@@ -17,7 +17,7 @@ elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
 
-    TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
+    TARGETS=$(ci/bazel-scripts-ci/diff.sh)
     ARGS=(--no-release)
 
     if [ "$TARGETS" == "//..." ]; then
