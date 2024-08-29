@@ -15,8 +15,7 @@ use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::CheckedSub;
+use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
@@ -1541,6 +1540,7 @@ async fn create_canister(
     }: CreateCanister,
 ) -> Result<CanisterId, CreateCanisterError> {
     let cycles = dfn_core::api::msg_cycles_available();
+
     if cycles < CREATE_CANISTER_MIN_CYCLES {
         return Err(CreateCanisterError::Refunded {
             refund_amount: cycles.into(),
@@ -1555,24 +1555,18 @@ async fn create_canister(
             }
         })?;
 
-    // will always succeed because only calls from canisters can have cycles attached
-    let calling_canister = caller().try_into().unwrap();
-
-    dfn_core::api::msg_cycles_accept(cycles);
-    match do_create_canister(caller(), cycles.into(), subnet_selection, settings, false).await {
-        Ok(canister_id) => Ok(canister_id),
+    match do_create_canister(caller(), cycles.into(), subnet_selection, settings).await {
+        Ok(canister_id) => {
+            dfn_core::api::msg_cycles_accept(cycles);
+            Ok(canister_id)
+        }
         Err(create_error) => {
-            let refund_amount = cycles.saturating_sub(BAD_REQUEST_CYCLES_PENALTY as u64);
-            match deposit_cycles(calling_canister, refund_amount.into(), false).await {
-                Ok(()) => Err(CreateCanisterError::Refunded {
-                    refund_amount: refund_amount.into(),
-                    create_error,
-                }),
-                Err(refund_error) => Err(CreateCanisterError::RefundFailed {
-                    create_error,
-                    refund_error,
-                }),
-            }
+            dfn_core::api::msg_cycles_accept(BAD_REQUEST_CYCLES_PENALTY as u64);
+            let refund_amount = dfn_core::api::msg_cycles_available();
+            Err(CreateCanisterError::Refunded {
+                refund_amount: refund_amount.into(),
+                create_error,
+            })
         }
     }
 }
@@ -1872,7 +1866,7 @@ async fn process_create_canister(
     // Create the canister. If this fails, refund. Either way,
     // return a result so that the notification cannot be retried.
     // If refund fails, we allow to retry.
-    match do_create_canister(controller, cycles, subnet_selection, settings, true).await {
+    match do_create_canister(controller, cycles, subnet_selection, settings).await {
         Ok(canister_id) => {
             burn_and_log(sub, amount).await;
             Ok(canister_id)
@@ -2113,7 +2107,6 @@ async fn do_create_canister(
     cycles: Cycles,
     subnet_selection: Option<SubnetSelection>,
     settings: Option<CanisterSettingsArgs>,
-    mint_cycles: bool,
 ) -> Result<CanisterId, String> {
     // Retrieve randomness from the system to use later to get a random
     // permutation of subnets. Performing the asynchronous call before
@@ -2177,11 +2170,12 @@ async fn do_create_canister(
 
     let mut last_err = None;
 
-    if mint_cycles && !subnets.is_empty() {
-        // TODO(NNS1-503): If CreateCanister fails, then we still have minted
-        // these cycles.
-        ensure_balance(cycles)?;
+    if subnets.is_empty() {
+        return Err("No subnets in which to create a canister.".to_owned());
     }
+
+    // We have subnets available, so we can now mint the cycles and create the canister.
+    ensure_balance(cycles)?;
 
     let canister_settings = settings
         .map(|mut settings| {
@@ -2234,7 +2228,7 @@ async fn do_create_canister(
         return Ok(canister_id);
     }
 
-    Err(last_err.unwrap_or_else(|| "No subnets in which to create a canister.".to_owned()))
+    Err(last_err.unwrap_or_else(|| "Unknown problem attempting to create a canister.".to_owned()))
 }
 
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {

@@ -25,7 +25,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
@@ -457,6 +457,100 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 7);
     assert_eq!(status.freezing_threshold(), 2592000);
+}
+
+fn canister_cycles_balance(
+    state_machine: &StateMachine,
+    canister: CanisterId,
+    controller: PrincipalId,
+) -> u128 {
+    canister_status(state_machine, controller, canister)
+        .unwrap()
+        .cycles()
+}
+
+#[test]
+fn test_cmc_create_canister_refunds() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(100, 0).unwrap();
+    let neuron = get_neuron_1();
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let subnet_id = state_machine.get_subnet_id();
+    cmc_set_default_authorized_subnetworks(
+        &state_machine,
+        vec![subnet_id],
+        neuron.principal_id,
+        neuron.neuron_id,
+    );
+    let cmc_cycles_balance = || {
+        canister_cycles_balance(
+            &state_machine,
+            CYCLES_MINTING_CANISTER_ID,
+            ROOT_CANISTER_ID.get(),
+        )
+    };
+
+    assert_eq!(cmc_cycles_balance(), 0);
+
+    let universal_canister = set_up_universal_canister(&state_machine, Some(u128::MAX.into()));
+
+    //default settings
+    let canister = cmc_create_canister_with_cycles(
+        &state_machine,
+        universal_canister,
+        None,
+        None,
+        10_000_000_000_000,
+    )
+    .unwrap();
+    let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
+    assert_eq!(status.controllers(), vec![universal_canister.get()]);
+
+    // We minted, then used, then accepted some cycles.
+    assert_eq!(cmc_cycles_balance(), 10_000_000_000_000);
+
+    // Create canister on non-existing subnet type
+    let error = cmc_create_canister_with_cycles(
+        &state_machine,
+        universal_canister,
+        None,
+        Some("fake_subnet_type".to_string()),
+        10_000_000_000_000,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error,
+        CreateCanisterError::Refunded {
+            refund_amount: 9_999_900_000_000,
+            create_error: "Provided subnet type fake_subnet_type does not exist".to_string()
+        }
+    );
+
+    assert_eq!(cmc_cycles_balance(), 10_000_100_000_000);
+
+    println!("{:?}", error);
+
+    //default settings
+    let canister = cmc_create_canister_with_cycles(
+        &state_machine,
+        universal_canister,
+        None,
+        None,
+        11_000_000_000_000,
+    )
+    .unwrap();
+    let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
+    assert_eq!(status.controllers(), vec![universal_canister.get()]);
+
+    assert_eq!(cmc_cycles_balance(), 11_000_000_000_000);
 }
 
 /// Test create_canister with different canister settings

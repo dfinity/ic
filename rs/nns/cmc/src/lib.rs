@@ -208,6 +208,7 @@ pub enum CreateCanisterError {
         refund_amount: u128,
         create_error: String,
     },
+    // Deprecated
     RefundFailed {
         create_error: String,
         refund_error: String,
