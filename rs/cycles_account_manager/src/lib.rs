@@ -508,7 +508,7 @@ impl CyclesAccountManager {
 
     /// Withdraws and consumes the cost of executing the given number of
     /// instructions.
-    pub fn consume_instructions(
+    pub fn consume_cycles_for_instructions(
         &self,
         sender: &PrincipalId,
         canister: &mut CanisterState,

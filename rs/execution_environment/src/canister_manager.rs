@@ -1958,10 +1958,10 @@ impl CanisterManager {
                         .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
-        // Charge for the take snapshot of the canister.
+        // Charge for taking a snapshot of the canister.
         let instructions = self.config.canister_snapshot_baseline_instructions
             + NumInstructions::new(new_snapshot_size.get());
-        if let Err(err) = self.cycles_account_manager.consume_instructions(
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
             instructions,
@@ -2097,7 +2097,7 @@ impl CanisterManager {
 
         // All basic checks have passed, charge baseline instructions.
         let mut canister_clone = canister.clone();
-        if let Err(err) = self.cycles_account_manager.consume_instructions(
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             &mut canister_clone,
             self.config.canister_snapshot_baseline_instructions,
@@ -2165,7 +2165,7 @@ impl CanisterManager {
         }
 
         // Charge for loading the snapshot of the canister.
-        if let Err(err) = self.cycles_account_manager.consume_instructions(
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             &mut new_canister,
             instructions_used + NumInstructions::new(snapshot.size().get()),
