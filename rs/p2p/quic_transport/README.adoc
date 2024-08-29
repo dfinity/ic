@@ -73,34 +73,6 @@ A nice writeup about async and blocking operations can be found in https://ryhl.
 
 === Breaking dependency cycles in P2P protocols ===
 
-<<<<<<< HEAD
-In any design that uses a single connection for inbound and outbound traffic with
-designated listner and dialer there exists a circlular dependency between the read and write paths.
-There are different approaches of breaking this depedency.
-
-The IC P2P protocols have a single event loop per P2P protocol that drives the outbound traffic.
-This follows the libp2p philosophy.
-Hence only those event loops need access to the `QuicTransport` object.
-In this model handlers can have a channel to the main event loop.
-
-Alternative approach (the one that SUI takes) is to have weak references
-to the transport object that can be used directly in the handlers. As a result,
-when there are handlers that take the weak reference the transport object needs to first be instantiated 
-and later started with the already constructed router.
-This approach enables the handlers for doing most of the work and potentially eliminating the need
-of the event loop from the first approach.
-However, this comes at the cost of having more shared state and more contention.
-
-=== Unused QUIC/QUINN abstraction ===
-
-1. QuicTransport doesn't send nor receive datagrams because they are not reliably delivered.
-2. QuicTransport doesn't use uni-directional streams. One possible situation where uni-directional
-stream may make sense is when a client handler is infallible. Since routes are given by the clients,
-if a route is missing it should not be considered a failure in transport.
-For comparision, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain for a response from the application receive side].
-In addition, no gRPC implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html['NOT_FOUND'],
-which is the most approriate return code if a route is missing.
-=======
 Many P2P protocol designs use a single TCP/UDP connection between any two peers. The main benefit is less consumption of limited resources (e.g. CPU for TLS handshake, file descriptors for sockets).
 Such protocols that use a single connection for inbound and outbound traffic, with a designated listener and dialer, have circular dependency between the read and write paths.
 
@@ -116,4 +88,13 @@ One possible implementation using this approach is to have weak references to th
 As a result, when there are handlers that take the weak reference the transport object needs first to be instantiated and later started with the already constructed router.
 
 3. Another alternative is to allow the QuicTransport to update the routes dynamically. In this case, once a connection is established it is unnatural to change the available routes from a client PoV.
->>>>>>> origin/master
+
+=== Unused QUIC/QUINN abstraction ===
+
+1. QuicTransport doesn't send nor receive datagrams because they are not reliably delivered.
+2. QuicTransport doesn't use uni-directional streams. One possible situation where uni-directional
+stream may make sense is when a client handler is infallible. Since routes are given by the clients,
+if a route is missing it should not be considered a failure in transport.
+For comparision, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain for a response from the application receive side].
+In addition, no gRPC implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html['NOT_FOUND'],
+which is the most approriate return code if a route is missing.

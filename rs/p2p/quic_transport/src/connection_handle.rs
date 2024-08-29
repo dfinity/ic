@@ -120,7 +120,6 @@ impl ConnectionHandle {
         in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
-<<<<<<< HEAD
 }
 
 async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, anyhow::Error> {
@@ -194,6 +193,4 @@ async fn write_request(
         .await
         .with_context(|| "Failed to write request to stream.")?;
     Ok(())
-=======
->>>>>>> origin/master
 }
