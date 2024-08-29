@@ -401,7 +401,7 @@ fn migrate_neurons_fund_audit_info(state: InternalGovernanceProto) -> InternalGo
         proposals: state
             .proposals
             .into_iter()
-            .map(|(id, proposal_data)| (id, proposal_data.into_current()))
+            .map(|(id, proposal_data)| (id, proposal_data.migrate()))
             .collect(),
         ..state
     }
