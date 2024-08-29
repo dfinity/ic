@@ -1057,7 +1057,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state(&env, ledger_id);
+    verify_ledger_state(&env, ledger_id, None);
 }
 
 #[test]
