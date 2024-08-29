@@ -2240,11 +2240,14 @@ async fn do_create_canister(
 fn ensure_balance(cycles: Cycles) -> Result<(), String> {
     let now = dfn_core::api::now();
 
+    let current_balance = Cycles::from(dfn_core::api::canister_cycle_balance());
+    let cycles_to_mint = cycles - current_balance;
+
     with_state_mut(|state| {
         state.limiter.purge_old(now);
         let count = state.limiter.get_count();
 
-        if count + cycles > state.cycles_limit {
+        if count + cycles_to_mint > state.cycles_limit {
             return Err(format!(
                 "More than {} cycles have been minted in the last {} seconds, please try again later.",
                 state.cycles_limit,
@@ -2252,13 +2255,13 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
             ));
         }
 
-        state.limiter.add(now, cycles);
-        state.total_cycles_minted += cycles;
+        state.limiter.add(now, cycles_to_mint);
+        state.total_cycles_minted += cycles_to_mint;
         Ok(())
     })?;
 
     dfn_core::api::mint_cycles(
-        cycles
+        cycles_to_mint
             .get()
             .try_into()
             .map_err(|_| "Cycles u64 overflow".to_owned())?,

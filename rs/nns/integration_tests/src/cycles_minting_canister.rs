@@ -1,11 +1,12 @@
-use candid::{Decode, Encode};
+use assert_matches::assert_matches;
+use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use cycles_minting_canister::{
     CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
-    UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
-    MEMO_TOP_UP_CANISTER,
+    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
+    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
+    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -16,6 +17,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
+use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -38,7 +40,7 @@ use ic_nns_test_utils::{
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_test_utilities::universal_canister::{call_args, wasm};
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
@@ -46,6 +48,7 @@ use icp_ledger::{
     DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use std::time::Duration;
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
 /// proposal.
@@ -136,11 +139,16 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
 
         set_icp_xdr_conversion_rate(&nns_canisters, payload).await;
 
-        let total_cycles_minted_initial: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
+        let governance_status_initial: CanisterStatusResult = nns_canisters
+            .root
+            .update_(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+            )
             .await
             .unwrap();
+        let governance_cycles_initial = governance_status_initial.cycles;
 
         // Top-up the Governance canister
         let cycles_response = send_cycles(
@@ -182,16 +190,21 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .unwrap();
         assert_eq!(final_balance, expected_final_balance);
 
-        let total_cycles_minted_final: u64 = nns_canisters
-            .cycles_minting
-            .query_("total_cycles_minted", protobuf, ())
+        let governance_status_final: CanisterStatusResult = nns_canisters
+            .root
+            .update_(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+            )
             .await
             .unwrap();
+        let governance_cycles_final = governance_status_final.cycles;
 
-        // Assert that the expected amount of cycles were minted
+        // Assert that the expected amount of cycles were added to governance.
         assert_eq!(
-            total_cycles_minted_final - total_cycles_minted_initial,
-            20000000000000
+            governance_cycles_final - governance_cycles_initial,
+            Nat::from(20000000000000u64)
         );
 
         Ok(())
@@ -1062,7 +1075,7 @@ fn cmc_notify_mint_cycles() {
     else {
         panic!("notify rejected")
     };
-    assert_matches::assert_matches!(
+    assert_matches!(
         Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap(),
         Err(NotifyError::InvalidTransaction(_))
     );
@@ -1169,4 +1182,223 @@ fn cmc_notify_mint_cycles() {
         }
         _ => panic!("Unexpected response: {:?}", response),
     }
+}
+
+/// Sends `amount` ICP from `TEST_USER1_PRINCIPAL`s ledger account to the given
+/// subaccount of the CMC, which then tries to top up the canister.
+fn notify_top_up(
+    state_machine: &StateMachine,
+    canister_id: CanisterId,
+    amount: Tokens,
+) -> Result<Cycles, NotifyError> {
+    let transfer_args = TransferArgs {
+        memo: MEMO_TOP_UP_CANISTER,
+        amount,
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: AccountIdentifier::new(
+            CYCLES_MINTING_CANISTER_ID.get(),
+            Some(Subaccount::from(&canister_id.get())),
+        )
+        .to_address(),
+        created_at_time: None,
+    };
+
+    let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+    let notify_args = NotifyTopUp {
+        block_index,
+        canister_id,
+    };
+
+    if let WasmResult::Reply(res) = state_machine
+        .execute_ingress_as(
+            *TEST_USER1_PRINCIPAL,
+            CYCLES_MINTING_CANISTER_ID,
+            "notify_top_up",
+            Encode!(&notify_args).unwrap(),
+        )
+        .unwrap()
+    {
+        Decode!(&res, Result<Cycles, NotifyError>).unwrap()
+    } else {
+        panic!("notify rejected")
+    }
+}
+
+fn total_cycles_minted(state_machine: &StateMachine) -> u64 {
+    use prost::Message;
+
+    if let WasmResult::Reply(res) = state_machine
+        .query(CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", vec![])
+        .unwrap()
+    {
+        u64::decode(&res[..]).unwrap()
+    } else {
+        panic!("total_cycles_minted rejected")
+    }
+}
+
+#[test]
+fn cmc_notify_top_up_valid() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(100, 0).unwrap();
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let total_minted_before = total_cycles_minted(&state_machine);
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(1, 0).unwrap(),
+    )
+    .unwrap();
+    let total_minted_after = total_cycles_minted(&state_machine);
+
+    assert_eq!(cycles, Cycles::new(100_000_000_000_000u128));
+    assert_eq!(
+        total_minted_after - total_minted_before,
+        100_000_000_000_000
+    );
+}
+
+#[test]
+fn cmc_notify_top_up_invalid() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(100, 0).unwrap();
+    let invalid_canister_id = CanisterId::from_u64(123_456_789);
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let total_minted_before = total_cycles_minted(&state_machine);
+    let error = notify_top_up(
+        &state_machine,
+        invalid_canister_id,
+        Tokens::new(1, 0).unwrap(),
+    )
+    .unwrap_err();
+    let total_minted_after = total_cycles_minted(&state_machine);
+    assert_matches!(error, NotifyError::Refunded { .. });
+    assert_eq!(
+        total_minted_after - total_minted_before,
+        100_000_000_000_000
+    );
+
+    let total_minted_before = total_cycles_minted(&state_machine);
+    let error = notify_top_up(
+        &state_machine,
+        invalid_canister_id,
+        Tokens::new(1, 0).unwrap(),
+    )
+    .unwrap_err();
+    let total_minted_after = total_cycles_minted(&state_machine);
+    assert_matches!(error, NotifyError::Refunded { .. });
+    assert_eq!(total_minted_after - total_minted_before, 0);
+}
+
+#[test]
+fn cmc_notify_top_up_rate_limited() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(1_000, 0).unwrap();
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // First top-up should succeed since it's 30P - less than the 50P/hr limit.
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(300, 0).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cycles, Cycles::new(30_000_000_000_000_000u128));
+
+    // Second top-up should also succeed after 1 hour.
+    state_machine.advance_time(Duration::from_secs(4000));
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(300, 0).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cycles, Cycles::new(30_000_000_000_000_000u128));
+
+    // Third top-up should fail since the rate limit is 50P cycles per hour, and less than an hour
+    // has passed.
+    state_machine.advance_time(Duration::from_secs(3000));
+    let error = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(300, 0).unwrap(),
+    )
+    .unwrap_err();
+    assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
+}
+
+#[test]
+fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
+    let good_account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let good_account_icpts = Tokens::new(10, 0).unwrap();
+    let bad_account = AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None);
+    let bad_account_icpts = Tokens::new(1, 0).unwrap();
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_accounts(vec![
+            (good_account, good_account_icpts),
+            (bad_account, bad_account_icpts),
+        ])
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    let non_existing_canister_id = CanisterId::from_u64(123_456_789);
+
+    // First make sure topping up 400T cylces on a valid canister works.
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(4, 0).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cycles, Cycles::new(400_000_000_000_000u128));
+
+    // Advance time by 1 hour to make sure the rate limit is reset.
+    state_machine.advance_time(Duration::from_secs(60 * 60));
+
+    // Now the attack begines - the bad account sends 0.69 tokens per 5 seconds to the non-existing
+    // canister, which makes it 69T * 12 * 60 = 49.68P cycles per hour, close to the 50P limit,
+    // while getting the 0.69 tokens back each time (the account only has 1 token in the
+    // begingging).
+    for _ in 0..(12 * 60) {
+        let error = notify_top_up(
+            &state_machine,
+            non_existing_canister_id,
+            Tokens::from_e8s(69_000_000),
+        )
+        .unwrap_err();
+        assert_matches!(error, NotifyError::Refunded { .. });
+        state_machine.advance_time(Duration::from_secs(5));
+    }
+
+    // Now the good account tries to top up 400T cycles on the governance canister again, which
+    // should still succeed.
+    let cycles = notify_top_up(
+        &state_machine,
+        GOVERNANCE_CANISTER_ID,
+        Tokens::new(4, 0).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cycles, Cycles::new(400_000_000_000_000u128));
 }
