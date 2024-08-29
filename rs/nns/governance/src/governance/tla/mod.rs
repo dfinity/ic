@@ -33,7 +33,7 @@ fn neuron_global(gov: &Governance) -> TlaValue {
         .iter()
         .map(|(neuron_id, neuron)| {
             (
-                neuron_id.clone(),
+                *neuron_id,
                 TlaValue::Record(BTreeMap::from([
                     (
                         "cached_stake".to_string(),
