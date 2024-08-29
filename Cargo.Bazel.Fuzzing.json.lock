@@ -1,5 +1,5 @@
 {
-  "checksum": "06922224d17eb69ebfef645ff2d97db52da527044be47b85355e642aec2e7965",
+  "checksum": "a047496b2645007a25d9db39603493c9e5f7ac3a95048ae1b0f469988a214ac7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18765,6 +18765,10 @@
               "target": "time"
             },
             {
+              "id": "tla_instrumentation 0.1.0",
+              "target": "tla_instrumentation"
+            },
+            {
               "id": "tokio 1.39.3",
               "target": "tokio"
             },
@@ -19027,6 +19031,10 @@
             {
               "id": "test-strategy 0.3.1",
               "target": "test_strategy"
+            },
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
             }
           ],
           "selects": {}
@@ -65385,6 +65393,127 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
+    "tla_instrumentation 0.1.0": {
+      "name": "tla_instrumentation",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "9498c4a5bca5fc20b5ef7353d6b9f80136178195"
+          },
+          "strip_prefix": "tla_instrumentation"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tla_instrumentation",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
+    "tla_instrumentation_proc_macros 0.1.0": {
+      "name": "tla_instrumentation_proc_macros",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "9498c4a5bca5fc20b5ef7353d6b9f80136178195"
+          },
+          "strip_prefix": "tla_instrumentation_proc_macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "tla_instrumentation_proc_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation_proc_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
     "tls_codec 0.4.1": {
       "name": "tls_codec",
       "version": "0.4.1",
@@ -78903,6 +79032,8 @@
     "tikv-jemalloc-ctl 0.5.4",
     "tikv-jemallocator 0.5.4",
     "time 0.3.36",
+    "tla_instrumentation 0.1.0",
+    "tla_instrumentation_proc_macros 0.1.0",
     "tokio 1.39.3",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
