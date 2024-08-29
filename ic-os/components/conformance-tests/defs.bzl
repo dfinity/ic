@@ -31,19 +31,21 @@ def _check_unused_components_test_impl(ctx):
     """
     Verifies that every file in components/ is actually being used in one of the images.
     """
-    repo_components = [component.label.name for component in ctx.attr.repo_components]
-    used_components = [component.label.name for component in ctx.attr.used_components]
-    used_components += ctx.attr.ignored_repo_components
+    repo_components_labels = [component.label for component in ctx.attr.repo_components]
+    used_components_labels = [component.label for component in ctx.attr.used_components]
 
-    unused_components = [file for file in repo_components if file not in used_components]
+    unused_component_files = [
+        label.name for label in repo_components_labels
+        if label not in used_components_labels and label.name not in ctx.attr.ignored_repo_components
+    ]
 
-    if unused_components:
+    if unused_component_files:
         script_content = """
         echo "Unused components check failed"
         echo "Unused components:"
-        echo "{unused_files}"
+        echo "{unused_component_files}"
         exit 1
-        """.format(unused_files="\n".join(unused_components))
+        """.format(unused_component_files="\n".join(unused_component_files))
     else:
         script_content = "echo 'Unused components check completed'"
 
