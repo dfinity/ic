@@ -311,7 +311,10 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
     guard
 }
 
-// Ensures atomically that this file was created freshly, and gives an error otherwise.
+// Create a file at a given path:
+// - if `create_new` is true, then it ensures atomically that this file was created freshly, and gives an error otherwise;
+// - if `create_new` is false and no file exists at the given path, then it creates a new file at that path;
+// - if `create_new` is false and a path exists at the given path, then it open the file at that path and truncates it to be empty.
 fn create_file<P: AsRef<std::path::Path>>(file_path: P, create_new: bool) -> std::io::Result<File> {
     File::options()
         .read(true)
