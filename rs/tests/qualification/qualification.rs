@@ -1,6 +1,7 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
-    group::SystemTestGroup, test_env_api::read_dependency_to_string,
+    group::SystemTestGroup,
+    test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
 };
 use ic_tests::qualification::{
     defs::QualificationExecutor,
@@ -60,7 +61,8 @@ pub fn main() -> anyhow::Result<()> {
     let (initial_version, to_version) = match new_version {
         Some(new_version) => (old_version, new_version),
         None => (
-            "0000000000000000000000000000000000000000".to_string(),
+            // Should be: 0000000000000000000000000000000000000000
+            read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?,
             old_version,
         ),
     };
