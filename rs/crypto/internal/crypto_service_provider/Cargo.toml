@@ -59,7 +59,7 @@ tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 x509-parser = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

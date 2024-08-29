@@ -776,7 +776,9 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
-            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+            Json(ApiResponse::Success(
+                RawSubmitIngressResult::try_from(opout).unwrap(),
+            )),
         )
             .into_response(),
         OpOut::NoOutput => (

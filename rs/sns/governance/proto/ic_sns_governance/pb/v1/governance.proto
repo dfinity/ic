@@ -1953,8 +1953,7 @@ message GetModeResponse {
 
 // The request for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsRequest {
-  // NeuronParameters groups parameters for creating a neuron in the
-  // `claim_swap_neurons` method.
+  // This type has been replaced by NeuronRecipe and should not be used.
   // TODO(NNS1-3198): Remove this message once `NeuronRecipe` is used systematically.
   message NeuronParameters {
     reserved "memo";
@@ -2048,7 +2047,7 @@ message ClaimSwapNeuronsRequest {
 
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For
   // each NeuronParameter, one neuron will be created.
-  // Deprecated. Use [`recipes`] instead.
+  // Deprecated. Use [`neuron_recipes`] instead.
   repeated NeuronParameters neuron_parameters = 1 [deprecated = true];
 }
 
@@ -2119,14 +2118,14 @@ message ClaimSwapNeuronsResponse {
 
   // The ok result from `claim_swap_neurons. For every requested neuron,
   // a SwapNeuron message is returned, and should equal the count of
-  // `ClaimSwapNeuronsRequest.neuron_parameters`.
+  // `ClaimSwapNeuronsRequest.neuron_recipes`.
   message ClaimedSwapNeurons {
     repeated SwapNeuron swap_neurons = 1;
   }
 
   // SwapNeuron associates the status of a neuron attempting to be
   // claimed with a NeuronId. The `id` field will correspond with a
-  // `ClaimSwapNeuronsRequest.neuron_parameters.neuron_id` field in
+  // `ClaimSwapNeuronsRequest.neuron_recipes.neuron_id` field in
   // the request object used in `claim_swap_neurons`.
   message SwapNeuron {
     NeuronId id = 1;

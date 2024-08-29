@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn,
-        PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, Bouncer, BouncerFactory, BouncerValue, ChangeResult,
+        MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -378,16 +378,16 @@ impl IngressPrioritizer {
     }
 }
 
-impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
-    fn get_priority_function(&self, _pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId> {
+impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
+    fn new_bouncer(&self, _pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
         let time_source = self.time_source.clone();
         Box::new(move |ingress_id| {
             let start = time_source.get_relative_time();
             let range = start..=start + MAX_INGRESS_TTL;
             if range.contains(&ingress_id.expiry()) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Drop
+                BouncerValue::Unwanted
             }
         })
     }

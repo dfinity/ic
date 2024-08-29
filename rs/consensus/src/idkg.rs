@@ -194,7 +194,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -433,7 +433,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgGossipImpl` implements the priority function and other gossip related
+/// `IDkgGossipImpl` implements the bouncer function and other gossip related
 /// functionality
 pub struct IDkgGossipImpl {
     subnet_id: SubnetId,
@@ -456,12 +456,12 @@ impl IDkgGossipImpl {
     }
 }
 
-struct IDkgPriorityFnArgs {
+struct IDkgBouncerArgs {
     finalized_height: Height,
     certified_height: Height,
 }
 
-impl IDkgPriorityFnArgs {
+impl IDkgBouncerArgs {
     fn new(
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
@@ -473,30 +473,30 @@ impl IDkgPriorityFnArgs {
     }
 }
 
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_priority_function(&self, _idkg_pool: &Pool) -> PriorityFn<IDkgMessageId> {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
+    fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        Box::new(move |id| compute_priority(id, subnet_id, &args))
+        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 }
 
-fn compute_priority(
+fn compute_bouncer(
     id: &IDkgMessageId,
     subnet_id: SubnetId,
-    args: &IDkgPriorityFnArgs,
-) -> Priority {
+    args: &IDkgBouncerArgs,
+) -> BouncerValue {
     match id {
         IDkgMessageId::Dealing(_, data) => {
             if data.get_ref().subnet_id != subnet_id {
-                return Priority::FetchNow;
+                return BouncerValue::Wants;
             }
 
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::DealingSupport(_, data) => {
@@ -504,41 +504,41 @@ fn compute_priority(
             // as the source_height from different subnet cannot be compared
             // anyways.
             if data.get_ref().subnet_id != subnet_id {
-                return Priority::FetchNow;
+                return BouncerValue::Wants;
             }
 
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::EcdsaSigShare(_, data) => {
             if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::SchnorrSigShare(_, data) => {
             if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::Complaint(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::Opening(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
     }
@@ -591,7 +591,7 @@ mod tests {
         );
 
         // Only the context with matched quadruple should be in "requested"
-        let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
     }
 
@@ -610,7 +610,7 @@ mod tests {
         }
     }
 
-    // Tests the priority computation for dealings/support.
+    // Tests the bouncer computation for dealings/support.
     #[test]
     fn test_idkg_priority_fn_dealing_support() {
         let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
@@ -619,7 +619,7 @@ mod tests {
         let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
         let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
 
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };
@@ -631,28 +631,28 @@ mod tests {
                     dealing_prefix(&xnet_transcript_id, &NODE_1),
                     get_fake_artifact_id_data(xnet_transcript_id).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_fetch_1, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_fetch_2, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_stash, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
             // Dealing support
             (
@@ -660,37 +660,37 @@ mod tests {
                     dealing_support_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(xnet_transcript_id).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
-    // Tests the priority computation for sig shares.
+    // Tests the bouncer computation for sig shares.
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
         let local_subnet_id = SUBNET_2;
@@ -710,7 +710,7 @@ mod tests {
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };
@@ -721,47 +721,47 @@ mod tests {
                     ecdsa_sig_share_prefix(&request_id_fetch_1, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_fetch_1, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
@@ -774,7 +774,7 @@ mod tests {
         let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
         let transcript_id_fetch_3 = IDkgTranscriptId::new(local_subnet_id, 5, Height::from(80));
 
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };
@@ -786,28 +786,28 @@ mod tests {
                     complaint_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_3).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             // Openings
             (
@@ -815,33 +815,33 @@ mod tests {
                     opening_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                Priority::Stash,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_3).into(),
                 ),
-                Priority::FetchNow,
+                BouncerValue::Wants,
             ),
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 }
