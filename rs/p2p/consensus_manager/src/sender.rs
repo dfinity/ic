@@ -322,6 +322,7 @@ async fn send_advert_to_peer(
             .body(message.clone())
             .expect("Building from typed values");
 
+        // TODO: NET-1748
         if transport.rpc(&peer, request).await.is_ok() {
             return;
         }
