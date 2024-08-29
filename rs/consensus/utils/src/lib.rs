@@ -17,7 +17,7 @@ use ic_types::{
         idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank, Threshold,
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
     },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -474,7 +474,9 @@ pub fn active_low_threshold_nidkg_id(
     height: Height,
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_nidkg_id_at_given_summary(block, height, NiDkgTag::LowThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            transcript.dkg_id
+        })
     })
 }
 
@@ -484,7 +486,9 @@ pub fn active_high_threshold_nidkg_id(
     height: Height,
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_nidkg_id_at_given_summary(block, height, NiDkgTag::HighThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            transcript.dkg_id
+        })
     })
 }
 
@@ -494,7 +498,12 @@ pub fn active_low_threshold_committee(
     height: Height,
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
-        get_threshold_committee_at_given_summary(block, height, NiDkgTag::LowThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
     })
 }
 
@@ -504,7 +513,12 @@ pub fn active_high_threshold_committee(
     height: Height,
 ) -> Option<(Threshold, NiDkgReceivers)> {
     get_active_data_at(reader, height, |block, height| {
-        get_threshold_committee_at_given_summary(block, height, NiDkgTag::HighThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
     })
 }
 
@@ -551,46 +565,20 @@ fn get_registry_version_at_given_summary(
     }
 }
 
-fn get_nidkg_id_at_given_summary(
+fn get_transcript_data_at_given_summary<T>(
     summary_block: &Block,
     height: Height,
     tag: NiDkgTag,
-) -> Option<NiDkgId> {
+    getter: impl Fn(&NiDkgTranscript) -> T,
+) -> Option<T> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(dkg_summary.current_transcript(&tag).dkg_id)
-    } else if dkg_summary.next_interval_includes(height) {
-        Some(
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .dkg_id,
-        )
-    } else {
-        None
-    }
-}
-
-fn get_threshold_committee_at_given_summary(
-    summary_block: &Block,
-    height: Height,
-    tag: NiDkgTag,
-) -> Option<(Threshold, NiDkgReceivers)> {
-    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
-    if dkg_summary.current_interval_includes(height) {
-        let transcript = dkg_summary.current_transcript(&tag);
-        Some((
-            transcript.threshold.get().get() as usize,
-            transcript.committee.clone(),
-        ))
+        Some(getter(dkg_summary.current_transcript(&tag)))
     } else if dkg_summary.next_interval_includes(height) {
         let transcript = dkg_summary
             .next_transcript(&tag)
             .unwrap_or_else(|| dkg_summary.current_transcript(&tag));
-        Some((
-            transcript.threshold.get().get() as usize,
-            transcript.committee.clone(),
-        ))
+        Some(getter(transcript))
     } else {
         None
     }
