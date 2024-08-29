@@ -45,17 +45,11 @@ fn start_server_helper(
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
-    let ready_file_path = if let Some(parent_pid) = parent_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid))
-    } else {
-        NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
-    };
     let mut cmd = Command::new(PathBuf::from(bin_path));
     if let Some(parent_pid) = parent_pid {
         cmd.arg("--pid").arg(parent_pid.to_string());
     } else {
         cmd.arg("--port-file").arg(port_file_path.clone());
-        cmd.arg("--ready-file").arg(ready_file_path.clone());
     }
     if let Some(ttl) = ttl {
         cmd.arg("--ttl").arg(ttl.to_string());
@@ -68,15 +62,16 @@ fn start_server_helper(
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
     let url = loop {
-        match ready_file_path.try_exists() {
-            Ok(true) => {
-                let port_string = std::fs::read_to_string(port_file_path)
-                    .expect("Failed to read port from port file");
-                let port: u16 = port_string.parse().expect("Failed to parse port to number");
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if port_string.contains("\n") {
+                let port: u16 = port_string
+                    .trim_end()
+                    .parse()
+                    .expect("Failed to parse port to number");
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
-            _ => std::thread::sleep(Duration::from_millis(20)),
         }
+        std::thread::sleep(Duration::from_millis(20));
     };
     (url, out)
 }
@@ -207,30 +202,8 @@ fn test_blob_store_wrong_encoding() {
 
 #[test]
 fn test_port_file() {
-    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    let port_file_path = std::env::temp_dir().join("pocket_ic.port");
-    Command::new(PathBuf::from(bin_path))
-        .arg("--port-file")
-        .arg(
-            port_file_path
-                .clone()
-                .into_os_string()
-                .into_string()
-                .unwrap(),
-        )
-        .spawn()
-        .expect("Failed to start PocketIC binary");
-    loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
-            if !port_string.is_empty() {
-                port_string
-                    .parse::<u16>()
-                    .expect("Failed to parse port to number");
-                break;
-            }
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    // tests the port file by setting the parent PID to None in start_server_helper
+    start_server_helper(None, None, false, false);
 }
 
 async fn test_gateway(server_url: Url, https: bool) {
