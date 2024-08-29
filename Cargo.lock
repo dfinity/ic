@@ -10273,7 +10273,6 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
- "walrus",
 ]
 
 [[package]]

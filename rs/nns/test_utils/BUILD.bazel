@@ -61,7 +61,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:tokio",
-    "@crate_index//:walrus",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
