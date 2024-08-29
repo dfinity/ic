@@ -14,13 +14,16 @@ use std::str::FromStr;
 fn test_disallow_opaque_callers() {
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().build();
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // Step 2: Call the code under test.
     let sender = PrincipalId::new_user_test_id(42);
     assert_eq!(sender.class(), Ok(PrincipalIdClass::Opaque));
-    let response = registry_get_changes_since(&state_machine, sender, 1);
+    let response = registry_get_changes_since(&state_machine, sender, 0);
 
     // Step 3: Inspect results.
     let RegistryGetChangesSinceResponse {
@@ -54,9 +57,12 @@ fn test_disallow_opaque_callers() {
 
 #[test]
 fn test_allow_non_opaque_callers() {
-    // Step 1: Prepare the world. (Same as previous test.)
+    // Step 1: Prepare the world. (Same as the previous test.)
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().build();
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // Step 2: Call the code under test. Unlike the previous test, the sender is a
@@ -65,14 +71,18 @@ fn test_allow_non_opaque_callers() {
         PrincipalId::from_str("ubktz-haghv-fqsdh-23fhi-3urex-bykoz-pvpfd-5rs6w-qpo3t-nf2dv-oae")
             .unwrap();
     assert_eq!(sender.class(), Ok(PrincipalIdClass::SelfAuthenticating));
-    let response = registry_get_changes_since(&state_machine, sender, 1);
+    let response = registry_get_changes_since(&state_machine, sender, 0);
 
     // Step 3: Inspect results.
     let RegistryGetChangesSinceResponse {
         error,
-        version: _,
-        deltas: _,
+        version,
+        deltas,
     } = response;
 
     assert_eq!(error, None);
+    // The important thing is that deltas is not empty. The exact number of
+    // elements is not so important.
+    assert_eq!(deltas.len(), 13);
+    assert_eq!(version, 1);
 }
