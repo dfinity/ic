@@ -18,7 +18,7 @@ def component_file_references_test(name, component_files, image):
 
     native.sh_test(
         name = name,
-        srcs = ["//ic-os/components/conformance-tests:check_file_references.py"],
+        srcs = ["//ic-os/components/conformance_tests:check_file_references.py"],
         data = deps,
         args = [
             "--files",
