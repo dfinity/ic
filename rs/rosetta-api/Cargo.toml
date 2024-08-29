@@ -60,8 +60,18 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_bl
 ic-nns-governance = { path = "../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
-proptest = "1.0"
+proptest = { workspace = true }
 rand_chacha = { workspace = true }
+ic-icp-rosetta-runner = { path = "runner" }
+ic-icp-rosetta-client ={ path = "client" }
+pocket-ic = { path = "../../packages/pocket-ic" }
+ic-ledger-test-utils = { path = "./icp_ledger/test_utils" }
+ic-icrc1-test-utils = { path = "./icrc1/test_utils" }
+tempfile = { workspace = true }
 
 [features]
 rosetta-blocks = []
+
+[[test]]
+name = "system_tests"
+path = "tests/system_tests/system_tests.rs"

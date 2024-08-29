@@ -77,10 +77,10 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
-libflate = "1.1.2"
+libflate = { workspace = true }
 maplit = "1.0.2"
 more-asserts = "0.3.1"
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 test-strategy = "0.3.1"
 wasmparser = { workspace = true }

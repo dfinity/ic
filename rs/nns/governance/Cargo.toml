@@ -112,7 +112,7 @@ ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

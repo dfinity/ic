@@ -52,7 +52,7 @@ build-info-build = { workspace = true }
 
 [dev-dependencies]
 ic-nns-governance-api = { path = "../../nns/governance/api" }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_bytes = { workspace = true }
 
 [features]
