@@ -94,9 +94,6 @@ pub trait PoolSection<T> {
 
     /// Get the number of artifacts in the pool.
     fn size(&self) -> usize;
-
-    /// Check whether we already have too many messages from the given peer.
-    fn exceeds_limit(&self, peer_id: &NodeId) -> bool;
 }
 
 /// The ingress pool contains all the ingress artifacts received by P2P and
@@ -114,6 +111,9 @@ pub trait IngressPool: Send + Sync {
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
+
+    /// Check whether we already have too many messages from the given peer.
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool;
 }
 
 /// Interface to throttle user ingress messages

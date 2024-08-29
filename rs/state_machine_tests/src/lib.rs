@@ -526,8 +526,13 @@ impl IngressPool for PocketIngressPool {
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
         self
     }
+
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         unimplemented!("PocketIngressPool has no unvalidated pool")
+    }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
     }
 }
 
@@ -559,10 +564,6 @@ impl PoolSection<ValidatedIngressArtifact> for PocketIngressPool {
 
     fn size(&self) -> usize {
         self.validated.len()
-    }
-
-    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
-        false
     }
 }
 

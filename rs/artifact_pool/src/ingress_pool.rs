@@ -56,19 +56,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         }
     }
 
-    fn new_with_limits(
-        log: ReplicaLogger,
-        metrics: PoolMetrics,
-        max_bytes: usize,
-        max_count: usize,
-    ) -> IngressPoolSection<T> {
-        IngressPoolSection {
-            peer_counters: PeerCounters::new_with_limits(log, max_bytes, max_count),
-            artifacts: BTreeMap::new(),
-            metrics,
-        }
-    }
-
     /// Adds the `artifact` to the pool.
     /// Note: the function doesn't check if the pool's limits are already exceeded, it's the
     /// caller's responsibility to check the limits before calling `insert`.
@@ -188,16 +175,14 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
     fn size(&self) -> usize {
         self.artifacts.len()
     }
-
-    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
-        self.peer_counters.exceeds_limit(peer_id)
-    }
 }
 
 #[derive(Clone)]
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
+    ingress_pool_max_count: usize,
+    ingress_pool_max_bytes: usize,
     ingress_messages_throttled: IntCounter,
     node_id: NodeId,
     log: ReplicaLogger,
@@ -213,15 +198,15 @@ impl IngressPoolImpl {
         log: ReplicaLogger,
     ) -> IngressPoolImpl {
         IngressPoolImpl {
+            ingress_pool_max_count: config.ingress_pool_max_count,
+            ingress_pool_max_bytes: config.ingress_pool_max_bytes,
             ingress_messages_throttled: metrics_registry.int_counter(
                 "ingress_messages_throttled",
                 "Number of throttled ingress messages",
             ),
-            validated: IngressPoolSection::new_with_limits(
+            validated: IngressPoolSection::new(
                 log.clone(),
                 PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
-                config.ingress_pool_max_bytes,
-                config.ingress_pool_max_count,
             ),
             unvalidated: IngressPoolSection::new(
                 log.clone(),
@@ -242,6 +227,14 @@ impl IngressPool for IngressPoolImpl {
     /// Unvalidated Ingress Pool
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         &self.unvalidated
+    }
+
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
+        let counters = self.unvalidated.peer_counters.get_counters(peer_id)
+            + self.validated.peer_counters.get_counters(peer_id);
+
+        counters.bytes > self.ingress_pool_max_bytes
+            || counters.messages > self.ingress_pool_max_count
     }
 }
 
@@ -281,21 +274,12 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         self.unvalidated.remove(id);
     }
 
-    /// Apply changeset to the Ingress Pool
+    /// Apply [`ChangeSet`] to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
         let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated(message_id) => {
-                    // If there is no space in the validated section, ignore the [`ChangeAction`].
-                    if self
-                        .unvalidated
-                        .get(&message_id)
-                        .is_some_and(|artifact| self.validated.exceeds_limit(&artifact.peer_id))
-                    {
-                        continue;
-                    }
-
                     // Remove it from unvalidated pool and move it to the validated pool
                     match self.unvalidated.remove(&message_id) {
                         Some(unvalidated_artifact) => {
@@ -362,12 +346,13 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
 
 impl IngressPoolThrottler for IngressPoolImpl {
     fn exceeds_threshold(&self) -> bool {
-        if self.validated.peer_counters.exceeds_limit(&self.node_id) {
+        if self.exceeds_limit(&self.node_id) {
             self.ingress_messages_throttled.inc();
-            return true;
-        }
 
-        false
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -716,50 +701,6 @@ mod tests {
                 // MESSAGE #4
                 insert_validated_artifact(&mut ingress_pool, 5);
                 assert!(ingress_pool.exceeds_threshold());
-            })
-        })
-    }
-
-    #[test]
-    fn test_exceeds_threshold_msgcount_via_changeset() {
-        with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
-                pool_config.ingress_pool_max_count = 2;
-                let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
-                let ingress_messages = [
-                    fake_ingress_message(0),
-                    fake_ingress_message(1),
-                    fake_ingress_message(2),
-                    fake_ingress_message(3),
-                ];
-
-                for ingress_message in &ingress_messages {
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_message.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: UNIX_EPOCH,
-                    });
-                }
-                // ingress messages are inserted into the unvalidated section.
-                assert_eq!(ingress_pool.validated().size(), 0);
-                assert_eq!(ingress_pool.unvalidated().size(), 4);
-
-                let changeset = ingress_messages
-                    .iter()
-                    .map(|ingress_message| {
-                        ChangeAction::MoveToValidated(IngressMessageId::from(ingress_message))
-                    })
-                    .collect();
-
-                ingress_pool.apply_changes(changeset);
-
-                // only the first three ingress messages are inserted into the validated section of
-                // the pool, the fourth one is ignored because we have already exceeded the pool's
-                // limits.
-                assert_eq!(ingress_pool.validated().size(), 3);
-                assert_eq!(ingress_pool.unvalidated().size(), 1);
             })
         })
     }
