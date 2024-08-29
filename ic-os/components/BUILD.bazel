@@ -39,11 +39,14 @@ REPO_COMPONENTS = glob(
 )
 
 # files used for testing and development that aren't "used" by any ic-os variant
-ignored_repo_components = ["networking/dev-certs/canister_http_test_ca.key", "networking/dev-certs/root_cert_gen.sh"]
+ignored_repo_components = [
+    "networking/dev-certs/canister_http_test_ca.key",
+    "networking/dev-certs/root_cert_gen.sh",
+]
 
 check_unused_components_test(
     name = "check_unused_components_test",
-    repo_components = REPO_COMPONENTS,
     ignored_repo_components = ignored_repo_components,
+    repo_components = REPO_COMPONENTS,
     used_components = used_components.keys(),
 )
