@@ -340,7 +340,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     } else {
         result.unwrap();
 
-        // Cuaranteed response requests consume `MAX_RESPONSE_COUNT_BYTES` guaranteed
+        // Guaranteed response requests consume `MAX_RESPONSE_COUNT_BYTES` guaranteed
         // response memory. Best-effort requests consume no guaranteed response memory.
         let expected_subnet_available_memory = if deadline == NO_DEADLINE {
             initial_subnet_available_memory - MAX_RESPONSE_COUNT_BYTES as i64

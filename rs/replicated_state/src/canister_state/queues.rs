@@ -524,8 +524,8 @@ impl CanisterQueues {
     ///
     /// It is possible for an input schedule to contain an empty input queue if e.g.
     /// all messages in said queue have expired / were shed since it was scheduled.
-    /// Meaning that it may be necessary to iterate over and mutate input schedules
-    /// in order to achieve amortized `O(1)` time complexity.
+    /// Requires a `&mut self` reference to be able advance to the first non-empty
+    /// queue in the input schedule, to achieve amortized `O(1)` time complexity.
     fn peek_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
@@ -1073,7 +1073,9 @@ impl CanisterQueues {
         // message at the head of a queue, advance to the first non-stale reference.
         //
         // Defensive check, reference may have already been popped by an earlier
-        // `on_message_dropped()` call if multiple messages got dropped at once.
+        // `on_message_dropped()` call if multiple messages expired at once (e.g. given
+        // a queue containing references `[1, 2]`; `1` and `2` expire  as part of the
+        // same `time_out_messages()` call; `on_message_dropped(1)` will also pop `2`).
         if queue.peek() == Some(&CanisterQueueItem::Reference(id)) {
             queue.pop();
             queue.pop_while(|item| self.pool.get(item.id()).is_none());
