@@ -46,11 +46,12 @@ use ic_nns_governance_api::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -1328,12 +1329,15 @@ pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
     Decode!(&reply, Migrations).unwrap()
 }
 
-pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoResponse {
+pub fn nns_list_proposals(
+    state_machine: &StateMachine,
+    request: ListProposalInfo,
+) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
             "list_proposals",
-            Encode!(&ListProposalInfo::default()).unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1343,6 +1347,43 @@ pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoRespo
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+pub fn get_all_proposal_ids(
+    state_machine: &StateMachine,
+    exclude_topic: Vec<Topic>,
+) -> Vec<ProposalId> {
+    let mut proposal_ids = vec![];
+    let mut before_proposal = None;
+
+    loop {
+        let ListProposalInfoResponse { proposal_info } = nns_list_proposals(
+            state_machine,
+            ListProposalInfo {
+                before_proposal,
+                limit: 100,
+                exclude_topic: exclude_topic
+                    .iter()
+                    .map(|topic| i32::from(*topic))
+                    .collect(),
+                include_reward_status: vec![],
+                include_status: vec![],
+                include_all_manage_neuron_proposals: None,
+                omit_large_fields: Some(true),
+            },
+        );
+        let new_proposal_ids = proposal_info
+            .into_iter()
+            .map(|info| info.id.unwrap())
+            .collect::<Vec<_>>();
+        if new_proposal_ids.is_empty() {
+            break;
+        }
+        before_proposal = Some(new_proposal_ids[new_proposal_ids.len() - 1]);
+        proposal_ids.extend(new_proposal_ids);
+    }
+
+    proposal_ids
 }
 
 /// Return the monthly Node Provider rewards
@@ -1446,6 +1487,31 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     };
 
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
+}
+
+pub fn get_neurons_fund_audit_info(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> GetNeuronsFundAuditInfoResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_neurons_fund_audit_info",
+            Encode!(&GetNeuronsFundAuditInfoRequest {
+                nns_proposal_id: Some(proposal_id)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
 }
 
 pub fn list_neurons(
