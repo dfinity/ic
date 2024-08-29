@@ -28,10 +28,7 @@ pub fn split_neuron_desc() -> Update {
     }
 }
 
-fn extract_split_neuron_constants(
-    pid: &str,
-    trace: &Vec<ResolvedStatePair>,
-) -> TlaConstantAssignment {
+fn extract_split_neuron_constants(pid: &str, trace: &[ResolvedStatePair]) -> TlaConstantAssignment {
     let constants = BTreeMap::from([
         (
             "Neuron_Ids".to_string(),

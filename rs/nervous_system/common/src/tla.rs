@@ -15,13 +15,13 @@ task_local! {
 pub static TLA_TRACES: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
 
 pub fn subaccount_to_tla(subaccount: &Subaccount) -> TlaValue {
-    opt_subaccount_to_tla(&Some(subaccount.clone()))
+    opt_subaccount_to_tla(&Some(*subaccount))
 }
 
 pub fn opt_subaccount_to_tla(subaccount: &Option<Subaccount>) -> TlaValue {
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        subaccount.clone(),
+        *subaccount,
     );
     TlaValue::Literal(account.to_string())
 }
