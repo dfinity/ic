@@ -13,9 +13,11 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{
+        idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank, Threshold,
+    },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag},
         CryptoHash, CryptoHashable, Signed,
     },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -467,22 +469,42 @@ pub fn registry_version_at_height(
 }
 
 /// Return the current low transcript for the given height if it was found.
-pub fn active_low_threshold_transcript(
+pub fn active_low_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+        get_nidkg_id_at_given_summary(block, height, NiDkgTag::LowThreshold)
     })
 }
 
 /// Return the current high transcript for the given height if it was found.
-pub fn active_high_threshold_transcript(
+pub fn active_high_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+        get_nidkg_id_at_given_summary(block, height, NiDkgTag::HighThreshold)
+    })
+}
+
+/// Return the current low transcript for the given height if it was found.
+pub fn active_low_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_threshold_committee_at_given_summary(block, height, NiDkgTag::LowThreshold)
+    })
+}
+
+/// Return the current high transcript for the given height if it was found.
+pub fn active_high_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_threshold_committee_at_given_summary(block, height, NiDkgTag::HighThreshold)
     })
 }
 
@@ -529,21 +551,46 @@ fn get_registry_version_at_given_summary(
     }
 }
 
-fn get_transcript_at_given_summary(
+fn get_nidkg_id_at_given_summary(
     summary_block: &Block,
     height: Height,
     tag: NiDkgTag,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(dkg_summary.current_transcript(&tag).clone())
+        Some(dkg_summary.current_transcript(&tag).dkg_id)
     } else if dkg_summary.next_interval_includes(height) {
         Some(
             dkg_summary
                 .next_transcript(&tag)
                 .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone(),
+                .dkg_id,
         )
+    } else {
+        None
+    }
+}
+
+fn get_threshold_committee_at_given_summary(
+    summary_block: &Block,
+    height: Height,
+    tag: NiDkgTag,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+    if dkg_summary.current_interval_includes(height) {
+        let transcript = dkg_summary.current_transcript(&tag);
+        Some((
+            transcript.threshold.get().get() as usize,
+            transcript.committee.clone(),
+        ))
+    } else if dkg_summary.next_interval_includes(height) {
+        let transcript = dkg_summary
+            .next_transcript(&tag)
+            .unwrap_or_else(|| dkg_summary.current_transcript(&tag));
+        Some((
+            transcript.threshold.get().get() as usize,
+            transcript.committee.clone(),
+        ))
     } else {
         None
     }
