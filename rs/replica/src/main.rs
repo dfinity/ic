@@ -128,6 +128,14 @@ fn main() -> io::Result<()> {
         .build()
         .unwrap();
 
+    // Runtime used for XNet.
+    let rt_xnet_payload_builder = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(rt_worker_threads)
+        .thread_name("XNet_Payload_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
     // Before setup of execution, we disable SIGPIPEs. In particular,
     // we install the corresponding signal handler. We are setting up
     // a series of socket based IPC connections for communication with
@@ -302,6 +310,7 @@ fn main() -> io::Result<()> {
             rt_p2p.handle(),
             rt_http.handle(),
             rt_xnet.handle(),
+            rt_xnet_payload_builder.handle(),
             config.clone(),
             node_id,
             subnet_id,

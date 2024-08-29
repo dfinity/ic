@@ -15,6 +15,21 @@ use std::{
 use tokio::net::TcpStream;
 use tower::{BoxError, Service};
 
+/// An implementation of hyper Executor that spawns futures on a tokio runtime
+/// handle.
+#[derive(Clone, Debug)]
+pub struct ExecuteOnRuntime(pub tokio::runtime::Handle);
+
+impl<F> hyper::rt::Executor<F> for ExecuteOnRuntime
+where
+    F: Future + 'static + Send,
+    <F as Future>::Output: Send,
+{
+    fn execute(&self, fut: F) {
+        self.0.spawn(fut);
+    }
+}
+
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.
 #[derive(Debug, Clone, Copy, Default)]

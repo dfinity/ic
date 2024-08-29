@@ -339,6 +339,7 @@ where
                 &tokio::runtime::Handle::current(),
                 &tokio::runtime::Handle::current(),
                 &tokio::runtime::Handle::current(),
+                &tokio::runtime::Handle::current(),
                 config.clone(),
                 temp_node,
                 subnet_id,
