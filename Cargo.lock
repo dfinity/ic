@@ -16197,6 +16197,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "indoc",
+ "itertools 0.12.0",
  "pcre2",
  "tempfile",
  "tokio",
