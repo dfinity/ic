@@ -16,10 +16,8 @@ use anyhow::anyhow;
 use anyhow::Context;
 use axum::Router;
 use axum::{
-    body::{Body, HttpBody},
-    extract::State,
+    body::Body,
     http::{Method, Request, Response, Version},
-    middleware::Next,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
