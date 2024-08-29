@@ -23,7 +23,6 @@ pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const STREAM_TYPE_UNI: &str = "uni";
 pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
 pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
