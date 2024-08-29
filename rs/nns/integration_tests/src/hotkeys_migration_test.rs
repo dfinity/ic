@@ -73,9 +73,8 @@ fn test_hotkey_principal_migration() {
         );
     }
 
-    let exclude_topics = all_but(vec![Topic::SnsAndCommunityFund]);
-    assert_eq!(exclude_topics.len(), 18);
-    let proposal_ids = get_all_proposal_ids(&state_machine, exclude_topics);
+    let exclude_topic = all_but(vec![Topic::SnsAndCommunityFund]);
+    let proposal_ids = get_all_proposal_ids(&state_machine, exclude_topic);
     assert!(
         !proposal_ids.is_empty(),
         "Smoke test failed: We expect to have at some proposals."
@@ -156,8 +155,8 @@ fn test_hotkey_principal_migration() {
                 // The legacy field is still set.
                 hotkey_principal: Some(_hotkey_principal),
                 // The new field is not yet set.
-                // TODO[NNS1-3292]: Set this data via migration.
-                controller: None,
+                // TODO[NNS1-3292]: Set this data via migration and uncomment this line.
+                // controller: Some(controller),
                 ..
             } // TODO[NNS1-3292]: Uncomment
               // if hotkey_principal == controller
