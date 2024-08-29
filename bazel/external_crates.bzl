@@ -1515,7 +1515,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.0",
             ),
             "wycheproof": crate.spec(
-                version = "^0.5",
+                version = "^0.6",
+                default_features = False,
+                features = [
+                    "ecdsa",
+                    "eddsa",
+                    "hkdf",
+                    "mac",
+                    "rsa_sig",
+                ],
             ),
             "wiremock": crate.spec(
                 version = "^0.5.19",
