@@ -10,7 +10,6 @@ system_test_nns(
         "system_test_daily",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "7200", # 2 hours
     uses_guestos_dev_test = True,
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

@@ -5,6 +5,8 @@ use tokio::runtime::Handle;
 pub mod ensure_blessed_version;
 pub mod retire_blessed_version;
 pub mod update_subnet_type;
+pub mod workload;
+pub mod xnet;
 
 pub trait Step: Sync + Send {
     fn execute(&self, env: TestEnv, rt: Handle) -> anyhow::Result<()>;
