@@ -25,6 +25,10 @@ mod metrics;
 mod receiver;
 mod sender;
 
+struct Config {
+    max_slots: usize,
+}
+
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
 
