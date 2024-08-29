@@ -71,6 +71,72 @@ impl CanisterQueuesLoopDetector {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
+///
+/// # Structure
+///
+/// At a high level,`CanisterQueues` can be broken down into several components:
+///
+///  1. Ingress queue: queue of user messages, see [IngressQueue] for details.
+///
+///  2. Canister input and output queues: a map of pairs of canister input and
+///     output queues; one pair per canister (including ourselves). Canister
+///     queues come in pairs in order to reliably implement backpressure, by
+///     reserving queue slots for responses: before a message can be enqueued
+///     into an input / output queue, a response slot must have been reserved in
+///     the reverse output / input queue.
+///
+///     Canister queues hold references (of type `message_pool::Id`) into the
+///     message pool (see below) or into maps of expired callbacks or shed
+///     responses. Some references may be *stale* due to expiration or load
+///     shedding.
+///
+///  3. Message pool (for the purpose of this breakdown, also includes the maps
+///     of expired callbacks and shed responses): backing storage for canister
+///     input and output queues.
+///
+///     The message pool holds the messages referenced from `canister_queues`,
+///     with support for time-based expiration and load shedding. Also maintains
+///     message count and size stats, broken down along several dimensions.
+///
+///     In order to handle shedding of inbound responses; as well as for compact
+///     representation of timeout responses; shed and expired `CallbackIds`` are
+///     maintained in separate maps. When it peeks or pops such a `CallbackId`,
+///     `SystemState` retrieves the `Callback` and synthesizes a reject response
+///     based on it.
+///
+///  4. Queue stats: slot and memory reservation stats, for efficient validation
+///     checks and memory usage calculations.
+///
+///  5. Input schedules: FIFO queues of local and remote subnet senders plus a
+///     "next input" pointer for round-robin consumption of input messages.
+///
+/// # Hard invariants
+///
+///  * The reference at the front of a non-empty canister input or output queue
+///    is non-stale.
+///
+///  * Input schedules are internally consistent: a canister is enqueued in the
+///    local or remote input schedule iff in the `input_schedule_canisters` set.
+///
+/// # Soft invariants
+///
+///  * `QueueStats`' input / output queue slot reservation stats are consistent
+///    with the actual number of reserved slots across input / output queues.
+///
+///  * All keys (references) in the pool and in the shed / expired callback maps
+///    are enqueued in the canister queues exactly once.
+///
+///  * All non-empty input queues are scheduled in an input schedule.
+///
+///  * Local canisters (including ourselves) are scheduled in the local input
+///    schedule. Canisters that are not known to be local (including potentially
+///    deleted local canisters) may be scheduled in either input schedule.
+///
+///  # External invariants
+///
+///  * `QueueStats`' slot and memory reservation stats are consistent with
+///    `CallContextManager`'s callbacks and non-responded call contexts (see
+///    `SystemState::check_invariants()` for details).
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
@@ -894,14 +960,14 @@ impl CanisterQueues {
         if self.canister_queues.is_empty() && self.ingress_queue.is_empty() {
             // The schedules and stats will already have default (zero) values, only `pool`
             // and the input schedule related fields must be reset explicitly.
-            assert!(self.pool.len() == 0);
+            debug_assert!(self.pool.len() == 0);
             self.pool = MessagePool::default();
             self.local_subnet_input_schedule = Default::default();
             self.remote_subnet_input_schedule = Default::default();
             self.input_schedule_canisters = Default::default();
             self.next_input_queue = Default::default();
 
-            // Trust but verify. Ensure everything is actually set to default.
+            // Trust but verify. Ensure that everything is actually set to default.
             debug_assert_eq!(CanisterQueues::default(), *self);
         }
     }
