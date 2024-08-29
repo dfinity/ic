@@ -84,10 +84,6 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
-# Install JRE for TLA/Apalache checks
-RUN apt -yq update && \
-    apt -yqq install openjdk-17-jre-headless
-
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
     # needed for github actions runner \
     groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
