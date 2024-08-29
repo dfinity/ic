@@ -2187,7 +2187,9 @@ fn ic0_call_cycles_add128_up_to_deducts_cycles() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(MAX_NUM_INSTRUCTIONS.get())
         .build();
-    let wat = r#"
+    let requested_cycles = Cycles::new(10_000_000_000);
+    let wat = format!(
+        r#"
         (module
             (import "ic0" "call_new"
                 (func $ic0_call_new
@@ -2199,6 +2201,8 @@ fn ic0_call_cycles_add128_up_to_deducts_cycles() {
             )
             (import "ic0" "call_cycles_add128_up_to" (func $ic0_call_cycles_add128_up_to (param i64 i64 i32)))
             (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
             (func (export "canister_update test")
                 (call $ic0_call_new
                     (i32.const 100) (i32.const 10)  ;; callee canister id = 777
@@ -2208,26 +2212,32 @@ fn ic0_call_cycles_add128_up_to_deducts_cycles() {
                 )
                 (call $ic0_call_cycles_add128_up_to
                     (i64.const 0)                       ;; amount of cycles used to be added - high
-                    (i64.const 10000000000)             ;; amount of cycles used to be added - low
+                    (i64.const {requested_cycles})      ;; amount of cycles used to be added - low
                     (i32.const 200)                     ;; where to write amount of cycles added
                 )
                 (call $ic0_call_perform)
                 drop
+                ;; return number of cycles attached
+                (call $msg_reply_data_append (i32.const 200) (i32.const 16))
+                (call $msg_reply)
             )
             (memory 1)
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
-        )"#;
+        )"#
+    );
     let initial_cycles = Cycles::new(100_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
-    let ingress_status = test.ingress_raw(canister_id, "test", vec![]).1;
-    let ingress_state = match ingress_status {
-        IngressStatus::Known { state, .. } => state,
-        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
+    let WasmResult::Reply(reply_bytes) = test.ingress(canister_id, "test", vec![]).unwrap() else {
+        panic!("bad WasmResult")
     };
-    assert_eq!(IngressState::Processing, ingress_state);
+    // The canister has plenty of cycles available to add the requested 10B cycles to the call.
+    // Therefore we expect that 10B cycles are transferred
+    let transferred_cycles: Cycles =
+        u128::from_le_bytes(reply_bytes.try_into().expect("bad number of reply bytes")).into();
+    assert_eq!(requested_cycles, transferred_cycles);
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
     let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
@@ -2240,9 +2250,6 @@ fn ic0_call_cycles_add128_up_to_deducts_cycles() {
             test.subnet_size(),
         )
         + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
-    // The canister has plenty of cycles available to add the requested 10B cycles to the call.
-    // Therefore we expect that 10B cycles are missing
-    let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
         test.canister_state(canister_id).system_state.balance(),
