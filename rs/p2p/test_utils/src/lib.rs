@@ -466,6 +466,11 @@ pub fn start_consensus_manager(
         bouncer_factory,
         MetricsRegistry::default(),
     );
-    cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);
+    cm1.add_client(
+        artifact_manager_event_rx,
+        artifact_sender,
+        downloader,
+        usize::MAX,
+    );
     (artifact_processor_jh, cm1)
 }

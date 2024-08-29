@@ -25,10 +25,6 @@ mod metrics;
 mod receiver;
 mod sender;
 
-struct Config {
-    max_slots: usize,
-}
-
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
 
@@ -61,6 +57,7 @@ impl ConsensusManagerBuilder {
         outbound_artifacts_rx: Receiver<ArtifactMutation<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
+        slot_limit: usize,
     ) {
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -82,6 +79,7 @@ impl ConsensusManagerBuilder {
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
+                slot_limit,
             )
         };
 
@@ -125,6 +123,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
+    slot_limit: usize,
 ) -> Shutdown
 where
     Artifact: IdentifiableArtifact,
@@ -150,6 +149,7 @@ where
         assembler,
         sender,
         topology_watcher,
+        slot_limit,
     );
     shutdown
 }

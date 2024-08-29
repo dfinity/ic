@@ -66,6 +66,8 @@ use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
+const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
+const SLOT_TABLE_NO_LIMIT: usize = usize::MAX;
 
 /// The collection of all artifact pools.
 struct ArtifactPools {
@@ -358,7 +360,7 @@ fn start_consensus(
             consensus_gossip,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(consensus_rx, client, assembler);
+        new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     let ingress_sender = {
@@ -381,7 +383,12 @@ fn start_consensus(
             ingress_prioritizer,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(ingress_rx, client.clone(), assembler);
+        new_p2p_consensus.add_client(
+            ingress_rx,
+            client.clone(),
+            assembler,
+            SLOT_TABLE_LIMIT_INGRESS,
+        );
         client
     };
 
@@ -415,7 +422,7 @@ fn start_consensus(
             certifier_gossip,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(certification_rx, client, assembler);
+        new_p2p_consensus.add_client(certification_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -443,7 +450,7 @@ fn start_consensus(
             dkg_gossip,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(dkg_rx, client, assembler);
+        new_p2p_consensus.add_client(dkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -492,7 +499,7 @@ fn start_consensus(
             idkg_gossip,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(idkg_rx, client, assembler);
+        new_p2p_consensus.add_client(idkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -527,7 +534,7 @@ fn start_consensus(
             canister_http_gossip,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(http_outcalls_rx, client, assembler);
+        new_p2p_consensus.add_client(http_outcalls_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     (
