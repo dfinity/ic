@@ -1,6 +1,6 @@
 use ic_protobuf::{
-    p2p::v1 as p2p_pb,
     proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
 };
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
@@ -19,11 +19,11 @@ pub enum MaybeStrippedConsensusMessage {
     Unstripped(ConsensusMessage),
 }
 
-impl TryFrom<p2p_pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage {
+impl TryFrom<pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: p2p_pb::StrippedConsensusMessage) -> Result<Self, Self::Error> {
-        use p2p_pb::stripped_consensus_message::Msg;
+    fn try_from(value: pb::StrippedConsensusMessage) -> Result<Self, Self::Error> {
+        use pb::stripped_consensus_message::Msg;
         let Some(msg) = value.msg else {
             return Err(ProxyDecodeError::MissingField(
                 "StrippedConsensusMessage::msg",
@@ -38,11 +38,11 @@ impl TryFrom<p2p_pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage
     }
 }
 
-impl From<MaybeStrippedConsensusMessage> for p2p_pb::StrippedConsensusMessage {
+impl From<MaybeStrippedConsensusMessage> for pb::StrippedConsensusMessage {
     fn from(value: MaybeStrippedConsensusMessage) -> Self {
         let msg = match value {
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
-                p2p_pb::stripped_consensus_message::Msg::Unstripped(unstripped.into())
+                pb::stripped_consensus_message::Msg::Unstripped(unstripped.into())
             }
             MaybeStrippedConsensusMessage::StrippedBlockProposal(_) => todo!(),
         };
@@ -60,18 +60,18 @@ impl AsRef<ConsensusMessageId> for StrippedConsensusMessageId {
     }
 }
 
-impl From<StrippedConsensusMessageId> for p2p_pb::StrippedConsensusMessageId {
+impl From<StrippedConsensusMessageId> for pb::StrippedConsensusMessageId {
     fn from(value: StrippedConsensusMessageId) -> Self {
-        p2p_pb::StrippedConsensusMessageId {
+        pb::StrippedConsensusMessageId {
             unstripped_id: Some(value.0.into()),
         }
     }
 }
 
-impl TryFrom<p2p_pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
+impl TryFrom<pb::StrippedConsensusMessageId> for StrippedConsensusMessageId {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: p2p_pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::StrippedConsensusMessageId) -> Result<Self, Self::Error> {
         let unstripped = try_from_option_field(
             value.unstripped_id,
             "StrippedConsensusMessageId::unstripped_id",
@@ -99,11 +99,11 @@ impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
 }
 
 impl PbArtifact for MaybeStrippedConsensusMessage {
-    type PbId = p2p_pb::StrippedConsensusMessageId;
+    type PbId = pb::StrippedConsensusMessageId;
 
     type PbIdError = ProxyDecodeError;
 
-    type PbMessage = p2p_pb::StrippedConsensusMessage;
+    type PbMessage = pb::StrippedConsensusMessage;
 
     type PbMessageError = ProxyDecodeError;
 }

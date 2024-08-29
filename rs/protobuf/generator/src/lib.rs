@@ -397,8 +397,6 @@ fn build_p2p_proto(def: &Path, out: &Path) {
     let files = [
         def.join("p2p/v1/state_sync_manager.proto"),
         def.join("p2p/v1/consensus_manager.proto"),
-        def.join("p2p/v1/stripped_artifact_downloader.proto"),
-        def.join("p2p/v1/stripped_types.proto"),
     ];
     compile_protos(config, def, &files);
 }

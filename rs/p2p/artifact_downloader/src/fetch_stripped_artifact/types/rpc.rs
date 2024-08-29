@@ -1,5 +1,5 @@
 use ic_protobuf::{
-    p2p::v1 as pb,
+    types::v1 as pb,
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use ic_types::{

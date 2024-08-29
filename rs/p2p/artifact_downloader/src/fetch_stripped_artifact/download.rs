@@ -13,7 +13,7 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_interfaces::p2p::consensus::{Peers, ValidatedPoolReader};
 use ic_logger::{warn, ReplicaLogger};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
+use ic_protobuf::{types::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IngressMessageId},
