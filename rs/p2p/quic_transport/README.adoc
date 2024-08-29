@@ -57,7 +57,7 @@ How do you make sure there are only transient errors? For example, how do you ru
 The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
 When a message is received by transport, a handler is chosen using the URI and invoked with the payload (a.k.a. routing).
 
-== Handlers ==
+=== Handlers ===
 
 A handler implements an async interface. This implies that a handler must satisfy all Tokio requirements for async code.
 Some handlers may use synchronous APIs that block the running thread for longer periods of time (>100 microseconds). 
@@ -73,6 +73,7 @@ A nice writeup about async and blocking operations can be found in https://ryhl.
 
 === Breaking dependency cycles in P2P protocols ===
 
+<<<<<<< HEAD
 In any design that uses a single connection for inbound and outbound traffic with
 designated listner and dialer there exists a circlular dependency between the read and write paths.
 There are different approaches of breaking this depedency.
@@ -99,3 +100,20 @@ if a route is missing it should not be considered a failure in transport.
 For comparision, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain for a response from the application receive side].
 In addition, no gRPC implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html['NOT_FOUND'],
 which is the most approriate return code if a route is missing.
+=======
+Many P2P protocol designs use a single TCP/UDP connection between any two peers. The main benefit is less consumption of limited resources (e.g. CPU for TLS handshake, file descriptors for sockets).
+Such protocols that use a single connection for inbound and outbound traffic, with a designated listener and dialer, have circular dependency between the read and write paths.
+
+There are different approaches to breaking this dependency.
+
+1. Clients of the P2P protocol have a single event loop that drives the outbound traffic. Hence only those event loops need access to the QuicTransport object. 
+In this model, handlers can have a channel to the main event loop. Effectively this means that P2P clients are instantiated in two stages 1. creating the receive side router and 2. creating the send side event loop.
+
+2. An alternative is instead of splitting the creation of P2P clients into send and receive sides to split the creation of the QuicTransport in two - 
+creating the QuicTransport object (client side) and starting the QuicTransport event loop for establishing connections(server side). 
+This approach enables the handlers to do most of the work and potentially eliminates the need for the event loop from the first approach. However, this comes at the cost of having a more shared state and contention. 
+One possible implementation using this approach is to have weak references to the transport object that can be used directly in the handlers. 
+As a result, when there are handlers that take the weak reference the transport object needs first to be instantiated and later started with the already constructed router.
+
+3. Another alternative is to allow the QuicTransport to update the routes dynamically. In this case, once a connection is established it is unnatural to change the available routes from a client PoV.
+>>>>>>> origin/master

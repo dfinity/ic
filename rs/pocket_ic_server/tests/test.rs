@@ -28,7 +28,7 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
 pub const LOCALHOST: &str = "127.0.0.1";
@@ -67,7 +67,6 @@ fn start_server_helper(
         cmd.stderr(std::process::Stdio::piped());
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
-    let start = Instant::now();
     let url = loop {
         match ready_file_path.try_exists() {
             Ok(true) => {
@@ -77,9 +76,6 @@ fn start_server_helper(
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
-        }
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
         }
     };
     (url, out)
@@ -224,7 +220,6 @@ fn test_port_file() {
         )
         .spawn()
         .expect("Failed to start PocketIC binary");
-    let start = Instant::now();
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
             if !port_string.is_empty() {
@@ -235,9 +230,6 @@ fn test_port_file() {
             }
         }
         std::thread::sleep(Duration::from_millis(20));
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
-        }
     }
 }
 

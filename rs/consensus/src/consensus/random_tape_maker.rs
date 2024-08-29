@@ -21,7 +21,7 @@
 //!    random tape is delivered.
 
 use ic_consensus_utils::{
-    active_low_threshold_transcript,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
@@ -132,10 +132,10 @@ impl RandomTapeMaker {
     ) -> Option<RandomTapeShare> {
         let content = RandomTapeContent::new(height);
 
-        if let Some(transcript) = active_low_threshold_transcript(pool.as_cache(), height) {
+        if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
             match self
                 .crypto
-                .sign(&content, self.replica_config.node_id, transcript.dkg_id)
+                .sign(&content, self.replica_config.node_id, dkg_id)
             {
                 Ok(signature) => Some(RandomTapeShare { content, signature }),
                 Err(err) => {

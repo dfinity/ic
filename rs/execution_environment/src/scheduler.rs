@@ -25,8 +25,10 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
+    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -36,6 +38,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -1340,7 +1343,36 @@ impl SchedulerImpl {
                 }
             }
         }
+        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
+    }
+
+    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
+        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
+            // Returns the larger of the two:
+            // - the default value
+            // - the average between the current usage and the hard limit.
+            default.max(NumBytes::new(
+                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
+            ))
+        }
+
+        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
+        for (_id, canister) in state.canister_states.iter_mut() {
+            if canister.system_state.wasm_memory_limit.is_none() {
+                let num_wasm_pages = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
+                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
+                    canister.system_state.wasm_memory_limit =
+                        Some(compute_default_wasm_memory_limit(
+                            default_wasm_memory_limit,
+                            wasm_memory_usage,
+                        ));
+                }
+            }
+        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.

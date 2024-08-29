@@ -21,8 +21,11 @@ use axum::{
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
+<<<<<<< HEAD
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
+=======
+>>>>>>> origin/master
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
@@ -171,6 +174,7 @@ async fn handle_bi_stream(
             .inc();
     }
 }
+<<<<<<< HEAD
 
 async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
     let raw_msg = recv_stream
@@ -244,3 +248,5 @@ async fn write_response(
         .with_context(|| "Failed to write request to stream.")?;
     Ok(())
 }
+=======
+>>>>>>> origin/master
