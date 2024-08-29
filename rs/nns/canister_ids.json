@@ -1,62 +1,54 @@
 {
   "registry": {
     "local": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
-    "mainnet": "rwlgt-iiaaa-aaaaa-aaaaa-cai",
-    "small01": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
+    "mainnet": "rwlgt-iiaaa-aaaaa-aaaaa-cai"
   },
   "governance": {
     "local": "rrkah-fqaaa-aaaaa-aaaaq-cai",
-    "mainnet": "rrkah-fqaaa-aaaaa-aaaaq-cai",
-    "small01": "rrkah-fqaaa-aaaaa-aaaaq-cai"
+    "mainnet": "rrkah-fqaaa-aaaaa-aaaaq-cai"
   },
   "ledger": {
     "local": "ryjl3-tyaaa-aaaaa-aaaba-cai",
-    "mainnet": "ryjl3-tyaaa-aaaaa-aaaba-cai",
-    "small01": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+    "mainnet": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+  },
+  "icp-index": {
+    "local": "qhbym-qaaaa-aaaaa-aaafq-cai",
+    "mainnet": "qhbym-qaaaa-aaaaa-aaafq-cai"
   },
   "icp-ledger-archive": {
     "local": "qjdve-lqaaa-aaaaa-aaaeq-cai",
-    "mainnet": "qjdve-lqaaa-aaaaa-aaaeq-cai",
-    "small01": "qjdve-lqaaa-aaaaa-aaaeq-cai"
+    "mainnet": "qjdve-lqaaa-aaaaa-aaaeq-cai"
   },
   "icp-ledger-archive-1": {
     "local": "qsgjb-riaaa-aaaaa-aaaga-cai",
-    "mainnet": "qsgjb-riaaa-aaaaa-aaaga-cai",
-    "small01": "qsgjb-riaaa-aaaaa-aaaga-cai"
+    "mainnet": "qsgjb-riaaa-aaaaa-aaaga-cai"
   },
   "root": {
     "local": "r7inp-6aaaa-aaaaa-aaabq-cai",
-    "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai",
-    "small01": "r7inp-6aaaa-aaaaa-aaabq-cai"
+    "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai"
   },
   "cycles-minting": {
     "local": "rkp4c-7iaaa-aaaaa-aaaca-cai",
-    "mainnet": "rkp4c-7iaaa-aaaaa-aaaca-cai",
-    "small01": "rkp4c-7iaaa-aaaaa-aaaca-cai"
+    "mainnet": "rkp4c-7iaaa-aaaaa-aaaca-cai"
   },
   "lifeline": {
     "local": "rno2w-sqaaa-aaaaa-aaacq-cai",
-    "mainnet": "rno2w-sqaaa-aaaaa-aaacq-cai",
-    "small01": "rno2w-sqaaa-aaaaa-aaacq-cai"
+    "mainnet": "rno2w-sqaaa-aaaaa-aaacq-cai"
   },
   "genesis-token": {
     "local": "renrk-eyaaa-aaaaa-aaada-cai",
-    "mainnet": "renrk-eyaaa-aaaaa-aaada-cai",
-    "small01": "renrk-eyaaa-aaaaa-aaada-cai"
+    "mainnet": "renrk-eyaaa-aaaaa-aaada-cai"
   },
   "sns-wasm": {
     "local": "qaa6y-5yaaa-aaaaa-aaafa-cai",
-    "mainnet": "qaa6y-5yaaa-aaaaa-aaafa-cai",
-    "small01": "qaa6y-5yaaa-aaaaa-aaafa-cai"
+    "mainnet": "qaa6y-5yaaa-aaaaa-aaafa-cai"
   },
   "identity": {
     "local": "rdmx6-jaaaa-aaaaa-aaadq-cai",
-    "mainnet": "rdmx6-jaaaa-aaaaa-aaadq-cai",
-    "small01": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    "mainnet": "rdmx6-jaaaa-aaaaa-aaadq-cai"
   },
   "nns-ui": {
     "local": "qoctq-giaaa-aaaaa-aaaea-cai",
-    "mainnet": "qoctq-giaaa-aaaaa-aaaea-cai",
-    "small01": "qoctq-giaaa-aaaaa-aaaea-cai"
+    "mainnet": "qoctq-giaaa-aaaaa-aaaea-cai"
   }
 }

@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_manager",
     "//rs/types/types",
-    "@crate_index//:either",
     "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:tower-http",

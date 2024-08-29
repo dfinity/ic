@@ -22,10 +22,7 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   ci-main:
@@ -51,6 +48,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -61,13 +60,16 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
     continue-on-error: True
@@ -88,6 +90,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -99,13 +103,15 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
@@ -125,6 +131,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -136,13 +144,15 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:
@@ -170,6 +180,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup python deps
         id: setup-python-deps
         shell: bash

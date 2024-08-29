@@ -32,11 +32,13 @@ ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
+ic-registry-node-provider-rewards = { path = "../node_provider_rewards" }
 ic-types = { path = "../../types/types" }
 idna = { workspace = true }
 lazy_static = { workspace = true }

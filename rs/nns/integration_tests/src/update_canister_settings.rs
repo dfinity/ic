@@ -4,11 +4,10 @@ use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVi
 use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command,
-    proposal::Action,
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
-    Proposal, UpdateCanisterSettings,
+    MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -75,21 +74,23 @@ fn test_update_canister_settings_proposal(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
-        &Proposal {
+        &MakeProposalRequest {
             title: Some("Update canister settings".to_string()),
-            action: Some(Action::UpdateCanisterSettings(UpdateCanisterSettings {
-                canister_id: Some(target_canister_id.get()),
-                settings: Some(CanisterSettings {
-                    controllers: Some(Controllers {
-                        controllers: target_controllers.clone(),
+            action: Some(ProposalActionRequest::UpdateCanisterSettings(
+                UpdateCanisterSettings {
+                    canister_id: Some(target_canister_id.get()),
+                    settings: Some(CanisterSettings {
+                        controllers: Some(Controllers {
+                            controllers: target_controllers.clone(),
+                        }),
+                        memory_allocation: Some(target_memory_allocation),
+                        compute_allocation: Some(target_compute_allocation),
+                        freezing_threshold: Some(target_freezing_threshold),
+                        wasm_memory_limit: Some(target_wasm_memory_limit),
+                        log_visibility: Some(GovernanceLogVisibility::Public as i32),
                     }),
-                    memory_allocation: Some(target_memory_allocation),
-                    compute_allocation: Some(target_compute_allocation),
-                    freezing_threshold: Some(target_freezing_threshold),
-                    wasm_memory_limit: Some(target_wasm_memory_limit),
-                    log_visibility: Some(GovernanceLogVisibility::Public as i32),
-                }),
-            })),
+                },
+            )),
             ..Default::default()
         },
     );

@@ -9,7 +9,7 @@ use crate::{
         v1::{
             claim_swap_neurons_request::{
                 neuron_recipe::{self, Participant},
-                NeuronParameters, NeuronRecipe, NeuronRecipes,
+                NeuronRecipe, NeuronRecipes,
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             get_neuron_response,
@@ -49,7 +49,7 @@ use ic_nervous_system_common::{
     ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
-use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage, Principals};
+use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
@@ -2508,59 +2508,6 @@ impl UpgradeSnsControlledCanister {
     }
 }
 
-// TODO(NNS1-3198): Remove this function after `NeuronParameters` is made obsolete.
-impl From<Vec<NeuronParameters>> for NeuronRecipes {
-    fn from(src: Vec<NeuronParameters>) -> Self {
-        let neuron_recipes = src
-            .into_iter()
-            .map(
-                |NeuronParameters {
-                     neuron_id,
-                     controller,
-                     hotkey,
-                     stake_e8s,
-                     dissolve_delay_seconds,
-                     source_nns_neuron_id,
-                     followees,
-                 }| {
-                    let followees = Some(NeuronIds {
-                        neuron_ids: followees,
-                    });
-                    let participant = if let Some(source_nns_neuron_id) = source_nns_neuron_id {
-                        let nns_neuron_id = Some(source_nns_neuron_id);
-
-                        // Historical misnomer.
-                        let nns_neuron_controller = hotkey;
-
-                        // NNS neurons' hotkeys cannot be specified in the legacy `NeuronParameters` struct.
-                        let nns_neuron_hotkeys = Some(Principals { principals: vec![] });
-
-                        Some(neuron_recipe::Participant::NeuronsFund(
-                            neuron_recipe::NeuronsFund {
-                                nns_neuron_id,
-                                nns_neuron_controller,
-                                nns_neuron_hotkeys,
-                            },
-                        ))
-                    } else {
-                        Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {}))
-                    };
-                    NeuronRecipe {
-                        neuron_id,
-                        controller,
-                        stake_e8s,
-                        dissolve_delay_seconds,
-                        participant,
-                        followees,
-                    }
-                },
-            )
-            .collect();
-
-        Self { neuron_recipes }
-    }
-}
-
 impl From<Vec<NeuronRecipe>> for NeuronRecipes {
     fn from(neuron_recipes: Vec<NeuronRecipe>) -> Self {
         NeuronRecipes { neuron_recipes }
@@ -2806,6 +2753,7 @@ pub(crate) mod tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
+    use ic_nervous_system_proto::pb::v1::Principals;
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
     use std::convert::TryInto;

@@ -3435,7 +3435,7 @@ async fn test_claim_swap_neuron_skips_correct_claim_statuses() {
     assert_eq!(sns_governance_client.get_calls_snapshot().len(), 0);
 }
 
-/// Assert that the NeuronParameters are correctly created from SnsNeuronRecipes. This
+/// Assert that the NeuronRecipes are correctly created from SnsNeuronRecipes. This
 /// is an ugly test that doesn't make use of a lot of variables, but given other tests
 /// of claim_swap_neurons, this is more of a regression test. If something unexpected changes
 /// in the NeuronParameter creation, this will fail loudly.
@@ -3507,9 +3507,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
         }
     );
 
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once neuron_parameters is removed
     let expected = SnsGovernanceClientCall::ClaimSwapNeurons(ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes {
             neuron_recipes: vec![
                 NeuronRecipe {
@@ -3546,6 +3544,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 },
             ],
         }),
+        ..Default::default()
     });
     assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }
@@ -3558,15 +3557,15 @@ async fn test_claim_swap_neurons_batches_claims() {
 
     // This test will create a set number of NeuronRecipes to trigger batching.
     let desired_batch_count = 10;
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // We want the test to handle non-divisible batch counts. Therefore create N-1 full batches,
     // and final a half full batch
-    let neuron_recipe_count = ((desired_batch_count - 1) * neuron_parameters_per_batch)
-        + (neuron_parameters_per_batch / 2);
+    let neuron_recipe_count =
+        ((desired_batch_count - 1) * neuron_recipes_per_batch) + (neuron_recipes_per_batch / 2);
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = SwapBuilder::new()
         .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
         .with_lifecycle(Committed)
@@ -3619,14 +3618,14 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     // Step 1: Prepare the world
 
     // This test will create a set number of NeuronRecipes to trigger batching.
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // The test requires 3 batches. The first call will succeed, the second one will fail, and the
     // 3rd one will not be attempted.
-    let neuron_recipe_count = neuron_parameters_per_batch * 3;
+    let neuron_recipe_count = neuron_recipes_per_batch * 3;
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = Swap {
         lifecycle: Committed as i32,
         init: Some(init()),
@@ -3655,7 +3654,7 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     assert_eq!(
         sweep_result,
         SweepResult {
-            success: neuron_parameters_per_batch as u32, // The first batch should have succeeded
+            success: neuron_recipes_per_batch as u32, // The first batch should have succeeded
             skipped: 0,
             failure: 0,
             invalid: 0,
@@ -3668,13 +3667,13 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     assert_eq!(replies_snapshot.len(), 2);
 
     // Assert that the successful batch had their journal updated
-    for recipe in &swap.neuron_recipes[0..neuron_parameters_per_batch] {
+    for recipe in &swap.neuron_recipes[0..neuron_recipes_per_batch] {
         assert_eq!(recipe.claimed_status, Some(ClaimedStatus::Success as i32));
     }
 
     // Assert that the two unsuccessful batch did not have their journal updated and can therefore
     // be retried
-    for recipe in &swap.neuron_recipes[neuron_parameters_per_batch..swap.neuron_recipes.len()] {
+    for recipe in &swap.neuron_recipes[neuron_recipes_per_batch..swap.neuron_recipes.len()] {
         assert_eq!(recipe.claimed_status, Some(ClaimedStatus::Pending as i32));
     }
 }
@@ -3686,12 +3685,12 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
     // Step 1: Prepare the world
 
     // This test will create a set number of NeuronRecipes to trigger batching.
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
     // The test requires 1 batch, and will pop one of the SwapNeurons from the response
-    let neuron_recipe_count = neuron_parameters_per_batch;
+    let neuron_recipe_count = neuron_recipes_per_batch;
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = Swap {
         lifecycle: Committed as i32,
         init: Some(init()),
@@ -3725,7 +3724,7 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
     assert_eq!(
         sweep_result,
         SweepResult {
-            success: (neuron_parameters_per_batch - 1) as u32, // All but the last of the batch should result in success
+            success: (neuron_recipes_per_batch - 1) as u32, // All but the last of the batch should result in success
             skipped: 0,
             failure: 0,
             invalid: 0,
@@ -4627,8 +4626,9 @@ fn buy_token_ok(
     );
 }
 
+#[track_caller]
 fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_message: &str) {
-    assert!(swap
+    let observed = swap
         .refresh_buyer_token_e8s(
             *user,
             None,
@@ -4643,8 +4643,13 @@ fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_m
         )
         .now_or_never()
         .unwrap()
-        .unwrap_err()
-        .contains(error_message));
+        .unwrap_err();
+    assert!(
+        observed.contains(error_message),
+        "Expected substring `{}` not found in observed error `{}`.",
+        error_message,
+        observed,
+    );
 }
 
 fn check_final_conditions(
@@ -4893,6 +4898,73 @@ fn test_refresh_buyer_tokens_not_enough_tokens_left() {
         &user1,
         &amount_user1_0,
         "minimum required to participate",
+    );
+
+    // The one token should still be left fur purchase
+    check_final_conditions(
+        &mut swap,
+        &user2,
+        &amount_user2_0,
+        &(params.max_direct_participation_icp_e8s.unwrap() - E8),
+    );
+}
+
+// Similar to test_refresh_buyer_tokens_not_enough_tokens_left, but we check that, once the number
+// of SNS neurons that all participants (user2, user3, user4) would need to get (if the swap
+// succeeds) exceeds the threshold `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`, then the swap would reject
+// a new user (user1) that did not yet participate, while existing participants (e.g., user2) are
+// still able to increase their participation amount.
+#[test]
+fn test_refresh_buyer_tokens_no_sns_neuron_baskets_available() {
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    let user3 = PrincipalId::new_user_test_id(3);
+    let user4 = PrincipalId::new_user_test_id(4);
+
+    let mut swap = SwapBuilder::new()
+        .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
+        .with_lifecycle(Open)
+        .with_swap_start_due(Some(START_TIMESTAMP_SECONDS), Some(END_TIMESTAMP_SECONDS))
+        .with_min_participants(1)
+        .with_min_max_participant_icp(2 * E8, 40 * E8)
+        .with_min_max_direct_participation(5 * E8, 100 * E8)
+        .with_sns_tokens(100_000 * E8)
+        // An extremely large basket size, so we can reach MAX_NEURONS_FOR_DIRECT_PARTICIPANTS with
+        // a relatively small number of participants.
+        .with_neuron_basket_count(33_000)
+        .with_neurons_fund_participation()
+        .build();
+
+    let params = swap.params.clone().unwrap();
+
+    let amount_user1_0 = 5 * E8;
+    let amount_user2_0 = 40 * E8;
+    let amount_user3_0 = 40 * E8;
+    let amount_user4_0 = 99 * E8 - (amount_user2_0 + amount_user3_0);
+
+    // All tokens but one should be already bought up by users 2 to 4 --> 99 Tokens were bought
+    buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+    buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+    buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+    // Make sure the 99 tokens were registered
+    assert_eq!(
+        swap.get_buyers_total().buyers_total,
+        amount_user2_0 + amount_user3_0 + amount_user4_0
+    );
+
+    // Make sure that only an amount smaller than the minimum amount to be bought per user is available
+    assert!(
+        params.max_direct_participation_icp_e8s.unwrap() - swap.get_buyers_total().buyers_total
+            < params.min_participant_icp_e8s
+    );
+
+    // No user that has not participated in the swap yet can buy this one token left
+    buy_token_err(
+        &mut swap,
+        &user1,
+        &amount_user1_0,
+        "The swap has reached the maximum number of direct participants",
     );
 
     // The one token should still be left fur purchase

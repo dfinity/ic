@@ -1387,31 +1387,6 @@ pub mod canister_http_response_message {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgMessageAttribute {
-    #[prost(oneof = "i_dkg_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
-    pub kind: ::core::option::Option<i_dkg_message_attribute::Kind>,
-}
-/// Nested message and enum types in `IDkgMessageAttribute`.
-pub mod i_dkg_message_attribute {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        SignedDealing(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "2")]
-        DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "3")]
-        EcdsaSigShare(super::RequestId),
-        #[prost(message, tag = "4")]
-        Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "5")]
-        Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "6")]
-        SchnorrSigShare(super::RequestId),
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessageId {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,

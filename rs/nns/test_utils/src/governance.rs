@@ -15,15 +15,17 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::governance::{BitcoinNetwork, BitcoinSetConfigProposal};
-use ic_nns_governance_api::pb::v1::{
-    add_or_remove_node_provider::Change,
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, ListNodeProvidersResponse,
-    ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider, Proposal, ProposalInfo,
-    ProposalStatus,
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal::Action,
+        AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, ListNodeProvidersResponse,
+        ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider, Proposal, ProposalInfo,
+        ProposalStatus,
+    },
 };
 pub use ic_nns_handler_lifeline_interface::{
     HardResetNnsRootToVersionPayload, UpgradeRootProposal,

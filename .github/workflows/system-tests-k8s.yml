@@ -29,7 +29,7 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/testing_verification:basic_health_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '9' ||
+    ${{ github.event_name == 'schedule' && '7' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
@@ -59,7 +59,7 @@ jobs:
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 180
+    timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,9 +88,12 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json

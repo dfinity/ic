@@ -15,8 +15,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
@@ -44,6 +43,8 @@ anchors:
     id: before-script
     shell: bash
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    env:
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -73,13 +74,16 @@ jobs:
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
 
   lock-generate:
     name: Lock Generate

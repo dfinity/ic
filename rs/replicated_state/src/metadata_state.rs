@@ -47,6 +47,8 @@ use ic_types::{
     },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
@@ -62,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -164,6 +166,7 @@ pub struct SystemMetadata {
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
@@ -1254,7 +1257,6 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
         let reject_signals = item
             .reject_signals()
             .iter()
@@ -1271,7 +1273,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals: Vec::new(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
@@ -1291,42 +1292,18 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
-        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
-        let reject_signals = match (
-            item.reject_signals.as_slice(),
-            item.deprecated_reject_signals.as_slice(),
-        ) {
-            // No reject signals.
-            ([], []) => VecDeque::new(),
-
-            // Only contemporary reject signals.
-            (reject_signals, []) => reject_signals
-                .iter()
-                .map(|signal| {
-                    Ok(RejectSignal {
-                        reason: pb_queues::RejectReason::try_from(signal.reason)
-                            .map_err(ProxyDecodeError::DecodeError)?
-                            .try_into()?,
-                        index: signal.index.into(),
-                    })
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(ProxyDecodeError::DecodeError)?
+                        .try_into()?,
+                    index: signal.index.into(),
                 })
-                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
-
-            // Only deprecated reject signals.
-            ([], deprecated_reject_signals) => deprecated_reject_signals
-                .iter()
-                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
-                .collect(),
-
-            // Both contemporary and deprecated reject signals.
-            ([_, ..], [_, ..]) => {
-                return Err(ProxyDecodeError::Other(format!(
-                    "both contemporary and deprecated signals are populated \
-                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
-                    item.reject_signals, item.deprecated_reject_signals,
-                )));
-            }
-        };
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
         // Check reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
@@ -2379,8 +2356,15 @@ pub(crate) mod testing {
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             f(&mut self.streams);
 
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
+            // Update `responses_size_bytes`, retaining all previous keys with a default
+            // byte size of zero (so that the respective canister's
+            // `transient_stream_responses_size_bytes` is correctly reset to zero).
+            self.responses_size_bytes
+                .values_mut()
+                .for_each(|size| *size = 0);
+            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
+                self.responses_size_bytes.insert(canister_id, size_bytes);
+            }
         }
     }
 

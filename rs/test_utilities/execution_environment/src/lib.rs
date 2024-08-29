@@ -1962,6 +1962,15 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_canister_http_requests_in_flight(
+        mut self,
+        max_canister_http_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config.max_canister_http_requests_in_flight =
+            max_canister_http_requests_in_flight;
+        self
+    }
+
     pub fn with_wasm64(mut self) -> Self {
         self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         self

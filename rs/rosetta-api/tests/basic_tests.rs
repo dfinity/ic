@@ -28,7 +28,6 @@ use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::objects::ObjectMap;
-use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -131,8 +130,7 @@ async fn smoke_test() {
         Some(block_id(scribe.blockchain.get(expected_first_block).unwrap()).unwrap())
     );
 
-    let msg = MetadataRequest::new();
-    let res = req_handler.network_list(msg).await;
+    let res = req_handler.network_list().await;
     assert_eq!(
         res,
         Ok(NetworkListResponse::new(vec![req_handler.network_id()]))

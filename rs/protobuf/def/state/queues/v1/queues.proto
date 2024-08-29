@@ -41,13 +41,11 @@ message StreamFlags {
 message Stream {
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
-  reserved 3, 4;
-  reserved "signals_begin", "signals";
   uint64 signals_end = 5;
-  // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-  repeated uint64 deprecated_reject_signals = 6;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
+  reserved 3, 4, 6;
+  reserved "signals_begin", "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {

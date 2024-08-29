@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
-    execution_environment::Config as HypervisorConfig,
+    execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
@@ -12,6 +12,7 @@ use ic_management_canister_types::{
     SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, IngressState, IngressStatus, MessageId, StateMachine, StateMachineBuilder,
     StateMachineConfig, UserError,
@@ -2358,4 +2359,314 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
         ret_val.description().contains(containing_str),
         "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
     );
+}
+
+fn fetch_wasm_memory_limit(env: &StateMachine, canister_id: CanisterId) -> NumBytes {
+    let limit: u64 = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+    NumBytes::new(limit)
+}
+
+#[test]
+fn set_wasm_memory_limit_below_memory_usage() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wat = r#"(module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (func (export "canister_update test") (call $msg_reply))
+        (memory $memory 65535)
+    )"#;
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            wat::parse_str(wat).unwrap(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_wasm_memory_limit(10_000_000_000)
+                    .build(),
+            ),
+            Cycles::new(1_000_000 * B),
+        )
+        .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(10)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(10));
+
+    let err = env
+        .execute_ingress(
+            canister_id,
+            "test",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn set_wasm_memory_limit_to_4_gib() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(4 * 1024 * 1024 * 1024)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(4 * 1024 * 1024 * 1024));
+
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
+
+#[test]
+fn set_wasm_memory_limit_to_zero() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(0)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(0));
+
+    // The Wasm memory limit of 0 means that there is no limit.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
+
+#[test]
+fn set_wasm_memory_limit_from_another_canister() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister1 = create_universal_canister_with_cycles(&env, None, initial_cycles);
+    let canister2 = create_universal_canister_with_cycles(
+        &env,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![PrincipalId::new_anonymous(), canister1.get()])
+                .build(),
+        ),
+        initial_cycles,
+    );
+
+    let result = env
+        .execute_ingress(
+            canister1,
+            "update",
+            wasm()
+                .call_simple(
+                    IC_00,
+                    "update_settings",
+                    call_args()
+                        .other_side(
+                            UpdateSettingsArgs {
+                                canister_id: canister2.get(),
+                                settings: CanisterSettingsArgsBuilder::new()
+                                    .with_wasm_memory_limit(4 * 1024 * 1024 * 1024)
+                                    .build(),
+                                sender_canister_version: None,
+                            }
+                            .encode(),
+                        )
+                        .on_reply(wasm().message_payload().append_and_reply())
+                        .on_reject(wasm().reject_message().reject()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister2);
+    assert_eq!(wasm_memory_limit, NumBytes::new(4 * 1024 * 1024 * 1024));
+
+    let result = env
+        .execute_ingress(
+            canister2,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
+
+#[test]
+fn canister_create_with_default_wasm_memory_limit() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_cycles = Cycles::new(200 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, DEFAULT_WASM_MEMORY_LIMIT);
+}
+
+#[test]
+fn initialize_default_wasm_memory_limit_with_low_memory_usage() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let initial_cycles = Cycles::new(200 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, DEFAULT_WASM_MEMORY_LIMIT);
+
+    // Clear the Wasm memory limit.
+    {
+        let mut state = env.get_latest_state().as_ref().clone();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        canister.system_state.wasm_memory_limit = None;
+        env.replace_canister_state(Arc::new(state), canister_id);
+    }
+
+    env.tick();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, DEFAULT_WASM_MEMORY_LIMIT);
+}
+
+#[test]
+fn initialize_default_wasm_memory_limit_with_high_memory_usage() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wat = r#"(module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (func $grow_mem
+            (drop (memory.grow (i32.const 49152)))
+            (call $msg_reply)
+        )
+        (export "canister_update grow_mem" (func $grow_mem))
+        (memory $memory 0)
+    )"#;
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = env
+        .install_canister_with_cycles(
+            wat::parse_str(wat).unwrap(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_wasm_memory_limit(10_000_000_000)
+                    .build(),
+            ),
+            initial_cycles,
+        )
+        .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
+
+    env.execute_ingress(canister_id, "grow_mem", vec![])
+        .unwrap();
+
+    // Check Wasm memory usage and clear the Wasm memory limit.
+    {
+        let mut state = env.get_latest_state().as_ref().clone();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        canister.system_state.wasm_memory_limit = None;
+        assert_eq!(
+            canister.execution_state.as_ref().unwrap().wasm_memory.size,
+            NumWasmPages::new(49152)
+        );
+        env.replace_canister_state(Arc::new(state), canister_id);
+    }
+
+    env.tick();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    // The initialized Wasm memory should be the average of the current memory
+    // usage and the hard limit of 4GiB.
+    assert_eq!(
+        wasm_memory_limit,
+        NumBytes::new((49152 + 65536) / 2 * WASM_PAGE_SIZE_IN_BYTES)
+    );
+}
+
+#[test]
+fn do_not_initialize_wasm_memory_limit_if_it_is_not_empty() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wat = "(module)";
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = env
+        .install_canister_with_cycles(
+            wat::parse_str(wat).unwrap(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_wasm_memory_limit(10_000_000_000)
+                    .build(),
+            ),
+            initial_cycles,
+        )
+        .unwrap();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
+
+    env.tick();
+
+    let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
+    assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
 }
