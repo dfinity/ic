@@ -381,12 +381,12 @@ mod test {
             ),
             indoc::formatdoc!(
                 "mkdir /opt
-                               mkdir /opt/ic
-                               mkdir /opt/ic/bin
-                               cd /opt/ic/bin
-                               rm output.sh
-                               write path/to/input.sh output.sh
-                               "
+                 mkdir /opt/ic
+                 mkdir /opt/ic/bin
+                 cd /opt/ic/bin
+                 rm output.sh
+                 write path/to/input.sh output.sh
+               "
             )
         );
     }
