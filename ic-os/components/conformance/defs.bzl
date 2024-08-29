@@ -1,8 +1,11 @@
-""" Rules for component conformance tests. """
+"""Rules for component conformance checks."""
 
-def component_file_references_test(name, component_files, image):
+def component_conformance_test(name, component_files, image):
     """
-    Verifies that the `component_files` only reference file paths that are accessible within the provided `image`.
+    Adds a new component conformance test rule.
+
+    The conformance test verifies that the `component_files` only reference file
+    paths that are accessible within the provided `image`.
 
     Args:
         name: The name of the test rule (must end in _test).
@@ -18,7 +21,7 @@ def component_file_references_test(name, component_files, image):
 
     native.sh_test(
         name = name,
-        srcs = ["//ic-os/components/conformance-tests:check_file_references.py"],
+        srcs = ["//ic-os/components/conformance:check_components.py"],
         data = deps,
         args = [
             "--files",
