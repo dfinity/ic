@@ -47,36 +47,21 @@
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
-use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
-    test_env_api::{
-        read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
-    },
-};
-use ic_system_test_driver::generic_workload_engine;
-use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
+    test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
-};
+use ic_system_test_driver::util::get_app_subnet_and_node;
 use ic_types::Height;
 
 use anyhow::Result;
-use futures::future::join_all;
-use slog::{error, info, Logger};
-use std::time::{Duration, Instant};
-use tokio::runtime::{Builder, Runtime};
+use std::time::Duration;
 
 const NODES_COUNT: usize = 13;
 const DKG_INTERVAL: u64 = 999;

@@ -64,7 +64,7 @@ impl Step for UpdateSubnetType {
                 rt.block_on(deploy_guestos_to_all_subnet_nodes(
                     &nns_node,
                     &ic_types::ReplicaVersion::try_from(self.version.clone())?,
-                    subnet_snaphost.subnet_id.clone(),
+                    subnet_snaphost.subnet_id,
                 ));
                 let new_topology =
                     rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
@@ -164,7 +164,7 @@ async fn assert_version_on_all_nodes(
         })
     });
 
-    join_all(threads.into_iter().map(|t| async { t.await })).await;
+    join_all(threads.into_iter()).await;
 }
 
 fn get_unassigned_nodes_version(topology_snapshot: TopologySnapshot) -> Vec<String> {
