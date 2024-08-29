@@ -156,7 +156,7 @@ mod garbage_collection;
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
 pub mod governance_proto_builder;
-mod heap_governance_data;
+pub mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
