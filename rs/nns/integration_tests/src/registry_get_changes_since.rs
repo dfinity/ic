@@ -11,7 +11,7 @@ use ic_registry_transport::pb::v1::{
 use std::str::FromStr;
 
 #[test]
-fn test_disallow_opaque_callers() {
+fn test_disallow_cannister_caller() {
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
 
@@ -21,7 +21,11 @@ fn test_disallow_opaque_callers() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // Step 2: Call the code under test.
-    let sender = PrincipalId::new_user_test_id(42);
+    let sender = PrincipalId::from_str(
+        // NNS root canister ID.
+        "r7inp-6aaaa-aaaaa-aaabq-cai"
+    )
+    .unwrap();
     assert_eq!(sender.class(), Ok(PrincipalIdClass::Opaque));
     let response = registry_get_changes_since(&state_machine, sender, 0);
 
@@ -45,7 +49,7 @@ fn test_disallow_opaque_callers() {
         Ok(registry_error::Code::Authorization)
     );
     let reason = reason.to_lowercase();
-    for key_word in ["caller", "opaque"] {
+    for key_word in ["caller", "canister"] {
         assert!(
             reason.contains(key_word),
             "{} not in {:?}",
@@ -56,7 +60,7 @@ fn test_disallow_opaque_callers() {
 }
 
 #[test]
-fn test_allow_non_opaque_callers() {
+fn test_allow_non_canister_caller() {
     // Step 1: Prepare the world. (Same as the previous test.)
     let state_machine = state_machine_builder_for_nns_tests().build();
 
