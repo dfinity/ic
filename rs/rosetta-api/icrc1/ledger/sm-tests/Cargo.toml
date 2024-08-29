@@ -34,7 +34,7 @@ icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 num-traits = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 serde = { workspace = true }
 
 [features]

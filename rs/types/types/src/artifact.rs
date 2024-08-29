@@ -1,10 +1,4 @@
 //! Artifact related types.
-//!
-//! Notably it includes the following definitions and their sub-types:
-//!
-//! - [`Artifact`]
-//! - [`ArtifactId`]
-//!
 use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
