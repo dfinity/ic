@@ -1,4 +1,3 @@
-#![allow(clippy::try_err)]
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
