@@ -45,4 +45,4 @@ ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
 k256 = { package = "k256_schnorr", git = "https://github.com/mraszyk/elliptic-curves", rev = "10cfcea0c2f956543ba7d1f340f267c459bd82b9", features = ["schnorr"] }
 lazy_static = "1.4.0"
-wat = "1.0.57"
+wat = { workspace = true }

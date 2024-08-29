@@ -103,7 +103,7 @@ rustc-hash = "1.1.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 
 [dev-dependencies]
