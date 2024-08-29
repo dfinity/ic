@@ -169,20 +169,6 @@ impl QuicTransport {
     pub async fn shutdown(&self) {
         self.shutdown.shutdown().await;
     }
-
-    pub(crate) fn get_conn_handle(
-        &self,
-        peer_id: &NodeId,
-    ) -> Result<ConnectionHandle, anyhow::Error> {
-        let conn = self
-            .conn_handles
-            .read()
-            .unwrap()
-            .get(peer_id)
-            .ok_or(anyhow!("Currently not connected to this peer"))?
-            .clone();
-        Ok(conn)
-    }
 }
 
 #[async_trait]
@@ -193,7 +179,13 @@ impl Transport for QuicTransport {
         peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, anyhow::Error> {
-        let peer = self.get_conn_handle(peer_id)?;
+        let peer = self
+            .conn_handles
+            .read()
+            .unwrap()
+            .get(peer_id)
+            .ok_or(anyhow!("Currently not connected to this peer"))?
+            .clone();
         peer.rpc(request).await
     }
 

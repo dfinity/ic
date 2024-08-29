@@ -172,9 +172,7 @@ async fn handle_bi_stream(
     }
 }
 
-pub(crate) async fn read_request(
-    mut recv_stream: RecvStream,
-) -> Result<Request<Body>, anyhow::Error> {
+async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
@@ -214,7 +212,7 @@ pub(crate) async fn read_request(
         .with_context(|| "Failed to build request.")
 }
 
-pub(crate) async fn write_response(
+async fn write_response(
     send_stream: &mut SendStream,
     response: Response<Body>,
 ) -> Result<(), anyhow::Error> {

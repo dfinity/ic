@@ -122,9 +122,7 @@ impl ConnectionHandle {
     }
 }
 
-pub(crate) async fn read_response(
-    mut recv_stream: RecvStream,
-) -> Result<Response<Bytes>, anyhow::Error> {
+async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, anyhow::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
@@ -156,7 +154,7 @@ pub(crate) async fn read_response(
         .with_context(|| "Failed to build response.")
 }
 
-pub(crate) async fn write_request(
+async fn write_request(
     send_stream: &mut SendStream,
     request: Request<Bytes>,
 ) -> Result<(), anyhow::Error> {
