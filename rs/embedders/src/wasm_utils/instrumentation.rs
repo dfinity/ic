@@ -904,7 +904,7 @@ pub(super) struct SpecialIndices {
     pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
     pub stable_memory_index: u32,
-    pub afl_instrument_prev_location: u32, 
+    pub afl_instrument_prev_location: u32,
     pub afl_instrument_mem_ptr: u32,
 }
 
@@ -939,26 +939,26 @@ pub(super) fn instrument(
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
 
-    // Inject two new globals 
+    // Inject two new globals
     // prev_location => mutable: true, value: 0
     // mem_ptr => mutable: true, value: 0
 
     let prev_location = Global {
         ty: GlobalType {
             content_type: ValType::I32,
-            mutable : true, 
-            shared: false, 
+            mutable: true,
+            shared: false,
         },
-        init_expr: Operator::I32Const { value: 0 }
+        init_expr: Operator::I32Const { value: 0 },
     };
 
     let mem_ptr = Global {
         ty: GlobalType {
             content_type: ValType::I32,
-            mutable : true, 
-            shared: false, 
+            mutable: true,
+            shared: false,
         },
-        init_expr: Operator::I32Const { value: 0 }
+        init_expr: Operator::I32Const { value: 0 },
     };
 
     // all previous indexes are fixed
@@ -985,15 +985,15 @@ pub(super) fn instrument(
     let dirty_pages_counter_ix;
     let accessed_pages_counter_ix;
     let count_clean_pages_fn;
-    // index is (import + export)
-    let afl_instrument_prev_location = num_globals - 1;
-    let afl_instrument_mem_ptr = num_globals;
+    assert!(num_globals >= 2);
+    let afl_instrument_prev_location = num_globals - 2;
+    let afl_instrument_mem_ptr = num_globals - 1;
 
     match wasm_native_stable_memory {
         FlagStatus::Enabled => {
             dirty_pages_counter_ix = Some(num_globals + 1);
             accessed_pages_counter_ix = Some(num_globals + 2);
-            count_clean_pages_fn = Some(num_functions + 1);
+            count_clean_pages_fn = Some(num_functions + 2);
         }
         FlagStatus::Disabled => {
             dirty_pages_counter_ix = None;
@@ -1002,11 +1002,11 @@ pub(super) fn instrument(
         }
     };
 
-    let special_indices = SpecialIndices {
+    let mut special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
         dirty_pages_counter_ix,
         accessed_pages_counter_ix,
-        decr_instruction_counter_fn: num_functions,
+        decr_instruction_counter_fn: num_functions + 1,
         count_clean_pages_fn,
         start_fn_ix: module.start,
         stable_memory_index,
@@ -1016,6 +1016,18 @@ pub(super) fn instrument(
 
     if special_indices.start_fn_ix.is_some() {
         module.start = None;
+    }
+
+    let new_num_funcs: u32 = inject_afl_coverage(&mut module, &special_indices, num_functions);
+
+    if new_num_funcs > num_functions {
+        special_indices.decr_instruction_counter_fn = new_num_funcs + 1;
+        match wasm_native_stable_memory {
+            FlagStatus::Enabled => {
+                special_indices.count_clean_pages_fn = Some(new_num_funcs + 2);
+            }
+            _ => ()
+        };
     }
 
     // inject instructions counter decrementation
@@ -1143,6 +1155,96 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
             }
         })
         .collect()
+}
+
+fn inject_afl_coverage(module: &mut Module<'_>, special_indices: &SpecialIndices, idx: u32) -> u32 {
+    use Operator::*;
+
+    let mut new_func_index = idx;
+
+    // Get the system API import indexes for the function body
+    let mut ic0_msg_reply_data_append_index: usize = usize::MAX;
+    let mut ic0_msg_reply_index: usize = usize::MAX;
+
+    for (func_index, import) in module
+        .imports
+        .iter()
+        .filter(|imp| matches!(imp.ty, TypeRef::Func(_)))
+        .enumerate()
+    {
+        if import.module == API_VERSION_IC0 {
+            match import.name {
+                "msg_reply_data_append" => ic0_msg_reply_data_append_index = func_index,
+                "msg_reply" => ic0_msg_reply_index = func_index,
+                &_ => (),
+            }
+        }
+    }
+
+    if ic0_msg_reply_data_append_index == usize::MAX {
+        let ty = FuncType::new(vec![ValType::I32, ValType::I32], []);
+        let mrda_type_idx = add_func_type(module, ty);
+
+        let mrda_import = Import {
+            module: API_VERSION_IC0,
+            name: "msg_reply_data_append",
+            ty: TypeRef::Func(mrda_type_idx),
+        };
+
+        module.imports.push(mrda_import);
+        ic0_msg_reply_data_append_index = module.imports.len() - 1;
+        new_func_index += 1;
+        
+    }
+
+    if ic0_msg_reply_index == usize::MAX {
+        let ty = FuncType::new([], []);
+        let mr_type_idx = add_func_type(module, ty);
+
+        let mr_import = Import {
+            module: API_VERSION_IC0,
+            name: "msg_reply",
+            ty: TypeRef::Func(mr_type_idx),
+        };
+
+        module.imports.push(mr_import);
+        ic0_msg_reply_index = module.imports.len() - 1;
+        new_func_index += 1;
+    }
+
+    // inject the canister export_coverage method
+    let ty = FuncType::new([], []);
+    let type_idx = add_func_type(module, ty);
+    module.functions.push(type_idx);
+
+    let func_body = ic_wasm_transform::Body {
+        locals: vec![],
+        instructions: vec![
+            GlobalGet {
+                global_index: special_indices.afl_instrument_mem_ptr, // 0 for now
+            },
+            I32Const {
+                value: 65536 as i32, // 1 page
+            },
+            Call {
+                function_index: ic0_msg_reply_data_append_index as u32,
+            },
+            Call {
+                function_index: ic0_msg_reply_index as u32,
+            },
+            End,
+        ],
+    };
+    module.code_sections.push(func_body);
+
+    let start_export = Export {
+        name: "canister_query export_coverage",
+        kind: ExternalKind::Func,
+        index: new_func_index,
+    };
+
+    module.exports.push(start_export);
+    new_func_index
 }
 
 fn replace_system_api_functions(
@@ -1497,6 +1599,9 @@ fn inject_metering(
         MeteringType::None => Vec::new(),
         MeteringType::New => injections(code, mem_type),
     };
+
+    // figure out which points to inject?
+
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
             scope: Scope::ReentrantBlockStart,
@@ -1510,6 +1615,40 @@ fn inject_metering(
     let mut last_injection_position = 0;
 
     use Operator::*;
+    // rough idea
+
+    // let afl_inject_slice: Vec<Operator> = vec![
+    //     I32Const {
+    //         value : 0 as i32 // this can be generated at random  but needs to deterministic?
+    //     },
+    //     GlobalGet {
+    //         global_index: export_data_module.afl_instrument_prev_location
+    //     },
+    //     I32Xor,
+    //     GlobalGet {
+    //         global_index: export_data_module.afl_instrument_mem_ptr,
+    //     },
+    //     I32Add,
+    //     LocalTee {
+    //         local_index: 0,
+    //     },
+    //     LocalGet {
+    //         local_index: 0,
+
+    //     },
+    //     I32Load8U {
+
+    //     },
+    //     I32Const {
+    //         value: 1
+    //     },
+    //     I32Add,
+    //     I32Store8,
+    //     // lett shift
+    //     GlobalSet {
+    //         global_index: export_data_module.afl_instrument_prev_location
+    //     }
+    // ];
 
     for point in points {
         elems.extend_from_slice(&orig_elems[last_injection_position..point.position]);
