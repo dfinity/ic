@@ -2240,6 +2240,8 @@ fn ic0_call_cycles_add128_up_to_deducts_cycles() {
             test.subnet_size(),
         )
         + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+    // The canister has plenty of cycles available to add the requested 10B cycles to the call.
+    // Therefore we expect that 10B cycles are missing
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
@@ -2295,6 +2297,8 @@ fn ic0_call_cycles_add128_up_to_limit_allows_performing_call() {
     let WasmResult::Reply(reply_bytes) = test.ingress(canister_id, "test", vec![]).unwrap() else {
         panic!("bad WasmResult")
     };
+    // The canister doesn't have enough cycles to attach the requested amount of cycles to the call.
+    // We expect to see a bunch of cycles transferred, but the subsequent `call_perform` still must have succeeded.
     let transferred_cycles =
         u128::from_le_bytes(reply_bytes.try_into().expect("bad number of reply bytes"));
     assert_eq!(1, test.xnet_messages().len());
