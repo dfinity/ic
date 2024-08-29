@@ -19,8 +19,8 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse,
-        RegistryError, RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
+        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
@@ -187,7 +187,10 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 fn get_changes_since() {
     fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
         if caller().class() == Ok(PrincipalIdClass::Opaque) {
-            return Err((Code::Authorization, "Caller must not be opaque.".to_string()));
+            return Err((
+                Code::Authorization,
+                "Caller must not be opaque.".to_string(),
+            ));
         }
 
         let version = match deserialize_get_changes_since_request(arg_data()) {
@@ -225,8 +228,8 @@ fn get_changes_since() {
         }
     };
 
-    let response: Vec<u8> = serialize_get_changes_since_response(response)
-        .expect("Error serializing response");
+    let response: Vec<u8> =
+        serialize_get_changes_since_response(response).expect("Error serializing response");
 
     reply(&response);
 }

@@ -5,18 +5,23 @@ use ic_nns_test_utils::{
         registry_get_changes_since, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_transport::pb::v1::{RegistryGetChangesSinceResponse, RegistryError, registry_error};
+use ic_registry_transport::pb::v1::{
+    registry_error, RegistryError, RegistryGetChangesSinceResponse,
+};
 
 #[test]
-fn test_disallow_opauqe_callers() {
+fn test_disallow_opaque_callers() {
+    // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
+    // Step 2: Call the code under test.
     let sender = PrincipalId::new_user_test_id(42);
     assert_eq!(sender.class(), Ok(PrincipalIdClass::Opaque));
     let response = registry_get_changes_since(&state_machine, sender, 1);
 
+    // Step 3: Inspect results.
     let RegistryGetChangesSinceResponse {
         error,
         version,
@@ -27,17 +32,21 @@ fn test_disallow_opauqe_callers() {
     assert_eq!(deltas, vec![]);
 
     let error = error.unwrap();
-    let RegistryError {
-        code,
-        reason,
-        key,
-    } = error;
+    let RegistryError { code, reason, key } = error;
 
     assert_eq!(key, Vec::<u8>::new());
 
-    assert_eq!(registry_error::Code::try_from(code), Ok(registry_error::Code::Authorization));
+    assert_eq!(
+        registry_error::Code::try_from(code),
+        Ok(registry_error::Code::Authorization)
+    );
     let reason = reason.to_lowercase();
     for key_word in ["caller", "opaque"] {
-        assert!(reason.contains(key_word), "{} not in {:?}", key_word, reason);
+        assert!(
+            reason.contains(key_word),
+            "{} not in {:?}",
+            key_word,
+            reason
+        );
     }
 }

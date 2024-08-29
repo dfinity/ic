@@ -54,7 +54,9 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_transport::pb::v1::{RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse};
+use ic_registry_transport::pb::v1::{
+    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+};
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
@@ -107,19 +109,12 @@ pub fn registry_get_changes_since(
     version: u64,
 ) -> RegistryGetChangesSinceResponse {
     let mut request = vec![];
-    RegistryGetChangesSinceRequest {
-        version,
-    }
-    .encode(&mut request)
-    .unwrap();
+    RegistryGetChangesSinceRequest { version }
+        .encode(&mut request)
+        .unwrap();
 
     let result = state_machine
-        .execute_ingress_as(
-            sender,
-            REGISTRY_CANISTER_ID,
-            "get_changes_since",
-            request,
-        )
+        .execute_ingress_as(sender, REGISTRY_CANISTER_ID, "get_changes_since", request)
         .unwrap();
 
     let result = match result {
