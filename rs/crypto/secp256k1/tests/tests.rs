@@ -156,7 +156,6 @@ fn should_accept_bip340_signatures_that_we_generate() {
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
         let pk = sk.public_key();
-        println!("{}", hex::encode(pk.serialize_sec1(true)));
 
         let mut msg = rng.gen::<[u8; 32]>();
         rng.fill_bytes(&mut msg);
