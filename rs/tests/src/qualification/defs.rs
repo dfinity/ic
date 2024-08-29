@@ -17,11 +17,6 @@ impl QualificationExecutor {
         for step in &self.steps {
             step.do_step(env.clone(), self.rt.handle().clone())?
         }
-
-        // xnet test
-
-        // xnet text
-
         Ok(())
     }
 }

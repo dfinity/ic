@@ -7,7 +7,7 @@ use ic_tests::qualification::{
     defs::QualificationExecutor,
     steps::{
         ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType,
-        workload::Workload,
+        workload::Workload, xnet::XNet,
     },
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
@@ -139,6 +139,9 @@ pub fn main() -> anyhow::Result<()> {
                             message_size: 4_000,
                             rps: 500.0,
                         }),
+                        // Run xnet tests
+                        // uses `rs/tests/src/message_routing/global_reboot_test`
+                        Box::new(XNet {}),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {
                             subnet_type: Some(SubnetType::Application),
@@ -158,6 +161,8 @@ pub fn main() -> anyhow::Result<()> {
                             message_size: 4_000,
                             rps: 500.0,
                         }),
+                        // Run xnet tests
+                        Box::new(XNet {}),
                     ],
                 );
                 qualifier.qualify(env).expect("Failed to qualify")
