@@ -1,4 +1,4 @@
-use super::{PrincipalId, PrincipalIdError, SubnetId};
+use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -90,6 +90,53 @@ impl CanisterId {
 
         Self(PrincipalId::new_opaque_from_array(data, blob_length))
     }
+
+    /// Converts from PrincipalId.
+    ///
+    /// There is a impl TryFrom<PrincipalId> for CanisterId, but we can't make it
+    /// do the behavior of this (yet), because there could be callers of TryFrom
+    /// who are implicitly relying on Err never being returned.
+    //
+    // Maintainers: Keep this consistent with from_u64.
+    pub fn try_from_principal_id(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
+        // Must be opaque.
+        if principal_id.class() != Ok(PrincipalIdClass::Opaque) {
+            return Err(CanisterIdError::InvalidPrincipalId(
+                format!(
+                    "Principal ID {} is of class {:?} (not Opaque).",
+                    principal_id, principal_id.class(),
+                )
+            ));
+        }
+
+        // Must be of length 10.
+        let raw = principal_id.as_slice();
+        if raw.len() != 10 {
+            return Err(CanisterIdError::InvalidPrincipalId(
+                format!(
+                    "Principal ID {} consists of {} bytes (not 10).",
+                    principal_id, raw.len(),
+                )
+            ));
+        }
+
+        // Byte 8 (penultimate) must be 0x01.
+        if raw[8] != 0x01 {
+            let hex = raw
+                .iter()
+                .map(|i| format!("{:02X}", i))
+                .collect::<Vec<_>>()
+                .join("_");
+            return Err(CanisterIdError::InvalidPrincipalId(
+                format!(
+                    "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
+                    principal_id, hex,
+                )
+            ));
+        }
+
+        Ok(CanisterId(principal_id))
+    }
 }
 
 impl AsRef<PrincipalId> for CanisterId {
@@ -110,6 +157,7 @@ impl fmt::Display for CanisterId {
     }
 }
 
+/// Deprecated. Use CanisterId::try_from_principal_id.
 impl TryFrom<PrincipalId> for CanisterId {
     type Error = CanisterIdError;
 
@@ -214,3 +262,6 @@ impl From<CanisterId> for Principal {
         principal_id.into()
     }
 }
+
+#[cfg(test)]
+mod tests;
