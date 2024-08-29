@@ -4,7 +4,7 @@ set -eEuo pipefail
 TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
 for TARGET in $TARGET_LIST; do
     export BAZEL_TARGETS="$TARGET"
-    time ./ci/bazel-scripts-ci/main.sh
+    time ./ci/bazel-scripts/main.sh
 done
 find -L ./bazel-out -name 'benchmark.json'
 
