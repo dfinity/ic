@@ -55,11 +55,13 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         let unvalidated_artifacts_changeset = pool
             .unvalidated()
             .get_all_by_expiry_range(expiry_range.clone())
-            // Skip validating the ingress message if we already have too many messages in the
-            // validated section of the pool.
-            .filter(|artifact| !pool.exceeds_limit(&artifact.message.peer_id))
             .map(|artifact| {
                 let ingress_object = &artifact.message;
+
+                // If the ingress pool is full, discard the message
+                if pool.exceeds_limit(&ingress_object.peer_id) {
+                    return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
+                }
 
                 match self.validate_ingress_pool_object(
                     ingress_object,
