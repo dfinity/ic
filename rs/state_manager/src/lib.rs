@@ -1103,6 +1103,24 @@ impl PageMapType {
         result
     }
 
+    //    fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
+    //        let mut result = vec![];
+    //        for (id, canister) in &state.canister_states {
+    //            result.push(Self::WasmChunkStore(id.to_owned()));
+    //            //            if canister.execution_state.is_some() {
+    //            //                result.push(Self::WasmMemory(id.to_owned()));
+    //            //                result.push(Self::StableMemory(id.to_owned()));
+    //            //            }
+    //        }
+    //        //        for (id, _snapshot) in state.canister_snapshots.iter() {
+    //        //            result.push(Self::SnapshotWasmMemory(id.to_owned()));
+    //        //            result.push(Self::SnapshotStableMemory(id.to_owned()));
+    //        //            result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
+    //        //        }
+    //
+    //        result
+    //    }
+
     /// The layout of the files on disk for this PageMap.
     fn layout<Access>(
         &self,

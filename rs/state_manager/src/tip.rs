@@ -597,14 +597,15 @@ fn merge_candidates_and_storage_info(
         disk_size: 0,
         mem_size: 0,
     };
-    for (page_map_type, num_pages) in pagemaptypes_with_num_pages {
+    for (page_map_type, _num_pages) in pagemaptypes_with_num_pages {
         let pm_layout = page_map_type.layout(layout)?;
         storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
+        let num_pages = PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
         storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
         for m in MergeCandidate::new(
             &pm_layout,
             height,
-            *num_pages as u64,
+            num_pages as u64,
             lsmt_config,
             &metrics.storage_metrics,
         )? {
