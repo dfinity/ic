@@ -438,5 +438,5 @@ rust_ic_test(
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
