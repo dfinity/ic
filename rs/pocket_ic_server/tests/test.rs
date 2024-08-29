@@ -505,6 +505,9 @@ fn canister_and_replica_logs() {
 
     drop(pic);
 
+    // kill the server to avoid blocking until TTL is hit
+    out.kill().unwrap();
+
     let mut stdout = String::new();
     out.stdout
         .take()
@@ -538,6 +541,9 @@ fn canister_and_no_replica_logs() {
     pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
 
     drop(pic);
+
+    // kill the server to avoid blocking until TTL is hit
+    out.kill().unwrap();
 
     let mut stdout = String::new();
     out.stdout
