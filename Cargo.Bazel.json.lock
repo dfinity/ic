@@ -1,5 +1,5 @@
 {
-  "checksum": "32ae6dee023f19c842be0a724d67b26b49ec30028076cfe14e5bfa79a12a9bd1",
+  "checksum": "547d0ebd0b46f5903c7f92d39af0f2a43d9f5d6a954fb119b47c7bb7d799c78e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18752,7 +18752,7 @@
               "target": "wsl"
             },
             {
-              "id": "wycheproof 0.5.1",
+              "id": "wycheproof 0.6.0",
               "target": "wycheproof"
             },
             {
@@ -76326,14 +76326,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wycheproof 0.5.1": {
+    "wycheproof 0.6.0": {
       "name": "wycheproof",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "package_url": "https://github.com/randombit/wycheproof-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wycheproof/0.5.1/download",
-          "sha256": "e639f57253b80c6584b378011aec0fed61c4c21d7a4b97c4d9d7eaf35ca77d12"
+          "url": "https://static.crates.io/crates/wycheproof/0.6.0/download",
+          "sha256": "efb3be19abfb206c6adcbdf2007b09b0e8ca1f6530db40c03b42ce8ed4719894"
         }
       },
       "targets": [
@@ -76355,15 +76355,21 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "ecdsa",
+            "eddsa",
+            "hkdf",
+            "mac",
+            "rsa_sig"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
-              "target": "base64"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
             },
             {
               "id": "serde 1.0.203",
@@ -76377,7 +76383,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.1"
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -79169,7 +79175,7 @@
     "which 4.4.0",
     "wiremock 0.5.19",
     "wsl 0.1.0",
-    "wycheproof 0.5.1",
+    "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
     "yansi 0.5.1",
