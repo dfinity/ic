@@ -33,13 +33,9 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
-=======
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
->>>>>>> master
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         env:
@@ -73,13 +69,9 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
-=======
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
->>>>>>> master
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -117,13 +109,9 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
-=======
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
->>>>>>> master
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
