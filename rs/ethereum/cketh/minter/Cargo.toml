@@ -63,7 +63,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/rep
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 maplit = "1"
-proptest = "1.0"
+proptest = { workspace = true }
 rand = { workspace = true }
 scraper = "0.17.1"
 tempfile = { workspace = true }
