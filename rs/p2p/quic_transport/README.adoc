@@ -91,8 +91,8 @@ As a result, when there are handlers that take the weak reference the transport 
 
 === Unused QUIC/QUINN abstraction ===
 
-1. `+QuicTransport+` doesn't send nor receive datagrams because they are not reliably delivered.
-2. `+QuicTransport+` doesn't use uni-directional streams. One possible situation where uni-directional
+* `+QuicTransport+` doesn't send nor receive datagrams because they are not reliably delivered.
+* `+QuicTransport+` doesn't use uni-directional streams. One possible situation where uni-directional
 stream may make sense is if handler is infallible. Since each route and the corresponding handler is given by a client,
 if a route is missing it should not be considered a failure in transport.
 For comparision, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain for a response from the application receive side].
