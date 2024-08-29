@@ -501,6 +501,8 @@ fn test_cmc_create_canister_refunds() {
 
     let universal_canister = set_up_universal_canister(&state_machine, Some(u128::MAX.into()));
 
+    let uc_cycles_balance = || state_machine.cycle_balance(universal_canister);
+
     //default settings
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
@@ -515,6 +517,7 @@ fn test_cmc_create_canister_refunds() {
 
     // We minted, then used, then accepted some cycles.
     assert_eq!(cmc_cycles_balance(), 10_000_000_000_000);
+    assert_eq!(uc_cycles_balance(), u128::MAX - 10_000_000_000_000);
 
     // Create canister on non-existing subnet type
     let error = cmc_create_canister_with_cycles(
@@ -535,6 +538,7 @@ fn test_cmc_create_canister_refunds() {
     );
 
     assert_eq!(cmc_cycles_balance(), 10_000_100_000_000);
+    assert_eq!(uc_cycles_balance(), u128::MAX - 10_000_100_000_000);
 
     println!("{:?}", error);
 
@@ -551,6 +555,7 @@ fn test_cmc_create_canister_refunds() {
     assert_eq!(status.controllers(), vec![universal_canister.get()]);
 
     assert_eq!(cmc_cycles_balance(), 11_000_000_000_000);
+    assert_eq!(uc_cycles_balance(), u128::MAX - 21_000_100_000_000);
 }
 
 /// Test create_canister with different canister settings
