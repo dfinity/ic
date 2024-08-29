@@ -21,7 +21,7 @@ pub(super) fn governance_account_id() -> TlaValue {
 /// Compute the union of the domain of the function field `field_name` in the
 /// start and end states of the given state pairs.
 pub fn function_domain_union(
-    state_pairs: &Vec<ResolvedStatePair>,
+    state_pairs: &[ResolvedStatePair],
     field_name: &str,
 ) -> BTreeSet<TlaValue> {
     state_pairs.iter().flat_map(|pair| {

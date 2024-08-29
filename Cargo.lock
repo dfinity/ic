@@ -9529,6 +9529,7 @@ dependencies = [
  "serde_json",
  "tla_instrumentation",
  "tla_instrumentation_proc_macros",
+ "tokio",
 ]
 
 [[package]]
