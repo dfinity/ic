@@ -96,5 +96,5 @@ As a result, when there are handlers that take the weak reference the transport 
 stream may make sense if a handler is infallible. Since each route and the corresponding handler is given by a client,
 if a route is missing it should not be considered a failure in transport.
 For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain a response from the application receive side].
-In addition, no +gRPC+ implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html['NOT_FOUND'],
+In addition, no +gRPC+ implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`],
 which is the most appropriate return code if a route is missing.
