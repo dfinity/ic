@@ -436,6 +436,11 @@ fn eval(ops_bytes: OpsBytes) {
                 }
                 std::hint::black_box(a);
             }
+            Ops::CallCyclesAdd128UpTo => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::call_cycles_add128_up_to(amount_high, amount_low))
+            }
         }
     }
 }

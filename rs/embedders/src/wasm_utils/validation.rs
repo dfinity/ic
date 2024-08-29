@@ -536,6 +536,16 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
+            "call_cycles_add128_up_to",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "canister_cycle_balance128",
             vec![(
                 API_VERSION_IC0,
