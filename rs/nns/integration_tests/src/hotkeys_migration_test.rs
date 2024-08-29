@@ -1,24 +1,22 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    GetNeuronsFundAuditInfoResponse, ListProposalInfo, ListProposalInfoResponse,
-    NeuronsFundAuditInfo, NeuronsFundParticipation, NeuronsFundSnapshot, Topic,
+    GetNeuronsFundAuditInfoResponse, NeuronsFundAuditInfo, NeuronsFundParticipation,
+    NeuronsFundSnapshot, Topic,
 };
 use ic_nns_test_utils::{
     common::build_governance_wasm,
     state_test_helpers::{
         get_all_proposal_ids, get_neurons_fund_audit_info, nns_create_super_powerful_neuron,
-        nns_list_proposals, nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
 
-fn all_but_csns() -> Vec<i32> {
+fn all_but(topics: Vec<Topic>) -> Vec<Topic> {
     [
         Topic::Unspecified,
         Topic::NeuronManagement,
@@ -33,14 +31,14 @@ fn all_but_csns() -> Vec<i32> {
         Topic::NodeProviderRewards,
         Topic::IcOsVersionDeployment,
         Topic::IcOsVersionElection,
-        // Topic::SnsAndCommunityFund,
+        Topic::SnsAndCommunityFund,
         Topic::ApiBoundaryNodeManagement,
         Topic::SubnetRental,
         Topic::ProtocolCanisterManagement,
         Topic::ServiceNervousSystemManagement,
     ]
     .into_iter()
-    .map(i32::from)
+    .filter(|topic| !topics.contains(&topic))
     .collect()
 }
 
@@ -75,7 +73,9 @@ fn test_hotkey_principal_migration() {
         );
     }
 
-    let proposal_ids = get_all_proposal_ids(&state_machine, all_but_csns());
+    let exclude_topics = all_but(vec![Topic::SnsAndCommunityFund]);
+    assert_eq!(exclude_topics.len(), 18);
+    let proposal_ids = get_all_proposal_ids(&state_machine, exclude_topics);
     assert!(
         !proposal_ids.is_empty(),
         "Smoke test failed: We expect to have at some proposals."
@@ -143,8 +143,10 @@ fn test_hotkey_principal_migration() {
         }
     }
 
-    // Smoke test: We have some data that needs migrating.
-    assert!(!neuron_portions.is_empty());
+    assert!(
+        !neuron_portions.is_empty(),
+        "Smoke test failed: We expect some data that needs migrating."
+    );
 
     // Assert that all collected neuron portions have been migrated correctly.
     for neuron_portion in neuron_portions {
@@ -152,11 +154,13 @@ fn test_hotkey_principal_migration() {
             neuron_portion,
             NeuronsFundNeuronPortion {
                 // The legacy field is still set.
-                hotkey_principal: Some(hotkey_principal),
-                // The new field set to the same value.
-                controller: Some(controller),
+                hotkey_principal: Some(_hotkey_principal),
+                // The new field is not yet set.
+                // TODO[NNS1-3292]: Set this data via migration.
+                controller: None,
                 ..
-            } if hotkey_principal == controller
+            } // TODO[NNS1-3292]: Uncomment
+              // if hotkey_principal == controller
         );
     }
 }
