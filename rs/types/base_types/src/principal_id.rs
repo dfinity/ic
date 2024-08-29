@@ -166,23 +166,23 @@ impl std::str::FromStr for PrincipalId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-pub enum Class {
+pub enum PrincipalIdClass {
     Opaque = 1,
     SelfAuthenticating = 2,
     Derived = 3,
     Anonymous = 4,
 }
 
-impl TryFrom<u8> for Class {
+impl TryFrom<u8> for PrincipalIdClass {
     type Error = String;
 
-    fn try_from(src: u8) -> Result<Class, String> {
+    fn try_from(src: u8) -> Result<PrincipalIdClass, String> {
         match src {
-            1 => Ok(Class::Opaque),
-            2 => Ok(Class::SelfAuthenticating),
-            3 => Ok(Class::Derived),
-            4 => Ok(Class::Anonymous),
-            garbage => Err(format!("{} is not a valid Class.", garbage)),
+            1 => Ok(PrincipalIdClass::Opaque),
+            2 => Ok(PrincipalIdClass::SelfAuthenticating),
+            3 => Ok(PrincipalIdClass::Derived),
+            4 => Ok(PrincipalIdClass::Anonymous),
+            garbage => Err(format!("{} is not a valid principal ID class.", garbage)),
         }
     }
 }
@@ -190,12 +190,12 @@ impl TryFrom<u8> for Class {
 impl PrincipalId {
     /// Some principal ids have special classes (system-generated,
     /// self-authenticating, derived), see <https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes>
-    pub fn class(&self) -> Result<Class, String> {
+    pub fn class(&self) -> Result<PrincipalIdClass, String> {
         let last = self
             .as_slice()
             .last()
             .ok_or_else(|| "Empty PrincipalId.".to_string())?;
-        Class::try_from(*last)
+        PrincipalIdClass::try_from(*last)
     }
 
     /// Opaque ids are usually used for system-internal ids (maybe system
@@ -204,7 +204,7 @@ impl PrincipalId {
     /// one can easily check here that all such ids are disjoint.
     pub(crate) fn new_opaque(blob: &[u8]) -> Self {
         let mut bytes = blob.to_vec();
-        bytes.push(Class::Opaque as u8);
+        bytes.push(PrincipalIdClass::Opaque as u8);
         PrincipalId(Principal::try_from_slice(&bytes[..]).expect("Input blob too long."))
     }
 
@@ -216,7 +216,7 @@ impl PrincipalId {
         mut blob: [u8; Self::MAX_LENGTH_IN_BYTES],
         len: usize,
     ) -> Self {
-        blob[len] = Class::Opaque as u8;
+        blob[len] = PrincipalIdClass::Opaque as u8;
         PrincipalId::new(len + 1, blob)
     }
 
@@ -295,7 +295,7 @@ impl PrincipalId {
     pub fn new_self_authenticating(pubkey: &[u8]) -> Self {
         let mut id: [u8; 29] = [0; 29];
         id[..28].copy_from_slice(&Sha224::hash(pubkey));
-        id[28] = Class::SelfAuthenticating as u8;
+        id[28] = PrincipalIdClass::SelfAuthenticating as u8;
         // id has fixed length of 29, safe to unwrap here
         PrincipalId(Principal::try_from_slice(&id).unwrap())
     }
@@ -305,7 +305,7 @@ impl PrincipalId {
         blob.insert(0, blob.len() as u8);
         blob.extend(seed);
         let mut bytes = Sha224::hash(&blob[..]).to_vec();
-        bytes.push(Class::Derived as u8);
+        bytes.push(PrincipalIdClass::Derived as u8);
         PrincipalId::try_from(&bytes[..]).unwrap()
     }
 
@@ -318,7 +318,7 @@ impl PrincipalId {
         if blob.len() != Self::HASH_LEN_IN_BYTES + 1 {
             return false;
         }
-        if self.class() != Ok(Class::SelfAuthenticating) {
+        if self.class() != Ok(PrincipalIdClass::SelfAuthenticating) {
             return false;
         }
         if Sha224::hash(pubkey) != blob[0..Self::HASH_LEN_IN_BYTES] {
@@ -332,7 +332,7 @@ impl PrincipalId {
         if blob.len() != Self::HASH_LEN_IN_BYTES + 1 {
             return false;
         }
-        if self.class() != Ok(Class::SelfAuthenticating) {
+        if self.class() != Ok(PrincipalIdClass::SelfAuthenticating) {
             return false;
         }
         true
@@ -343,7 +343,7 @@ impl PrincipalId {
     }
 
     pub fn is_anonymous(&self) -> bool {
-        self.as_slice() == [Class::Anonymous as u8]
+        self.as_slice() == [PrincipalIdClass::Anonymous as u8]
     }
 }
 
@@ -362,7 +362,7 @@ impl<'a> Arbitrary<'a> for PrincipalId {
                 // non-anonymous principal cannot have type ANONYMOUS
                 // adapt by changing the last byte.
                 let last = result.last_mut().unwrap();
-                if self.class() == Ok(Class::Anonymous) {
+                if self.class() == Ok(PrincipalIdClass::Anonymous) {
                     *last = u8::MAX
                 }
                 PrincipalId::try_from(&result[..]).unwrap()
@@ -724,21 +724,35 @@ mod tests {
     #[test]
     fn test_class_round_trip() {
         let mut count = 0;
-        for class in Class::iter() {
-            assert_eq!(Class::try_from(class as u8), Ok(class));
+        for class in PrincipalIdClass::iter() {
+            assert_eq!(PrincipalIdClass::try_from(class as u8), Ok(class));
             count += 1;
         }
-        // This is to make sure the above loop actually does something interesting.
+        // This is to make sure the above loop actually does something
+        // interesting. (If more classes are added later, this will need to be
+        // updated to reflect.)
         assert_eq!(count, 4);
 
-        assert!(Class::try_from(42).is_err());
+        assert!(PrincipalIdClass::try_from(42).is_err());
     }
 
     #[test]
     fn test_class() {
-        assert_eq!(PrincipalId::new_opaque(&[42][..]).class(), Ok(Class::Opaque));
-        assert_eq!(PrincipalId::new_self_authenticating(&[42][..]).class(), Ok(Class::SelfAuthenticating));
-        assert_eq!(PrincipalId::new_derived(&PrincipalId::new_user_test_id(42), &[42][..]).class(), Ok(Class::Derived));
-        assert_eq!(PrincipalId::new_anonymous().class(), Ok(Class::Anonymous));
+        assert_eq!(
+            PrincipalId::new_opaque(&[42][..]).class(),
+            Ok(PrincipalIdClass::Opaque)
+        );
+        assert_eq!(
+            PrincipalId::new_self_authenticating(&[42][..]).class(),
+            Ok(PrincipalIdClass::SelfAuthenticating)
+        );
+        assert_eq!(
+            PrincipalId::new_derived(&PrincipalId::new_user_test_id(42), &[42][..]).class(),
+            Ok(PrincipalIdClass::Derived)
+        );
+        assert_eq!(
+            PrincipalId::new_anonymous().class(),
+            Ok(PrincipalIdClass::Anonymous)
+        );
     }
 }
