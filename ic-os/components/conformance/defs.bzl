@@ -38,7 +38,8 @@ def _check_unused_components_test_impl(ctx):
     used_components_labels = [component.label for component in ctx.attr.used_components]
 
     unused_component_files = [
-        label.name for label in repo_components_labels
+        label.name
+        for label in repo_components_labels
         if label not in used_components_labels and label.name not in ctx.attr.ignored_repo_components
     ]
 
@@ -48,7 +49,7 @@ def _check_unused_components_test_impl(ctx):
         echo "Unused components:"
         echo "{unused_component_files}"
         exit 1
-        """.format(unused_component_files="\n".join(unused_component_files))
+        """.format(unused_component_files = "\n".join(unused_component_files))
     else:
         script_content = "echo 'Unused components check completed'"
 
