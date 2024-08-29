@@ -1,6 +1,6 @@
 use ic_protobuf::{
-    types::v1 as pb,
     proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
 };
 use ic_types::{
     artifact::{ConsensusMessageId, IngressMessageId},
