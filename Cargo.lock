@@ -20242,8 +20242,8 @@ name = "tla_instrumentation_proc_macros"
 version = "0.1.0"
 source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=9498c4a5bca5fc20b5ef7353d6b9f80136178195#9498c4a5bca5fc20b5ef7353d6b9f80136178195"
 dependencies = [
- "proc-macro2 1.0.86",
- "quote 1.0.36",
+ "proc-macro2",
+ "quote",
  "syn 1.0.109",
 ]
 
