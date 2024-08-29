@@ -18,7 +18,7 @@ async fn get_inputs(tx_id: String) -> Vec<String> {
 /// Return `Passed` if the given bitcion address passed the KYT check, or
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
-async fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
+fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
         .require_network(Network::Bitcoin)
