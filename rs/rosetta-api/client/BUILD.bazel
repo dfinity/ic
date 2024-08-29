@@ -26,6 +26,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
+    "//rs/rosetta-api/test_utils",
     "@crate_index//:candid",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

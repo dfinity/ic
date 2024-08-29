@@ -29,3 +29,52 @@ def component_conformance_test(name, component_files, image):
             "--image $(location %s)" % image,
         ],
     )
+
+def _check_unused_components_test_impl(ctx):
+    """
+    Verifies that every file in components/ is actually being used in one of the images.
+    """
+    repo_components_labels = [component.label for component in ctx.attr.repo_components]
+    used_components_labels = [component.label for component in ctx.attr.used_components]
+
+    unused_component_files = [
+        label.name
+        for label in repo_components_labels
+        if label not in used_components_labels and label.name not in ctx.attr.ignored_repo_components
+    ]
+
+    if unused_component_files:
+        script_content = """
+        echo "Unused components check failed"
+        echo "Unused components:"
+        echo "{unused_component_files}"
+        exit 1
+        """.format(unused_component_files = "\n".join(unused_component_files))
+    else:
+        script_content = "echo 'Unused components check completed'"
+
+    script = ctx.actions.declare_file(ctx.label.name + ".sh")
+    ctx.actions.write(
+        output = script,
+        content = script_content,
+    )
+
+    return [
+        DefaultInfo(
+            executable = script,
+        ),
+    ]
+
+check_unused_components_test = rule(
+    test = True,
+    implementation = _check_unused_components_test_impl,
+    attrs = {
+        "repo_components": attr.label_list(
+            allow_files = True,
+        ),
+        "ignored_repo_components": attr.string_list(),
+        "used_components": attr.label_list(
+            allow_files = True,
+        ),
+    },
+)
