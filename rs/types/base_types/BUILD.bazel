@@ -53,12 +53,12 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_base_types",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
 
