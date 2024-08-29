@@ -12,12 +12,11 @@
 //!
 use std::time::Duration;
 
-use anyhow::anyhow;
-use anyhow::Context;
-use axum::Router;
+use anyhow::{anyhow, Context};
 use axum::{
     body::Body,
     http::{Method, Request, Response, Version},
+    Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;

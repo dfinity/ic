@@ -5,8 +5,7 @@
 //! connection.
 //!
 
-use anyhow::anyhow;
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use axum::http::{Method, Request, Response, Version};
 use bytes::Bytes;
 use ic_base_types::NodeId;
