@@ -362,7 +362,7 @@ impl<'a> Arbitrary<'a> for PrincipalId {
                 // non-anonymous principal cannot have type ANONYMOUS
                 // adapt by changing the last byte.
                 let last = result.last_mut().unwrap();
-                if self.class() == Ok(PrincipalIdClass::Anonymous) {
+                if PrincipalIdClass::try_from(*last) == Ok(PrincipalIdClass::Anonymous) {
                     *last = u8::MAX
                 }
                 PrincipalId::try_from(&result[..]).unwrap()
