@@ -12,9 +12,20 @@
 //!
 use std::time::Duration;
 
+use anyhow::anyhow;
+use anyhow::Context;
 use axum::Router;
+use axum::{
+    body::{Body, HttpBody},
+    extract::State,
+    http::{Method, Request, Response, Version},
+    middleware::Next,
+};
+use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
+use ic_protobuf::transport::v1 as pb;
+use prost::Message;
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
@@ -24,8 +35,7 @@ use crate::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
     },
-    utils::{read_request, write_response},
-    ConnId,
+    ConnId, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -163,4 +173,79 @@ async fn handle_bi_stream(
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
             .inc();
     }
+}
+
+pub(crate) async fn read_request(
+    mut recv_stream: RecvStream,
+) -> Result<Request<Body>, anyhow::Error> {
+    let raw_msg = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .with_context(|| "Failed to read request from the stream.")?;
+
+    let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
+        .with_context(|| "Failed to decode http request.")?;
+
+    let mut request = Request::builder()
+        .method(match pb::HttpMethod::try_from(request_proto.method) {
+            Ok(pb::HttpMethod::Get) => Method::GET,
+            Ok(pb::HttpMethod::Post) => Method::POST,
+            Ok(pb::HttpMethod::Put) => Method::PUT,
+            Ok(pb::HttpMethod::Delete) => Method::DELETE,
+            Ok(pb::HttpMethod::Head) => Method::HEAD,
+            Ok(pb::HttpMethod::Options) => Method::OPTIONS,
+            Ok(pb::HttpMethod::Connect) => Method::CONNECT,
+            Ok(pb::HttpMethod::Patch) => Method::PATCH,
+            Ok(pb::HttpMethod::Trace) => Method::TRACE,
+            Ok(pb::HttpMethod::Unspecified) => {
+                return Err(anyhow!("received http method unspecified."));
+            }
+            Err(e) => {
+                return Err(anyhow!("received invalid method {}", e));
+            }
+        })
+        .version(Version::HTTP_3)
+        .uri(request_proto.uri);
+    for h in request_proto.headers {
+        let pb::HttpHeader { key, value } = h;
+        request = request.header(key, value);
+    }
+    // This consumes the body without requiring allocation or cloning the whole content.
+    let body_bytes = Bytes::from(request_proto.body);
+    request
+        .body(Body::from(body_bytes))
+        .with_context(|| "Failed to build request.")
+}
+
+pub(crate) async fn write_response(
+    send_stream: &mut SendStream,
+    response: Response<Body>,
+) -> Result<(), anyhow::Error> {
+    let (parts, body) = response.into_parts();
+    // Check for axum error in body
+    // TODO: Think about this. What is the error that can happen here?
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .with_context(|| "Failed to read response from body.")?;
+    let response_proto = pb::HttpResponse {
+        status_code: parts.status.as_u16().into(),
+        headers: parts
+            .headers
+            .into_iter()
+            .filter_map(|(k, v)| {
+                k.map(|k| ic_protobuf::transport::v1::HttpHeader {
+                    key: k.to_string(),
+                    value: v.as_bytes().to_vec(),
+                })
+            })
+            .collect(),
+        body: body.into(),
+    };
+
+    let response_bytes = response_proto.encode_to_vec();
+    send_stream
+        .write_all(&response_bytes)
+        .await
+        .with_context(|| "Failed to write request to stream.")?;
+    Ok(())
 }
