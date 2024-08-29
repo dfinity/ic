@@ -39,9 +39,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 Transport is devided into two logical parts - sending and receiving.
 
-For the sending side, transport exposes two API calls - `+rpc+` and `+push+`. For both the `+push+` and `+rpc+` method calls, the caller specifies destination, payload and an URI.
-The key difference between the two is that the `+push+` method doesn't return a response from the receving side.
-It is effectively the same as `+rpc+` just slightly more performant because there is less data to be exchanged. 
+For the sending side, transport exposes the `+rpc+` API call. 
 
 Transport uses https://docs.rs/anyhow/latest/anyhow/struct.Error.html[anyhow::Error] instead of https://docs.rs/thiserror/latest/thiserror/derive.Error.html[thiserror::Error] as the error type 
 because the errors are transient and it is expected that the user retries on failure.
@@ -54,16 +52,12 @@ How do you make sure there are only transient errors? For example, how do you ru
 [source, rust]
 ----
     async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error>;
-
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 ----
 
 The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
 When a message is received by transport, a handler is chosen using the URI and invoked with the payload (a.k.a. routing).
 
 == Handlers ==
-
-As a rule of thumb, if a handler doesn't return a response the sender should use the `+push+` method for sending data.
 
 A handler implements an async interface. This implies that a handler must satisfy all Tokio requirements for async code.
 Some handlers may use synchronous APIs that block the running thread for longer periods of time (>100 microseconds). 
@@ -95,3 +89,13 @@ and later started with the already constructed router.
 This approach enables the handlers for doing most of the work and potentially eliminating the need
 of the event loop from the first approach.
 However, this comes at the cost of having more shared state and more contention.
+
+=== Unused QUIC/QUINN abstraction ===
+
+1. QuicTransport doesn't send nor receive datagrams because they are not reliably delivered.
+2. QuicTransport doesn't use uni-directional streams. One possible situation where uni-directional
+stream may make sense is when a client handler is infallible. Since routes are given by the clients,
+if a route is missing it should not be considered a failure in transport.
+For comparision, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all gRPC methods contain for a response from the application receive side].
+In addition, no gRPC implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html['NOT_FOUND'],
+which is the most approriate return code if a route is missing.
