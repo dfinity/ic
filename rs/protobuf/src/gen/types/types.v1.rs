@@ -1492,6 +1492,7 @@ pub struct GetIngressMessageInBlockResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {}
+#[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedConsensusMessage {
@@ -1500,6 +1501,7 @@ pub struct StrippedConsensusMessage {
 }
 /// Nested message and enum types in `StrippedConsensusMessage`.
 pub mod stripped_consensus_message {
+    #[allow(clippy::large_enum_variant)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
