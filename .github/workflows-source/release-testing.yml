@@ -30,7 +30,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+    image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1

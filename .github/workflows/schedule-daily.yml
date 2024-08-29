@@ -43,7 +43,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       # running on bare metal machine using ubuntu user
       options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
@@ -78,7 +78,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -120,7 +120,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -162,7 +162,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 20
@@ -204,7 +204,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 480
@@ -251,7 +251,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:bf2a048213608ad4169b55b3115891f8673ce0af621b67cdcbc3083277105c30
+      image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
