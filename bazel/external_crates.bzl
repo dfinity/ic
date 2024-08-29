@@ -62,6 +62,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "secp256k1-sys": [crate.annotation(
+            # This specific version is used by ic-btc-kyt canister, which
+            # requires an extra cfg flag to avoid linking issues.
+            # Applying the same cfg to other versions of secp256k1-sys
+            # may break other programs or tests.
+            version = "0.10.0",
+            rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
+        )],
         "sha2": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -233,6 +241,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "bit-vec": crate.spec(
                 version = "^0.6.3",
+            ),
+            "bitcoin-0-32": crate.spec(
+                package = "bitcoin",
+                version = "^0.32.2",
+                default_features = False,
             ),
             "bitcoin": crate.spec(
                 version = "^0.28.1",
@@ -710,13 +723,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "k8s-openapi": crate.spec(
-                version = "^0.20.0",
+                version = "^0.22.0",
                 features = [
-                    "v1_22",
+                    "v1_24",
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.87.2",
+                version = "^0.93.1",
                 features = [
                     "runtime",
                     "derive",

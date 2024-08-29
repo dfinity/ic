@@ -22,10 +22,7 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   ci-main:
@@ -50,7 +47,13 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
+=======
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+>>>>>>> master
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -90,7 +93,13 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
+=======
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+>>>>>>> master
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -129,7 +138,13 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
+=======
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+>>>>>>> master
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -176,7 +191,13 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/src/ci-scripts/before-script.sh
+=======
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+>>>>>>> master
       - name: Setup python deps
         id: setup-python-deps
         shell: bash

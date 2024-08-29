@@ -405,7 +405,7 @@ impl BlockMaker {
         );
         let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
-        let metadata = BlockMetadata::from_block(&hashed_block, &self.replica_config);
+        let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
         match self
             .crypto
             .sign(&metadata, self.replica_config.node_id, registry_version)

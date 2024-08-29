@@ -1676,7 +1676,7 @@ impl Swap {
             }
         }
 
-        // If neuron_parameters is empty, all recipes are either Invalid or Skipped and there
+        // If neuron_recipes is empty, all recipes are either Invalid or Skipped and there
         // is no work to do.
         if neuron_recipes.is_empty() {
             return sweep_result;
@@ -1723,11 +1723,11 @@ impl Swap {
                 batch_count,
             );
 
-            #[allow(deprecated)] // Remove once neuron_parameters is removed
+            #[allow(deprecated)] // TODO(NNS1-3198): Remove once `neuron_parameters` is removed
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
-                    neuron_parameters: vec![],
                     neuron_recipes: Some(NeuronRecipes::from(batch)),
+                    neuron_parameters: vec![],
                 })
                 .await;
 

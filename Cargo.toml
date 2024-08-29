@@ -19,6 +19,7 @@ members = [
     "rs/bitcoin/ckbtc/minter",
     "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
+    "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
     "rs/boundary_node/canary_proxy",
@@ -58,7 +59,6 @@ members = [
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
-    "rs/crypto/extended_bip32",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -390,6 +390,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
