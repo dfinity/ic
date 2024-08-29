@@ -18,11 +18,7 @@ impl QualificationExecutor {
             step.do_step(env.clone(), self.rt.handle().clone())?
         }
 
-        // workload test
-
         // xnet test
-
-        // workload test
 
         // xnet text
 

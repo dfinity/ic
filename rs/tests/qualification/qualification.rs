@@ -5,7 +5,10 @@ use ic_system_test_driver::driver::{
 };
 use ic_tests::qualification::{
     defs::QualificationExecutor,
-    steps::{ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType},
+    steps::{
+        ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType,
+        workload::Workload,
+    },
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
@@ -130,6 +133,12 @@ pub fn main() -> anyhow::Result<()> {
                             subnet_type: None,
                             version: to_version.clone(),
                         }),
+                        // Run workload tests
+                        // Maps to `rs/tests/consensus/consensus_performance.rs` small
+                        Box::new(Workload {
+                            message_size: 4_000,
+                            rps: 500.0,
+                        }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {
                             subnet_type: Some(SubnetType::Application),
@@ -142,6 +151,12 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(UpdateSubnetType {
                             subnet_type: None,
                             version: initial_version.clone(),
+                        }),
+                        // Run workload tests again
+                        // Maps to `rs/tests/consensus/consensus_performance.rs` small
+                        Box::new(Workload {
+                            message_size: 4_000,
+                            rps: 500.0,
                         }),
                     ],
                 );

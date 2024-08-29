@@ -11,6 +11,8 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-agent = { workspace = true }
+futures = { workspace = true }
+chrono = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
 ic-config = { path = "../../../config" }
