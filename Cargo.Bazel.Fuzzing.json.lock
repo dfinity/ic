@@ -1,5 +1,5 @@
 {
-  "checksum": "58325bedc49be31a9111c286209905574373eeccb1e1d90dd25aa86bfc485c72",
+  "checksum": "1a797366f71d799219b96a35417cc2ed0e800ef3d75eccced987f8a6fdba42b7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18205,8 +18205,9 @@
               "target": "k256"
             },
             {
-              "id": "k256_schnorr 0.13.3",
-              "target": "k256_schnorr"
+              "id": "k256 0.13.3",
+              "target": "k256",
+              "alias": "k256_schnorr"
             },
             {
               "id": "k8s-openapi 0.22.0",
@@ -34224,97 +34225,6 @@
           ],
           "selects": {}
         },
-        "version": "0.13.3"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "k256_schnorr 0.13.3": {
-      "name": "k256_schnorr",
-      "version": "0.13.3",
-      "package_url": "https://github.com/RustCrypto/elliptic-curves/tree/master/k256",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/mraszyk/elliptic-curves",
-          "commitish": {
-            "Rev": "10cfcea0c2f956543ba7d1f340f267c459bd82b9"
-          },
-          "strip_prefix": "k256"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "k256_schnorr",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "k256_schnorr",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "arithmetic",
-            "digest",
-            "ecdsa",
-            "ecdsa-core",
-            "once_cell",
-            "pem",
-            "pkcs8",
-            "precomputed-tables",
-            "schnorr",
-            "sha2",
-            "sha256",
-            "signature",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "ecdsa 0.16.9",
-              "target": "ecdsa",
-              "alias": "ecdsa_core"
-            },
-            {
-              "id": "elliptic-curve 0.13.8",
-              "target": "elliptic_curve"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "sha2 0.10.8",
-              "target": "sha2"
-            },
-            {
-              "id": "signature 2.2.0",
-              "target": "signature"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
         "version": "0.13.3"
       },
       "license": "Apache-2.0 OR MIT",
@@ -78852,7 +78762,6 @@
     "json-patch 0.2.7",
     "json5 0.4.1",
     "k256 0.13.3",
-    "k256_schnorr 0.13.3",
     "k8s-openapi 0.22.0",
     "kube 0.93.1",
     "lazy_static 1.4.0",

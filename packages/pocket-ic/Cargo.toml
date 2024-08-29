@@ -43,6 +43,6 @@ flate2 = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
-k256 = { package = "k256_schnorr", git = "https://github.com/mraszyk/elliptic-curves", rev = "10cfcea0c2f956543ba7d1f340f267c459bd82b9", features = ["schnorr"] }
+k256 = { git = "https://github.com/altkdf/elliptic-curves", rev = "01d6e705afb663487cf61226e087c6874fac72a0", features = ["schnorr"] }
 lazy_static = "1.4.0"
 wat = { workspace = true }
