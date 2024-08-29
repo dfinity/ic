@@ -9,8 +9,10 @@ documentation.workspace = true
 [dependencies]
 backoff = { workspace = true }
 futures-util = { workspace = true }
-hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
-hyper-rustls = { version = "0.24.2", features = ["http2"] }
+hyper = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
 ic-canister-client-sender = { path = "./sender" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-certification = { path = "../certification" }
@@ -21,10 +23,11 @@ ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
 itertools = { workspace = true }
 prost = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = { workspace = true }
 

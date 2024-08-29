@@ -1,5 +1,5 @@
 {
-  "checksum": "407f7d1a6583c9abd8d384e6c187ad8ad515e76bd933e470ea9509c08d7460cf",
+  "checksum": "547d0ebd0b46f5903c7f92d39af0f2a43d9f5d6a954fb119b47c7bb7d799c78e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18566,10 +18566,6 @@
               "target": "time"
             },
             {
-              "id": "tla_instrumentation 0.1.0",
-              "target": "tla_instrumentation"
-            },
-            {
               "id": "tokio 1.39.3",
               "target": "tokio"
             },
@@ -18756,7 +18752,7 @@
               "target": "wsl"
             },
             {
-              "id": "wycheproof 0.5.1",
+              "id": "wycheproof 0.6.0",
               "target": "wycheproof"
             },
             {
@@ -18832,10 +18828,6 @@
             {
               "id": "test-strategy 0.3.1",
               "target": "test_strategy"
-            },
-            {
-              "id": "tla_instrumentation_proc_macros 0.1.0",
-              "target": "tla_instrumentation_proc_macros"
             }
           ],
           "selects": {}
@@ -65542,127 +65534,6 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
-    "tla_instrumentation 0.1.0": {
-      "name": "tla_instrumentation",
-      "version": "0.1.0",
-      "package_url": null,
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
-          "commitish": {
-            "Rev": "9498c4a5bca5fc20b5ef7353d6b9f80136178195"
-          },
-          "strip_prefix": "tla_instrumentation"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tla_instrumentation",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tla_instrumentation",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.6",
-              "target": "candid"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "sha2 0.10.8",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "tla_instrumentation_proc_macros 0.1.0",
-              "target": "tla_instrumentation_proc_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.1.0"
-      },
-      "license": null,
-      "license_ids": [],
-      "license_file": null
-    },
-    "tla_instrumentation_proc_macros 0.1.0": {
-      "name": "tla_instrumentation_proc_macros",
-      "version": "0.1.0",
-      "package_url": null,
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
-          "commitish": {
-            "Rev": "9498c4a5bca5fc20b5ef7353d6b9f80136178195"
-          },
-          "strip_prefix": "tla_instrumentation_proc_macros"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "tla_instrumentation_proc_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tla_instrumentation_proc_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.85",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.0"
-      },
-      "license": null,
-      "license_ids": [],
-      "license_file": null
-    },
     "tls_codec 0.4.1": {
       "name": "tls_codec",
       "version": "0.4.1",
@@ -76455,14 +76326,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wycheproof 0.5.1": {
+    "wycheproof 0.6.0": {
       "name": "wycheproof",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "package_url": "https://github.com/randombit/wycheproof-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wycheproof/0.5.1/download",
-          "sha256": "e639f57253b80c6584b378011aec0fed61c4c21d7a4b97c4d9d7eaf35ca77d12"
+          "url": "https://static.crates.io/crates/wycheproof/0.6.0/download",
+          "sha256": "efb3be19abfb206c6adcbdf2007b09b0e8ca1f6530db40c03b42ce8ed4719894"
         }
       },
       "targets": [
@@ -76484,15 +76355,21 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "ecdsa",
+            "eddsa",
+            "hkdf",
+            "mac",
+            "rsa_sig"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
-              "target": "base64"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
             },
             {
               "id": "serde 1.0.203",
@@ -76506,7 +76383,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.1"
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -79252,8 +79129,6 @@
     "tikv-jemalloc-ctl 0.5.4",
     "tikv-jemallocator 0.5.4",
     "time 0.3.36",
-    "tla_instrumentation 0.1.0",
-    "tla_instrumentation_proc_macros 0.1.0",
     "tokio 1.39.3",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
@@ -79300,7 +79175,7 @@
     "which 4.4.0",
     "wiremock 0.5.19",
     "wsl 0.1.0",
-    "wycheproof 0.5.1",
+    "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
     "yansi 0.5.1",

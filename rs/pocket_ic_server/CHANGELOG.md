@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
 - The endpoint `/instances/<instance_id>/auto_progress` returns an error if the corresponding PocketIC instance is already in auto progress mode.
 
+### Removed
+- The option `--ready-file`: the PocketIC server is ready to accept HTTP connections once the port file (specified via `--pid` or `--port-file`) contains a line terminated by a newline character.
+
 
 
 ## 5.0.0 - 2024-07-22

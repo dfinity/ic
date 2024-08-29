@@ -123,7 +123,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:92b992242e9ee14de5b7515d5705cb8e5926499ed0bac848922d4c54deea3756
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4

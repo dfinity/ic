@@ -1118,7 +1118,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustls": crate.spec(
                 default_features = False,
                 version = "^0.23.12",
-                features = ["ring"],
+                features = [
+                    "ring",
+                    "std",
+                ],
             ),
             "rustls-native-certs": crate.spec(
                 version = "^0.7.0",
@@ -1522,7 +1525,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.0",
             ),
             "wycheproof": crate.spec(
-                version = "^0.5",
+                version = "^0.6",
+                default_features = False,
+                features = [
+                    "ecdsa",
+                    "eddsa",
+                    "hkdf",
+                    "mac",
+                    "rsa_sig",
+                ],
             ),
             "wiremock": crate.spec(
                 version = "^0.5.19",
