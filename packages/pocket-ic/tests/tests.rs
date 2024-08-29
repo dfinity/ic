@@ -1134,12 +1134,11 @@ fn test_schnorr() {
             // We verify the Schnorr signature.
             match key_id.algorithm {
                 SchnorrAlgorithm::Bip340Secp256k1 => {
-                    use ic_crypto_internal_threshold_sig_ecdsa_test_utils::verify_bip340_signature_using_third_party;
-                    assert!(verify_bip340_signature_using_third_party(
-                        &schnorr_public_key.public_key,
-                        schnorr_signature.as_slice(),
-                        message
-                    ));
+                    use k256::ecdsa::signature::hazmat::PrehashVerifier;
+                    use k256::schnorr::{Signature, VerifyingKey};
+                    let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
+                    let sig = Signature::try_from(schnorr_signature.as_slice()).unwrap();
+                    vk.verify_prehash(message, &sig).unwrap();
                 }
                 SchnorrAlgorithm::Ed25519 => {
                     use ed25519_dalek::{Signature, Verifier, VerifyingKey};

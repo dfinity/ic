@@ -26,7 +26,6 @@ MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/rosetta-api/icp_ledger",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",

@@ -41,7 +41,6 @@ candid_parser = { workspace = true }
 ed25519-dalek = "2.1"
 flate2 = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
-ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "../../rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
 k256 = "^0.13.3"

@@ -16554,7 +16554,6 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-cdk 0.13.5",
- "ic-crypto-internal-threshold-sig-ecdsa-test-utils",
  "ic-universal-canister",
  "icp-ledger",
  "k256",
