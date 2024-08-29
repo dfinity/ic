@@ -15,8 +15,6 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
@@ -46,10 +44,14 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/sns/governance",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients:clients--test_feature",
+    "//rs/nervous_system/common:common--test_feature",
     "//rs/sns/governance:governance--test_feature",
 ]
 
