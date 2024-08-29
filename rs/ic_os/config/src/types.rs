@@ -1,10 +1,13 @@
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use std::path::PathBuf;
+use url::Url;
 
+#[derive(Debug)]
 pub struct SetuposConfig {
     hostos_config: HostOSConfig,
 }
 
+#[derive(Debug)]
 pub struct HostOSConfig {
     vm_memory: u32,
     vm_cpu: String,
@@ -12,10 +15,11 @@ pub struct HostOSConfig {
 }
 
 // todo: fix types and separate dev/prod
+#[derive(Debug)]
 pub struct IcConfig {
     networking: Networking,
     nns_public_key_path: PathBuf,
-    nns_url: String,
+    nns_url: Vec<Url>,
     elasticsearch_hosts: String,
     elasticsearch_tags: Option<String>,
     hostname: String,
@@ -36,6 +40,7 @@ pub struct IcConfig {
     socks_proxy: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct Networking {
     ipv6_address: String,
     ipv6_gateway: String,
@@ -50,7 +55,7 @@ impl SetuposConfig {
         vm_memory: u32,
         vm_cpu: String,
         nns_public_key_path: PathBuf,
-        nns_url: String,
+        nns_url: Vec<Url>,
         elasticsearch_hosts: String,
         elasticsearch_tags: Option<String>,
         hostname: String,
@@ -119,7 +124,7 @@ impl HostOSConfig {
 impl IcConfig {
     pub fn new(
         nns_public_key_path: PathBuf,
-        nns_url: String,
+        nns_url: Vec<Url>,
         elasticsearch_hosts: String,
         elasticsearch_tags: Option<String>,
         hostname: String,

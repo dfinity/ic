@@ -2,10 +2,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{config_map_from_path, ConfigMap};
-
-// todo: add PathBuf
-// use std::path::PathBuf;
+use utils::deployment::read_deployment_file;
 use std::path::Path;
+use url::Url;
 
 mod types;
 
@@ -49,33 +48,49 @@ pub fn main() -> Result<()> {
             let node_operator_private_key_path = Path::new(&node_operator_private_key_path);
 
             let config_ini_variables: ConfigMap = config_map_from_path(config_ini_path)?;
-            // get deployment.json variables
-
-            // todo: read out the nns_public_key value
-            // todo: ssh_authorized_keys_path
-            // todo: node_operator_private_key
-
             
-            // todo: parse the values out of the files
-            let vm_memory = ;
-            let vm_cpu = ;
+            // get deployment.json variables
+            let deployment = read_deployment_file(deployment_json_path);
+            let vm_memory: u32;
+            let vm_cpu: String;
+            let nns_url: Vec<Url>;
+            let hostname: String;
+            let elasticsearch_hosts: String;
+            match &deployment {
+                Ok(deployment_json) => {
+                    vm_memory = deployment_json.resources.memory;
+                    vm_cpu = deployment_json.resources.cpu.unwrap_or("kvm".to_string());
+                    nns_url = deployment_json.nns.url;
+                    hostname = deployment_json.deployment.name.to_string();
+                    elasticsearch_hosts= deployment_json.logging.hosts.to_string();
+                },
+                Err(e) => {
+                    eprintln!("Error retrieving deployment file: {e}. Continuing with default values");
+                    vm_memory = 490;
+                    vm_cpu = "kvm".to_string();
+                    nns_url = vec![
+                        Url::parse("https://icp-api.io").unwrap(),
+                        Url::parse("https://icp0.io").unwrap(),
+                        Url::parse("https://ic0.app").unwrap(),
+                    ];
+                    hostname =  "mainnet".to_string();
+                    elasticsearch_hosts= "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string();
+                }
+            }
+            
             // help: nns_public_key_path is copied to GuestOS (and it's contents are not copied into ic.json)
-            // let nns_public_key_contents = ...
-            let nns_url = ;
-            let elasticsearch_hosts= ;
             let elasticsearch_tags = None;
-            let hostname := ;
             let node_operator_private_key_path = if node_operator_private_key_path.exists() {
                 Some(node_operator_private_key_path.to_path_buf())
             } else {
                 None
             };
-            let ipv6_address = config_ini_variables.get("ipv6_address")?;
-            let ipv6_gateway = config_ini_variables.get("ipv6_address")?;
-            let ipv4_address = config_ini_variables.get("ipv4_address");
-            let ipv4_gateway = config_ini_variables.get("ipv4_gateway");
-            let domain = config_ini_variables.get("domain");
-            let verbose = config_ini_variables.get("verbose");
+            let ipv6_address = config_ini_variables.get("ipv6_address").unwrap().to_string();
+            let ipv6_gateway = config_ini_variables.get("ipv6_address").unwrap().to_string();
+            let ipv4_address = config_ini_variables.get("ipv4_address").cloned();
+            let ipv4_gateway = config_ini_variables.get("ipv4_gateway").cloned();
+            let domain = config_ini_variables.get("domain").cloned();
+            let verbose = config_ini_variables.get("verbose").cloned();
             let ic_crypto_path = None;
             let ic_state_path = None;
             let ic_registry_local_store_path = None;
@@ -93,7 +108,7 @@ pub fn main() -> Result<()> {
             let setupos_config = types::SetuposConfig::new(
                 vm_memory,
                 vm_cpu,
-                nns_public_key_path,
+                nns_public_key_path.to_path_buf(),
                 nns_url ,
                 elasticsearch_hosts,
                 elasticsearch_tags,
@@ -117,6 +132,10 @@ pub fn main() -> Result<()> {
                 jaeger_addr,
                 socks_proxy,
             );
+
+            dbg!(setupos_config);
+
+            // write serialized setupOS json object to config /var (or wherever)
 
             //todo: fix return type
             Ok(())

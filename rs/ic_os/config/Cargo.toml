@@ -7,6 +7,8 @@ edition = "2021"
 anyhow = { workspace = true }
 ic-types = { path = "../../types/types" }
 clap = { workspace = true }
+utils = { path = "../utils" }
+url = { workspace = true }
 
 [[bin]]
 name = "config_tool"
