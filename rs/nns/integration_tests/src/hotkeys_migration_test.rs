@@ -38,7 +38,7 @@ fn all_but(topics: Vec<Topic>) -> Vec<Topic> {
         Topic::ServiceNervousSystemManagement,
     ]
     .into_iter()
-    .filter(|topic| !topics.contains(&topic))
+    .filter(|topic| !topics.contains(topic))
     .collect()
 }
 
@@ -149,6 +149,7 @@ fn test_hotkey_principal_migration() {
 
     // Assert that all collected neuron portions have been migrated correctly.
     for neuron_portion in neuron_portions {
+        #[rustfmt::skip]
         assert_matches!(
             neuron_portion,
             NeuronsFundNeuronPortion {
