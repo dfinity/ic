@@ -66,7 +66,6 @@ go_deps.bzl               @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/finint
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
-/ci/                                                                     @dfinity/idx
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
