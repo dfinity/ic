@@ -404,10 +404,7 @@ impl CertifierImpl {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
-                Some(active_high_threshold_nidkg_id(
-                    self.consensus_pool_cache.as_ref(),
-                    cert.height(),
-                )?)
+                active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
             shares,
         )
