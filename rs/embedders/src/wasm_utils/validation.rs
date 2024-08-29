@@ -915,11 +915,9 @@ fn validate_export_section(
                     func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
-                        return Err(WasmValidationError::UserInvalidExportSection(format!(
-                            "Duplicate function '{}' exported multiple times \
-                             with different call types: update, query, or composite_query.",
-                            unmangled_func_name
-                        )));
+                        return Err(WasmValidationError::DuplicateExport {
+                            name: unmangled_func_name.to_string(),
+                        });
                     }
                     seen_funcs.insert(unmangled_func_name);
                     number_exported_functions += 1;
@@ -957,13 +955,19 @@ fn validate_export_section(
                 }
             }
         }
+
         if number_exported_functions > max_number_exported_functions {
-            let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::TooManyExports {
+                defined: number_exported_functions,
+                allowed: max_number_exported_functions,
+            });
         }
+
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
-            let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::ExportedNamesTooLong {
+                total_length: sum_exported_function_name_lengths,
+                allowed: max_sum_exported_function_name_lengths,
+            });
         }
     }
     Ok(())
