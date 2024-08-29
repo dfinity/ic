@@ -41,8 +41,9 @@ candid_parser = { workspace = true }
 ed25519-dalek = "2.1"
 flate2 = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
+ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "../../rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
-k256 = { git = "https://github.com/altkdf/elliptic-curves", rev = "01d6e705afb663487cf61226e087c6874fac72a0", features = ["schnorr"] }
+k256 = "^0.13.3"
 lazy_static = "1.4.0"
 wat = { workspace = true }

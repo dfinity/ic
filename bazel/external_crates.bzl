@@ -722,21 +722,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
                 default_features = False,
             ),
-            "k256_schnorr": crate.spec(
-                git = "https://github.com/altkdf/elliptic-curves",
-                rev = "01d6e705afb663487cf61226e087c6874fac72a0",
-                package = "k256",
-                features = [
-                    "arithmetic",
-                    "ecdsa",
-                    "pem",
-                    "pkcs8",
-                    "precomputed-tables",
-                    "schnorr",
-                    "std",
-                ],
-                default_features = False,
-            ),
             "k8s-openapi": crate.spec(
                 version = "^0.22.0",
                 features = [

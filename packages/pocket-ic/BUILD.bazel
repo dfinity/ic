@@ -26,6 +26,7 @@ MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/rosetta-api/icp_ledger",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
@@ -33,7 +34,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
-    "@crate_index//:k256_schnorr",
+    "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:wat",
 ]
@@ -70,9 +71,6 @@ rust_test_suite(
     name = "test",
     size = "small",
     srcs = ["tests/tests.rs"],
-    aliases = {
-        "@crate_index//:k256_schnorr": "k256",
-    },
     data = [
         "tests/counter.wasm",
         "tests/icp_ledger.wasm",

@@ -1157,7 +1157,7 @@ checksum = "7e141fb0f8be1c7b45887af94c88b182472b57c96b56773250ae00cd6a14a164"
 dependencies = [
  "bs58",
  "hmac",
- "k256 0.13.3",
+ "k256",
  "once_cell",
  "pbkdf2",
  "rand_core 0.6.4",
@@ -3122,8 +3122,7 @@ dependencies = [
  "itertools 0.12.0",
  "json-patch 0.2.7",
  "json5",
- "k256 0.13.3",
- "k256 0.13.3",
+ "k256",
  "k8s-openapi",
  "kube",
  "lazy_static",
@@ -3731,7 +3730,7 @@ dependencies = [
  "ethabi",
  "generic-array",
  "hex",
- "k256 0.13.3",
+ "k256",
  "num_enum",
  "open-fastrlp",
  "rand 0.8.5",
@@ -4914,7 +4913,7 @@ dependencies = [
  "ic-certification 2.6.0",
  "ic-transport-types",
  "ic-verify-bls-signature 0.5.0",
- "k256 0.13.3",
+ "k256",
  "leb128",
  "p256",
  "pem 3.0.3",
@@ -6052,19 +6051,6 @@ name = "k256"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "956ff9b67e26e1a6a866cb758f12c6f8746208489e3e4a4b5580802f2f0a587b"
-dependencies = [
- "cfg-if 1.0.0",
- "ecdsa",
- "elliptic-curve",
- "once_cell",
- "sha2 0.10.8",
- "signature",
-]
-
-[[package]]
-name = "k256"
-version = "0.13.3"
-source = "git+https://github.com/altkdf/elliptic-curves?rev=01d6e705afb663487cf61226e087c6874fac72a0#01d6e705afb663487cf61226e087c6874fac72a0"
 dependencies = [
  "cfg-if 1.0.0",
  "ecdsa",
