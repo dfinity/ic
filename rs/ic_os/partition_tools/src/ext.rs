@@ -229,8 +229,9 @@ impl ExtPartition {
         // mkdir /opt
         // mkdir /opt/ic
         // mkdir /opt/ic/bin
-        let mkdir_all = std::iter::successors(output.parent(), |child| child.parent())
-            .filter(|path| *path != Path::new("/"))
+        let mkdir_all = output.ancestors()
+            .skip(1) // skip `output` itself
+            .take_while(|path| path != &Path::new("/"))
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
