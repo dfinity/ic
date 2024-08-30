@@ -54,3 +54,20 @@ pub async fn wait_for_rosetta_block(
     }
     panic!("Failed to sync with the ledger");
 }
+
+pub fn bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
+    // Ensure we have at least 8 bytes.
+    if bytebuf.len() < 8 {
+        return None; // Handle insufficient bytes.
+    }
+
+    // Extract the first 8 bytes (assuming we want to use the first 8 bytes).
+    let byte_array: [u8; 8] = bytebuf[0..8]
+        .try_into()
+        .expect("slice with incorrect length");
+
+    // Convert the byte array into a u64.
+    let value = u64::from_le_bytes(byte_array); // Or use from_be_bytes for big-endian.
+
+    Some(value)
+}

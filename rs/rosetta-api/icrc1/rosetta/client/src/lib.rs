@@ -180,20 +180,11 @@ impl RosettaClient {
         while tries < 10 {
             let transaction = self
                 .search_transactions(
-                    network_identifier.clone(),
-                    Some(submit_response.transaction_identifier.clone()),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
+                    &SearchTransactionsRequest::builder(network_identifier.clone())
+                        .with_transaction_identifier(submit_response.transaction_identifier.clone())
+                        .build(),
                 )
                 .await?;
-            println!("Transaction: {:?}", transaction);
-            println!(
-                "Transaction hash looked for: {:?}",
-                submit_response.transaction_identifier
-            );
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }

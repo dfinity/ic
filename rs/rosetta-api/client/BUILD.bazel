@@ -5,8 +5,12 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/rosetta-api",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api:ic-rosetta-api",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:clap",

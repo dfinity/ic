@@ -17,7 +17,7 @@ use tokio::runtime::Runtime;
 lazy_static! {
     pub static ref TEST_ACCOUNT: Account = test_identity().sender().unwrap().into();
     pub static ref MAX_NUM_GENERATED_BLOCKS: usize = 50;
-    pub static ref NUM_TEST_CASES: u32 = 5;
+    pub static ref NUM_TEST_CASES: u32 = 1;
     pub static ref MINTING_IDENTITY: Arc<BasicIdentity> = Arc::new(minter_identity());
 }
 

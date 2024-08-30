@@ -63,11 +63,11 @@ pub fn arb_small_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
     any::<u16>().prop_map(|v| token_amount(v as u64))
 }
 
-pub fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
+fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
     any::<u64>().prop_map(|v| token_amount(v))
 }
 
-fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
+pub fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
     prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
 }
 
@@ -131,7 +131,7 @@ fn operation_strategy<Tokens: TokensType>(
     })
 }
 
-fn valid_created_at_time_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
+pub fn valid_created_at_time_strategy(now: SystemTime) -> impl Strategy<Value = Option<u64>> {
     let day_in_sec = 24 * 60 * 60 - 60 * 5;
     prop::option::of((0..=day_in_sec).prop_map(move |duration| {
         let start = now - Duration::from_secs(day_in_sec);
