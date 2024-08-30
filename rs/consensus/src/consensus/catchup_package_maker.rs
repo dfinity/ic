@@ -290,358 +290,330 @@ mod tests {
 
     #[test]
     fn test_catch_up_package_maker() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let interval_length = 5;
-                let committee: Vec<_> = (0..4).map(node_test_id).collect();
-                let Dependencies {
-                    mut pool,
-                    membership,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(interval_length)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 5;
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-                let message_routing = FakeMessageRouting::new();
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let message_routing = Arc::new(message_routing);
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let message_routing = Arc::new(message_routing);
 
-                let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
-                    membership,
-                    crypto,
-                    state_manager.clone(),
-                    message_routing,
-                    no_op_logger(),
-                );
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager.clone(),
+                message_routing,
+                no_op_logger(),
+            );
 
-                // 1. Genesis CUP already exists, we won't make a new one
-                assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            // 1. Genesis CUP already exists, we won't make a new one
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-                // Skip the first DKG interval
-                pool.advance_round_normal_operation_n(interval_length);
+            // Skip the first DKG interval
+            pool.advance_round_normal_operation_n(interval_length);
 
-                let mut proposal = pool.make_next_block();
-                let block = proposal.content.as_mut();
-                block.context.certified_height = block.height();
-                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
-                pool.insert_validated(proposal.clone());
-                pool.notarize(&proposal);
-                pool.finalize(&proposal);
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = block.height();
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
 
-                // 4. Beacon does not exist, we can't make a new CUP share
-                assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            // 4. Beacon does not exist, we can't make a new CUP share
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-                // 5. Beacon now exists, we can make a new CUP share
-                pool.insert_validated(pool.make_next_beacon());
-                let share = cup_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .expect("Expecting CatchUpPackageShare");
+            // 5. Beacon now exists, we can make a new CUP share
+            pool.insert_validated(pool.make_next_beacon());
+            let share = cup_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting CatchUpPackageShare");
 
-                assert_eq!(&share.content.block, proposal.content.get_hash());
-                assert_eq!(
-                    share.content.state_hash,
-                    state_manager.get_state_hash_at(Height::from(0)).unwrap()
-                );
-                assert_eq!(
-                    share
-                        .content
-                        .oldest_registry_version_in_use_by_replicated_state,
-                    None
-                );
-            },
-        )
+            assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+            );
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                None
+            );
+        })
     }
 
     #[test]
     fn test_catch_up_package_maker_with_registry_version() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let interval_length = 5;
-                let committee: Vec<_> = (0..4).map(node_test_id).collect();
-                let Dependencies {
-                    mut pool,
-                    membership,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_records_with_raw_state_manager(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(interval_length)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 5;
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_records_with_raw_state_manager(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-                let key_id = fake_ecdsa_master_public_key_id();
+            let key_id = fake_ecdsa_master_public_key_id();
 
-                // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-                let pre_sig_id1 = PreSigId(1);
-                let pre_sig_id2 = PreSigId(2);
-                let pre_sig_id3 = PreSigId(3);
+            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id2 = PreSigId(2);
+            let pre_sig_id3 = PreSigId(3);
 
-                let contexts = vec![
-                    fake_signature_request_context_with_pre_sig(
-                        1,
-                        key_id.clone(),
-                        Some(pre_sig_id1),
-                    ),
-                    fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                    fake_signature_request_context_with_pre_sig(
-                        3,
-                        key_id.clone(),
-                        Some(pre_sig_id3),
-                    ),
-                ];
+            let contexts = vec![
+                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
+                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+            ];
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_at()
-                    .return_const(Ok(fake_state_with_signature_requests(
-                        Height::from(0),
-                        contexts.clone(),
-                    )
-                    .get_labeled_state()));
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(fake_state_with_signature_requests(
+                    Height::from(0),
+                    contexts.clone(),
+                )
+                .get_labeled_state()));
 
-                let message_routing = FakeMessageRouting::new();
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let message_routing = Arc::new(message_routing);
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let message_routing = Arc::new(message_routing);
 
-                let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
-                    membership,
-                    crypto,
-                    state_manager.clone(),
-                    message_routing,
-                    no_op_logger(),
-                );
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager.clone(),
+                message_routing,
+                no_op_logger(),
+            );
 
-                // Genesis CUP already exists, we won't make a new one
-                assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            // Genesis CUP already exists, we won't make a new one
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-                // Skip the first DKG interval
-                pool.advance_round_normal_operation_n(interval_length);
+            // Skip the first DKG interval
+            pool.advance_round_normal_operation_n(interval_length);
 
-                let mut proposal = pool.make_next_block();
-                let block = proposal.content.as_mut();
-                block.context.certified_height = block.height();
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = block.height();
 
-                let mut idkg = empty_idkg_payload(subnet_test_id(0));
-                // Add the three quadruples using registry version 3, 1 and 2 in order
-                add_available_quadruple_to_payload(
-                    &mut idkg,
-                    pre_sig_id1,
-                    RegistryVersion::from(3),
-                );
-                add_available_quadruple_to_payload(
-                    &mut idkg,
-                    pre_sig_id2,
-                    RegistryVersion::from(1),
-                );
-                add_available_quadruple_to_payload(
-                    &mut idkg,
-                    pre_sig_id3,
-                    RegistryVersion::from(2),
-                );
+            let mut idkg = empty_idkg_payload(subnet_test_id(0));
+            // Add the three quadruples using registry version 3, 1 and 2 in order
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
 
-                let dkg = block.payload.as_ref().as_summary().dkg.clone();
-                block.payload = Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Summary(SummaryPayload {
-                        dkg,
-                        idkg: Some(idkg),
-                    }),
-                );
-                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            let dkg = block.payload.as_ref().as_summary().dkg.clone();
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload {
+                    dkg,
+                    idkg: Some(idkg),
+                }),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
-                pool.advance_round_with_block(&proposal);
+            pool.advance_round_with_block(&proposal);
 
-                let share = cup_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .expect("Expecting CatchUpPackageShare");
+            let share = cup_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting CatchUpPackageShare");
 
-                assert_eq!(&share.content.block, proposal.content.get_hash());
-                assert_eq!(
-                    share.content.state_hash,
-                    state_manager.get_state_hash_at(Height::from(0)).unwrap()
-                );
-                // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
-                // by the replicated state should be the registry version of quadruple 3, which is 2.
-                assert_eq!(
-                    share
-                        .content
-                        .oldest_registry_version_in_use_by_replicated_state,
-                    Some(RegistryVersion::from(2))
-                );
-            },
-        )
+            assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+            );
+            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
+            // by the replicated state should be the registry version of quadruple 3, which is 2.
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                Some(RegistryVersion::from(2))
+            );
+        })
     }
 
     #[test]
     fn test_invoke_state_sync() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let interval_length = 3;
-                let committee: Vec<_> = (0..5).map(node_test_id).collect();
-                let Dependencies {
-                    mut pool,
-                    membership,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(interval_length)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 3;
+            let committee: Vec<_> = (0..5).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
 
-                pool.advance_round_normal_operation_n(5);
-                let cup_height = PoolReader::new(&pool).get_catch_up_height();
-                assert_eq!(cup_height, Height::from(4));
+            pool.advance_round_normal_operation_n(5);
+            let cup_height = PoolReader::new(&pool).get_catch_up_height();
+            assert_eq!(cup_height, Height::from(4));
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
 
-                let fetch_height = Arc::new(RwLock::new(Height::from(0)));
-                let fetch_height_cl = fetch_height.clone();
-                state_manager.get_mut().expect_fetch_state().returning(
-                    move |height, _hash, _cup_interval_length| {
-                        *fetch_height_cl.write().unwrap() = height;
-                    },
-                );
+            let fetch_height = Arc::new(RwLock::new(Height::from(0)));
+            let fetch_height_cl = fetch_height.clone();
+            state_manager.get_mut().expect_fetch_state().returning(
+                move |height, _hash, _cup_interval_length| {
+                    *fetch_height_cl.write().unwrap() = height;
+                },
+            );
 
-                let message_routing = FakeMessageRouting::new();
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let message_routing = Arc::new(message_routing);
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let message_routing = Arc::new(message_routing);
 
-                let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
-                    membership,
-                    crypto,
-                    state_manager,
-                    message_routing,
-                    no_op_logger(),
-                );
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager,
+                message_routing,
+                no_op_logger(),
+            );
 
-                // Check if fetch state is correctly triggered
-                cup_maker.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(*fetch_height.read().unwrap(), cup_height);
-            },
-        )
+            // Check if fetch state is correctly triggered
+            cup_maker.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(*fetch_height.read().unwrap(), cup_height);
+        })
     }
 
     #[test]
     fn test_state_divergence_report() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let interval_length = 3;
-                let committee: Vec<_> = (0..5).map(node_test_id).collect();
-                let Dependencies {
-                    mut pool,
-                    membership,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(interval_length)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 3;
+            let committee: Vec<_> = (0..5).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
 
-                state_manager
-                    .get_mut()
-                    .expect_fetch_state()
-                    .return_const(());
+            state_manager
+                .get_mut()
+                .expect_fetch_state()
+                .return_const(());
 
-                let message_routing = Arc::new(FakeMessageRouting::new());
-                let cup_maker = CatchUpPackageMaker::new(
-                    replica_config,
-                    membership,
-                    crypto,
-                    state_manager.clone(),
-                    message_routing,
-                    no_op_logger(),
-                );
+            let message_routing = Arc::new(FakeMessageRouting::new());
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager.clone(),
+                message_routing,
+                no_op_logger(),
+            );
 
-                pool.advance_round_normal_operation_n(5);
-                let cup_height = PoolReader::new(&pool).get_catch_up_height();
-                assert_eq!(cup_height, Height::from(4));
+            pool.advance_round_normal_operation_n(5);
+            let cup_height = PoolReader::new(&pool).get_catch_up_height();
+            assert_eq!(cup_height, Height::from(4));
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .times(1)
-                    .return_const(Err(StateHashError::Transient(StateNotCommittedYet(
-                        cup_height,
-                    ))));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .times(1)
+                .return_const(Err(StateHashError::Transient(StateNotCommittedYet(
+                    cup_height,
+                ))));
 
-                // Nothing happens, because the state is not committed yet.
-                assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            // Nothing happens, because the state is not committed yet.
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .times(1)
-                    .return_const(Err(StateHashError::Transient(HashNotComputedYet(
-                        cup_height,
-                    ))));
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .times(1)
+                .return_const(Err(StateHashError::Transient(HashNotComputedYet(
+                    cup_height,
+                ))));
 
-                // Still nothing happens, because the state hash is not computed
-                // yet.
-                assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+            // Still nothing happens, because the state hash is not computed
+            // yet.
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-                // Now make the state manager return a hash which differs from the mocked hash
-                // in our fixtures (empty one).
-                state_manager
-                    .get_mut()
-                    .expect_get_state_hash_at()
-                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+            // Now make the state manager return a hash which differs from the mocked hash
+            // in our fixtures (empty one).
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-                state_manager
-                    .get_mut()
-                    .expect_report_diverged_checkpoint()
-                    .times(1)
-                    .return_const(());
-                cup_maker.on_state_change(&PoolReader::new(&pool));
-            },
-        )
+            state_manager
+                .get_mut()
+                .expect_report_diverged_checkpoint()
+                .times(1)
+                .return_const(());
+            cup_maker.on_state_change(&PoolReader::new(&pool));
+        })
     }
 }

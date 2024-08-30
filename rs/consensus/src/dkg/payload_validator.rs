@@ -298,77 +298,75 @@ mod tests {
     /// block, expecting both to succeed.
     #[test]
     fn test_validate_payload() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let dkg_interval_length = 4;
-                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-                let Dependencies {
-                    crypto,
-                    mut pool,
-                    registry,
-                    state_manager,
-                    dkg_pool,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        5,
-                        SubnetRecordBuilder::from(&committee)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval_length = 4;
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies {
+                crypto,
+                mut pool,
+                registry,
+                state_manager,
+                dkg_pool,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    5,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
 
-                let context = ValidationContext {
-                    registry_version: RegistryVersion::from(5),
-                    certified_height: Height::from(0),
-                    time: ic_types::time::UNIX_EPOCH,
-                };
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(5),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
 
-                // Advance the blockchain to height `dkg_interval_length - 1`
-                pool.advance_round_normal_operation_n(dkg_interval_length - 1);
-                let parent_block = PoolReader::new(&pool).get_finalized_tip();
-                // This will be a regular block, since we are not at dkg_interval_length height
-                let block = Block::from(pool.make_next_block());
-                let block_payload = block.payload.as_ref();
+            // Advance the blockchain to height `dkg_interval_length - 1`
+            pool.advance_round_normal_operation_n(dkg_interval_length - 1);
+            let parent_block = PoolReader::new(&pool).get_finalized_tip();
+            // This will be a regular block, since we are not at dkg_interval_length height
+            let block = Block::from(pool.make_next_block());
+            let block_payload = block.payload.as_ref();
 
-                assert!(validate_payload(
-                    subnet_test_id(0),
-                    registry.as_ref(),
-                    crypto.as_ref(),
-                    &PoolReader::new(&pool),
-                    dkg_pool.read().unwrap().deref(),
-                    parent_block,
-                    block_payload,
-                    state_manager.as_ref(),
-                    &context,
-                    &mock_metrics(),
-                )
-                .is_ok());
+            assert!(validate_payload(
+                subnet_test_id(0),
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                dkg_pool.read().unwrap().deref(),
+                parent_block,
+                block_payload,
+                state_manager.as_ref(),
+                &context,
+                &mock_metrics(),
+            )
+            .is_ok());
 
-                // Advance the blockchain by one block to height `dkg_interval_length`
-                pool.advance_round_normal_operation();
-                let parent_block = PoolReader::new(&pool).get_finalized_tip();
-                // This will be a summary block, since we are at dkg_interval_length height
-                let block = Block::from(pool.make_next_block());
-                let summary = block.payload.as_ref();
+            // Advance the blockchain by one block to height `dkg_interval_length`
+            pool.advance_round_normal_operation();
+            let parent_block = PoolReader::new(&pool).get_finalized_tip();
+            // This will be a summary block, since we are at dkg_interval_length height
+            let block = Block::from(pool.make_next_block());
+            let summary = block.payload.as_ref();
 
-                assert!(validate_payload(
-                    subnet_test_id(0),
-                    registry.as_ref(),
-                    crypto.as_ref(),
-                    &PoolReader::new(&pool),
-                    dkg_pool.read().unwrap().deref(),
-                    parent_block,
-                    summary,
-                    state_manager.as_ref(),
-                    &context,
-                    &mock_metrics(),
-                )
-                .is_ok());
-            },
-        )
+            assert!(validate_payload(
+                subnet_test_id(0),
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                dkg_pool.read().unwrap().deref(),
+                parent_block,
+                summary,
+                state_manager.as_ref(),
+                &context,
+                &mock_metrics(),
+            )
+            .is_ok());
+        })
     }
 
     #[test]
@@ -507,66 +505,64 @@ mod tests {
         subnet_id: SubnetId,
         committee: &[NodeId],
     ) -> ValidationResult<PayloadValidationError> {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let registry_version = 1;
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let registry_version = 1;
 
-                let Dependencies {
-                    crypto,
-                    pool,
-                    dkg_pool,
-                    registry,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config.clone(),
-                    subnet_id,
-                    vec![(
-                        registry_version,
-                        SubnetRecordBuilder::from(committee)
-                            .with_dkg_dealings_per_block(max_dealings_per_payload)
-                            .build(),
-                    )],
-                );
+            let Dependencies {
+                crypto,
+                pool,
+                dkg_pool,
+                registry,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config.clone(),
+                subnet_id,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(committee)
+                        .with_dkg_dealings_per_block(max_dealings_per_payload)
+                        .build(),
+                )],
+            );
 
-                let mut parent = Block::from(pool.make_next_block());
-                parent.payload = Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dealings: dkg::Dealings::new(Height::from(0), parent_dealings),
-                        idkg: idkg::Payload::default(),
-                    }),
-                );
-
-                let context = ValidationContext {
-                    registry_version: RegistryVersion::from(registry_version),
-                    certified_height: Height::from(0),
-                    time: ic_types::time::UNIX_EPOCH,
-                };
-
-                let block_payload = BlockPayload::Data(DataPayload {
+            let mut parent = Block::from(pool.make_next_block());
+            parent.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dealings: dkg::Dealings::new(Height::from(0), dealings_to_validate),
+                    dealings: dkg::Dealings::new(Height::from(0), parent_dealings),
                     idkg: idkg::Payload::default(),
-                });
+                }),
+            );
 
-                let result = validate_payload(
-                    subnet_id,
-                    registry.as_ref(),
-                    crypto.as_ref(),
-                    &PoolReader::new(&pool),
-                    dkg_pool.read().unwrap().deref(),
-                    parent.clone(),
-                    &block_payload,
-                    state_manager.as_ref(),
-                    &context,
-                    &mock_metrics(),
-                );
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(registry_version),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
 
-                result
-            },
-        )
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: dkg::Dealings::new(Height::from(0), dealings_to_validate),
+                idkg: idkg::Payload::default(),
+            });
+
+            let result = validate_payload(
+                subnet_id,
+                registry.as_ref(),
+                crypto.as_ref(),
+                &PoolReader::new(&pool),
+                dkg_pool.read().unwrap().deref(),
+                parent.clone(),
+                &block_payload,
+                state_manager.as_ref(),
+                &context,
+                &mock_metrics(),
+            );
+
+            result
+        })
     }
 
     fn fake_dkg_message(subnet_id: SubnetId, dealer_id: NodeId) -> Message {

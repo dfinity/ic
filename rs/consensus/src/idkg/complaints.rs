@@ -1047,33 +1047,24 @@ mod tests {
     #[test]
     fn test_crypto_verify_complaint() {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                    let crypto = env.nodes.iter().next().unwrap().crypto();
-                    let (_, complaint_handler) = create_complaint_dependencies_with_crypto(
-                        pool_config,
-                        logger,
-                        Some(crypto),
-                    );
-                    let id = create_transcript_id_with_height(2, Height::from(20));
-                    let transcript = create_transcript(&key_id, id, &[NODE_2]);
-                    let complaint = create_complaint(id, NODE_2, NODE_3);
-                    let changeset: Vec<_> = complaint_handler
-                        .crypto_verify_complaint(
-                            complaint.message_id(),
-                            &transcript,
-                            complaint.clone(),
-                        )
-                        .into_iter()
-                        .collect();
-                    // assert that the mock complaint does not pass real crypto check
-                    assert!(is_handle_invalid(&changeset, &complaint.message_id()));
-                })
-            },
-        )
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+                let crypto = env.nodes.iter().next().unwrap().crypto();
+                let (_, complaint_handler) =
+                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                let id = create_transcript_id_with_height(2, Height::from(20));
+                let transcript = create_transcript(&key_id, id, &[NODE_2]);
+                let complaint = create_complaint(id, NODE_2, NODE_3);
+                let changeset: Vec<_> = complaint_handler
+                    .crypto_verify_complaint(complaint.message_id(), &transcript, complaint.clone())
+                    .into_iter()
+                    .collect();
+                // assert that the mock complaint does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &complaint.message_id()));
+            })
+        })
     }
 
     // Tests validation of the received complaints
@@ -1128,211 +1119,193 @@ mod tests {
         );
 
         // Test successful validation using CryptoReturningOk
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                    let change_set =
-                        complaint_handler.validate_complaints(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 2);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
-                })
-            },
-        );
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert!(is_moved_to_validated(&change_set, &msg_id_3));
+            })
+        });
 
         // Test transient crypto failure during validation
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies_with_crypto(
-                            pool_config,
-                            logger,
-                            Some(crypto_without_keys()),
-                        );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                    // Crypto should return a transient error thus validation of msg_id_3 should be deferred.
-                    let change_set =
-                        complaint_handler.validate_complaints(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-                })
-            },
-        );
+                // Crypto should return a transient error thus validation of msg_id_3 should be deferred.
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        });
 
         // Simulate failure when resolving transcript ref
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                    let block_reader = block_reader.clone().with_fail_to_resolve();
-                    let change_set =
-                        complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let block_reader = block_reader.clone().with_fail_to_resolve();
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
 
-                    assert_eq!(change_set.len(), 2);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-                    assert!(is_handle_invalid(&change_set, &msg_id_3));
-                })
-            },
-        );
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(&change_set, &msg_id_3));
+            })
+        });
     }
 
     // Tests that duplicate complaint from the same complainer is dropped
     #[test]
     fn test_ecdsa_duplicate_complaints() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let id_1 = create_transcript_id_with_height(1, Height::from(30));
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
-                    // Set up the IDKG pool
-                    // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                    let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                    let msg_id = complaint.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint.clone()),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Set up the IDKG pool
+                // Complaint from NODE_3 for transcript id_1, dealer NODE_2
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
+                let msg_id = complaint.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint.clone()),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Validated pool already has complaint from NODE_3 for
-                    // transcript id_1, dealer NODE_2
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::Complaint(complaint),
-                    )];
-                    idkg_pool.apply_changes(change_set);
+                // Validated pool already has complaint from NODE_3 for
+                // transcript id_1, dealer NODE_2
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(30),
-                        vec![TranscriptRef::new(Height::new(30), id_1)],
-                    );
-                    let change_set =
-                        complaint_handler.validate_complaints(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_handle_invalid(&change_set, &msg_id));
-                })
-            },
-        )
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(30),
+                    vec![TranscriptRef::new(Height::new(30), id_1)],
+                );
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_handle_invalid(&change_set, &msg_id));
+            })
+        })
     }
 
     // Tests that complaints are purged once the finalized height increases
     #[test]
     fn test_ecdsa_complaints_purging() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler, mut consensus_pool) =
-                        create_complaint_dependencies_and_pool(pool_config, logger);
-                    let transcript_height = Height::from(30);
-                    let id_1 = create_transcript_id_with_height(1, Height::from(0));
-                    let id_2 = create_transcript_id_with_height(2, transcript_height);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler, mut consensus_pool) =
+                    create_complaint_dependencies_and_pool(pool_config, logger);
+                let transcript_height = Height::from(30);
+                let id_1 = create_transcript_id_with_height(1, Height::from(0));
+                let id_2 = create_transcript_id_with_height(2, transcript_height);
 
-                    let complaint1 = create_complaint(id_1, NODE_2, NODE_3);
-                    let msg_id1 = complaint1.message_id();
-                    let complaint2 = create_complaint(id_2, NODE_2, NODE_3);
-                    let msg_id2 = complaint2.message_id();
-                    let change_set = vec![
-                        IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint1)),
-                        IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint2)),
-                    ];
-                    idkg_pool.apply_changes(change_set);
+                let complaint1 = create_complaint(id_1, NODE_2, NODE_3);
+                let msg_id1 = complaint1.message_id();
+                let complaint2 = create_complaint(id_2, NODE_2, NODE_3);
+                let msg_id2 = complaint2.message_id();
+                let change_set = vec![
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint1)),
+                    IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint2)),
+                ];
+                idkg_pool.apply_changes(change_set);
 
-                    // Finalized height doesn't increase, so complaint1 shouldn't be purged
-                    let change_set = complaint_handler.on_state_change(&idkg_pool);
-                    assert_eq!(
-                        *complaint_handler.prev_finalized_height.borrow(),
-                        Height::from(0)
-                    );
-                    assert!(change_set.is_empty());
+                // Finalized height doesn't increase, so complaint1 shouldn't be purged
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    Height::from(0)
+                );
+                assert!(change_set.is_empty());
 
-                    // Finalized height increases, so complaint1 is purged
-                    let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                    let change_set = complaint_handler.on_state_change(&idkg_pool);
-                    assert_eq!(
-                        *complaint_handler.prev_finalized_height.borrow(),
-                        new_height
-                    );
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_validated(&change_set, &msg_id1));
+                // Finalized height increases, so complaint1 is purged
+                let new_height = consensus_pool.advance_round_normal_operation_n(29);
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    new_height
+                );
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id1));
 
-                    idkg_pool.apply_changes(change_set);
+                idkg_pool.apply_changes(change_set);
 
-                    // Finalized height increases above complaint2, so it is purged
-                    let new_height = consensus_pool.advance_round_normal_operation();
-                    let change_set = complaint_handler.on_state_change(&idkg_pool);
-                    assert_eq!(
-                        *complaint_handler.prev_finalized_height.borrow(),
-                        new_height
-                    );
-                    assert_eq!(transcript_height, new_height);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_validated(&change_set, &msg_id2));
-                })
-            },
-        )
+                // Finalized height increases above complaint2, so it is purged
+                let new_height = consensus_pool.advance_round_normal_operation();
+                let change_set = complaint_handler.on_state_change(&idkg_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    new_height
+                );
+                assert_eq!(transcript_height, new_height);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id2));
+            })
+        })
     }
 
     // Tests that duplicate complaint from the same complainer in the unvalidated
     // pool  is dropped
     #[test]
     fn test_ecdsa_duplicate_complaints_in_batch() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let id_1 = create_transcript_id_with_height(1, Height::from(30));
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
-                    // Set up the IDKG pool
-                    // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                    let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
-                    let msg_id_1 = complaint.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Set up the IDKG pool
+                // Complaint from NODE_3 for transcript id_1, dealer NODE_2
+                let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
+                let msg_id_1 = complaint.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                    let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
-                    let msg_id_2 = complaint.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Complaint from NODE_3 for transcript id_1, dealer NODE_2
+                let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
+                let msg_id_2 = complaint.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(30), id_1)],
-                    );
-                    let change_set =
-                        complaint_handler.validate_complaints(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 2);
-                    // One is considered duplicate
-                    assert!(is_handle_invalid(&change_set, &msg_id_1));
-                    // One is considered valid
-                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
-                })
-            },
-        )
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(30), id_1)],
+                );
+                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                // One is considered duplicate
+                assert!(is_handle_invalid(&change_set, &msg_id_1));
+                // One is considered valid
+                assert!(is_moved_to_validated(&change_set, &msg_id_2));
+            })
+        })
     }
 
     // Tests that openings are sent for eligible complaints
@@ -1378,87 +1351,77 @@ mod tests {
         );
 
         // Opening should be sent when using CryptoReturningOk
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
 
-                    idkg_pool.apply_changes(
-                        artifacts
-                            .iter()
-                            .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
-                            .collect(),
-                    );
-                    let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_opening_added_to_validated(
-                        &change_set,
-                        &id_1,
-                        &NODE_2,
-                        &NODE_1
-                    ));
-                })
-            },
-        );
+                idkg_pool.apply_changes(
+                    artifacts
+                        .iter()
+                        .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
+                        .collect(),
+                );
+                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_opening_added_to_validated(
+                    &change_set,
+                    &id_1,
+                    &NODE_2,
+                    &NODE_1
+                ));
+            })
+        });
 
         // Opening should not be sent if crypto fails
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies_with_crypto(
-                            pool_config,
-                            logger,
-                            Some(crypto_without_keys()),
-                        );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
 
-                    idkg_pool.apply_changes(
-                        artifacts
-                            .iter()
-                            .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
-                            .collect(),
-                    );
+                idkg_pool.apply_changes(
+                    artifacts
+                        .iter()
+                        .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
+                        .collect(),
+                );
 
-                    let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
-                    assert!(change_set.is_empty());
-                })
-            },
-        );
+                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
+                assert!(change_set.is_empty());
+            })
+        });
     }
 
     #[test]
     fn test_crypto_verify_opening() {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                    let crypto = env.nodes.iter().next().unwrap().crypto();
-                    let (_, complaint_handler) = create_complaint_dependencies_with_crypto(
-                        pool_config,
-                        logger,
-                        Some(crypto),
-                    );
-                    let id = create_transcript_id_with_height(2, Height::from(20));
-                    let transcript = create_transcript(&key_id, id, &[NODE_2]);
-                    let complaint = create_complaint(id, NODE_2, NODE_3);
-                    let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
-                    let changeset: Vec<_> = complaint_handler
-                        .crypto_verify_opening(
-                            opening.message_id(),
-                            &transcript,
-                            opening.clone(),
-                            &complaint,
-                        )
-                        .into_iter()
-                        .collect();
-                    // assert that the mock opening does not pass real crypto check
-                    assert!(is_handle_invalid(&changeset, &opening.message_id()));
-                })
-            },
-        )
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+                let crypto = env.nodes.iter().next().unwrap().crypto();
+                let (_, complaint_handler) =
+                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                let id = create_transcript_id_with_height(2, Height::from(20));
+                let transcript = create_transcript(&key_id, id, &[NODE_2]);
+                let complaint = create_complaint(id, NODE_2, NODE_3);
+                let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
+                let changeset: Vec<_> = complaint_handler
+                    .crypto_verify_opening(
+                        opening.message_id(),
+                        &transcript,
+                        opening.clone(),
+                        &complaint,
+                    )
+                    .into_iter()
+                    .collect();
+                // assert that the mock opening does not pass real crypto check
+                assert!(is_handle_invalid(&changeset, &opening.message_id()));
+            })
+        })
     }
 
     // Tests the validation of received openings
@@ -1527,374 +1490,352 @@ mod tests {
         );
 
         // Opening should be moved to validated when using CryptoReturningOk
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                    idkg_pool
-                        .apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
-                    let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 2);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
-                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
-                })
-            },
-        );
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
+                assert!(is_moved_to_validated(&change_set, &msg_id_2));
+            })
+        });
 
         // Opening should be deferred when crypto returns transient failure
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies_with_crypto(
-                            pool_config,
-                            logger,
-                            Some(crypto_without_keys()),
-                        );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                    idkg_pool
-                        .apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
-                    // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
-                    let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
-                })
-            },
-        );
+                // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
+            })
+        });
 
         // Opening should be handled invalid when corresponding transcript fails to be resolved
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
 
-                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                    idkg_pool
-                        .apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
-                    let block_reader = block_reader.clone().with_fail_to_resolve();
-                    let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 2);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
-                    assert!(is_handle_invalid(&change_set, &msg_id_2));
-                })
-            },
-        );
+                let block_reader = block_reader.clone().with_fail_to_resolve();
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
+                assert!(is_handle_invalid(&change_set, &msg_id_2));
+            })
+        });
     }
 
     // Tests that duplicate openings are dropped
     #[test]
     fn test_ecdsa_duplicate_openings() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let id_1 = create_transcript_id_with_height(1, Height::from(20));
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
-                    // Set up the IDKG pool
-                    // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                    let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                    let msg_id = opening.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening.clone()),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Set up the IDKG pool
+                // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+                let msg_id = opening.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening.clone()),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Validated pool already has it
-                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                        opening,
-                    ))];
-                    idkg_pool.apply_changes(change_set);
+                // Validated pool already has it
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_handle_invalid(&change_set, &msg_id));
-                })
-            },
-        )
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_handle_invalid(&change_set, &msg_id));
+            })
+        })
     }
 
     // Tests that duplicate openings from the same opener in the unvalidated
     // pool is dropped
     #[test]
     fn test_ecdsa_duplicate_openings_in_batch() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let id_1 = create_transcript_id_with_height(1, Height::from(20));
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
-                    // Set up the IDKG pool
-                    // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                    let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
-                    let msg_id_1 = opening.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Set up the IDKG pool
+                // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
+                let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
+                let msg_id_1 = opening.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                    let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
-                    let msg_id_2 = opening.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
+                let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
+                let msg_id_2 = opening.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Make sure we also have matching complaints
-                    let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                    let message = IDkgMessage::Complaint(complaint);
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: message.clone(),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
-                    let change_set = vec![IDkgChangeAction::AddToValidated(message)];
-                    idkg_pool.apply_changes(change_set);
+                // Make sure we also have matching complaints
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
+                let message = IDkgMessage::Complaint(complaint);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: message.clone(),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
+                let change_set = vec![IDkgChangeAction::AddToValidated(message)];
+                idkg_pool.apply_changes(change_set);
 
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 2);
-                    // One is considered duplicate
-                    assert!(is_handle_invalid(&change_set, &msg_id_2));
-                    // One is considered valid
-                    assert!(is_moved_to_validated(&change_set, &msg_id_1));
-                })
-            },
-        )
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                // One is considered duplicate
+                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                // One is considered valid
+                assert!(is_moved_to_validated(&change_set, &msg_id_1));
+            })
+        })
     }
 
     // Tests purging of complaints from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_complaints() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let (id_1, id_2, id_3) = (
-                        create_transcript_id_with_height(1, Height::from(20)),
-                        create_transcript_id_with_height(2, Height::from(30)),
-                        create_transcript_id_with_height(3, Height::from(200)),
-                    );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
 
-                    // Complaint 1: height <= current_height, active transcripts (not purged)
-                    let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Complaint 1: height <= current_height, active transcripts (not purged)
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Complaint 2: height <= current_height, non-active transcripts (purged)
-                    let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                    let msg_id = complaint.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Complaint 2: height <= current_height, non-active transcripts (purged)
+                let complaint = create_complaint(id_2, NODE_2, NODE_3);
+                let msg_id = complaint.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Complaint 3: height > current_height (not purged)
-                    let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Complaint(complaint),
-                        peer_id: NODE_3,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Complaint 3: height > current_height (not purged)
+                let complaint = create_complaint(id_3, NODE_2, NODE_3);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Complaint(complaint),
+                    peer_id: NODE_3,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Only id_1 is active
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id));
-                })
-            },
-        )
+                // Only id_1 is active
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+            })
+        })
     }
 
     // Tests purging of complaints from validated pool
     #[test]
     fn test_ecdsa_purge_validated_complaints() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let (id_1, id_2, id_3) = (
-                        create_transcript_id_with_height(1, Height::from(20)),
-                        create_transcript_id_with_height(2, Height::from(30)),
-                        create_transcript_id_with_height(3, Height::from(200)),
-                    );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
 
-                    // Complaint 1: height <= current_height, active transcripts (not purged)
-                    let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::Complaint(complaint),
-                    )];
-                    idkg_pool.apply_changes(change_set);
+                // Complaint 1: height <= current_height, active transcripts (not purged)
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Complaint 2: height <= current_height, non-active transcripts (purged)
-                    let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                    let msg_id = complaint.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::Complaint(complaint),
-                    )];
-                    idkg_pool.apply_changes(change_set);
+                // Complaint 2: height <= current_height, non-active transcripts (purged)
+                let complaint = create_complaint(id_2, NODE_2, NODE_3);
+                let msg_id = complaint.message_id();
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Complaint 3: height > current_height (not purged)
-                    let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                    let change_set = vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::Complaint(complaint),
-                    )];
-                    idkg_pool.apply_changes(change_set);
+                // Complaint 3: height > current_height (not purged)
+                let complaint = create_complaint(id_3, NODE_2, NODE_3);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
+                    complaint,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Only id_1 is active
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_validated(&change_set, &msg_id));
-                })
-            },
-        )
+                // Only id_1 is active
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id));
+            })
+        })
     }
 
     // Tests purging of openings from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_openings() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let (id_1, id_2, id_3) = (
-                        create_transcript_id_with_height(1, Height::from(20)),
-                        create_transcript_id_with_height(2, Height::from(30)),
-                        create_transcript_id_with_height(3, Height::from(200)),
-                    );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
 
-                    // Opening 1: height <= current_height, active transcripts (not purged)
-                    let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Opening 1: height <= current_height, active transcripts (not purged)
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Opening 2: height <= current_height, non-active transcripts (purged)
-                    let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                    let msg_id = opening.message_id();
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Opening 2: height <= current_height, non-active transcripts (purged)
+                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
+                let msg_id = opening.message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Complaint 3: height > current_height (not purged)
-                    let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                    idkg_pool.insert(UnvalidatedArtifact {
-                        message: IDkgMessage::Opening(opening),
-                        peer_id: NODE_4,
-                        timestamp: UNIX_EPOCH,
-                    });
+                // Complaint 3: height > current_height (not purged)
+                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Opening(opening),
+                    peer_id: NODE_4,
+                    timestamp: UNIX_EPOCH,
+                });
 
-                    // Only id_1 is active
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_unvalidated(&change_set, &msg_id));
-                })
-            },
-        )
+                // Only id_1 is active
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+            })
+        })
     }
 
     // Tests purging of openings from validated pool
     #[test]
     fn test_ecdsa_purge_validated_openings() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies(pool_config, logger);
-                    let (id_1, id_2, id_3) = (
-                        create_transcript_id_with_height(1, Height::from(20)),
-                        create_transcript_id_with_height(2, Height::from(30)),
-                        create_transcript_id_with_height(3, Height::from(200)),
-                    );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
 
-                    // Opening 1: height <= current_height, active transcripts (not purged)
-                    let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                        opening,
-                    ))];
-                    idkg_pool.apply_changes(change_set);
+                // Opening 1: height <= current_height, active transcripts (not purged)
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Opening 2: height <= current_height, non-active transcripts (purged)
-                    let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                    let msg_id = opening.message_id();
-                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                        opening,
-                    ))];
-                    idkg_pool.apply_changes(change_set);
+                // Opening 2: height <= current_height, non-active transcripts (purged)
+                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
+                let msg_id = opening.message_id();
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Complaint 3: height > current_height (not purged)
-                    let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
-                        opening,
-                    ))];
-                    idkg_pool.apply_changes(change_set);
+                // Complaint 3: height > current_height (not purged)
+                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
+                    opening,
+                ))];
+                idkg_pool.apply_changes(change_set);
 
-                    // Only id_1 is active
-                    let block_reader = TestIDkgBlockReader::for_complainer_test(
-                        &key_id,
-                        Height::new(100),
-                        vec![TranscriptRef::new(Height::new(10), id_1)],
-                    );
-                    let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
-                    assert_eq!(change_set.len(), 1);
-                    assert!(is_removed_from_validated(&change_set, &msg_id));
-                })
-            },
-        )
+                // Only id_1 is active
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                );
+                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id));
+            })
+        })
     }
 
     #[test]
@@ -1914,56 +1855,45 @@ mod tests {
     // Tests loading of a valid transcript without complaints
     fn test_load_transcript_success(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                    let (_, _, idkg_transcript) =
-                        create_valid_transcript(&env, &mut rng, algorithm);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                let (_, _, idkg_transcript) = create_valid_transcript(&env, &mut rng, algorithm);
 
-                    let crypto = env
-                        .nodes
-                        .filter_by_receivers(&idkg_transcript)
-                        .next()
-                        .unwrap()
-                        .crypto();
-                    let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
-                        pool_config,
-                        logger,
-                        Some(crypto),
-                    );
+                let crypto = env
+                    .nodes
+                    .filter_by_receivers(&idkg_transcript)
+                    .next()
+                    .unwrap()
+                    .crypto();
+                let (idkg_pool, complaint_handler) =
+                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
-                    let status = complaint_handler.load_transcript(&idkg_pool, &idkg_transcript);
-                    assert_matches!(status, TranscriptLoadStatus::Success);
-                })
-            },
-        )
+                let status = complaint_handler.load_transcript(&idkg_pool, &idkg_transcript);
+                assert_matches!(status, TranscriptLoadStatus::Success);
+            })
+        })
     }
 
     // Tests that loading of an invalid transcript fails
     #[test]
     fn test_ecdsa_load_transcript_failure_invalid_transcript() {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let key_id = fake_ecdsa_master_public_key_id();
-                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                    let receivers: Vec<_> = env.nodes.ids();
-                    let t = create_transcript(&key_id, create_transcript_id(1), &receivers[..]);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
+                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                let receivers: Vec<_> = env.nodes.ids();
+                let t = create_transcript(&key_id, create_transcript_id(1), &receivers[..]);
 
-                    let crypto = env.nodes.iter().next().unwrap().crypto();
-                    let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
-                        pool_config,
-                        logger,
-                        Some(crypto),
-                    );
+                let crypto = env.nodes.iter().next().unwrap().crypto();
+                let (idkg_pool, complaint_handler) =
+                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
-                    let status = complaint_handler.load_transcript(&idkg_pool, &t);
-                    assert_matches!(status, TranscriptLoadStatus::Failure);
-                })
-            },
-        )
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+            })
+        })
     }
 
     // Tests that crypto failure when creating complaint leads to transcript load failure
@@ -1977,32 +1907,27 @@ mod tests {
 
     fn test_load_transcript_failure_to_create_complaint(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                    let (_, _, transcript) =
-                        create_corrupted_transcript(&env, &mut rng, algorithm_for_key_id(&key_id));
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                let (_, _, transcript) =
+                    create_corrupted_transcript(&env, &mut rng, algorithm_for_key_id(&key_id));
 
-                    let crypto = env
-                        .nodes
-                        .filter_by_receivers(&transcript)
-                        .next()
-                        .unwrap()
-                        .crypto();
-                    let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
-                        pool_config,
-                        logger,
-                        Some(crypto),
-                    );
+                let crypto = env
+                    .nodes
+                    .filter_by_receivers(&transcript)
+                    .next()
+                    .unwrap()
+                    .crypto();
+                let (idkg_pool, complaint_handler) =
+                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
-                    // Will attempt to create a complaint but fail since node ID of crypto and
-                    // complaint_handler are different
-                    let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
-                    assert_matches!(status, TranscriptLoadStatus::Failure);
-                })
-            },
-        )
+                // Will attempt to create a complaint but fail since node ID of crypto and
+                // complaint_handler are different
+                let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+            })
+        })
     }
 
     #[test]
@@ -2023,63 +1948,59 @@ mod tests {
     // loading succeeds after openings are generated.
     fn test_load_transcripts_with_complaints_and_openings(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                with_test_replica_logger(|logger| {
-                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                    let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng, algorithm);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng, algorithm);
 
-                    let mut components = env.nodes.filter_by_receivers(&t);
+                let mut components = env.nodes.filter_by_receivers(&t);
 
-                    let complainer_crypto = components.next().unwrap().crypto();
-                    let remaining_nodes: Vec<_> = components.collect();
-                    let (mut idkg_pool, complaint_handler) =
-                        create_complaint_dependencies_with_crypto_and_node_id(
-                            pool_config,
-                            logger,
-                            Some(complainer_crypto),
-                            complainer,
-                        );
+                let complainer_crypto = components.next().unwrap().crypto();
+                let remaining_nodes: Vec<_> = components.collect();
+                let (mut idkg_pool, complaint_handler) =
+                    create_complaint_dependencies_with_crypto_and_node_id(
+                        pool_config,
+                        logger,
+                        Some(complainer_crypto),
+                        complainer,
+                    );
 
-                    let status = complaint_handler.load_transcript(&idkg_pool, &t);
-                    let complaint = match status {
-                        TranscriptLoadStatus::Complaints(mut complaints)
-                            if complaints.len() == 1 =>
-                        {
-                            let complaint = complaints.remove(0);
-                            idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
-                                IDkgMessage::Complaint(complaint.clone()),
-                            )]);
-                            complaint
-                        }
-                        _ => panic!("Unexpected status: {status:?}"),
-                    };
-
-                    // should fail due to insufficient openings
-                    let status = complaint_handler.load_transcript(&idkg_pool, &t);
-                    assert_matches!(status, TranscriptLoadStatus::Failure);
-
-                    for node in remaining_nodes {
-                        let idkg_opening = node
-                            .crypto()
-                            .open_transcript(&t, complainer, &complaint.content.idkg_complaint)
-                            .expect("Failed to open transcript with complaint");
-                        let content = IDkgOpeningContent { idkg_opening };
-                        let signature = node
-                            .crypto()
-                            .sign(&content, node.id(), t.registry_version)
-                            .expect("Failed to sign opening content");
-                        let opening = SignedIDkgOpening { content, signature };
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
+                let complaint = match status {
+                    TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
+                        let complaint = complaints.remove(0);
                         idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
-                            IDkgMessage::Opening(opening),
+                            IDkgMessage::Complaint(complaint.clone()),
                         )]);
+                        complaint
                     }
+                    _ => panic!("Unexpected status: {status:?}"),
+                };
 
-                    // should now be successful
-                    let status = complaint_handler.load_transcript(&idkg_pool, &t);
-                    assert_matches!(status, TranscriptLoadStatus::Success);
-                })
-            },
-        )
+                // should fail due to insufficient openings
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+
+                for node in remaining_nodes {
+                    let idkg_opening = node
+                        .crypto()
+                        .open_transcript(&t, complainer, &complaint.content.idkg_complaint)
+                        .expect("Failed to open transcript with complaint");
+                    let content = IDkgOpeningContent { idkg_opening };
+                    let signature = node
+                        .crypto()
+                        .sign(&content, node.id(), t.registry_version)
+                        .expect("Failed to sign opening content");
+                    let opening = SignedIDkgOpening { content, signature };
+                    idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
+                        IDkgMessage::Opening(opening),
+                    )]);
+                }
+
+                // should now be successful
+                let status = complaint_handler.load_transcript(&idkg_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Success);
+            })
+        })
     }
 }

@@ -265,204 +265,199 @@ mod tests {
     /// Given a single block, just finalize it
     #[test]
     fn test_finalizer_behavior() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let Dependencies {
-                    mut pool,
-                    replica_config,
-                    membership,
-                    registry,
-                    crypto,
-                    ..
-                } = dependencies(pool_config, 1);
-                let message_routing = FakeMessageRouting::new();
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                replica_config,
+                membership,
+                registry,
+                crypto,
+                ..
+            } = dependencies(pool_config, 1);
+            let message_routing = FakeMessageRouting::new();
 
-                assert_eq!(pool.advance_round_normal_operation(), Height::from(1));
+            assert_eq!(pool.advance_round_normal_operation(), Height::from(1));
 
-                // 1. When notarized_height = finalized_height = expected_height - 1
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            // 1. When notarized_height = finalized_height = expected_height - 1
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
 
-                let message_routing = Arc::new(message_routing);
-                let ingress_selector = Arc::new(FakeIngressSelector::new());
+            let message_routing = Arc::new(message_routing);
+            let ingress_selector = Arc::new(FakeIngressSelector::new());
 
-                let finalizer = Finalizer::new(
-                    replica_config,
-                    registry,
-                    membership,
-                    crypto,
-                    message_routing.clone(),
-                    ingress_selector,
-                    no_op_logger(),
-                    MetricsRegistry::new(),
-                );
-                let shares = finalizer.on_state_change(&PoolReader::new(&pool));
-                let b = message_routing.batches.read().unwrap().clone();
-                *message_routing.batches.write().unwrap() = Vec::new();
-                assert!(b.is_empty());
-                assert!(shares.is_empty());
+            let finalizer = Finalizer::new(
+                replica_config,
+                registry,
+                membership,
+                crypto,
+                message_routing.clone(),
+                ingress_selector,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let b = message_routing.batches.read().unwrap().clone();
+            *message_routing.batches.write().unwrap() = Vec::new();
+            assert!(b.is_empty());
+            assert!(shares.is_empty());
 
-                // 2. When notarized_height = finalized_height = expected_height
-                *message_routing.next_batch_height.write().unwrap() = Height::from(1);
-                let shares = finalizer.on_state_change(&PoolReader::new(&pool));
-                let b = message_routing.batches.read().unwrap().clone();
-                *message_routing.batches.write().unwrap() = Vec::new();
-                assert!(!b.is_empty());
-                // First block, nothing to remove.
-                assert!(shares.is_empty());
+            // 2. When notarized_height = finalized_height = expected_height
+            *message_routing.next_batch_height.write().unwrap() = Height::from(1);
+            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let b = message_routing.batches.read().unwrap().clone();
+            *message_routing.batches.write().unwrap() = Vec::new();
+            assert!(!b.is_empty());
+            // First block, nothing to remove.
+            assert!(shares.is_empty());
 
-                // 3. When notarization exists, create a finalization share
-                pool.insert_validated(pool.make_next_beacon());
-                let block = pool.make_next_block();
-                pool.insert_validated(block.clone());
-                pool.notarize(&block);
+            // 3. When notarization exists, create a finalization share
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
 
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let shares = finalizer.on_state_change(&PoolReader::new(&pool));
-                let b = message_routing.batches.read().unwrap().clone();
-                *message_routing.batches.write().unwrap() = Vec::new();
-                assert!(b.is_empty());
-                assert!(shares.len() == 1);
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let b = message_routing.batches.read().unwrap().clone();
+            *message_routing.batches.write().unwrap() = Vec::new();
+            assert!(b.is_empty());
+            assert!(shares.len() == 1);
 
-                // 4. When finalization share exists, don't create a full finalization
-                // (this is done in the aggregator now), and don't create another share
-                // if I have already signed.
-                let finalization_share = &shares[0];
-                pool.insert_validated(finalization_share.clone());
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let shares = finalizer.on_state_change(&PoolReader::new(&pool));
-                let b = message_routing.batches.read().unwrap().clone();
-                *message_routing.batches.write().unwrap() = Vec::new();
-                assert!(b.is_empty());
-                assert!(shares.is_empty());
-            },
-        )
+            // 4. When finalization share exists, don't create a full finalization
+            // (this is done in the aggregator now), and don't create another share
+            // if I have already signed.
+            let finalization_share = &shares[0];
+            pool.insert_validated(finalization_share.clone());
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let shares = finalizer.on_state_change(&PoolReader::new(&pool));
+            let b = message_routing.batches.read().unwrap().clone();
+            *message_routing.batches.write().unwrap() = Vec::new();
+            assert!(b.is_empty());
+            assert!(shares.is_empty());
+        })
     }
 
     // We expect block maker to correctly detect version change and start
     // making only empty blocks.
     #[test]
     fn test_batch_not_delivered_in_protocol_upgrade() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let committee = vec![node_test_id(0)];
-                let dkg_interval_length = 3;
-                let Dependencies {
-                    mut pool,
-                    replica_config,
-                    membership,
-                    registry,
-                    crypto,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![
-                        (
-                            1,
-                            SubnetRecordBuilder::from(&committee)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .with_replica_version("1")
-                                .build(),
-                        ),
-                        (
-                            10,
-                            SubnetRecordBuilder::from(&committee)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .with_replica_version("2")
-                                .build(),
-                        ),
-                    ],
-                );
-                let metrics_registry = MetricsRegistry::new();
-                let message_routing = Arc::new(FakeMessageRouting::new());
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
-                let ingress_selector = Arc::new(FakeIngressSelector::new());
-                let finalizer = Finalizer::new(
-                    replica_config,
-                    registry,
-                    membership,
-                    crypto,
-                    message_routing.clone(),
-                    ingress_selector,
-                    no_op_logger(),
-                    metrics_registry,
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = vec![node_test_id(0)];
+            let dkg_interval_length = 3;
+            let Dependencies {
+                mut pool,
+                replica_config,
+                membership,
+                registry,
+                crypto,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .with_replica_version("1")
+                            .build(),
+                    ),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .with_replica_version("2")
+                            .build(),
+                    ),
+                ],
+            );
+            let metrics_registry = MetricsRegistry::new();
+            let message_routing = Arc::new(FakeMessageRouting::new());
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let ingress_selector = Arc::new(FakeIngressSelector::new());
+            let finalizer = Finalizer::new(
+                replica_config,
+                registry,
+                membership,
+                crypto,
+                message_routing.clone(),
+                ingress_selector,
+                no_op_logger(),
+                metrics_registry,
+            );
 
-                // 1. Make progress until a CUP block
-                pool.advance_round_normal_operation_n(dkg_interval_length);
-                assert_eq!(
-                    PoolReader::new(&pool).registry_version(Height::from(3)),
-                    Some(RegistryVersion::from(1))
-                );
+            // 1. Make progress until a CUP block
+            pool.advance_round_normal_operation_n(dkg_interval_length);
+            assert_eq!(
+                PoolReader::new(&pool).registry_version(Height::from(3)),
+                Some(RegistryVersion::from(1))
+            );
 
-                // 2. Make CUP block at next start block
-                let mut block_proposal = pool.make_next_block();
-                let block = block_proposal.content.as_mut();
-                assert!(block.payload.is_summary());
-                assert_eq!(
-                    block.payload.as_ref().as_summary().dkg.registry_version,
-                    RegistryVersion::from(1)
-                );
-                assert_eq!(block.context.registry_version, RegistryVersion::from(10));
-                block_proposal.content =
-                    HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
-                pool.insert_validated(block_proposal.clone());
-                pool.insert_validated(pool.make_next_beacon());
-                pool.insert_validated(pool.make_next_tape());
-                pool.notarize(&block_proposal);
-                pool.finalize(&block_proposal);
+            // 2. Make CUP block at next start block
+            let mut block_proposal = pool.make_next_block();
+            let block = block_proposal.content.as_mut();
+            assert!(block.payload.is_summary());
+            assert_eq!(
+                block.payload.as_ref().as_summary().dkg.registry_version,
+                RegistryVersion::from(1)
+            );
+            assert_eq!(block.context.registry_version, RegistryVersion::from(10));
+            block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(block_proposal.clone());
+            pool.insert_validated(pool.make_next_beacon());
+            pool.insert_validated(pool.make_next_tape());
+            pool.notarize(&block_proposal);
+            pool.finalize(&block_proposal);
 
-                let catch_up_package = pool.make_catch_up_package(block_proposal.height());
-                pool.insert_validated(catch_up_package);
+            let catch_up_package = pool.make_catch_up_package(block_proposal.height());
+            pool.insert_validated(catch_up_package);
 
-                // 3. continue to make next CUP, expect block summary version to become 10
-                pool.advance_round_normal_operation_n(3);
-                assert_eq!(
-                    PoolReader::new(&pool).registry_version(Height::from(7)),
-                    Some(RegistryVersion::from(1))
-                );
-                let block_proposal = pool.make_next_block();
-                let block = block_proposal.content.as_ref();
-                assert!(block.payload.is_summary());
-                assert_eq!(block.context.registry_version, RegistryVersion::from(10));
-                assert_eq!(
-                    block.payload.as_ref().as_summary().dkg.registry_version,
-                    RegistryVersion::from(10)
-                );
+            // 3. continue to make next CUP, expect block summary version to become 10
+            pool.advance_round_normal_operation_n(3);
+            assert_eq!(
+                PoolReader::new(&pool).registry_version(Height::from(7)),
+                Some(RegistryVersion::from(1))
+            );
+            let block_proposal = pool.make_next_block();
+            let block = block_proposal.content.as_ref();
+            assert!(block.payload.is_summary());
+            assert_eq!(block.context.registry_version, RegistryVersion::from(10));
+            assert_eq!(
+                block.payload.as_ref().as_summary().dkg.registry_version,
+                RegistryVersion::from(10)
+            );
 
-                pool.insert_validated(block_proposal.clone());
-                pool.insert_validated(pool.make_next_beacon());
-                pool.insert_validated(pool.make_next_tape());
-                pool.notarize(&block_proposal);
-                pool.finalize(&block_proposal);
+            pool.insert_validated(block_proposal.clone());
+            pool.insert_validated(pool.make_next_beacon());
+            pool.insert_validated(pool.make_next_tape());
+            pool.notarize(&block_proposal);
+            pool.finalize(&block_proposal);
 
-                // expect batch to be still delivered for block at CUP height
-                *message_routing.next_batch_height.write().unwrap() = block_proposal.height();
-                pool.insert_validated(pool.make_next_tape());
-                let _ = finalizer.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(
-                    *message_routing.next_batch_height.write().unwrap(),
-                    block_proposal.height().increment(),
-                );
+            // expect batch to be still delivered for block at CUP height
+            *message_routing.next_batch_height.write().unwrap() = block_proposal.height();
+            pool.insert_validated(pool.make_next_tape());
+            let _ = finalizer.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(
+                *message_routing.next_batch_height.write().unwrap(),
+                block_proposal.height().increment(),
+            );
 
-                // expect batch to be not delivered for next block
-                pool.advance_round_normal_operation();
-                pool.insert_validated(pool.make_next_tape());
-                assert_eq!(
-                    PoolReader::new(&pool).registry_version(Height::from(9)),
-                    Some(RegistryVersion::from(10))
-                );
-                assert_eq!(
-                    PoolReader::new(&pool).registry_version(Height::from(10)),
-                    Some(RegistryVersion::from(10))
-                );
-                let _ = finalizer.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(
-                    *message_routing.next_batch_height.write().unwrap(),
-                    block_proposal.height().increment(),
-                );
-            },
-        )
+            // expect batch to be not delivered for next block
+            pool.advance_round_normal_operation();
+            pool.insert_validated(pool.make_next_tape());
+            assert_eq!(
+                PoolReader::new(&pool).registry_version(Height::from(9)),
+                Some(RegistryVersion::from(10))
+            );
+            assert_eq!(
+                PoolReader::new(&pool).registry_version(Height::from(10)),
+                Some(RegistryVersion::from(10))
+            );
+            let _ = finalizer.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(
+                *message_routing.next_batch_height.write().unwrap(),
+                block_proposal.height().increment(),
+            );
+        })
     }
 
     #[test]

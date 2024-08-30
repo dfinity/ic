@@ -171,87 +171,84 @@ where
     ),
 {
     ic_test_utilities_logger::with_test_replica_logger(|log| {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                // Set initial time to non-zero
-                time_source.advance_time(Duration::from_secs(1));
-                let (history, ingress_hist_reader) =
-                    SimulatedIngressHistory::new(time_source.clone());
-                let history = Arc::new(history);
-                let history_cl = history.clone();
-                let subnet_id = subnet_test_id(1);
-                let mut state_manager = MockStateManager::new();
-                state_manager
-                    .expect_latest_state_height()
-                    .return_const(Height::from(1));
-                state_manager.expect_get_latest_state().returning(move || {
-                    let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-                    metadata.batch_time = history_cl.batch_time();
-                    Labeled::new(
-                        Height::from(1),
-                        Arc::new(ReplicatedState::new_from_checkpoint(
-                            BTreeMap::new(),
-                            metadata,
-                            CanisterQueues::default(),
-                            RawQueryStats::default(),
-                            CanisterSnapshots::default(),
-                        )),
-                    )
-                });
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            // Set initial time to non-zero
+            time_source.advance_time(Duration::from_secs(1));
+            let (history, ingress_hist_reader) = SimulatedIngressHistory::new(time_source.clone());
+            let history = Arc::new(history);
+            let history_cl = history.clone();
+            let subnet_id = subnet_test_id(1);
+            let mut state_manager = MockStateManager::new();
+            state_manager
+                .expect_latest_state_height()
+                .return_const(Height::from(1));
+            state_manager.expect_get_latest_state().returning(move || {
+                let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
+                metadata.batch_time = history_cl.batch_time();
+                Labeled::new(
+                    Height::from(1),
+                    Arc::new(ReplicatedState::new_from_checkpoint(
+                        BTreeMap::new(),
+                        metadata,
+                        CanisterQueues::default(),
+                        RawQueryStats::default(),
+                        CanisterSnapshots::default(),
+                    )),
+                )
+            });
 
-                let mut consensus_time = MockConsensusTime::new();
-                let time_source_cl = time_source.clone();
-                consensus_time
-                    .expect_consensus_time()
-                    .returning(move || Some(time_source_cl.get_relative_time()));
+            let mut consensus_time = MockConsensusTime::new();
+            let time_source_cl = time_source.clone();
+            consensus_time
+                .expect_consensus_time()
+                .returning(move || Some(time_source_cl.get_relative_time()));
 
-                let subnet_id = subnet_test_id(0);
-                let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-                    node_test_id(VALIDATOR_NODE_ID),
-                ));
-                let mut state_manager = MockStateManager::new();
-                state_manager
-                    .expect_get_state_at()
-                    .return_const(Ok(Labeled::new(
-                        Height::new(0),
-                        Arc::new(ReplicatedStateBuilder::default().build()),
-                    )));
-
-                let metrics_registry = MetricsRegistry::new();
-                let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
-                    node_test_id(VALIDATOR_NODE_ID),
-                    pool_config.clone(),
-                    metrics_registry.clone(),
-                    no_op_logger(),
+            let subnet_id = subnet_test_id(0);
+            let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
+                node_test_id(VALIDATOR_NODE_ID),
+            ));
+            let mut state_manager = MockStateManager::new();
+            state_manager
+                .expect_get_state_at()
+                .return_const(Ok(Labeled::new(
+                    Height::new(0),
+                    Arc::new(ReplicatedStateBuilder::default().build()),
                 )));
 
-                let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-                let runtime = tokio::runtime::Runtime::new().unwrap();
-                let mut ingress_manager = IngressManager::new(
-                    time_source.clone(),
-                    Arc::new(consensus_time),
-                    Box::new(ingress_hist_reader),
-                    ingress_pool,
-                    setup_registry(subnet_id, runtime.handle().clone()),
-                    ingress_signature_crypto,
-                    metrics_registry,
-                    subnet_id,
-                    log.clone(),
-                    Arc::new(state_manager),
-                    cycles_account_manager,
-                    MaliciousFlags::default(),
-                    RandomStateKind::Random,
-                );
-                test(
-                    time_source,
-                    pool_config,
-                    log,
-                    &history,
-                    &mut ingress_manager,
-                );
-            },
-        )
+            let metrics_registry = MetricsRegistry::new();
+            let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                node_test_id(VALIDATOR_NODE_ID),
+                pool_config.clone(),
+                metrics_registry.clone(),
+                no_op_logger(),
+            )));
+
+            let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            let mut ingress_manager = IngressManager::new(
+                time_source.clone(),
+                Arc::new(consensus_time),
+                Box::new(ingress_hist_reader),
+                ingress_pool,
+                setup_registry(subnet_id, runtime.handle().clone()),
+                ingress_signature_crypto,
+                metrics_registry,
+                subnet_id,
+                log.clone(),
+                Arc::new(state_manager),
+                cycles_account_manager,
+                MaliciousFlags::default(),
+                RandomStateKind::Random,
+            );
+            test(
+                time_source,
+                pool_config,
+                log,
+                &history,
+                &mut ingress_manager,
+            );
+        })
     })
 }
 

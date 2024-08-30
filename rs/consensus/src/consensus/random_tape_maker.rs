@@ -202,100 +202,98 @@ mod tests {
 
     #[test]
     fn test_random_tape_maker() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let Dependencies {
-                    mut pool,
-                    replica_config,
-                    membership,
-                    time_source,
-                    crypto,
-                    ..
-                } = dependencies(pool_config, 4);
-                let message_routing = Arc::new(FakeMessageRouting::new());
-                pool.advance_round_normal_operation();
-                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                replica_config,
+                membership,
+                time_source,
+                crypto,
+                ..
+            } = dependencies(pool_config, 4);
+            let message_routing = Arc::new(FakeMessageRouting::new());
+            pool.advance_round_normal_operation();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
 
-                let random_tape_maker = RandomTapeMaker::new(
-                    replica_config,
-                    membership,
-                    crypto,
-                    message_routing.clone(),
-                    no_op_logger(),
-                );
+            let random_tape_maker = RandomTapeMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                message_routing.clone(),
+                no_op_logger(),
+            );
 
-                // With a pool with just one block (with finalized height 1) and the next
-                // expected batch height 2, we should add one random tape share (for
-                // height 2).
-                let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            // With a pool with just one block (with finalized height 1) and the next
+            // expected batch height 2, we should add one random tape share (for
+            // height 2).
+            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
 
-                assert_eq!(shares.len(), 1);
-                assert_eq!(heights_of_added_shares(&shares), vec![Height::from(2)]);
+            assert_eq!(shares.len(), 1);
+            assert_eq!(heights_of_added_shares(&shares), vec![Height::from(2)]);
 
-                // After adding our random tape share for height 2, we should not create
-                // any more shares
-                pool.apply_changes(add_all_to_validated(
-                    time_source.get_relative_time(),
-                    shares,
-                ));
-                let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(shares.len(), 0);
+            // After adding our random tape share for height 2, we should not create
+            // any more shares
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
+            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(shares.len(), 0);
 
-                // when the finalized chain grows by 3 blocks (to reach finalized height 4), the
-                // random_tape_maker should immediately create random tape shares for
-                // heights 3, 4, 5.
+            // when the finalized chain grows by 3 blocks (to reach finalized height 4), the
+            // random_tape_maker should immediately create random tape shares for
+            // heights 3, 4, 5.
 
-                let mut round = pool.prepare_round().dont_add_random_tape();
-                round.advance();
-                round.advance();
-                round.advance();
-                let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(shares.len(), 3);
-                assert_eq!(
-                    heights_of_added_shares(&shares),
-                    vec![Height::from(3), Height::from(4), Height::from(5)]
-                );
-                // when we advance the pool by three heights again (advancing the finalized
-                // height to 7), but we add a full random tape for height 7, we should
-                // only construct a share for heights 6 and 8.
-                pool.apply_changes(add_all_to_validated(
-                    time_source.get_relative_time(),
-                    shares,
-                ));
-                let mut round = pool.prepare_round().dont_add_random_tape();
-                round.advance();
-                round.advance();
-                round.advance();
-                pool.insert_validated(ConsensusMessage::RandomTape(RandomTape::fake(
-                    RandomTapeContent::new(Height::from(7)),
-                )));
+            let mut round = pool.prepare_round().dont_add_random_tape();
+            round.advance();
+            round.advance();
+            round.advance();
+            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(shares.len(), 3);
+            assert_eq!(
+                heights_of_added_shares(&shares),
+                vec![Height::from(3), Height::from(4), Height::from(5)]
+            );
+            // when we advance the pool by three heights again (advancing the finalized
+            // height to 7), but we add a full random tape for height 7, we should
+            // only construct a share for heights 6 and 8.
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
+            let mut round = pool.prepare_round().dont_add_random_tape();
+            round.advance();
+            round.advance();
+            round.advance();
+            pool.insert_validated(ConsensusMessage::RandomTape(RandomTape::fake(
+                RandomTapeContent::new(Height::from(7)),
+            )));
 
-                let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(shares.len(), 2);
-                assert_eq!(
-                    heights_of_added_shares(&shares),
-                    vec![Height::from(6), Height::from(8)]
-                );
+            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(shares.len(), 2);
+            assert_eq!(
+                heights_of_added_shares(&shares),
+                vec![Height::from(6), Height::from(8)]
+            );
 
-                // The finalized chain grows by 2 more blocks (now reaching 9), which means the
-                // random tape maker would could create shares for heights 9 and 10.
-                // However, we let message routing expect batch 10 (indicating that batch
-                // 8 already was delivered so there is no need to construct random tape 8
-                // anymore. We therefore expect the random tape maker to only add a
-                // share for height 10.
-                pool.apply_changes(add_all_to_validated(
-                    time_source.get_relative_time(),
-                    shares,
-                ));
-                let mut round = pool.prepare_round().dont_add_random_tape();
-                round.advance();
-                round.advance();
-                *message_routing.next_batch_height.write().unwrap() = Height::from(10);
+            // The finalized chain grows by 2 more blocks (now reaching 9), which means the
+            // random tape maker would could create shares for heights 9 and 10.
+            // However, we let message routing expect batch 10 (indicating that batch
+            // 8 already was delivered so there is no need to construct random tape 8
+            // anymore. We therefore expect the random tape maker to only add a
+            // share for height 10.
+            pool.apply_changes(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
+            let mut round = pool.prepare_round().dont_add_random_tape();
+            round.advance();
+            round.advance();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(10);
 
-                let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
-                assert_eq!(shares.len(), 1);
-                assert_eq!(heights_of_added_shares(&shares), vec![Height::from(10)]);
-            },
-        )
+            let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(shares.len(), 1);
+            assert_eq!(heights_of_added_shares(&shares), vec![Height::from(10)]);
+        })
     }
 }

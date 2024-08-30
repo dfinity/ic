@@ -666,11 +666,11 @@ mod tests {
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
+    use ic_test_artifact_pool::artifact_pool_config::with_test_pool_config;
     use ic_test_utilities::{
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
-    use ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_state::{
         CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,

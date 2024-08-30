@@ -2257,12 +2257,10 @@ mod tests {
         T: FnOnce(LMDBConfig, ReplicaLogger) + panic::UnwindSafe,
     {
         with_test_replica_logger(|log| {
-            ic_test_utilities_artifact_pool::artifact_pool_config::with_test_lmdb_pool_config(
-                |config| {
-                    let result = panic::catch_unwind(|| test(config.clone(), log));
-                    assert!(result.is_ok());
-                },
-            )
+            ic_test_artifact_pool::artifact_pool_config::with_test_lmdb_pool_config(|config| {
+                let result = panic::catch_unwind(|| test(config.clone(), log));
+                assert!(result.is_ok());
+            })
         })
     }
 
@@ -2274,13 +2272,11 @@ mod tests {
             T: FnOnce(LMDBConfig, ReplicaLogger) -> R + panic::UnwindSafe,
         {
             with_test_replica_logger(|log| {
-                ic_test_utilities_artifact_pool::artifact_pool_config::with_test_lmdb_pool_config(
-                    |config| {
-                        let result = panic::catch_unwind(|| test(config.clone(), log));
-                        assert!(result.is_ok());
-                        result.unwrap()
-                    },
-                )
+                ic_test_artifact_pool::artifact_pool_config::with_test_lmdb_pool_config(|config| {
+                    let result = panic::catch_unwind(|| test(config.clone(), log));
+                    assert!(result.is_ok());
+                    result.unwrap()
+                })
             })
         }
 

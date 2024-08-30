@@ -113,46 +113,44 @@ mod tests {
 
     #[test]
     fn test_beacon_maker() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let Dependencies {
-                    mut pool,
-                    membership,
-                    replica_config,
-                    crypto,
-                    ..
-                } = dependencies(pool_config, 1);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                ..
+            } = dependencies(pool_config, 1);
 
-                let beacon_maker =
-                    RandomBeaconMaker::new(replica_config, membership, crypto, no_op_logger());
+            let beacon_maker =
+                RandomBeaconMaker::new(replica_config, membership, crypto, no_op_logger());
 
-                // 1. Make the next beacon share
-                let beacon_share = beacon_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .expect("Expecting RandomBeaconShare");
+            // 1. Make the next beacon share
+            let beacon_share = beacon_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting RandomBeaconShare");
 
-                // 2. Skip making another share
-                pool.insert_validated(beacon_share);
-                assert!(beacon_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .is_none());
+            // 2. Skip making another share
+            pool.insert_validated(beacon_share);
+            assert!(beacon_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .is_none());
 
-                // 3. Next next beacon can't be made due to missing notarized block
-                pool.insert_validated(pool.make_next_beacon());
-                assert!(beacon_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .is_none());
+            // 3. Next next beacon can't be made due to missing notarized block
+            pool.insert_validated(pool.make_next_beacon());
+            assert!(beacon_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .is_none());
 
-                // 4. Next next beacon can be made once we have another block
-                let beacon = pool.validated().random_beacon().get_highest().unwrap();
-                let next_block = pool.make_next_block();
-                pool.insert_validated(next_block.clone());
-                pool.notarize(&next_block);
-                let beacon_share = beacon_maker
-                    .on_state_change(&PoolReader::new(&pool))
-                    .expect("Expecting RandomBeaconShare");
-                assert!(beacon_share.content.parent == ic_types::crypto::crypto_hash(&beacon));
-            },
-        )
+            // 4. Next next beacon can be made once we have another block
+            let beacon = pool.validated().random_beacon().get_highest().unwrap();
+            let next_block = pool.make_next_block();
+            pool.insert_validated(next_block.clone());
+            pool.notarize(&next_block);
+            let beacon_share = beacon_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting RandomBeaconShare");
+            assert!(beacon_share.content.parent == ic_types::crypto::crypto_hash(&beacon));
+        })
     }
 }

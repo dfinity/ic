@@ -655,101 +655,95 @@ mod tests {
 
     #[test]
     fn test_get_adjusted_notary_delay_cup_delay() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let settings = NotarizationDelaySettings {
-                    unit_delay: Duration::from_secs(1),
-                    initial_notary_delay: Duration::from_secs(0),
-                };
-                let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
-                /* use large enough DKG interval to trigger notarization/CUP gap limit */
-                let record = SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(ACCEPTABLE_NOTARIZATION_CUP_GAP + 30)
-                    .build();
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let settings = NotarizationDelaySettings {
+                unit_delay: Duration::from_secs(1),
+                initial_notary_delay: Duration::from_secs(0),
+            };
+            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
+            /* use large enough DKG interval to trigger notarization/CUP gap limit */
+            let record = SubnetRecordBuilder::from(&committee)
+                .with_dkg_interval_length(ACCEPTABLE_NOTARIZATION_CUP_GAP + 30)
+                .build();
 
-                let Dependencies {
-                    mut pool,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(1, record)],
-                );
-                let last_cup_dkg_info = PoolReader::new(&pool)
-                    .get_highest_catch_up_package()
-                    .content
-                    .block
-                    .as_ref()
-                    .payload
-                    .as_ref()
-                    .as_summary()
-                    .dkg
-                    .clone();
+            let Dependencies {
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+            let last_cup_dkg_info = PoolReader::new(&pool)
+                .get_highest_catch_up_package()
+                .content
+                .block
+                .as_ref()
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .clone();
 
-                // Advance to next summary height
-                pool.advance_round_normal_operation_no_cup_n(
-                    last_cup_dkg_info.interval_length.get() + 1,
-                );
-                assert!(pool.get_cache().finalized_block().payload.is_summary());
-                // Advance to one height before the highest possible CUP-less notarized height
-                pool.advance_round_normal_operation_no_cup_n(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1);
+            // Advance to next summary height
+            pool.advance_round_normal_operation_no_cup_n(
+                last_cup_dkg_info.interval_length.get() + 1,
+            );
+            assert!(pool.get_cache().finalized_block().payload.is_summary());
+            // Advance to one height before the highest possible CUP-less notarized height
+            pool.advance_round_normal_operation_no_cup_n(ACCEPTABLE_NOTARIZATION_CUP_GAP - 1);
 
-                let gap_trigger_height = Height::new(
-                    PoolReader::new(&pool).get_notarized_height().get()
-                        - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
-                        - 1,
-                );
-                state_manager
-                    .get_mut()
-                    .expect_latest_certified_height()
-                    .return_const(gap_trigger_height);
+            let gap_trigger_height = Height::new(
+                PoolReader::new(&pool).get_notarized_height().get()
+                    - ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+                    - 1,
+            );
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(gap_trigger_height);
 
-                assert_matches!(
-                    get_adjusted_notary_delay_from_settings(
-                        settings.clone(),
-                        &PoolReader::new(&pool),
-                        state_manager.as_ref(),
-                        Rank(0),
-                    ),
-                    NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
-                );
+            assert_matches!(
+                get_adjusted_notary_delay_from_settings(
+                    settings.clone(),
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
+            );
 
-                state_manager.get_mut().checkpoint();
-                state_manager
-                    .get_mut()
-                    .expect_latest_certified_height()
-                    .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager.get_mut().checkpoint();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(PoolReader::new(&pool).get_finalized_height());
 
-                assert_eq!(
-                    get_adjusted_notary_delay_from_settings(
-                        settings.clone(),
-                        &PoolReader::new(&pool),
-                        state_manager.as_ref(),
-                        Rank(0),
-                    ),
-                    NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
-                );
+            assert_eq!(
+                get_adjusted_notary_delay_from_settings(
+                    settings.clone(),
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
+            );
 
-                state_manager.get_mut().checkpoint();
-                state_manager
-                    .get_mut()
-                    .expect_latest_certified_height()
-                    .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager.get_mut().checkpoint();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(PoolReader::new(&pool).get_finalized_height());
 
-                pool.advance_round_normal_operation_no_cup();
+            pool.advance_round_normal_operation_no_cup();
 
-                assert_matches!(
-                    get_adjusted_notary_delay_from_settings(
-                        settings,
-                        &PoolReader::new(&pool),
-                        state_manager.as_ref(),
-                        Rank(0),
-                    ),
-                    NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
-                );
-            },
-        );
+            assert_matches!(
+                get_adjusted_notary_delay_from_settings(
+                    settings,
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    Rank(0),
+                ),
+                NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
+            );
+        });
     }
 
     #[test]
@@ -1012,38 +1006,36 @@ mod tests {
 
     #[test]
     fn test_ignore_disqualified_ranks() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                const SUBNET_SIZE: u64 = 10;
-                let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const SUBNET_SIZE: u64 = 10;
+            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
 
-                let height = Height::new(1);
+            let height = Height::new(1);
 
-                // We fill the validated pool with blocks from every rank and incrementally
-                // disqualify the lowest qualified rank. Each time we assert that it's
-                // ignored by [`find_lowest_ranked_non_disqualified_proposals`].
-                let f = get_faults_tolerated(SUBNET_SIZE as usize) as u64;
-                for i in 0..f + 1 {
-                    pool.insert_validated(pool.make_next_block_with_rank(Rank(i)));
+            // We fill the validated pool with blocks from every rank and incrementally
+            // disqualify the lowest qualified rank. Each time we assert that it's
+            // ignored by [`find_lowest_ranked_non_disqualified_proposals`].
+            let f = get_faults_tolerated(SUBNET_SIZE as usize) as u64;
+            for i in 0..f + 1 {
+                pool.insert_validated(pool.make_next_block_with_rank(Rank(i)));
+            }
+
+            assert_matches!(
+                &find_lowest_ranked_non_disqualified_proposals(&PoolReader::new(&pool), height)[..],
+                [b] if b.content.as_ref().rank == Rank(0)
+            );
+            for i in 0..f {
+                pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
+                // We disqualify rank i, so lowest ranked proposal must be i + 1
+                match &find_lowest_ranked_non_disqualified_proposals(
+                    &PoolReader::new(&pool),
+                    height,
+                )[..]
+                {
+                    [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
+                    _ => panic!("expected exactly one proposal at the given height"),
                 }
-
-                assert_matches!(
-                    &find_lowest_ranked_non_disqualified_proposals(&PoolReader::new(&pool), height)[..],
-                    [b] if b.content.as_ref().rank == Rank(0)
-                );
-                for i in 0..f {
-                    pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
-                    // We disqualify rank i, so lowest ranked proposal must be i + 1
-                    match &find_lowest_ranked_non_disqualified_proposals(
-                        &PoolReader::new(&pool),
-                        height,
-                    )[..]
-                    {
-                        [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
-                        _ => panic!("expected exactly one proposal at the given height"),
-                    }
-                }
-            },
-        );
+            }
+        });
     }
 }

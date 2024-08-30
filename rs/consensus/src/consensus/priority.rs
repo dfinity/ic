@@ -130,172 +130,166 @@ mod tests {
 
     #[test]
     fn test_bouncer_for_validation_cup_gap() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
-                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-                let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(0),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(committee.as_slice())
-                            .with_dkg_interval_length(dkg_interval)
-                            .build(),
-                    )],
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(committee.as_slice())
+                        .with_dkg_interval_length(dkg_interval)
+                        .build(),
+                )],
+            );
 
-                // Advance pool *without* producing CUP to the maximum height beyond
-                // which we don't validate non-CUP artifacts anymore.
-                let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
-                pool.advance_round_normal_operation_no_cup_n(max_validation_height);
+            // Advance pool *without* producing CUP to the maximum height beyond
+            // which we don't validate non-CUP artifacts anymore.
+            let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
+            pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
-                let expected_batch_height = Height::from(1);
-                let bouncer = new_bouncer(&pool, expected_batch_height);
+            let expected_batch_height = Height::from(1);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
 
-                // Artifacts at the next height are within look-ahead, but exceed
-                // the validator-CUP gap. We should stash them, but not fetch them.
-                let beacon = pool.make_next_beacon();
-                let block = pool.make_next_block();
-                let notarization = Notarization::fake(NotarizationContent::new(
-                    block.height(),
-                    block.content.get_hash().clone(),
-                ));
-                let equivocation_proof_id = ConsensusMessageId {
-                    hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
-                        vec![],
-                    ))),
-                    height: block.height(),
-                };
-                assert_eq!(bouncer(&beacon.get_id()), MaybeWantsLater);
-                assert_eq!(bouncer(&block.get_id()), MaybeWantsLater);
-                assert_eq!(bouncer(&notarization.get_id()), MaybeWantsLater);
-                assert_eq!(bouncer(&equivocation_proof_id), MaybeWantsLater);
+            // Artifacts at the next height are within look-ahead, but exceed
+            // the validator-CUP gap. We should stash them, but not fetch them.
+            let beacon = pool.make_next_beacon();
+            let block = pool.make_next_block();
+            let notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            let equivocation_proof_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
+                    vec![],
+                ))),
+                height: block.height(),
+            };
+            assert_eq!(bouncer(&beacon.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&block.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&notarization.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&equivocation_proof_id), MaybeWantsLater);
 
-                // Regardless of bounds, we should always fetch CUPs.
-                let cup_id = ConsensusMessageId {
-                    hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(
-                        vec![],
-                    ))),
-                    height: Height::new(100000000),
-                };
-                assert_eq!(bouncer(&cup_id), Wants);
+            // Regardless of bounds, we should always fetch CUPs.
+            let cup_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
+                height: Height::new(100000000),
+            };
+            assert_eq!(bouncer(&cup_id), Wants);
 
-                // Insert CUP for next summary height and recompute bouncer function.
-                pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
-                let bouncer = new_bouncer(&pool, expected_batch_height);
+            // Insert CUP for next summary height and recompute bouncer function.
+            pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
+            let bouncer = new_bouncer(&pool, expected_batch_height);
 
-                // The artifacts are not outside the validation-CUP gap, and
-                // within look-ahead distance. We should fetch them all.
-                assert_eq!(bouncer(&beacon.get_id()), Wants);
-                assert_eq!(bouncer(&block.get_id()), Wants);
-                assert_eq!(bouncer(&notarization.get_id()), Wants);
-                assert_eq!(bouncer(&equivocation_proof_id), Wants);
-            },
-        )
+            // The artifacts are not outside the validation-CUP gap, and
+            // within look-ahead distance. We should fetch them all.
+            assert_eq!(bouncer(&beacon.get_id()), Wants);
+            assert_eq!(bouncer(&block.get_id()), Wants);
+            assert_eq!(bouncer(&notarization.get_id()), Wants);
+            assert_eq!(bouncer(&equivocation_proof_id), Wants);
+        })
     }
 
     #[test]
     fn test_bouncer_function() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
-                pool.advance_round_normal_operation_n(2);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
+            pool.advance_round_normal_operation_n(2);
 
-                let expected_batch_height = Height::from(1);
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                // New block ==> Wants
+            let expected_batch_height = Height::from(1);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            // New block ==> Wants
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            assert_eq!(bouncer(&block.get_id()), Wants);
+
+            // Older than finalized ==> Unwanted
+            let notarization = pool
+                .validated()
+                .notarization()
+                .get_by_height(Height::from(1))
+                .last()
+                .unwrap();
+            assert_eq!(bouncer(&notarization.get_id()), Unwanted);
+
+            // Put block into validated pool, notarization in to unvalidated pool
+            pool.insert_validated(block.clone());
+            let notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            pool.insert_unvalidated(notarization.clone());
+
+            // Possible duplicate notarization ==> Wants
+            let mut dup_notarization = notarization.clone();
+            let dup_notarization_id = dup_notarization.get_id();
+            dup_notarization.signature.signers = vec![node_test_id(42)];
+            // Move block back to unvalidated after attribute is computed
+            pool.purge_validated_below(block.clone());
+            pool.insert_unvalidated(block.clone());
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
+
+            // Moving block to validated does not affect result
+            pool.remove_unvalidated(block.clone());
+            pool.insert_validated(block.clone());
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
+
+            // Definite duplicate notarization ==> Wants but within look ahead window
+            pool.insert_validated(notarization.clone());
+            pool.remove_unvalidated(notarization);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
+
+            // Put finalization in the unvalidated pool
+            let finalization = Finalization::fake(FinalizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            pool.insert_unvalidated(finalization.clone());
+
+            // Possible duplicate finalization ==> Wants but within look ahead window
+            let mut dup_finalization = finalization.clone();
+            let dup_finalization_id = dup_finalization.get_id();
+            dup_finalization.signature.signers = vec![node_test_id(42)];
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_finalization_id), Wants);
+
+            // Once finalized, possible duplicate finalization ==> Drop
+            pool.insert_validated(finalization.clone());
+            pool.remove_unvalidated(finalization);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_finalization_id), Unwanted);
+
+            // Add notarizations until we reach finalized_height + LOOK_AHEAD.
+            for _ in 0..LOOK_AHEAD {
                 pool.insert_validated(pool.make_next_beacon());
                 let block = pool.make_next_block();
-                assert_eq!(bouncer(&block.get_id()), Wants);
-
-                // Older than finalized ==> Unwanted
-                let notarization = pool
-                    .validated()
-                    .notarization()
-                    .get_by_height(Height::from(1))
-                    .last()
-                    .unwrap();
-                assert_eq!(bouncer(&notarization.get_id()), Unwanted);
-
-                // Put block into validated pool, notarization in to unvalidated pool
                 pool.insert_validated(block.clone());
                 let notarization = Notarization::fake(NotarizationContent::new(
                     block.height(),
                     block.content.get_hash().clone(),
                 ));
-                pool.insert_unvalidated(notarization.clone());
-
-                // Possible duplicate notarization ==> Wants
-                let mut dup_notarization = notarization.clone();
-                let dup_notarization_id = dup_notarization.get_id();
-                dup_notarization.signature.signers = vec![node_test_id(42)];
-                // Move block back to unvalidated after attribute is computed
-                pool.purge_validated_below(block.clone());
-                pool.insert_unvalidated(block.clone());
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                assert_eq!(bouncer(&dup_notarization_id), Wants);
-
-                // Moving block to validated does not affect result
-                pool.remove_unvalidated(block.clone());
-                pool.insert_validated(block.clone());
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                assert_eq!(bouncer(&dup_notarization_id), Wants);
-
-                // Definite duplicate notarization ==> Wants but within look ahead window
                 pool.insert_validated(notarization.clone());
-                pool.remove_unvalidated(notarization);
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                assert_eq!(bouncer(&dup_notarization_id), Wants);
-
-                // Put finalization in the unvalidated pool
-                let finalization = Finalization::fake(FinalizationContent::new(
-                    block.height(),
-                    block.content.get_hash().clone(),
-                ));
-                pool.insert_unvalidated(finalization.clone());
-
-                // Possible duplicate finalization ==> Wants but within look ahead window
-                let mut dup_finalization = finalization.clone();
-                let dup_finalization_id = dup_finalization.get_id();
-                dup_finalization.signature.signers = vec![node_test_id(42)];
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                assert_eq!(bouncer(&dup_finalization_id), Wants);
-
-                // Once finalized, possible duplicate finalization ==> Drop
-                pool.insert_validated(finalization.clone());
-                pool.remove_unvalidated(finalization);
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                assert_eq!(bouncer(&dup_finalization_id), Unwanted);
-
-                // Add notarizations until we reach finalized_height + LOOK_AHEAD.
-                for _ in 0..LOOK_AHEAD {
-                    pool.insert_validated(pool.make_next_beacon());
-                    let block = pool.make_next_block();
-                    pool.insert_validated(block.clone());
-                    let notarization = Notarization::fake(NotarizationContent::new(
-                        block.height(),
-                        block.content.get_hash().clone(),
-                    ));
-                    pool.insert_validated(notarization.clone());
-                }
-                // Insert one more block
-                pool.insert_validated(pool.make_next_beacon());
-                let block = pool.make_next_block();
-                pool.insert_validated(block.clone());
-                let notarization = Notarization::fake(NotarizationContent::new(
-                    block.height(),
-                    block.content.get_hash().clone(),
-                ));
-                assert!(
-                    block.height().get()
-                        > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
-                );
-                // Recompute bouncer function since pool content has changed
-                let bouncer = new_bouncer(&pool, expected_batch_height);
-                // Still fetch even when notarization is much ahead of finalization
-                assert_eq!(bouncer(&notarization.get_id()), Wants);
-            },
-        )
+            }
+            // Insert one more block
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            let notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            assert!(
+                block.height().get()
+                    > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
+            );
+            // Recompute bouncer function since pool content has changed
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            // Still fetch even when notarization is much ahead of finalization
+            assert_eq!(bouncer(&notarization.get_id()), Wants);
+        })
     }
 }

@@ -1021,8 +1021,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
-    use ic_test_utilities_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -1077,468 +1077,457 @@ mod tests {
 
     #[test]
     fn test_timestamp() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let time_0 = time_source.get_relative_time();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let time_0 = time_source.get_relative_time();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let mut random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(0),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
-                let msg_0 = random_beacon.clone().into_message();
-                let msg_id_0 = random_beacon.get_id();
-                random_beacon.content.height = Height::from(1);
-                let msg_1 = random_beacon.clone().into_message();
-                let msg_id_1 = random_beacon.get_id();
+            let mut random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(0),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let msg_0 = random_beacon.clone().into_message();
+            let msg_id_0 = random_beacon.get_id();
+            random_beacon.content.height = Height::from(1);
+            let msg_1 = random_beacon.clone().into_message();
+            let msg_id_1 = random_beacon.get_id();
 
-                pool.insert(UnvalidatedArtifact {
-                    message: msg_0.clone(),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
+            pool.insert(UnvalidatedArtifact {
+                message: msg_0.clone(),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
 
-                let time_1 = time_0 + Duration::from_secs(100);
-                time_source.set_time(time_1).unwrap();
+            let time_1 = time_0 + Duration::from_secs(100);
+            time_source.set_time(time_1).unwrap();
 
-                pool.insert(UnvalidatedArtifact {
-                    message: msg_1.clone(),
-                    peer_id: node_test_id(1),
-                    timestamp: time_source.get_relative_time(),
-                });
+            pool.insert(UnvalidatedArtifact {
+                message: msg_1.clone(),
+                peer_id: node_test_id(1),
+                timestamp: time_source.get_relative_time(),
+            });
 
-                // Check timestamp is the insertion time.
-                assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), Some(time_0));
-                assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), Some(time_1));
+            // Check timestamp is the insertion time.
+            assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), Some(time_0));
+            assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), Some(time_1));
 
-                let changeset = vec![
-                    ChangeAction::MoveToValidated(msg_0),
-                    ChangeAction::RemoveFromUnvalidated(msg_1),
-                ];
-                pool.apply_changes(changeset);
+            let changeset = vec![
+                ChangeAction::MoveToValidated(msg_0),
+                ChangeAction::RemoveFromUnvalidated(msg_1),
+            ];
+            pool.apply_changes(changeset);
 
-                // Check timestamp is carried over for msg_0.
-                assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
-                assert_eq!(pool.validated().get_timestamp(&msg_id_0), Some(time_0));
+            // Check timestamp is carried over for msg_0.
+            assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
+            assert_eq!(pool.validated().get_timestamp(&msg_id_0), Some(time_0));
 
-                // Check timestamp is removed for msg_1.
-                assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), None);
-                assert_eq!(pool.validated().get_timestamp(&msg_id_1), None);
-            },
-        )
+            // Check timestamp is removed for msg_1.
+            assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), None);
+            assert_eq!(pool.validated().get_timestamp(&msg_id_1), None);
+        })
     }
 
     #[test]
     fn test_artifacts_with_opt_are_created_for_aggregates() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(1),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ))
-                .into_message();
+            let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
 
-                let random_beacon_2 = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(2),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ))
-                .into_message();
+            let random_beacon_2 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(2),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
 
-                let random_beacon_3 = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(3),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ))
-                .into_message();
+            let random_beacon_3 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(3),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
 
-                pool.insert(UnvalidatedArtifact {
-                    message: random_beacon_1,
-                    peer_id: node_test_id(0),
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_1,
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_2.clone(),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            let changeset = vec![
+                ChangeAction::MoveToValidated(random_beacon_2.clone()),
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: random_beacon_3.clone(),
                     timestamp: time_source.get_relative_time(),
-                });
-
-                pool.insert(UnvalidatedArtifact {
-                    message: random_beacon_2.clone(),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                let changeset = vec![
-                    ChangeAction::MoveToValidated(random_beacon_2.clone()),
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg: random_beacon_3.clone(),
-                        timestamp: time_source.get_relative_time(),
-                    }),
-                ];
-                let result = pool.apply_changes(changeset);
-                assert_eq!(result.mutations.len(), 2);
-                assert!(result.poll_immediately);
-                assert!(matches!(
+                }),
+            ];
+            let result = pool.apply_changes(changeset);
+            assert_eq!(result.mutations.len(), 2);
+            assert!(result.poll_immediately);
+            assert!(matches!(
                 &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_2.get_id()));
-                assert!(matches!(
+            assert!(matches!(
                 &result.mutations[1], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_3.get_id()));
 
-                let result =
-                    pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-                assert!(!result
-                    .mutations
-                    .iter()
-                    .any(|x| matches!(x, ArtifactMutation::Insert(_))));
-                // purging genesis CUP & beacon + validated beacon at height 2
-                assert_eq!(result.mutations.len(), 3);
-                assert!(result.mutations.iter().any(
-                    |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
-                ));
-                assert!(result.poll_immediately);
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            assert!(!result
+                .mutations
+                .iter()
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+            // purging genesis CUP & beacon + validated beacon at height 2
+            assert_eq!(result.mutations.len(), 3);
+            assert!(result.mutations.iter().any(
+                |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
+            ));
+            assert!(result.poll_immediately);
 
-                let result =
-                    pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-                assert_eq!(result.mutations.len(), 0);
-                assert!(result.poll_immediately);
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
+            assert_eq!(result.mutations.len(), 0);
+            assert!(result.poll_immediately);
 
-                let result = pool.apply_changes(vec![]);
-                assert!(!result.poll_immediately);
-            },
-        )
+            let result = pool.apply_changes(vec![]);
+            assert!(!result.poll_immediately);
+        })
     }
 
     #[test]
     fn test_shares_are_not_relayed() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(1),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
 
-                let random_beacon_share_1 =
-                    RandomBeaconShare::fake(&random_beacon, node_test_id(1)).into_message();
+            let random_beacon_share_1 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(1)).into_message();
 
-                let random_beacon_share_2 =
-                    RandomBeaconShare::fake(&random_beacon, node_test_id(2)).into_message();
+            let random_beacon_share_2 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(2)).into_message();
 
-                let random_beacon_share_3 =
-                    RandomBeaconShare::fake(&random_beacon, node_test_id(3)).into_message();
+            let random_beacon_share_3 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(3)).into_message();
 
-                pool.insert(UnvalidatedArtifact {
-                    message: random_beacon_share_1,
-                    peer_id: node_test_id(0),
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_share_1,
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_share_2.clone(),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            let changeset = vec![
+                ChangeAction::MoveToValidated(random_beacon_share_2.clone()),
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: random_beacon_share_3.clone(),
                     timestamp: time_source.get_relative_time(),
-                });
+                }),
+            ];
+            let result = pool.apply_changes(changeset);
+            // share 3 should be added to the validated pool and create an advert
+            // share 2 should be moved to the validated pool and not create an advert
+            // share 1 should remain in the unvalidated pool
+            assert_eq!(result.mutations.len(), 1);
+            assert!(result.poll_immediately);
+            assert!(matches!(
+                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_share_3.get_id()
+            ));
 
-                pool.insert(UnvalidatedArtifact {
-                    message: random_beacon_share_2.clone(),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                let changeset = vec![
-                    ChangeAction::MoveToValidated(random_beacon_share_2.clone()),
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg: random_beacon_share_3.clone(),
-                        timestamp: time_source.get_relative_time(),
-                    }),
-                ];
-                let result = pool.apply_changes(changeset);
-                // share 3 should be added to the validated pool and create an advert
-                // share 2 should be moved to the validated pool and not create an advert
-                // share 1 should remain in the unvalidated pool
-                assert_eq!(result.mutations.len(), 1);
-                assert!(result.poll_immediately);
-                assert!(matches!(
-                    &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_share_3.get_id()
-                ));
-
-                let result =
-                    pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-                assert!(!result
-                    .mutations
-                    .iter()
-                    .any(|x| matches!(x, ArtifactMutation::Insert(_))));
-                // purging genesis CUP & beacon + 2 validated beacon shares
-                assert_eq!(result.mutations.len(), 4);
-                assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
-                assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
-                assert!(result.poll_immediately);
-            },
-        )
+            let result =
+                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            assert!(!result
+                .mutations
+                .iter()
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+            // purging genesis CUP & beacon + 2 validated beacon shares
+            assert_eq!(result.mutations.len(), 4);
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
+            assert!(result.poll_immediately);
+        })
     }
 
     #[test]
     fn test_insert_remove() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(1),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
-                let id = random_beacon.get_id();
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let id = random_beacon.get_id();
 
-                pool.insert(UnvalidatedArtifact {
-                    message: ConsensusMessage::RandomBeacon(random_beacon),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-                assert!(pool.unvalidated.contains(&id));
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::RandomBeacon(random_beacon),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            assert!(pool.unvalidated.contains(&id));
 
-                pool.remove(&id);
-                assert!(!pool.unvalidated.contains(&id));
-            },
-        );
+            pool.remove(&id);
+            assert!(!pool.unvalidated.contains(&id));
+        });
     }
 
     #[test]
     fn test_get_all_validated() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let node = node_test_id(3);
-                let mut pool = new_from_cup_without_bytes(
-                    node,
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let node = node_test_id(3);
+            let mut pool = new_from_cup_without_bytes(
+                node,
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let height_offset = 5_000_000_000;
+            let height_offset = 5_000_000_000;
 
-                let fake_proposal = |height: Height, node_id: NodeId| {
-                    BlockProposal::fake(fake_block(height, Rank(0)), node_id)
-                        .into_message()
-                        .into_message()
-                };
-
-                let fake_finalization = |height: Height| {
-                    Finalization::fake(FinalizationContent {
-                        version: ReplicaVersion::default(),
-                        height,
-                        block: crypto_hash(&fake_block(height, Rank(0))),
-                    })
+            let fake_proposal = |height: Height, node_id: NodeId| {
+                BlockProposal::fake(fake_block(height, Rank(0)), node_id)
                     .into_message()
-                };
-
-                let fake_finalization_share = |height: Height, node_id: NodeId| {
-                    FinalizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
-                };
-
-                let fake_notarization = |height: Height| {
-                    Notarization::fake(NotarizationContent {
-                        version: ReplicaVersion::default(),
-                        height,
-                        block: crypto_hash(&fake_block(height, Rank(0))),
-                    })
                     .into_message()
-                };
+            };
 
-                let fake_notarization_share = |height: Height, node_id: NodeId| {
-                    NotarizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
-                };
+            let fake_finalization = |height: Height| {
+                Finalization::fake(FinalizationContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    block: crypto_hash(&fake_block(height, Rank(0))),
+                })
+                .into_message()
+            };
 
-                let fake_beacon = |height: Height| {
-                    RandomBeacon::fake(RandomBeaconContent {
-                        version: ReplicaVersion::default(),
-                        height,
-                        parent: CryptoHashOf::from(CryptoHash(vec![])),
-                    })
-                    .into_message()
-                };
+            let fake_finalization_share = |height: Height, node_id: NodeId| {
+                FinalizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
+            };
 
-                let fake_beacon_share = |height: Height, node_id: NodeId| {
-                    RandomBeaconShare::fake(
-                        &fake_beacon(height.decrement()).try_into().unwrap(),
-                        node_id,
-                    )
-                    .into_message()
-                };
+            let fake_notarization = |height: Height| {
+                Notarization::fake(NotarizationContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    block: crypto_hash(&fake_block(height, Rank(0))),
+                })
+                .into_message()
+            };
 
-                let fake_tape = |height: Height| {
-                    RandomTape::fake(RandomTapeContent {
-                        version: ReplicaVersion::default(),
-                        height,
-                    })
-                    .into_message()
-                };
+            let fake_notarization_share = |height: Height, node_id: NodeId| {
+                NotarizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
+            };
 
-                let fake_tape_share = |height: Height, node_id: NodeId| {
-                    RandomTapeShare::fake(height, node_id).into_message()
-                };
+            let fake_beacon = |height: Height| {
+                RandomBeacon::fake(RandomBeaconContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                    parent: CryptoHashOf::from(CryptoHash(vec![])),
+                })
+                .into_message()
+            };
 
-                // Create shares from 5 nodes for 20 heights, only add aggregates below height 15.
-                let mut messages = Vec::new();
-                for h in 1..=20 {
-                    let height = Height::from(height_offset + h);
-                    for i in 1..=5 {
-                        let node_id = node_test_id(i);
-                        messages.extend([
-                            fake_proposal(height, node_id),
-                            fake_finalization_share(height, node_id),
-                            fake_notarization_share(height, node_id),
-                            fake_beacon_share(height, node_id),
-                            fake_tape_share(height, node_id),
-                        ]);
-                    }
-                    if h <= 15 {
-                        messages.extend([
-                            fake_finalization(height),
-                            fake_notarization(height),
-                            fake_beacon(height),
-                            fake_tape(height),
-                        ]);
-                    }
+            let fake_beacon_share = |height: Height, node_id: NodeId| {
+                RandomBeaconShare::fake(
+                    &fake_beacon(height.decrement()).try_into().unwrap(),
+                    node_id,
+                )
+                .into_message()
+            };
+
+            let fake_tape = |height: Height| {
+                RandomTape::fake(RandomTapeContent {
+                    version: ReplicaVersion::default(),
+                    height,
+                })
+                .into_message()
+            };
+
+            let fake_tape_share = |height: Height, node_id: NodeId| {
+                RandomTapeShare::fake(height, node_id).into_message()
+            };
+
+            // Create shares from 5 nodes for 20 heights, only add aggregates below height 15.
+            let mut messages = Vec::new();
+            for h in 1..=20 {
+                let height = Height::from(height_offset + h);
+                for i in 1..=5 {
+                    let node_id = node_test_id(i);
+                    messages.extend([
+                        fake_proposal(height, node_id),
+                        fake_finalization_share(height, node_id),
+                        fake_notarization_share(height, node_id),
+                        fake_beacon_share(height, node_id),
+                        fake_tape_share(height, node_id),
+                    ]);
                 }
-                messages.push(
-                    CatchUpPackage::fake(CatchUpContent::new(
-                        HashedBlock::new(
-                            crypto_hash,
-                            fake_block(Height::from(height_offset), Rank(0)),
-                        ),
-                        HashedRandomBeacon::new(
-                            crypto_hash,
-                            RandomBeacon::fake(RandomBeaconContent {
-                                version: ReplicaVersion::default(),
-                                height: Height::from(height_offset),
-                                parent: CryptoHashOf::from(CryptoHash(vec![])),
-                            }),
-                        ),
-                        CryptoHashOf::from(CryptoHash(vec![])),
-                        None,
-                    ))
-                    .into_message(),
-                );
+                if h <= 15 {
+                    messages.extend([
+                        fake_finalization(height),
+                        fake_notarization(height),
+                        fake_beacon(height),
+                        fake_tape(height),
+                    ]);
+                }
+            }
+            messages.push(
+                CatchUpPackage::fake(CatchUpContent::new(
+                    HashedBlock::new(
+                        crypto_hash,
+                        fake_block(Height::from(height_offset), Rank(0)),
+                    ),
+                    HashedRandomBeacon::new(
+                        crypto_hash,
+                        RandomBeacon::fake(RandomBeaconContent {
+                            version: ReplicaVersion::default(),
+                            height: Height::from(height_offset),
+                            parent: CryptoHashOf::from(CryptoHash(vec![])),
+                        }),
+                    ),
+                    CryptoHashOf::from(CryptoHash(vec![])),
+                    None,
+                ))
+                .into_message(),
+            );
 
-                pool.apply_changes(
-                    messages
-                        .into_iter()
-                        .map(|msg| {
-                            ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                                msg,
-                                timestamp: time_source.get_relative_time(),
-                            })
+            pool.apply_changes(
+                messages
+                    .into_iter()
+                    .map(|msg| {
+                        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                            msg,
+                            timestamp: time_source.get_relative_time(),
                         })
-                        .collect(),
-                );
+                    })
+                    .collect(),
+            );
 
-                let get_signer = |m: &ConsensusMessage| match m {
-                    ConsensusMessage::RandomBeaconShare(x) => x.signature.signer,
-                    ConsensusMessage::RandomTapeShare(x) => x.signature.signer,
-                    ConsensusMessage::NotarizationShare(x) => x.signature.signer,
-                    ConsensusMessage::FinalizationShare(x) => x.signature.signer,
-                    ConsensusMessage::CatchUpPackageShare(x) => x.signature.signer,
-                    _ => panic!("No signer for aggregate artifacts"),
-                };
+            let get_signer = |m: &ConsensusMessage| match m {
+                ConsensusMessage::RandomBeaconShare(x) => x.signature.signer,
+                ConsensusMessage::RandomTapeShare(x) => x.signature.signer,
+                ConsensusMessage::NotarizationShare(x) => x.signature.signer,
+                ConsensusMessage::FinalizationShare(x) => x.signature.signer,
+                ConsensusMessage::CatchUpPackageShare(x) => x.signature.signer,
+                _ => panic!("No signer for aggregate artifacts"),
+            };
 
-                pool.get_all_validated().for_each(|m| {
-                    if m.height().get() <= height_offset + 15 {
-                        assert!(!m.is_share());
-                    }
-                    if m.is_share() {
-                        assert_eq!(get_signer(&m), node);
-                    }
-                });
+            pool.get_all_validated().for_each(|m| {
+                if m.height().get() <= height_offset + 15 {
+                    assert!(!m.is_share());
+                }
+                if m.is_share() {
+                    assert_eq!(get_signer(&m), node);
+                }
+            });
 
-                assert_eq!(
-                    pool.get_all_validated().count(),
-                    // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
-                    1 + 15 * 4 + 5 * 4 + 20 * 5
-                );
-            },
-        );
+            assert_eq!(
+                pool.get_all_validated().count(),
+                // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
+                1 + 15 * 4 + 5 * 4 + 20 * 5
+            );
+        });
     }
 
     #[test]
     fn test_metrics() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::global(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::global(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                // creates a fake block proposal for the given block
-                let fake_block_proposal = |block: &Block| {
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg: BlockProposal::fake(block.clone(), node_test_id(333)).into_message(),
-                        timestamp: time_source.get_relative_time(),
-                    })
-                };
+            // creates a fake block proposal for the given block
+            let fake_block_proposal = |block: &Block| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: BlockProposal::fake(block.clone(), node_test_id(333)).into_message(),
+                    timestamp: time_source.get_relative_time(),
+                })
+            };
 
-                // creates a fake notarization for the given block
-                let fake_notarization = |block: &Block| {
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg: Notarization::fake(NotarizationContent::new(
-                            block.height(),
-                            ic_types::crypto::crypto_hash(block),
-                        ))
-                        .into_message(),
-                        timestamp: time_source.get_relative_time(),
-                    })
-                };
+            // creates a fake notarization for the given block
+            let fake_notarization = |block: &Block| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: Notarization::fake(NotarizationContent::new(
+                        block.height(),
+                        ic_types::crypto::crypto_hash(block),
+                    ))
+                    .into_message(),
+                    timestamp: time_source.get_relative_time(),
+                })
+            };
 
-                // creates a fake finalization for the given block
-                let fake_finalization = |block: &Block| {
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg: Finalization::fake(FinalizationContent::new(
-                            block.height(),
-                            ic_types::crypto::crypto_hash(block),
-                        ))
-                        .into_message(),
-                        timestamp: time_source.get_relative_time(),
-                    })
-                };
+            // creates a fake finalization for the given block
+            let fake_finalization = |block: &Block| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg: Finalization::fake(FinalizationContent::new(
+                        block.height(),
+                        ic_types::crypto::crypto_hash(block),
+                    ))
+                    .into_message(),
+                    timestamp: time_source.get_relative_time(),
+                })
+            };
 
-                // extracts the notarization metric from the registry
-                let get_metric = || {
-                    prometheus::default_registry()
+            // extracts the notarization metric from the registry
+            let get_metric = || {
+                prometheus::default_registry()
                 .gather()
                 .iter()
                 .find(|m| m.get_name() == "artifact_pool_consensus_count_per_height")
@@ -1557,403 +1546,397 @@ mod tests {
                 )
                 .get_histogram()
                 .clone()
-                };
+            };
 
-                //
-                // Height = 3
-                //
-                let block = fake_block(Height::new(3), Rank(0));
+            //
+            // Height = 3
+            //
+            let block = fake_block(Height::new(3), Rank(0));
 
-                pool.apply_changes(vec![
-                    fake_block_proposal(&block),
-                    fake_notarization(&block),
-                    fake_finalization(&block),
-                ]);
+            pool.apply_changes(vec![
+                fake_block_proposal(&block),
+                fake_notarization(&block),
+                fake_finalization(&block),
+            ]);
 
-                let metric = get_metric();
-                assert_eq!(metric.get_sample_count(), 0_u64);
-                assert_eq!(metric.get_sample_sum(), 0_f64);
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 0_u64);
+            assert_eq!(metric.get_sample_sum(), 0_f64);
 
-                //
-                // Height = 4
-                //
-                let block1 = fake_block(Height::new(4), Rank(0));
-                let block2 = fake_block(Height::new(4), Rank(1));
+            //
+            // Height = 4
+            //
+            let block1 = fake_block(Height::new(4), Rank(0));
+            let block2 = fake_block(Height::new(4), Rank(1));
 
-                pool.apply_changes(vec![
-                    fake_block_proposal(&block1),
-                    fake_notarization(&block1),
-                    fake_block_proposal(&block2),
-                    fake_notarization(&block2),
-                    fake_finalization(&block2),
-                ]);
+            pool.apply_changes(vec![
+                fake_block_proposal(&block1),
+                fake_notarization(&block1),
+                fake_block_proposal(&block2),
+                fake_notarization(&block2),
+                fake_finalization(&block2),
+            ]);
 
-                let metric = get_metric();
-                assert_eq!(metric.get_sample_count(), 1_u64);
-                assert_eq!(metric.get_sample_sum(), 1_f64);
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 1_u64);
+            assert_eq!(metric.get_sample_sum(), 1_f64);
 
-                //
-                // Height = 5
-                //
-                let block = fake_block(Height::new(5), Rank(0));
+            //
+            // Height = 5
+            //
+            let block = fake_block(Height::new(5), Rank(0));
 
-                pool.apply_changes(vec![
-                    fake_block_proposal(&block),
-                    fake_notarization(&block),
-                    fake_finalization(&block),
-                ]);
+            pool.apply_changes(vec![
+                fake_block_proposal(&block),
+                fake_notarization(&block),
+                fake_finalization(&block),
+            ]);
 
-                let metric = get_metric();
-                assert_eq!(metric.get_sample_count(), 2_u64);
-                assert_eq!(metric.get_sample_sum(), 3_f64);
-            },
-        );
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 2_u64);
+            assert_eq!(metric.get_sample_sum(), 3_f64);
+        });
     }
 
     #[test]
     // We create multiple artifacts for multiple heights, check that all of them are
     // written to the disk and can be restored.
     fn test_backup() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let backup_dir = tempfile::Builder::new().tempdir().unwrap();
-                let subnet_id = subnet_test_id(0);
-                let root_path = backup_dir
-                    .path()
-                    .join(subnet_id.to_string())
-                    .join(ic_types::ReplicaVersion::default().to_string());
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_id,
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let backup_dir = tempfile::Builder::new().tempdir().unwrap();
+            let subnet_id = subnet_test_id(0);
+            let root_path = backup_dir
+                .path()
+                .join(subnet_id.to_string())
+                .join(ic_types::ReplicaVersion::default().to_string());
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_id,
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let purging_interval = Duration::from_millis(100);
-                pool.backup = Some(Backup::new(
-                    &pool,
-                    backup_dir.path().into(),
-                    root_path.clone(),
-                    // We purge all artifacts older than 5ms millisecond.
-                    Duration::from_millis(100),
-                    // We purge every 5 milliseconds.
-                    purging_interval,
-                    MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                ));
+            let purging_interval = Duration::from_millis(100);
+            pool.backup = Some(Backup::new(
+                &pool,
+                backup_dir.path().into(),
+                root_path.clone(),
+                // We purge all artifacts older than 5ms millisecond.
+                Duration::from_millis(100),
+                // We purge every 5 milliseconds.
+                purging_interval,
+                MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            ));
 
-                // All tests in this group work on artifacts inside the same group, so we extend
-                // the path with it.
-                let path = root_path.join("0");
+            // All tests in this group work on artifacts inside the same group, so we extend
+            // the path with it.
+            let path = root_path.join("0");
 
-                let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(1),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
-                let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
-                let notarization = Notarization::fake(NotarizationContent::new(
-                    Height::from(2),
-                    CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
-                ));
-                let finalization = Finalization::fake(FinalizationContent::new(
-                    Height::from(3),
-                    CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
-                ));
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
+            let notarization = Notarization::fake(NotarizationContent::new(
+                Height::from(2),
+                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            ));
+            let finalization = Finalization::fake(FinalizationContent::new(
+                Height::from(3),
+                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            ));
 
-                // height 3, non-final
-                let block = Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(3),
-                    Rank(46),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(98),
-                        certified_height: Height::from(41),
-                        time: UNIX_EPOCH,
-                    },
-                );
-                let proposal3 = BlockProposal::fake(block, node_test_id(333));
-
-                // height 3, final
-                let block = Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(3),
-                    Rank(46),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(101),
-                        certified_height: Height::from(42),
-                        time: UNIX_EPOCH,
-                    },
-                );
-                let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
-                let notarization3 = Notarization::fake(NotarizationContent::new(
-                    Height::from(3),
-                    ic_types::crypto::crypto_hash(&block),
-                ));
-
-                let block = Block::new(
-                    ic_types::crypto::crypto_hash(&block),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(4),
-                    Rank(456),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: UNIX_EPOCH,
-                    },
-                );
-                let finalization_at_4 = Finalization::fake(FinalizationContent::new(
-                    Height::from(4),
-                    ic_types::crypto::crypto_hash(&block),
-                ));
-                let proposal = BlockProposal::fake(block, node_test_id(333));
-
-                // non finalized one
-                let block = Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(4),
-                    Rank(46),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(98),
-                        certified_height: Height::from(41),
-                        time: UNIX_EPOCH,
-                    },
-                );
-                let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
-
-                let genesis_cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
-                let mut cup = genesis_cup.clone();
-                cup.content.random_beacon = hashed::Hashed::new(
+            // height 3, non-final
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
                     ic_types::crypto::crypto_hash,
-                    RandomBeacon::fake(RandomBeaconContent::new(
-                        Height::from(4),
-                        CryptoHashOf::from(CryptoHash(Vec::new())),
-                    )),
-                );
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                Height::from(3),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(98),
+                    certified_height: Height::from(41),
+                    time: UNIX_EPOCH,
+                },
+            );
+            let proposal3 = BlockProposal::fake(block, node_test_id(333));
 
-                let changeset = vec![
-                    random_beacon.clone().into_message(),
-                    random_tape.clone().into_message(),
-                    finalization.clone().into_message(),
-                    finalization_at_4.into_message(),
-                    notarization.clone().into_message(),
-                    proposal.clone().into_message(),
-                    proposal_non_final.clone().into_message(),
-                    proposal3.clone().into_message(),
-                    notarization3.clone().into_message(),
-                    proposal3_final.clone().into_message(),
-                    cup.clone().into_message(),
-                ]
-                .into_iter()
-                .map(|msg| {
-                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                        msg,
-                        timestamp: time_source.get_relative_time(),
-                    })
+            // height 3, final
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                Height::from(3),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(101),
+                    certified_height: Height::from(42),
+                    time: UNIX_EPOCH,
+                },
+            );
+            let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
+            let notarization3 = Notarization::fake(NotarizationContent::new(
+                Height::from(3),
+                ic_types::crypto::crypto_hash(&block),
+            ));
+
+            let block = Block::new(
+                ic_types::crypto::crypto_hash(&block),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                Height::from(4),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: UNIX_EPOCH,
+                },
+            );
+            let finalization_at_4 = Finalization::fake(FinalizationContent::new(
+                Height::from(4),
+                ic_types::crypto::crypto_hash(&block),
+            ));
+            let proposal = BlockProposal::fake(block, node_test_id(333));
+
+            // non finalized one
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                Height::from(4),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(98),
+                    certified_height: Height::from(41),
+                    time: UNIX_EPOCH,
+                },
+            );
+            let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
+
+            let genesis_cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
+            let mut cup = genesis_cup.clone();
+            cup.content.random_beacon = hashed::Hashed::new(
+                ic_types::crypto::crypto_hash,
+                RandomBeacon::fake(RandomBeaconContent::new(
+                    Height::from(4),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                )),
+            );
+
+            let changeset = vec![
+                random_beacon.clone().into_message(),
+                random_tape.clone().into_message(),
+                finalization.clone().into_message(),
+                finalization_at_4.into_message(),
+                notarization.clone().into_message(),
+                proposal.clone().into_message(),
+                proposal_non_final.clone().into_message(),
+                proposal3.clone().into_message(),
+                notarization3.clone().into_message(),
+                proposal3_final.clone().into_message(),
+                cup.clone().into_message(),
+            ]
+            .into_iter()
+            .map(|msg| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg,
+                    timestamp: time_source.get_relative_time(),
                 })
-                .collect();
+            })
+            .collect();
 
-                pool.apply_changes(changeset);
-                // We sync the backup before checking the asserts to make sure all backups have
-                // been written.
-                pool.backup.as_ref().unwrap().sync_backup();
+            pool.apply_changes(changeset);
+            // We sync the backup before checking the asserts to make sure all backups have
+            // been written.
+            pool.backup.as_ref().unwrap().sync_backup();
 
-                // Check backup for height 0
-                assert!(
-                    path.join("0").join("catch_up_package.bin").exists(),
-                    "catch-up package at height 0 was backed up"
-                );
-                assert!(
-                    path.join("0").join("random_beacon.bin").exists(),
-                    "random beacon at height 0 was backed up"
-                );
-                assert_eq!(
-                    fs::read_dir(path.join("0")).unwrap().count(),
-                    2,
-                    "two artifacts for height 0 were backed up"
-                );
-                let mut file = fs::File::open(path.join("0").join("catch_up_package.bin")).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored = CatchUpPackage::try_from(
-                    &pb::CatchUpPackage::decode(buffer.as_slice()).unwrap(),
-                )
-                .unwrap();
-                assert_eq!(
-                    genesis_cup, restored,
-                    "restored catch-up package is identical with the original one"
-                );
-
-                // Check backup for height 1
-                assert!(
-                    path.join("1").join("random_beacon.bin").exists(),
-                    "random beacon at height 1 was backed up"
-                );
-                assert_eq!(
-                    fs::read_dir(path.join("1")).unwrap().count(),
-                    1,
-                    "only one artifact for height 1 was backed up"
-                );
-                let mut file = fs::File::open(path.join("1").join("random_beacon.bin")).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored =
-                    RandomBeacon::try_from(pb::RandomBeacon::decode(buffer.as_slice()).unwrap())
-                        .unwrap();
-                assert_eq!(
-                    random_beacon, restored,
-                    "restored random beacon is identical with the original one"
-                );
-
-                let notarization_path = path.join("2").join("notarization.bin");
-                assert!(
-                    path.join("2").join("random_tape.bin").exists(),
-                    "random tape at height 2 was backed up"
-                );
-                // notarization at height 2 was not backed up because this height is not
-                // finalized
-                assert!(!notarization_path.exists());
-                assert_eq!(
-                    fs::read_dir(path.join("2")).unwrap().count(),
-                    1,
-                    "only one artifact for height 2 was backed up"
-                );
-                let mut file = fs::File::open(path.join("2").join("random_tape.bin")).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored =
-                    RandomTape::try_from(pb::RandomTape::decode(buffer.as_slice()).unwrap())
-                        .unwrap();
-                assert_eq!(
-                    random_tape, restored,
-                    "restored random tape is identical with the original one"
-                );
-                // Check backup for height 3
-                let finalization_path = path.join("3").join("finalization.bin");
-                assert!(
-                    finalization_path.exists(),
-                    "finalization at height 3 was backed up",
-                );
-                assert_eq!(
-                    fs::read_dir(path.join("3")).unwrap().count(),
-                    3,
-                    "only three artifact for height 3 were backed up"
-                );
-                let mut file = fs::File::open(path.join("3").join(finalization_path)).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored =
-                    Finalization::try_from(pb::Finalization::decode(buffer.as_slice()).unwrap())
-                        .unwrap();
-                assert_eq!(
-                    finalization, restored,
-                    "restored finalization is identical with the original one"
-                );
-                let proposal_path = path.join("3").join("block_proposalbin");
-                assert!(
-                    !proposal_path.exists(),
-                    "non-final proposal wasn't backed up"
-                );
-
-                let proposal_path = path.join("3").join("block_proposal.bin");
-                assert!(proposal_path.exists(), "final proposal was backed up");
-
-                let notarization_path = path.join("3").join("notarization.bin");
-                assert!(
-                    notarization_path.exists(),
-                    "notarization at height 3 was backed up",
-                );
-                let mut file = fs::File::open(notarization_path).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored =
-                    Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
-                        .unwrap();
-                assert_eq!(
-                    notarization3, restored,
-                    "restored notarization is identical with the original one"
-                );
-
-                // Check backup for height 4
-                assert!(
-                    path.join("4").join("catch_up_package.bin").exists(),
-                    "catch-up package at height 4 was backed up"
-                );
-                let proposal_path = path.join("4").join("block_proposal.bin");
-                assert!(
-                    proposal_path.exists(),
-                    "block proposal at height 4 was backed up"
-                );
-                assert_eq!(
-                    fs::read_dir(path.join("4")).unwrap().count(),
-                    3,
-                    "three artifacts for height 4 were backed up"
-                );
-                let mut file = fs::File::open(path.join("4").join("catch_up_package.bin")).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored = CatchUpPackage::try_from(
-                    &pb::CatchUpPackage::decode(buffer.as_slice()).unwrap(),
-                )
-                .unwrap();
-                assert_eq!(
-                    cup, restored,
-                    "restored catch-up package is identical with the original one"
-                );
-
-                let mut file = fs::File::open(proposal_path).unwrap();
-                let mut buffer = Vec::new();
-                file.read_to_end(&mut buffer).unwrap();
-                let restored =
-                    BlockProposal::try_from(pb::BlockProposal::decode(buffer.as_slice()).unwrap())
-                        .unwrap();
-                assert_eq!(
-                    proposal, restored,
-                    "restored catch-up package is identical with the original one"
-                );
-
-                // Now we fast-forward the time for purging being definitely overdue.
-                std::thread::sleep(purging_interval);
-                time_source
-                    .set_time(time_source.get_relative_time() + purging_interval)
+            // Check backup for height 0
+            assert!(
+                path.join("0").join("catch_up_package.bin").exists(),
+                "catch-up package at height 0 was backed up"
+            );
+            assert!(
+                path.join("0").join("random_beacon.bin").exists(),
+                "random beacon at height 0 was backed up"
+            );
+            assert_eq!(
+                fs::read_dir(path.join("0")).unwrap().count(),
+                2,
+                "two artifacts for height 0 were backed up"
+            );
+            let mut file = fs::File::open(path.join("0").join("catch_up_package.bin")).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                CatchUpPackage::try_from(&pb::CatchUpPackage::decode(buffer.as_slice()).unwrap())
                     .unwrap();
-                pool.apply_changes(Vec::new());
-                pool.backup.as_ref().unwrap().sync_purging();
+            assert_eq!(
+                genesis_cup, restored,
+                "restored catch-up package is identical with the original one"
+            );
 
-                // Make sure the subnet directory is empty, as we purged everything.
-                assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
-
-                // We sleep for ont interval more and make sure we also delete the subnet
-                // directory
-                let sleep_time = 2 * purging_interval;
-                std::thread::sleep(sleep_time);
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
+            // Check backup for height 1
+            assert!(
+                path.join("1").join("random_beacon.bin").exists(),
+                "random beacon at height 1 was backed up"
+            );
+            assert_eq!(
+                fs::read_dir(path.join("1")).unwrap().count(),
+                1,
+                "only one artifact for height 1 was backed up"
+            );
+            let mut file = fs::File::open(path.join("1").join("random_beacon.bin")).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                RandomBeacon::try_from(pb::RandomBeacon::decode(buffer.as_slice()).unwrap())
                     .unwrap();
-                pool.apply_changes(Vec::new());
-                pool.backup.as_ref().unwrap().sync_purging();
-                assert!(!path.exists());
-            },
-        )
+            assert_eq!(
+                random_beacon, restored,
+                "restored random beacon is identical with the original one"
+            );
+
+            let notarization_path = path.join("2").join("notarization.bin");
+            assert!(
+                path.join("2").join("random_tape.bin").exists(),
+                "random tape at height 2 was backed up"
+            );
+            // notarization at height 2 was not backed up because this height is not
+            // finalized
+            assert!(!notarization_path.exists());
+            assert_eq!(
+                fs::read_dir(path.join("2")).unwrap().count(),
+                1,
+                "only one artifact for height 2 was backed up"
+            );
+            let mut file = fs::File::open(path.join("2").join("random_tape.bin")).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                RandomTape::try_from(pb::RandomTape::decode(buffer.as_slice()).unwrap()).unwrap();
+            assert_eq!(
+                random_tape, restored,
+                "restored random tape is identical with the original one"
+            );
+            // Check backup for height 3
+            let finalization_path = path.join("3").join("finalization.bin");
+            assert!(
+                finalization_path.exists(),
+                "finalization at height 3 was backed up",
+            );
+            assert_eq!(
+                fs::read_dir(path.join("3")).unwrap().count(),
+                3,
+                "only three artifact for height 3 were backed up"
+            );
+            let mut file = fs::File::open(path.join("3").join(finalization_path)).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                Finalization::try_from(pb::Finalization::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                finalization, restored,
+                "restored finalization is identical with the original one"
+            );
+            let proposal_path = path.join("3").join("block_proposalbin");
+            assert!(
+                !proposal_path.exists(),
+                "non-final proposal wasn't backed up"
+            );
+
+            let proposal_path = path.join("3").join("block_proposal.bin");
+            assert!(proposal_path.exists(), "final proposal was backed up");
+
+            let notarization_path = path.join("3").join("notarization.bin");
+            assert!(
+                notarization_path.exists(),
+                "notarization at height 3 was backed up",
+            );
+            let mut file = fs::File::open(notarization_path).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                Notarization::try_from(pb::Notarization::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                notarization3, restored,
+                "restored notarization is identical with the original one"
+            );
+
+            // Check backup for height 4
+            assert!(
+                path.join("4").join("catch_up_package.bin").exists(),
+                "catch-up package at height 4 was backed up"
+            );
+            let proposal_path = path.join("4").join("block_proposal.bin");
+            assert!(
+                proposal_path.exists(),
+                "block proposal at height 4 was backed up"
+            );
+            assert_eq!(
+                fs::read_dir(path.join("4")).unwrap().count(),
+                3,
+                "three artifacts for height 4 were backed up"
+            );
+            let mut file = fs::File::open(path.join("4").join("catch_up_package.bin")).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                CatchUpPackage::try_from(&pb::CatchUpPackage::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                cup, restored,
+                "restored catch-up package is identical with the original one"
+            );
+
+            let mut file = fs::File::open(proposal_path).unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+            let restored =
+                BlockProposal::try_from(pb::BlockProposal::decode(buffer.as_slice()).unwrap())
+                    .unwrap();
+            assert_eq!(
+                proposal, restored,
+                "restored catch-up package is identical with the original one"
+            );
+
+            // Now we fast-forward the time for purging being definitely overdue.
+            std::thread::sleep(purging_interval);
+            time_source
+                .set_time(time_source.get_relative_time() + purging_interval)
+                .unwrap();
+            pool.apply_changes(Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
+
+            // Make sure the subnet directory is empty, as we purged everything.
+            assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+
+            // We sleep for ont interval more and make sure we also delete the subnet
+            // directory
+            let sleep_time = 2 * purging_interval;
+            std::thread::sleep(sleep_time);
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            pool.apply_changes(Vec::new());
+            pool.backup.as_ref().unwrap().sync_purging();
+            assert!(!path.exists());
+        })
     }
 
     #[test]
@@ -1978,119 +1961,84 @@ mod tests {
             }
         }
 
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let backup_dir = tempfile::Builder::new().tempdir().unwrap();
-                let subnet_id = subnet_test_id(0);
-                let path = backup_dir.path().join(format!("{:?}", subnet_id));
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_id,
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let backup_dir = tempfile::Builder::new().tempdir().unwrap();
+            let subnet_id = subnet_test_id(0);
+            let path = backup_dir.path().join(format!("{:?}", subnet_id));
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_id,
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let map: Arc<RwLock<HashMap<String, Duration>>> = Default::default();
+            let map: Arc<RwLock<HashMap<String, Duration>>> = Default::default();
 
-                // Insert a list of directory names into the fake age map.
-                let insert_dirs = |v: &[&str]| {
-                    let mut m = map.write().unwrap();
-                    for h in v {
-                        m.insert(h.to_string(), Duration::ZERO);
-                    }
-                };
+            // Insert a list of directory names into the fake age map.
+            let insert_dirs = |v: &[&str]| {
+                let mut m = map.write().unwrap();
+                for h in v {
+                    m.insert(h.to_string(), Duration::ZERO);
+                }
+            };
 
-                // Increase the age of all artifacts currently stored in the map by the given duration
-                let add_age = |d: Duration| {
-                    let mut m = map.write().unwrap();
-                    m.iter_mut().for_each(|(_, age)| {
-                        *age += d;
-                    })
-                };
+            // Increase the age of all artifacts currently stored in the map by the given duration
+            let add_age = |d: Duration| {
+                let mut m = map.write().unwrap();
+                m.iter_mut().for_each(|(_, age)| {
+                    *age += d;
+                })
+            };
 
-                let purging_interval = Duration::from_millis(3000);
-                pool.backup = Some(Backup::new_with_age_func(
-                    &pool,
-                    backup_dir.path().into(),
-                    backup_dir.path().join(format!("{:?}", subnet_id)),
-                    // Artifact retention time
-                    Duration::from_millis(2700),
-                    purging_interval,
-                    MetricsRegistry::new(),
-                    no_op_logger(),
-                    Box::new(FakeAge { map: map.clone() }),
-                    time_source.clone(),
-                ));
+            let purging_interval = Duration::from_millis(3000);
+            pool.backup = Some(Backup::new_with_age_func(
+                &pool,
+                backup_dir.path().into(),
+                backup_dir.path().join(format!("{:?}", subnet_id)),
+                // Artifact retention time
+                Duration::from_millis(2700),
+                purging_interval,
+                MetricsRegistry::new(),
+                no_op_logger(),
+                Box::new(FakeAge { map: map.clone() }),
+                time_source.clone(),
+            ));
 
-                let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    Height::from(1),
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
-                let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
-                let random_tape3 = RandomTape::fake(RandomTapeContent::new(Height::from(3)));
-                let notarization = Notarization::fake(NotarizationContent::new(
-                    Height::from(3),
-                    CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
-                ));
-                let block = Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(4),
-                    Rank(456),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: UNIX_EPOCH,
-                    },
-                );
-                let finalization = Finalization::fake(FinalizationContent::new(
-                    Height::from(4),
-                    ic_types::crypto::crypto_hash(&block),
-                ));
-                let proposal = BlockProposal::fake(block, node_test_id(333));
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(2)));
+            let random_tape3 = RandomTape::fake(RandomTapeContent::new(Height::from(3)));
+            let notarization = Notarization::fake(NotarizationContent::new(
+                Height::from(3),
+                CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            ));
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                Height::from(4),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: UNIX_EPOCH,
+                },
+            );
+            let finalization = Finalization::fake(FinalizationContent::new(
+                Height::from(4),
+                ic_types::crypto::crypto_hash(&block),
+            ));
+            let proposal = BlockProposal::fake(block, node_test_id(333));
 
-                let changeset = vec![random_beacon.into_message(), random_tape.into_message()]
-                    .into_iter()
-                    .map(|msg| {
-                        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                            msg,
-                            timestamp: time_source.get_relative_time(),
-                        })
-                    })
-                    .collect();
-
-                // Apply changes
-                pool.apply_changes(changeset);
-                // sync
-                pool.backup.as_ref().unwrap().sync_backup();
-
-                let group_path = &path.join("0");
-                // We expect 3 folders for heights 0 to 2.
-                assert_eq!(fs::read_dir(group_path).unwrap().count(), 3);
-                insert_dirs(&[&subnet_id.to_string(), "0", "1", "2"]);
-
-                // Let's sleep so that the previous heights are close to being purged.
-                // Instead of actually sleeping, we simply increase the emulated age of artifacts.
-                let sleep_time = purging_interval / 10 * 8;
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                add_age(sleep_time);
-
-                // Now add new artifacts
-                let changeset = vec![
-                    notarization.into_message(),
-                    random_tape3.into_message(),
-                    proposal.into_message(),
-                    finalization.into_message(),
-                ]
+            let changeset = vec![random_beacon.into_message(), random_tape.into_message()]
                 .into_iter()
                 .map(|msg| {
                     ChangeAction::AddToValidated(ValidatedConsensusArtifact {
@@ -2100,224 +2048,253 @@ mod tests {
                 })
                 .collect();
 
-                pool.apply_changes(changeset);
-                // sync
-                pool.backup.as_ref().unwrap().sync_backup();
+            // Apply changes
+            pool.apply_changes(changeset);
+            // sync
+            pool.backup.as_ref().unwrap().sync_backup();
 
-                // We expect 5 folders for heights 0 to 4.
-                assert_eq!(fs::read_dir(group_path).unwrap().count(), 5);
-                insert_dirs(&["3", "4"]);
+            let group_path = &path.join("0");
+            // We expect 3 folders for heights 0 to 2.
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 3);
+            insert_dirs(&[&subnet_id.to_string(), "0", "1", "2"]);
 
-                // We sleep just enough so that purging is overdue and the oldest artifacts are
-                // approximately 1 purging interval old.
-                let sleep_time = purging_interval / 10 * 3;
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                add_age(sleep_time);
+            // Let's sleep so that the previous heights are close to being purged.
+            // Instead of actually sleeping, we simply increase the emulated age of artifacts.
+            let sleep_time = purging_interval / 10 * 8;
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            add_age(sleep_time);
 
-                // Trigger the purging.
-                pool.apply_changes(Vec::new());
-                // sync
-                pool.backup.as_ref().unwrap().sync_purging();
+            // Now add new artifacts
+            let changeset = vec![
+                notarization.into_message(),
+                random_tape3.into_message(),
+                proposal.into_message(),
+                finalization.into_message(),
+            ]
+            .into_iter()
+            .map(|msg| {
+                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                    msg,
+                    timestamp: time_source.get_relative_time(),
+                })
+            })
+            .collect();
 
-                // We expect only 2 folders to survive the purging: 3, 4
-                assert_eq!(fs::read_dir(group_path).unwrap().count(), 2);
-                assert!(group_path.join("3").exists());
-                assert!(group_path.join("4").exists());
+            pool.apply_changes(changeset);
+            // sync
+            pool.backup.as_ref().unwrap().sync_backup();
 
-                let sleep_time = purging_interval + purging_interval / 10 * 3;
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                add_age(sleep_time);
+            // We expect 5 folders for heights 0 to 4.
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 5);
+            insert_dirs(&["3", "4"]);
 
-                // Trigger the purging.
-                pool.apply_changes(Vec::new());
-                // sync
-                pool.backup.as_ref().unwrap().sync_purging();
+            // We sleep just enough so that purging is overdue and the oldest artifacts are
+            // approximately 1 purging interval old.
+            let sleep_time = purging_interval / 10 * 3;
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            add_age(sleep_time);
 
-                // We deleted all artifacts, but the group folder was updated by this and needs
-                // to age now.
-                assert!(group_path.exists());
-                assert_eq!(fs::read_dir(group_path).unwrap().count(), 0);
+            // Trigger the purging.
+            pool.apply_changes(Vec::new());
+            // sync
+            pool.backup.as_ref().unwrap().sync_purging();
 
-                let sleep_time = purging_interval + purging_interval / 10 * 3;
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                add_age(sleep_time);
+            // We expect only 2 folders to survive the purging: 3, 4
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 2);
+            assert!(group_path.join("3").exists());
+            assert!(group_path.join("4").exists());
 
-                // Trigger the purging.
-                pool.apply_changes(Vec::new());
-                // sync
-                pool.backup.as_ref().unwrap().sync_purging();
+            let sleep_time = purging_interval + purging_interval / 10 * 3;
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            add_age(sleep_time);
 
-                //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 37));
-                // The group folder expired and was deleted.
-                assert!(!group_path.exists());
-                assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+            // Trigger the purging.
+            pool.apply_changes(Vec::new());
+            // sync
+            pool.backup.as_ref().unwrap().sync_purging();
 
-                // We wait more and make sure the subnet folder is purged.
-                let sleep_time = purging_interval + purging_interval / 10 * 3;
-                time_source
-                    .set_time(time_source.get_relative_time() + sleep_time)
-                    .unwrap();
-                add_age(sleep_time);
+            // We deleted all artifacts, but the group folder was updated by this and needs
+            // to age now.
+            assert!(group_path.exists());
+            assert_eq!(fs::read_dir(group_path).unwrap().count(), 0);
 
-                // Trigger the purging.
-                pool.apply_changes(Vec::new());
-                // sync
-                pool.backup.as_ref().unwrap().sync_purging();
+            let sleep_time = purging_interval + purging_interval / 10 * 3;
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            add_age(sleep_time);
 
-                // The subnet_id folder expired and was deleted.
-                assert!(!path.exists());
-                assert_eq!(fs::read_dir(&backup_dir).unwrap().count(), 0);
-            },
-        )
+            // Trigger the purging.
+            pool.apply_changes(Vec::new());
+            // sync
+            pool.backup.as_ref().unwrap().sync_purging();
+
+            //print_time_elapsed(&test_start_time, &(purging_interval / 10 * 37));
+            // The group folder expired and was deleted.
+            assert!(!group_path.exists());
+            assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+
+            // We wait more and make sure the subnet folder is purged.
+            let sleep_time = purging_interval + purging_interval / 10 * 3;
+            time_source
+                .set_time(time_source.get_relative_time() + sleep_time)
+                .unwrap();
+            add_age(sleep_time);
+
+            // Trigger the purging.
+            pool.apply_changes(Vec::new());
+            // sync
+            pool.backup.as_ref().unwrap().sync_purging();
+
+            // The subnet_id folder expired and was deleted.
+            assert!(!path.exists());
+            assert_eq!(fs::read_dir(&backup_dir).unwrap().count(), 0);
+        })
     }
 
     #[test]
     fn test_block_chain_iterator() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let subnet_id = subnet_test_id(1);
-                let committee = vec![node_test_id(0)];
-                let dkg_interval_length = 5;
-                let subnet_records = vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )];
-                let registry = setup_registry(subnet_id, subnet_records);
-                let state_manager = FakeStateManager::new();
-                let state_manager = Arc::new(state_manager);
-                let mut pool = TestConsensusPool::new(
-                    node_test_id(0),
-                    subnet_id,
-                    pool_config,
-                    time_source,
-                    registry,
-                    Arc::new(CryptoReturningOk::default()),
-                    state_manager,
-                    None,
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let subnet_id = subnet_test_id(1);
+            let committee = vec![node_test_id(0)];
+            let dkg_interval_length = 5;
+            let subnet_records = vec![(
+                1,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .build(),
+            )];
+            let registry = setup_registry(subnet_id, subnet_records);
+            let state_manager = FakeStateManager::new();
+            let state_manager = Arc::new(state_manager);
+            let mut pool = TestConsensusPool::new(
+                node_test_id(0),
+                subnet_id,
+                pool_config,
+                time_source,
+                registry,
+                Arc::new(CryptoReturningOk::default()),
+                state_manager,
+                None,
+            );
 
-                // Only genesis to start with
-                check_iterator(&pool, pool.as_cache().finalized_block(), vec![0]);
+            // Only genesis to start with
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![0]);
 
-                // Two finalized rounds added
-                assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
-                check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
+            // Two finalized rounds added
+            assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
 
-                // Two notarized rounds added
-                pool.insert_validated(pool.make_next_beacon());
-                let block = pool.make_next_block();
-                pool.insert_validated(block.clone());
-                pool.notarize(&block);
+            // Two notarized rounds added
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
 
-                pool.insert_validated(pool.make_next_beacon());
-                let block = pool.make_next_block();
-                pool.insert_validated(block.clone());
-                pool.notarize(&block);
-                check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
 
-                pool.finalize(&block);
-                pool.insert_validated(pool.make_next_tape());
-                pool.insert_validated(pool.make_next_tape());
-                check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);
+            pool.finalize(&block);
+            pool.insert_validated(pool.make_next_tape());
+            pool.insert_validated(pool.make_next_tape());
+            check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);
 
-                // Next summary interval starts(height = 6), iterator should stop at the summary block
-                assert_eq!(pool.advance_round_normal_operation_n(3), Height::from(7));
-                check_iterator(&pool, pool.as_cache().finalized_block(), vec![7, 6]);
+            // Next summary interval starts(height = 6), iterator should stop at the summary block
+            assert_eq!(pool.advance_round_normal_operation_n(3), Height::from(7));
+            check_iterator(&pool, pool.as_cache().finalized_block(), vec![7, 6]);
 
-                // Start from CUP height
-                check_iterator(
-                    &pool,
-                    pool.as_cache()
-                        .catch_up_package()
-                        .content
-                        .block
-                        .into_inner(),
-                    vec![6],
-                );
-            },
-        )
+            // Start from CUP height
+            check_iterator(
+                &pool,
+                pool.as_cache()
+                    .catch_up_package()
+                    .content
+                    .block
+                    .into_inner(),
+                vec![6],
+            );
+        })
     }
 
     #[test]
     fn test_recording_instants() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let time_source = FastForwardTimeSource::new();
-                let mut pool = new_from_cup_without_bytes(
-                    node_test_id(0),
-                    subnet_test_id(0),
-                    make_genesis(ic_types::consensus::dkg::Summary::fake()),
-                    pool_config,
-                    ic_metrics::MetricsRegistry::new(),
-                    no_op_logger(),
-                    time_source.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
 
-                let height = Height::from(5_000_000_000);
-                let cup = CatchUpPackage::fake(CatchUpContent::new(
-                    HashedBlock::new(crypto_hash, fake_block(height, Rank(0))),
-                    HashedRandomBeacon::new(
-                        crypto_hash,
-                        RandomBeacon::fake(RandomBeaconContent {
-                            version: ReplicaVersion::default(),
-                            height,
-                            parent: CryptoHashOf::from(CryptoHash(vec![])),
-                        }),
-                    ),
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    None,
-                ));
-                let notarization = Notarization::fake(NotarizationContent {
-                    version: ReplicaVersion::default(),
-                    height,
-                    block: crypto_hash(&fake_block(height, Rank(0))),
-                });
-                let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
-                    height,
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                ));
-                let cup_id = cup.get_id();
-                let notarization_id = notarization.get_id();
-                let random_beacon_id = random_beacon.get_id();
-                pool.insert(UnvalidatedArtifact {
-                    message: ConsensusMessage::CatchUpPackage(cup),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-                pool.insert(UnvalidatedArtifact {
-                    message: ConsensusMessage::Notarization(notarization),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-                pool.insert(UnvalidatedArtifact {
-                    message: ConsensusMessage::RandomBeacon(random_beacon),
-                    peer_id: node_test_id(0),
-                    timestamp: time_source.get_relative_time(),
-                });
-                assert!(pool.message_instant(&cup_id).is_some());
-                assert!(pool.message_instant(&notarization_id).is_some());
-                assert!(pool.message_instant(&random_beacon_id).is_some());
+            let height = Height::from(5_000_000_000);
+            let cup = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(crypto_hash, fake_block(height, Rank(0))),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: ReplicaVersion::default(),
+                        height,
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
+            let notarization = Notarization::fake(NotarizationContent {
+                version: ReplicaVersion::default(),
+                height,
+                block: crypto_hash(&fake_block(height, Rank(0))),
+            });
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                height,
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let cup_id = cup.get_id();
+            let notarization_id = notarization.get_id();
+            let random_beacon_id = random_beacon.get_id();
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::CatchUpPackage(cup),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::Notarization(notarization),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::RandomBeacon(random_beacon),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            assert!(pool.message_instant(&cup_id).is_some());
+            assert!(pool.message_instant(&notarization_id).is_some());
+            assert!(pool.message_instant(&random_beacon_id).is_some());
 
-                // Check that purging of instants respects PurgeValidatedBelow semantics
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
-                assert!(pool.message_instant(&cup_id).is_some());
-                assert!(pool.message_instant(&notarization_id).is_some());
-                assert!(pool.message_instant(&random_beacon_id).is_some());
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
-                assert!(pool.message_instant(&cup_id).is_none());
-                assert!(pool.message_instant(&notarization_id).is_none());
-                assert!(pool.message_instant(&random_beacon_id).is_none());
-            },
-        );
+            // Check that purging of instants respects PurgeValidatedBelow semantics
+            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
+            assert!(pool.message_instant(&cup_id).is_some());
+            assert!(pool.message_instant(&notarization_id).is_some());
+            assert!(pool.message_instant(&random_beacon_id).is_some());
+            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
+            assert!(pool.message_instant(&cup_id).is_none());
+            assert!(pool.message_instant(&notarization_id).is_none());
+            assert!(pool.message_instant(&random_beacon_id).is_none());
+        });
     }
 
     // Verifies the iterator output, starting from the given block

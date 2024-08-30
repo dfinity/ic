@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_ensure_persistent_pool_replica_version_compatibility() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(|config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|config| {
             ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
             let mut replica_version_file_path = config.persistent_pool_db_path();
             replica_version_file_path.push("replica_version");

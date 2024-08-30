@@ -37,7 +37,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_test_utilities_artifact_pool",
+    crate_name = "ic_test_artifact_pool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,

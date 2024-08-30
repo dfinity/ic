@@ -26,12 +26,12 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
     ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
     artifact::IdentifiableArtifact,

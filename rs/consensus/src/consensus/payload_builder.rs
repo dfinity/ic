@@ -348,48 +348,46 @@ pub(crate) mod test {
         provided_responses_from_adapter: Vec<BitcoinAdapterResponse>,
         provided_canister_http_responses: Vec<CanisterHttpResponseWithConsensus>,
     ) {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let Dependencies { registry, .. } = dependencies(pool_config, 1);
-                let payload_builder = make_test_payload_impl(
-                    registry,
-                    vec![provided_ingress_messages.clone()],
-                    vec![provided_certified_streams.clone()],
-                    provided_responses_from_adapter.clone(),
-                    provided_canister_http_responses.clone(),
-                );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+            let payload_builder = make_test_payload_impl(
+                registry,
+                vec![provided_ingress_messages.clone()],
+                vec![provided_certified_streams.clone()],
+                provided_responses_from_adapter.clone(),
+                provided_canister_http_responses.clone(),
+            );
 
-                let prev_payloads = Vec::new();
-                let context = ValidationContext {
-                    certified_height: Height::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    time: UNIX_EPOCH,
-                };
-                let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
-                let subnet_records = SubnetRecords {
-                    membership_version: subnet_record.clone(),
-                    context_version: subnet_record,
-                };
+            let prev_payloads = Vec::new();
+            let context = ValidationContext {
+                certified_height: Height::from(0),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            };
+            let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
+            let subnet_records = SubnetRecords {
+                membership_version: subnet_record.clone(),
+                context_version: subnet_record,
+            };
 
-                let batch_messages = payload_builder
-                    .get_payload(Height::from(1), &prev_payloads, &context, &subnet_records)
-                    .into_messages()
-                    .unwrap();
+            let batch_messages = payload_builder
+                .get_payload(Height::from(1), &prev_payloads, &context, &subnet_records)
+                .into_messages()
+                .unwrap();
 
-                assert_eq!(
-                    batch_messages.signed_ingress_msgs,
-                    provided_ingress_messages
-                );
-                assert_eq!(
-                    batch_messages.certified_stream_slices,
-                    provided_certified_streams
-                );
-                assert_eq!(
-                    batch_messages.bitcoin_adapter_responses,
-                    provided_responses_from_adapter
-                );
-            },
-        )
+            assert_eq!(
+                batch_messages.signed_ingress_msgs,
+                provided_ingress_messages
+            );
+            assert_eq!(
+                batch_messages.certified_stream_slices,
+                provided_certified_streams
+            );
+            assert_eq!(
+                batch_messages.bitcoin_adapter_responses,
+                provided_responses_from_adapter
+            );
+        })
     }
 
     // Engine for changing the number of Ingress and RequestOrResponse messages

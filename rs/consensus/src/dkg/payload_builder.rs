@@ -898,59 +898,92 @@ mod tests {
 
     #[test]
     fn test_return_errors_for_repeatedly_failing_remote_dkg_requests() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                use ic_types::crypto::threshold_sig::ni_dkg::*;
-                with_test_replica_logger(|logger| {
-                    let node_ids = vec![node_test_id(0), node_test_id(1)];
-                    let dkg_interval_length = 99;
-                    let subnet_id = subnet_test_id(0);
-                    let Dependencies {
-                        registry,
-                        state_manager,
-                        ..
-                    } = dependencies_with_subnet_records_with_raw_state_manager(
-                        pool_config,
-                        subnet_id,
-                        vec![(
-                            10,
-                            SubnetRecordBuilder::from(&node_ids)
-                                .with_dkg_interval_length(dkg_interval_length)
-                                .build(),
-                        )],
-                    );
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            use ic_types::crypto::threshold_sig::ni_dkg::*;
+            with_test_replica_logger(|logger| {
+                let node_ids = vec![node_test_id(0), node_test_id(1)];
+                let dkg_interval_length = 99;
+                let subnet_id = subnet_test_id(0);
+                let Dependencies {
+                    registry,
+                    state_manager,
+                    ..
+                } = dependencies_with_subnet_records_with_raw_state_manager(
+                    pool_config,
+                    subnet_id,
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
+                );
 
-                    let target_id = NiDkgTargetId::new([0u8; 32]);
-                    // The first two times, the context will have a request for the given target and
-                    // not afterwards.
-                    complement_state_manager_with_remote_dkg_requests(
-                        state_manager.clone(),
-                        registry.get_latest_version(),
-                        vec![10, 11, 12],
-                        // XXX: This is a very brittle way to set up this test since
-                        // it will cause issues if we access the state manager more
-                        // than once in any call.
-                        Some(2),
-                        Some(target_id),
-                    );
-                    complement_state_manager_with_remote_dkg_requests(
-                        state_manager.clone(),
-                        registry.get_latest_version(),
-                        vec![],
-                        None,
-                        None,
-                    );
+                let target_id = NiDkgTargetId::new([0u8; 32]);
+                // The first two times, the context will have a request for the given target and
+                // not afterwards.
+                complement_state_manager_with_remote_dkg_requests(
+                    state_manager.clone(),
+                    registry.get_latest_version(),
+                    vec![10, 11, 12],
+                    // XXX: This is a very brittle way to set up this test since
+                    // it will cause issues if we access the state manager more
+                    // than once in any call.
+                    Some(2),
+                    Some(target_id),
+                );
+                complement_state_manager_with_remote_dkg_requests(
+                    state_manager.clone(),
+                    registry.get_latest_version(),
+                    vec![],
+                    None,
+                    None,
+                );
 
-                    // Any validation_context
-                    let validation_context = ValidationContext {
-                        registry_version: registry.get_latest_version(),
-                        certified_height: Height::from(0),
-                        time: ic_types::time::UNIX_EPOCH,
-                    };
+                // Any validation_context
+                let validation_context = ValidationContext {
+                    registry_version: registry.get_latest_version(),
+                    certified_height: Height::from(0),
+                    time: ic_types::time::UNIX_EPOCH,
+                };
 
-                    // STEP 1;
-                    // Call compute_remote_dkg_data for the first time with this target.
-                    let (configs, _, mut initial_dkg_attempts) = compute_remote_dkg_data(
+                // STEP 1;
+                // Call compute_remote_dkg_data for the first time with this target.
+                let (configs, _, mut initial_dkg_attempts) = compute_remote_dkg_data(
+                    subnet_id,
+                    Height::from(0),
+                    registry.as_ref(),
+                    state_manager.as_ref(),
+                    &validation_context,
+                    BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &logger,
+                )
+                .unwrap();
+
+                // Two configs are created for this remote target.
+                assert_eq!(
+                    configs
+                        .iter()
+                        .filter(|config| config.dkg_id().target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id))
+                        .count(),
+                    2,
+                    "{:?}",
+                    configs
+                );
+
+                // This is the first attempt to run DKG for this remote target.
+                assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1u32));
+
+                // STEP 2:
+                // Call compute_remote_dkg_data again, but this time with an indicator that we
+                // have already attempted to run remote DKG for this target
+                // MAX_REMOTE_DKG_ATTEMPTS times.
+                initial_dkg_attempts.insert(target_id, MAX_REMOTE_DKG_ATTEMPTS);
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                    compute_remote_dkg_data(
                         subnet_id,
                         Height::from(0),
                         registry.as_ref(),
@@ -958,126 +991,263 @@ mod tests {
                         &validation_context,
                         BTreeMap::new(),
                         &BTreeMap::new(),
-                        &BTreeMap::new(),
+                        &initial_dkg_attempts,
                         &logger,
                     )
                     .unwrap();
 
-                    // Two configs are created for this remote target.
-                    assert_eq!(
-                        configs
-                            .iter()
-                            .filter(|config| config.dkg_id().target_subnet
-                                == NiDkgTargetSubnet::Remote(target_id))
-                            .count(),
-                        2,
-                        "{:?}",
-                        configs
-                    );
+                // No configs are created for this remote target any more.
+                assert_eq!(
+                    configs
+                        .iter()
+                        .filter(|config| config.dkg_id().target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id))
+                        .count(),
+                    0
+                );
 
-                    // This is the first attempt to run DKG for this remote target.
-                    assert_eq!(initial_dkg_attempts.get(&target_id), Some(&1u32));
+                // We rather respond with errors for this target.
+                assert_eq!(
+                    transcripts_for_new_subnets
+                        .iter()
+                        .filter(|(dkg_id, _, result)| dkg_id.target_subnet
+                            == NiDkgTargetSubnet::Remote(target_id)
+                            && *result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()))
+                        .count(),
+                    2
+                );
+                // The attempt counter is still kept and unchanged.
+                assert_eq!(
+                    initial_dkg_attempts.get(&target_id),
+                    Some(&MAX_REMOTE_DKG_ATTEMPTS)
+                );
 
-                    // STEP 2:
-                    // Call compute_remote_dkg_data again, but this time with an indicator that we
-                    // have already attempted to run remote DKG for this target
-                    // MAX_REMOTE_DKG_ATTEMPTS times.
-                    initial_dkg_attempts.insert(target_id, MAX_REMOTE_DKG_ATTEMPTS);
-                    let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
-                        compute_remote_dkg_data(
-                            subnet_id,
-                            Height::from(0),
-                            registry.as_ref(),
-                            state_manager.as_ref(),
-                            &validation_context,
-                            BTreeMap::new(),
-                            &BTreeMap::new(),
-                            &initial_dkg_attempts,
-                            &logger,
-                        )
-                        .unwrap();
+                // STEP 3:
+                // Call compute_remote_dkg_data the last time, with an empty call context.
+                // (As arranged in the initialization of the state manager...)
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                    compute_remote_dkg_data(
+                        subnet_id,
+                        Height::from(0),
+                        registry.as_ref(),
+                        state_manager.as_ref(),
+                        &validation_context,
+                        BTreeMap::new(),
+                        &BTreeMap::new(),
+                        &initial_dkg_attempts,
+                        &logger,
+                    )
+                    .unwrap();
 
-                    // No configs are created for this remote target any more.
-                    assert_eq!(
-                        configs
-                            .iter()
-                            .filter(|config| config.dkg_id().target_subnet
-                                == NiDkgTargetSubnet::Remote(target_id))
-                            .count(),
-                        0
-                    );
-
-                    // We rather respond with errors for this target.
-                    assert_eq!(
-                        transcripts_for_new_subnets
-                            .iter()
-                            .filter(|(dkg_id, _, result)| dkg_id.target_subnet
-                                == NiDkgTargetSubnet::Remote(target_id)
-                                && *result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()))
-                            .count(),
-                        2
-                    );
-                    // The attempt counter is still kept and unchanged.
-                    assert_eq!(
-                        initial_dkg_attempts.get(&target_id),
-                        Some(&MAX_REMOTE_DKG_ATTEMPTS)
-                    );
-
-                    // STEP 3:
-                    // Call compute_remote_dkg_data the last time, with an empty call context.
-                    // (As arranged in the initialization of the state manager...)
-                    let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
-                        compute_remote_dkg_data(
-                            subnet_id,
-                            Height::from(0),
-                            registry.as_ref(),
-                            state_manager.as_ref(),
-                            &validation_context,
-                            BTreeMap::new(),
-                            &BTreeMap::new(),
-                            &initial_dkg_attempts,
-                            &logger,
-                        )
-                        .unwrap();
-
-                    // No configs are created for this remote target any more.
-                    assert_eq!(configs.len(), 0);
-                    // No transcripts or errors are returned for this target.
-                    assert_eq!(transcripts_for_new_subnets.len(), 0);
-                    // The corresponding entry is removed from the counter.
-                    assert_eq!(initial_dkg_attempts.len(), 0);
-                });
-            },
-        );
+                // No configs are created for this remote target any more.
+                assert_eq!(configs.len(), 0);
+                // No transcripts or errors are returned for this target.
+                assert_eq!(transcripts_for_new_subnets.len(), 0);
+                // The corresponding entry is removed from the counter.
+                assert_eq!(initial_dkg_attempts.len(), 0);
+            });
+        });
     }
 
     /// Tests, which transcripts get reshared, when DKG succeeded or failed.
     #[test]
     fn test_transcript_resharing() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let nodes: Vec<_> = (7..14).map(node_test_id).collect();
-                let dkg_interval_len = 3;
-                let subnet_id = subnet_test_id(222);
-                let initial_registry_version = 112;
-                let Dependencies {
-                    crypto,
-                    registry,
-                    mut pool,
-                    state_manager,
-                    ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        initial_registry_version,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
-                let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let nodes: Vec<_> = (7..14).map(node_test_id).collect();
+            let dkg_interval_len = 3;
+            let subnet_id = subnet_test_id(222);
+            let initial_registry_version = 112;
+            let Dependencies {
+                crypto,
+                registry,
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    initial_registry_version,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            );
+            let mut genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
 
+            // Let's ensure we have no summaries for the whole DKG interval.
+            for _ in 0..dkg_interval_len {
+                pool.advance_round_normal_operation();
+                let block = pool.get_cache().finalized_block();
+                assert!(!block.payload.as_ref().is_summary());
+            }
+
+            let latest_block = pool.get_cache().finalized_block();
+            let create_summary_payload = |last_summary: &Summary| {
+                create_summary_payload(
+                    subnet_test_id(222),
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    &last_summary.clone(),
+                    &latest_block,
+                    RegistryVersion::from(112),
+                    state_manager.as_ref(),
+                    &ValidationContext {
+                        registry_version: RegistryVersion::from(112),
+                        certified_height: Height::from(3),
+                        time: UNIX_EPOCH,
+                    },
+                    no_op_logger(),
+                )
+                .unwrap()
+            };
+
+            // Test the regular case (Both DKGs succeeded)
+            let next_summary = create_summary_payload(&genesis_summary);
+            for (_, conf) in next_summary.configs.iter() {
+                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
+                    assert_eq!(
+                        next_summary
+                            .clone()
+                            .next_transcript(&NiDkgTag::HighThreshold)
+                            .unwrap(),
+                        &conf.resharing_transcript().clone().unwrap()
+                    )
+                }
+            }
+
+            // Remove configs from `genesis_summary`. This emulates the
+            // behaviour of DKG failing validations.
+            // In this case, the `current_transcripts` are being reshared.
+            genesis_summary.configs.clear();
+            let next_summary = create_summary_payload(&genesis_summary);
+            for (_, conf) in next_summary.configs.iter() {
+                if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
+                    assert_eq!(
+                        next_summary
+                            .clone()
+                            .current_transcript(&NiDkgTag::HighThreshold),
+                        &conf.resharing_transcript().clone().unwrap()
+                    )
+                }
+            }
+        });
+    }
+
+    // Creates a summary from registry and tests that all fields of the summary
+    // contain the expected contents.
+    #[test]
+    fn test_make_genesis_summary() {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let nodes: Vec<_> = (7..14).map(node_test_id).collect();
+            let initial_registry_version = 145;
+            let dkg_interval_len = 66;
+            let subnet_id = subnet_test_id(222);
+            let Dependencies { registry, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    initial_registry_version,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            );
+
+            let summary = make_genesis_summary(&*registry, subnet_id, None);
+
+            assert_eq!(
+                summary.registry_version,
+                RegistryVersion::from(initial_registry_version)
+            );
+            assert_eq!(summary.height, Height::from(0));
+            assert_eq!(summary.interval_length, Height::from(dkg_interval_len));
+            assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
+            assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
+            assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
+
+            for tag in TAGS.iter() {
+                let (id, conf) = summary
+                    .configs
+                    .iter()
+                    .find(|(id, _)| id.dkg_tag == *tag)
+                    .unwrap();
+
+                assert_eq!(
+                    id,
+                    &NiDkgId {
+                        start_block_height: Height::from(0),
+                        dealer_subnet: subnet_id,
+                        dkg_tag: *tag,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    }
+                );
+
+                assert_eq!(&conf.dkg_id(), id);
+                assert_eq!(
+                    conf.registry_version(),
+                    RegistryVersion::from(initial_registry_version)
+                );
+                assert_eq!(
+                    conf.receivers().get(),
+                    &nodes.clone().into_iter().collect::<BTreeSet<_>>()
+                );
+                assert_eq!(
+                    conf.dealers().get(),
+                    &nodes.clone().into_iter().collect::<BTreeSet<_>>()
+                );
+                assert_eq!(conf.max_corrupt_receivers().get(), 2);
+                assert_eq!(conf.max_corrupt_dealers().get(), 2);
+                assert_eq!(
+                    conf.threshold().get().get(),
+                    match *tag {
+                        NiDkgTag::LowThreshold => 3,
+                        NiDkgTag::HighThreshold => 5,
+                    }
+                );
+            }
+        });
+    }
+
+    #[test]
+    // In this test we check that all summary payloads are created at the expected
+    // heights and with the expected contents. Note, we do not test anything related
+    // to the presence or contents of transcripts, as this would require using a
+    // real CSP.
+    fn test_create_regular_summaries() {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let nodes: Vec<_> = (7..14).map(node_test_id).collect();
+            let dkg_interval_len = 3;
+            let subnet_id = subnet_test_id(222);
+            let initial_registry_version = 112;
+            let Dependencies {
+                registry, mut pool, ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    initial_registry_version,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            );
+            let genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
+            let block = pool.get_cache().finalized_block();
+            // This first block is expected to contain the genesis summary.
+            if block.payload.as_ref().is_summary() {
+                assert_eq!(
+                    block.payload.as_ref().as_summary().dkg,
+                    genesis_summary,
+                    "Unexpected genesis summary."
+                );
+            } else {
+                panic!("Unexpected DKG payload.")
+            };
+
+            // Simulate 3 intervals
+            for interval in 0..3 {
                 // Let's ensure we have no summaries for the whole DKG interval.
                 for _ in 0..dkg_interval_len {
                     pool.advance_round_normal_operation();
@@ -1085,95 +1255,25 @@ mod tests {
                     assert!(!block.payload.as_ref().is_summary());
                 }
 
-                let latest_block = pool.get_cache().finalized_block();
-                let create_summary_payload = |last_summary: &Summary| {
-                    create_summary_payload(
-                        subnet_test_id(222),
-                        registry.as_ref(),
-                        crypto.as_ref(),
-                        &PoolReader::new(&pool),
-                        &last_summary.clone(),
-                        &latest_block,
-                        RegistryVersion::from(112),
-                        state_manager.as_ref(),
-                        &ValidationContext {
-                            registry_version: RegistryVersion::from(112),
-                            certified_height: Height::from(3),
-                            time: UNIX_EPOCH,
-                        },
-                        no_op_logger(),
-                    )
-                    .unwrap()
-                };
-
-                // Test the regular case (Both DKGs succeeded)
-                let next_summary = create_summary_payload(&genesis_summary);
-                for (_, conf) in next_summary.configs.iter() {
-                    if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                        assert_eq!(
-                            next_summary
-                                .clone()
-                                .next_transcript(&NiDkgTag::HighThreshold)
-                                .unwrap(),
-                            &conf.resharing_transcript().clone().unwrap()
-                        )
-                    }
-                }
-
-                // Remove configs from `genesis_summary`. This emulates the
-                // behaviour of DKG failing validations.
-                // In this case, the `current_transcripts` are being reshared.
-                genesis_summary.configs.clear();
-                let next_summary = create_summary_payload(&genesis_summary);
-                for (_, conf) in next_summary.configs.iter() {
-                    if conf.dkg_id().dkg_tag == NiDkgTag::HighThreshold {
-                        assert_eq!(
-                            next_summary
-                                .clone()
-                                .current_transcript(&NiDkgTag::HighThreshold),
-                            &conf.resharing_transcript().clone().unwrap()
-                        )
-                    }
-                }
-            },
-        );
-    }
-
-    // Creates a summary from registry and tests that all fields of the summary
-    // contain the expected contents.
-    #[test]
-    fn test_make_genesis_summary() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let nodes: Vec<_> = (7..14).map(node_test_id).collect();
-                let initial_registry_version = 145;
-                let dkg_interval_len = 66;
-                let subnet_id = subnet_test_id(222);
-                let Dependencies { registry, .. } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        initial_registry_version,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
-
-                let summary = make_genesis_summary(&*registry, subnet_id, None);
+                // Advance one more time and get the summary block.
+                pool.advance_round_normal_operation();
+                let block = pool.get_cache().finalized_block();
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
 
                 assert_eq!(
-                    summary.registry_version,
+                    dkg_summary.registry_version,
                     RegistryVersion::from(initial_registry_version)
                 );
-                assert_eq!(summary.height, Height::from(0));
-                assert_eq!(summary.interval_length, Height::from(dkg_interval_len));
-                assert_eq!(summary.next_interval_length, Height::from(dkg_interval_len));
-                assert!(summary.next_transcript(&NiDkgTag::LowThreshold).is_none());
-                assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
+                let expected_height = interval * (dkg_interval_len + 1) + dkg_interval_len + 1;
+                assert_eq!(dkg_summary.height, Height::from(expected_height));
+                assert_eq!(dkg_summary.interval_length, Height::from(dkg_interval_len));
+                assert_eq!(
+                    dkg_summary.next_interval_length,
+                    Height::from(dkg_interval_len)
+                );
 
                 for tag in TAGS.iter() {
-                    let (id, conf) = summary
+                    let (id, conf) = dkg_summary
                         .configs
                         .iter()
                         .find(|(id, _)| id.dkg_tag == *tag)
@@ -1182,7 +1282,7 @@ mod tests {
                     assert_eq!(
                         id,
                         &NiDkgId {
-                            start_block_height: Height::from(0),
+                            start_block_height: Height::from(expected_height),
                             dealer_subnet: subnet_id,
                             dkg_tag: *tag,
                             target_subnet: NiDkgTargetSubnet::Local,
@@ -1211,132 +1311,24 @@ mod tests {
                             NiDkgTag::HighThreshold => 5,
                         }
                     );
-                }
-            },
-        );
-    }
 
-    #[test]
-    // In this test we check that all summary payloads are created at the expected
-    // heights and with the expected contents. Note, we do not test anything related
-    // to the presence or contents of transcripts, as this would require using a
-    // real CSP.
-    fn test_create_regular_summaries() {
-        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
-            |pool_config| {
-                let nodes: Vec<_> = (7..14).map(node_test_id).collect();
-                let dkg_interval_len = 3;
-                let subnet_id = subnet_test_id(222);
-                let initial_registry_version = 112;
-                let Dependencies {
-                    registry, mut pool, ..
-                } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        initial_registry_version,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
-                let genesis_summary = make_genesis_summary(&*registry, subnet_id, None);
-                let block = pool.get_cache().finalized_block();
-                // This first block is expected to contain the genesis summary.
-                if block.payload.as_ref().is_summary() {
-                    assert_eq!(
-                        block.payload.as_ref().as_summary().dkg,
-                        genesis_summary,
-                        "Unexpected genesis summary."
-                    );
-                } else {
-                    panic!("Unexpected DKG payload.")
-                };
-
-                // Simulate 3 intervals
-                for interval in 0..3 {
-                    // Let's ensure we have no summaries for the whole DKG interval.
-                    for _ in 0..dkg_interval_len {
-                        pool.advance_round_normal_operation();
-                        let block = pool.get_cache().finalized_block();
-                        assert!(!block.payload.as_ref().is_summary());
-                    }
-
-                    // Advance one more time and get the summary block.
-                    pool.advance_round_normal_operation();
-                    let block = pool.get_cache().finalized_block();
-                    let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-
-                    assert_eq!(
-                        dkg_summary.registry_version,
-                        RegistryVersion::from(initial_registry_version)
-                    );
-                    let expected_height = interval * (dkg_interval_len + 1) + dkg_interval_len + 1;
-                    assert_eq!(dkg_summary.height, Height::from(expected_height));
-                    assert_eq!(dkg_summary.interval_length, Height::from(dkg_interval_len));
-                    assert_eq!(
-                        dkg_summary.next_interval_length,
-                        Height::from(dkg_interval_len)
-                    );
-
-                    for tag in TAGS.iter() {
-                        let (id, conf) = dkg_summary
-                            .configs
-                            .iter()
-                            .find(|(id, _)| id.dkg_tag == *tag)
-                            .unwrap();
-
-                        assert_eq!(
-                            id,
-                            &NiDkgId {
-                                start_block_height: Height::from(expected_height),
-                                dealer_subnet: subnet_id,
-                                dkg_tag: *tag,
-                                target_subnet: NiDkgTargetSubnet::Local,
-                            }
-                        );
-
-                        assert_eq!(&conf.dkg_id(), id);
-                        assert_eq!(
-                            conf.registry_version(),
-                            RegistryVersion::from(initial_registry_version)
-                        );
-                        assert_eq!(
-                            conf.receivers().get(),
-                            &nodes.clone().into_iter().collect::<BTreeSet<_>>()
-                        );
-                        assert_eq!(
-                            conf.dealers().get(),
-                            &nodes.clone().into_iter().collect::<BTreeSet<_>>()
-                        );
-                        assert_eq!(conf.max_corrupt_receivers().get(), 2);
-                        assert_eq!(conf.max_corrupt_dealers().get(), 2);
-                        assert_eq!(
-                            conf.threshold().get().get(),
-                            match *tag {
-                                NiDkgTag::LowThreshold => 3,
-                                NiDkgTag::HighThreshold => 5,
-                            }
-                        );
-
-                        // In later intervals we can also check that the resharing transcript matches
-                        // the expected value.
-                        if interval > 0 {
-                            if tag == &NiDkgTag::HighThreshold {
-                                assert_eq!(
-                                    dkg_summary
-                                        .clone()
-                                        .next_transcript(&NiDkgTag::HighThreshold)
-                                        .unwrap(),
-                                    &conf.resharing_transcript().clone().unwrap()
-                                );
-                            } else {
-                                assert!(&conf.resharing_transcript().is_none());
-                            }
+                    // In later intervals we can also check that the resharing transcript matches
+                    // the expected value.
+                    if interval > 0 {
+                        if tag == &NiDkgTag::HighThreshold {
+                            assert_eq!(
+                                dkg_summary
+                                    .clone()
+                                    .next_transcript(&NiDkgTag::HighThreshold)
+                                    .unwrap(),
+                                &conf.resharing_transcript().clone().unwrap()
+                            );
+                        } else {
+                            assert!(&conf.resharing_transcript().is_none());
                         }
                     }
                 }
-            },
-        );
+            }
+        });
     }
 }

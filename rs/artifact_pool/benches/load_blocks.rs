@@ -29,7 +29,7 @@ fn run_test<T>(_test_name: &str, test: T)
 where
     T: FnOnce(&mut ConsensusPoolImpl),
 {
-    ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),

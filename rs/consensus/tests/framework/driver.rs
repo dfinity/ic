@@ -14,7 +14,7 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities_artifact_pool::ingress_pool::TestIngressPool;
+use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_types::{consensus::ConsensusMessage, NodeId};
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};

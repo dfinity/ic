@@ -240,7 +240,7 @@ fn run_test(
 ) {
     let rng = &mut ChaChaRng::seed_from_u64(config.random_seed);
     let nodes = config.num_nodes;
-    ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_configs(
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_configs(
         nodes,
         move |pool_configs| {
             let time_source = FastForwardTimeSource::new();
