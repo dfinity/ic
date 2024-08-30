@@ -1714,3 +1714,91 @@ fn load_canister_snapshot_charges_canister_cycles() {
         test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
     );
 }
+
+#[test]
+fn snapshot_must_include_globals() {
+    let wat = r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+          (func $msg_reply_data_append (param i32 i32)))
+      
+        (func $read_global
+          (i32.store
+            (i32.const 0)
+            (global.get 0)
+          )
+          (call $msg_reply_data_append
+            (i32.const 0)
+            (i32.const 4))
+          (call $msg_reply)
+        )
+      
+        (func $increase_global
+          (global.set 0
+            (i32.add
+              (global.get 0)
+              (i32.const 1)
+            )
+          )
+          (call $msg_reply)
+        )
+      
+        (memory $memory 1)
+        (export "memory" (memory $memory))
+        (global (export "counter") (mut i32) (i32.const 0))
+        (export "canister_query read_global" (func $read_global))
+        (export "canister_update increase_global" (func $increase_global))
+      )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
+
+    // Check that global is initially 0
+    let result = test
+        .non_replicated_query(canister_id, "read_global", vec![])
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![0, 0, 0, 0]));
+
+    // Increase global to 1
+    test.ingress(canister_id, "increase_global", vec![])
+        .unwrap();
+
+    // Check that global is now 1
+    let result = test
+        .non_replicated_query(canister_id, "read_global", vec![])
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
+
+    // Take a snapshot.
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap();
+    let response = CanisterSnapshotResponse::decode(&result.bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+
+    // Load the snapshot.
+    let args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    test.subnet_message("load_canister_snapshot", args.encode())
+        .unwrap();
+
+    // Check that global is still 1
+    let result = test
+        .non_replicated_query(canister_id, "read_global", vec![])
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
+}
