@@ -148,6 +148,7 @@ pub fn main() -> anyhow::Result<()> {
                             versions: vec![initial_version.clone()],
                         }),
                         // Ensure that the old version is blessed
+                        // if it was retired previously
                         Box::new(EnsureBlessedVersion {
                             version: initial_version.clone(),
                         }),
