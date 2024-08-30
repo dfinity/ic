@@ -96,9 +96,6 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         else:
             flattened_paths.append(target_path)
 
-    if not flattened_paths:
-        return
-
     # TODO: replace this with itertools.batched when we have Python 3.12
     BATCH_SIZE = 100
     for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
