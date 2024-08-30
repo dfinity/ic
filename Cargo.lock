@@ -5775,10 +5775,12 @@ version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.2",
  "candid",
+ "candid_parser",
  "futures",
  "ic-cdk 0.13.5",
  "ic-test-utilities-load-wasm",
  "pocket-ic",
+ "serde",
 ]
 
 [[package]]
@@ -5827,8 +5829,10 @@ dependencies = [
  "backoff",
  "futures-util",
  "hex",
- "hyper 0.14.26",
- "hyper-rustls 0.24.2",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.2",
+ "hyper-util",
  "ic-canister-client-sender",
  "ic-canonical-state",
  "ic-certification 0.9.0",
@@ -5848,11 +5852,12 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.21.12",
+ "rustls 0.23.12",
  "serde",
  "serde_cbor",
  "tokio",
  "tokio-test",
+ "tower",
  "tree-deserializer",
  "url",
 ]
@@ -10158,6 +10163,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-integration-tests",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nns-common",
@@ -10273,7 +10279,6 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
- "walrus",
 ]
 
 [[package]]
@@ -16549,6 +16554,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "candid_parser",
+ "ed25519-dalek",
  "flate2",
  "hex",
  "ic-base-types",
@@ -22057,12 +22063,11 @@ checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
 
 [[package]]
 name = "wycheproof"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccaef718f69c19f7f66faacc10f747180ceb4883a53c35548be4cac4cec1591c"
+checksum = "efb3be19abfb206c6adcbdf2007b09b0e8ca1f6530db40c03b42ce8ed4719894"
 dependencies = [
- "base64 0.13.1",
- "hex",
+ "data-encoding",
  "serde",
  "serde_json",
 ]
