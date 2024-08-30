@@ -28,7 +28,7 @@ use num_traits::ToPrimitive;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct LegacyInitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -40,7 +40,7 @@ pub struct LegacyInitArgs {
     pub archive_options: ArchiveOptions,
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct LegacyUpgradeArgs {
     pub metadata: Option<Vec<(String, MetadataValue)>>,
     pub token_name: Option<String>,
@@ -50,7 +50,7 @@ pub struct LegacyUpgradeArgs {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum LegacyLedgerArgument {
     Init(LegacyInitArgs),
     Upgrade(Option<LegacyUpgradeArgs>),

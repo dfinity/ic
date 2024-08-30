@@ -61,7 +61,7 @@ pub fn corrupt_dealing(
 /// Corrupts a complaint using the functionality that corresponds to the enum variant.
 ///
 /// This is only intended for testing and should not be called in production code.
-#[derive(EnumIter, Debug)]
+#[derive(Debug, EnumIter)]
 pub enum ComplaintCorrupter {
     /// Corrupts ZK proof in the complaint by incrementing the underlying ECC scalars by 1,
     /// `shared_secret` remains correct.

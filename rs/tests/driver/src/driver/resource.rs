@@ -36,7 +36,7 @@ const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
 /// A declaration of resources needed to instantiate a InternetComputer.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ResourceRequest {
     pub group_name: String,
     pub primary_image: DiskImage,
@@ -45,14 +45,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -101,7 +101,7 @@ impl ResourceRequest {
 /// Virtual machine configuration as to be requested.
 /// At first, the set of possible configurations is just a singleton:
 /// We assume that there is only one possible VM configuration available.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct VmSpec {
     pub name: String,
     pub vcpus: NrOfVCPUs,
@@ -114,14 +114,14 @@ pub struct VmSpec {
     pub alternate_template: Option<VmType>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum BootImage {
     GroupDefault,
     Image(DiskImage),
     File(FileId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct ResourceGroup {
     pub group_name: String,
     pub vms: BTreeMap<String, AllocatedVm>,
@@ -140,7 +140,7 @@ impl ResourceGroup {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,

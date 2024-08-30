@@ -2053,11 +2053,11 @@ pub fn cmc_set_default_authorized_subnetworks(
 }
 
 pub fn setup_cycles_ledger(state_machine: &StateMachine) {
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     enum LedgerArgs {
         Init(Config),
     }
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
         pub max_transactions_per_request: u64,
         pub index_id: Option<candid::Principal>,

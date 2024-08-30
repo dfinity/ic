@@ -6,7 +6,7 @@ use std::fmt;
 use thiserror::Error;
 
 /// Errors returned by the registry data provider.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum RegistryDataProviderError {
     /// Timeout occurred when attempting to fetch updates from the registry
     /// canister.
@@ -30,7 +30,7 @@ impl fmt::Display for RegistryDataProviderError {
 }
 
 /// Errors returned by the registry client.
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Error, Serialize)]
 pub enum RegistryClientError {
     #[error("the requested version is not available locally: {version}")]
     VersionNotAvailable { version: RegistryVersion },
