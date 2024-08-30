@@ -3,7 +3,7 @@ mod config_tests;
 #[cfg(test)]
 mod tests;
 
-use hyper::{Body, Request, Response, StatusCode, Uri};
+use hyper::{Body, Request, Response, StatusCode};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
@@ -163,7 +163,7 @@ impl XNetEndpoint {
                             async move {
                                 let _permit = match ctx.semaphore.try_acquire_owned() {
                                     Ok(permit) => permit,
-                                    Err(err) => {
+                                    Err(_) => {
                                         ctx.metrics
                                             .request_duration
                                             .with_label_values(&[
@@ -182,7 +182,16 @@ impl XNetEndpoint {
                                 tokio::task::spawn_blocking(move || {
                                     let _permit = _permit;
                                     route_request(
-                                        request.uri().clone(),
+                                        Url::parse("http://example.com/")
+                                            .unwrap()
+                                            .join(
+                                                request
+                                                    .uri()
+                                                    .path_and_query()
+                                                    .map(|pq| pq.as_str())
+                                                    .unwrap_or(""),
+                                            )
+                                            .unwrap(),
                                         certified_stream_store.as_ref(),
                                         &metrics,
                                     )
@@ -259,7 +268,7 @@ impl XNetEndpoint {
 /// Routes an `XNetEndpoint` request to the appropriate handler; or produces an
 /// HTTP 404 Not Found response if the URL doesn't match any handler.
 fn route_request(
-    url: Uri,
+    url: Url,
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
