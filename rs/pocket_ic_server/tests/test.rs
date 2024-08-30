@@ -35,7 +35,6 @@ pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
     parent_pid: Option<u32>,
-    ttl: Option<u64>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
@@ -51,9 +50,10 @@ fn start_server_helper(
     } else {
         cmd.arg("--port-file").arg(port_file_path.clone());
     }
-    if let Some(ttl) = ttl {
-        cmd.arg("--ttl").arg(ttl.to_string());
-    }
+    // use a long TTL of 5 mins (the bazel test timeout for medium tests)
+    // so that the server doesn't die during the test if the runner
+    // is overloaded
+    cmd.arg("--ttl").arg("300");
     if capture_stdout {
         cmd.stdout(std::process::Stdio::piped());
     }
@@ -78,7 +78,7 @@ fn start_server_helper(
 
 pub fn start_server() -> Url {
     let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(Some(parent_pid), None, false, false).0
+    start_server_helper(Some(parent_pid), false, false).0
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn test_blob_store_wrong_encoding() {
 #[test]
 fn test_port_file() {
     // tests the port file by setting the parent PID to None in start_server_helper
-    start_server_helper(None, None, false, false);
+    start_server_helper(None, false, false);
 }
 
 async fn test_gateway(server_url: Url, https: bool) {
@@ -429,7 +429,7 @@ fn test_specified_id() {
 
 #[test]
 fn test_dashboard() {
-    let (server_url, _) = start_server_helper(None, Some(5), false, false);
+    let (server_url, _) = start_server_helper(None, false, false);
     let subnet_config_set = SubnetConfigSet {
         nns: true,
         application: 1,
@@ -491,7 +491,7 @@ const CANISTER_LOGS_WAT: &str = r#"
 #[test]
 fn canister_and_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let (server_url, mut out) = start_server_helper(None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -504,6 +504,9 @@ fn canister_and_replica_logs() {
     pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
 
     drop(pic);
+
+    // kill the server to avoid blocking until TTL is hit
+    out.kill().unwrap();
 
     let mut stdout = String::new();
     out.stdout
@@ -525,7 +528,7 @@ fn canister_and_replica_logs() {
 #[test]
 fn canister_and_no_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let (server_url, mut out) = start_server_helper(None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -538,6 +541,9 @@ fn canister_and_no_replica_logs() {
     pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
 
     drop(pic);
+
+    // kill the server to avoid blocking until TTL is hit
+    out.kill().unwrap();
 
     let mut stdout = String::new();
     out.stdout
@@ -687,7 +693,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (new_server_url, _) = start_server_helper(None, Some(5), false, false);
+    let (new_server_url, _) = start_server_helper(None, false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -716,7 +722,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, Some(5), false, false);
+    let (newest_server_url, _) = start_server_helper(None, false, false);
 
     // Create a PocketIC instance mounting the NNS state created so far.
     let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
@@ -1015,7 +1021,7 @@ fn test_unresponsive_gateway_backend() {
     let client = Client::new();
 
     // Create PocketIC instance with one NNS subnet and one app subnet.
-    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
+    let (backend_server_url, mut backend_process) = start_server_helper(None, false, false);
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -1023,7 +1029,7 @@ fn test_unresponsive_gateway_backend() {
         .build();
 
     // Create HTTP gateway on a different gateway server.
-    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
         .join(&format!("instances/{}/", pic.instance_id()))
@@ -1077,7 +1083,7 @@ fn test_unresponsive_gateway_backend() {
 #[test]
 fn test_invalid_gateway_backend() {
     // Create HTTP gateway with an invalid backend URL
-    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_url = "http://240.0.0.0";
     let http_gateway_config = HttpGatewayConfig {
