@@ -12,10 +12,14 @@ use libafl::{
     corpus::InMemoryCorpus,
     events::SimpleEventManager,
     executors::{inprocess::InProcessExecutor, ExitKind},
+    feedback_or,
+    feedbacks::map::AflMapFeedback,
     feedbacks::CrashFeedback,
     fuzzer::{Fuzzer, StdFuzzer},
     inputs::BytesInput,
     mutators::scheduled::{havoc_mutations, StdScheduledMutator},
+    observers::map::hitcount_map::HitcountsMapObserver,
+    observers::map::StdMapObserver,
     observers::value::RefCellValueObserver,
     prelude::*,
     schedulers::QueueScheduler,
@@ -35,6 +39,8 @@ const CORPUS_DIR: &str = "rs/execution_environment/fuzz/corpus";
 
 static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
+
+static mut COVERAGE_MAP: &'static mut [u8] = &mut [0; 65536];
 
 // TODO: The right way to do this would be iclude_bytes! but would require a build.rs
 // since the env var is not set at compile time.
@@ -71,7 +77,14 @@ pub fn main() {
                 cycles.clone_from_slice(&result[0..8]);
                 u64::from_le_bytes(cycles)
             }
-            _ => 0,
+            Ok(WasmResult::Reject(message)) => {
+                // Canister crashing is interesting
+                if message.contains("Canister trapped") {
+                    return ExitKind::Crash;
+                }
+                0
+            }
+            _ => return ExitKind::Ok, // We continue
         };
 
         test.advance_time(Duration::from_secs(1));
@@ -80,11 +93,7 @@ pub fn main() {
         let result = test.query(canister_id, "export_coverage", vec![]);
         match result {
             Ok(WasmResult::Reply(result)) => {
-                println!(
-                    "result {:#?}, cycles {:?}",
-                    result.iter().filter(|&i| *i > 0).count(),
-                    cycles
-                );
+                unsafe { COVERAGE_MAP.copy_from_slice(&result) };
             }
             _ => (),
         }
@@ -107,19 +116,18 @@ pub fn main() {
         ExitKind::Ok
     };
 
-    let observer = unsafe {
+    let decoding_map_observer = unsafe {
         RefCellValueObserver::new(
             DECODING_MAP_OBSERVER_NAME,
             libafl_bolts::ownedref::OwnedRef::from_ptr(addr_of!(MAP)),
         )
     };
-    let mut feedback = DecodingMapFeedback::new();
 
-    // [TODO]
-    // An observer to observe coverage in WASM
-    // A MaxMapFeedback to adapt the coverage map information
-    // A feedback_or to combine DecodingMapFeedback and MaxMapFeedback
-
+    let mut decoding_feedback = DecodingMapFeedback::new();
+    let hitcount_map_observer =
+        HitcountsMapObserver::new(unsafe { StdMapObserver::new("coverage_map", COVERAGE_MAP) });
+    let mut afl_map_feedback = AflMapFeedback::new(&hitcount_map_observer);
+    let mut feedback = feedback_or!(decoding_feedback, afl_map_feedback);
     let mut objective = CrashFeedback::new();
 
     let mut state = StdState::new(
@@ -145,7 +153,7 @@ pub fn main() {
 
     let mut executor = InProcessExecutor::new(
         &mut harness,
-        tuple_list!(observer),
+        tuple_list!(decoding_map_observer, hitcount_map_observer),
         &mut fuzzer,
         &mut state,
         &mut mgr,
