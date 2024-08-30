@@ -155,7 +155,7 @@ async fn assert_version_on_all_nodes(
     logger: Logger,
     version: String,
     rt: Handle,
-) {
+) -> anyhow::Result<()> {
     let threads = nodes.into_iter().map(|node| {
         let logger_clone = logger.clone();
         let version_clone = version.clone();
@@ -164,7 +164,18 @@ async fn assert_version_on_all_nodes(
         })
     });
 
-    join_all(threads.into_iter()).await;
+    if join_all(threads.into_iter())
+        .await
+        .iter()
+        .any(|r| r.is_err())
+    {
+        anyhow::bail!(
+            "Failed to ensure replica version {} on the current subnet",
+            version
+        )
+    }
+
+    Ok(())
 }
 
 fn get_unassigned_nodes_version(topology_snapshot: TopologySnapshot) -> Vec<String> {
