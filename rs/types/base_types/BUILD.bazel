@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
+    "@crate_index//:hex",
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:strum",

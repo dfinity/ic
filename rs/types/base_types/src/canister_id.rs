@@ -122,15 +122,10 @@ impl CanisterId {
 
         // Byte 8 (penultimate) must be 0x01.
         if raw[8] != 0x01 {
-            let hex = raw
-                .iter()
-                .map(|i| format!("{:02X}", i))
-                .collect::<Vec<_>>()
-                .join("_");
             return Err(CanisterIdError::InvalidPrincipalId(
                 format!(
                     "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
-                    principal_id, hex,
+                    principal_id, hex::encode(raw),
                 )
             ));
         }

@@ -12,6 +12,7 @@ byte-unit = "4.0.14"
 bytes = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
+hex = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
