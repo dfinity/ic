@@ -54,6 +54,7 @@ impl Step for RetireBlessedVersions {
         let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
         let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
 
+        info!(env.logger(), "Records found: {:?}", replica_versions);
         versions_to_unelect.retain(|r| {
             let record = replica_versions
                 .iter()
@@ -70,8 +71,6 @@ impl Step for RetireBlessedVersions {
                         replica_versions.iter().map(|(k, _)| k).join(", ")
                     )
                 });
-
-            info!(env.logger(), "Found record: {:?}", record);
 
             record
                 .release_package_urls
