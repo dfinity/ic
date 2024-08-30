@@ -304,14 +304,6 @@ container_pull(
     repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
 
-# URL: registry.gitlab.com/dfinity-lab/open/public-docker-registry/nns-dapp-specs:latest
-container_pull(
-    name = "nns-dapp-specs",
-    digest = "sha256:9e003fe2740f2813bf9e776b9cabd5cdb1fbe15581fc4b78876708fdf3791b3f",
-    registry = "registry.gitlab.com",
-    repository = "dfinity-lab/open/public-docker-registry/nns-dapp-specs",
-)
-
 # Third party dependencies that require special treatment
 
 lmdb_repository()
