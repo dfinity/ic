@@ -17,7 +17,7 @@ const Z_V128: &str = "(local.get $z_v128)";
 const ADDRESS_I32: &str = "(local.get $address_i32)";
 const UNALIGNED_ADDRESS_I32: &str = "(local.get $one_i32)";
 
-pub fn benchmarks() -> Vec<Benchmark> {
+pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
 
@@ -30,7 +30,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.const"]) {
         let name = format!("vconst/{op}");
         let code = &format!("({SET_X_V128} ({op} i64x2 7 7))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The following add operation is just an example to show that each
     // constant adds one memory load.
@@ -41,7 +41,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         //   vmovdqu xmmword ptr [rdi + 0x70], xmm4
         let name = format!("vconst/{op}_add_locals");
         let code = &format!("({SET_X_V128} (i64x2.add {Y_V128} {Z_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.4 Gops/s
     for op in first_or_all(&["v128.const"]) {
@@ -52,7 +52,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         //   vmovdqu xmmword ptr [rdi + 0x70], xmm4
         let name = format!("vconst/{op}_add_constants");
         let code = &format!("({SET_X_V128} (i64x2.add ({op} i64x2 7 7) ({op} i64x2 1 1)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Bitwise Unary Operators (vvunop): `$x_v128 = ({op} $x_v128)`
@@ -60,7 +60,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.not"]) {
         let name = format!("vvunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Bitwise Binary Operators (vvbinop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -68,7 +68,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.and", "v128.andnot", "v128.or", "v128.xor"]) {
         let name = format!("vvbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Bitwise Ternary Operators (vvternop): `$x_v128 = ({op} $x_v128 $y_v128 $z_v128)`
@@ -76,7 +76,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.bitselect"]) {
         let name = format!("vvternop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128} {Z_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Bitwise Test Operators (vvtestop): `$x_i32 = ({op} $x_v128)`
@@ -84,7 +84,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.any_true"]) {
         let name = format!("vvtestop/{op}");
         let code = &format!("({SET_X_I32} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Shuffle: `$x_v128 = ({op} u8x16 $x_v128 $y_v128)`
@@ -92,7 +92,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i8x16.shuffle"]) {
         let name = format!("vshuffle/{op}");
         let code = &format!("({SET_X_V128} ({op} {U8X16} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Swizzle: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -100,7 +100,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i8x16.swizzle"]) {
         let name = format!("vswizzle/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Splat: `$x_v128 = ({op} $x_{ty})`
@@ -116,7 +116,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("vsplat/{op}");
         let code = &format!("({SET_X_V128} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Extract Lane: `$x_{ty} = ({op} u8 $x_v128)`
@@ -130,7 +130,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("vextlane/{op}");
         let code = &format!("(global.set $x_{ty} ({op} 1 (local.get $x_v128)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&[
@@ -142,7 +142,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("vextlane/{op}");
         let code = &format!("(global.set $x_{ty} ({op} 1 (local.get $x_v128)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Replace Lane: `$x_v128 = ({op} u8 $x_v128 $y_{ty})`
@@ -158,7 +158,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("vreplane/{op}");
         let code = &format!("({SET_X_V128} ({op} 1 {X_V128} (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Relational Operators (virelop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -197,7 +197,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("virelop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&[
@@ -210,7 +210,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("virelop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Floating-Point Relational Operators (vfrelop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -221,7 +221,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vfrelop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Unary Operators (viunop): `$x_v128 = ({op} $x_v128)`
@@ -229,25 +229,25 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i8x16.abs", "i16x8.abs", "i32x4.abs"]) {
         let name = format!("viunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["i64x2.abs"]) {
         let name = format!("viunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.4 Gops/s
     for op in first_or_all(&["i8x16.neg", "i16x8.neg", "i32x4.neg", "i64x2.neg"]) {
         let name = format!("viunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.8 Gops/s
     for op in first_or_all(&["i8x16.popcnt"]) {
         let name = format!("viunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Saturating integer Q-format rounding multiplication:
@@ -256,7 +256,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i16x8.q15mulr_sat_s"]) {
         let name = format!("vq15mulr/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Integer dot product: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -264,7 +264,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i32x4.dot_i16x8_s"]) {
         let name = format!("vdot/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Floating-Point Unary Operators (vfunop): `$x_v128 = ({op} $x_v128)`
@@ -272,7 +272,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["f32x4.abs", "f32x4.neg", "f64x2.abs", "f64x2.neg"]) {
         let name = format!("vfunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.1 Gops/s
     for op in first_or_all(&[
@@ -287,19 +287,19 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vfunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.5 Gops/s
     for op in first_or_all(&["f32x4.sqrt"]) {
         let name = format!("vfunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.2 Gops/s
     for op in first_or_all(&["f64x2.sqrt"]) {
         let name = format!("vfunop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Test Operators (vitestop): `$x_i32 = ({op} $x_v128)`
@@ -312,7 +312,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vitestop/{op}");
         let code = &format!("({SET_X_I32} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Bitmask Extraction: `$x_i32 = ({op} $x_v128)`
@@ -325,7 +325,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vbitmask/{op}");
         let code = &format!("({SET_X_I32} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer to Integer Narrowing: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -338,7 +338,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vnarrow/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer to Integer Extension: `$x_v128 = ({op} $x_v128)`
@@ -353,7 +353,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vextend/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.0 Gops/s
     for op in first_or_all(&[
@@ -366,7 +366,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vextend/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Shift Operators (vishiftop): `$x_v128 = ({op} $x_v128 $y_i32)`
@@ -383,13 +383,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vishiftop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.0 Gops/s
     for op in first_or_all(&["i8x16.shl", "i8x16.shr_s", "i8x16.shr_u", "i64x2.shr_s"]) {
         let name = format!("vishiftop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Binary Operators (vibinop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -406,7 +406,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vibinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Binary Min/Max Operators (viminmaxop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -427,7 +427,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("viminmaxop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Saturating Binary Operators (visatbinop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -444,7 +444,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("visatbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer Multiplication: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -452,19 +452,19 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i16x8.mul"]) {
         let name = format!("vimul/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["i32x4.mul"]) {
         let name = format!("vimul/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.7 Gops/s
     for op in first_or_all(&["i64x2.mul"]) {
         let name = format!("vimul/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Lane-wise Integer Rounding Average: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -472,7 +472,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i8x16.avgr_u", "i16x8.avgr_u"]) {
         let name = format!("vavgr/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Extended Integer Multiplication: `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -486,7 +486,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vextmul/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.4 Gops/s
     for op in first_or_all(&[
@@ -500,7 +500,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vextmul/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Extended Pairwise Integer Addition: `$x_v128 = ({op} $x_v128)`
@@ -508,25 +508,25 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i16x8.extadd_pairwise_i8x16_s"]) {
         let name = format!("vextadd/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.4 Gops/s
     for op in first_or_all(&["i16x8.extadd_pairwise_i8x16_u"]) {
         let name = format!("vextadd/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.4 Gops/s
     for op in first_or_all(&["i32x4.extadd_pairwise_i16x8_s"]) {
         let name = format!("vextadd/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.8 Gops/s
     for op in first_or_all(&["i32x4.extadd_pairwise_i16x8_u"]) {
         let name = format!("vextadd/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Floating-Point Binary Operators (vfbinop): `$x_v128 = ({op} $x_v128 $y_v128)`
@@ -541,25 +541,25 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vfbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.3 Gops/s
     for op in first_or_all(&["f32x4.div", "f64x2.div"]) {
         let name = format!("vfbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.6 Gops/s
     for op in first_or_all(&["f32x4.min", "f32x4.max", "f64x2.min", "f64x2.max"]) {
         let name = format!("vfbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.9 Gops/s
     for op in first_or_all(&["f32x4.pmin", "f32x4.pmax", "f64x2.pmin", "f64x2.pmax"]) {
         let name = format!("vfbinop/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128} {Y_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Floating Point to Integer With Saturation Conversion: `$x_v128 = ({op} $x_v128)`
@@ -567,13 +567,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i32x4.trunc_sat_f32x4_s", "i32x4.trunc_sat_f64x2_s_zero"]) {
         let name = format!("vtrunc/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.8 Gops/s
     for op in first_or_all(&["i32x4.trunc_sat_f32x4_u", "i32x4.trunc_sat_f64x2_u_zero"]) {
         let name = format!("vtrunc/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Integer to Floating Point Conversion: `$x_v128 = ({op} $x_v128)`
@@ -581,19 +581,19 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["f32x4.convert_i32x4_s", "f64x2.convert_low_i32x4_s"]) {
         let name = format!("vconvert/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.6 Gops/s
     for op in first_or_all(&["f32x4.convert_i32x4_u"]) {
         let name = format!("vconvert/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["f64x2.convert_low_i32x4_u"]) {
         let name = format!("vconvert/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Double-Precision Floating Point to Single-Precision Conversion:
@@ -602,7 +602,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["f32x4.demote_f64x2_zero"]) {
         let name = format!("vdemote/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Single-Precision Floating Point to Double-Precision Conversion:
@@ -611,7 +611,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["f64x2.promote_low_f32x4"]) {
         let name = format!("vpromote/{op}");
         let code = &format!("({SET_X_V128} ({op} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     ////////////////////////////////////////////////////////////////////
@@ -623,13 +623,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["local.get"]) {
         let name = format!("vvar/{op}");
         let code = &format!("({SET_X_V128} ({op} $x_v128))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.4 Gops/s
     for op in first_or_all(&["global.get"]) {
         let name = format!("vvar/{op}");
         let code = &format!("({SET_X_V128} ({op} $x_v128))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Set Variable Instructions: `({op} x_v128 $x_v128)`
@@ -637,13 +637,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["local.set"]) {
         let name = format!("vvar/{op}");
         let code = &format!("({op} $x_v128 (global.get $x_v128))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.6 Gops/s
     for op in first_or_all(&["global.set"]) {
         let name = format!("vvar/{op}");
         let code = &format!("({op} $x_v128 {X_V128})");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Tee Variable Instructions: `$x_v128 = ({op} x_v128 $x_v128)`
@@ -651,7 +651,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["local.tee"]) {
         let name = format!("vvar/{op}");
         let code = &format!("({SET_X_V128} ({op} $x_v128 {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     ////////////////////////////////////////////////////////////////////
@@ -663,13 +663,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}_unaligned");
         let code = &format!("({SET_X_V128} ({op} {UNALIGNED_ADDRESS_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Store: `({op} $address_i32 $x_v128)`
@@ -677,13 +677,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({op} {ADDRESS_I32} {X_V128})");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}_unaligned");
         let code = &format!("({op} {UNALIGNED_ADDRESS_I32} {X_V128})");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Load and Extend: `$x_v128 = ({op} $address_i32))`
@@ -698,7 +698,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Load and Zero-Pad: `$x_v128 = ({op} $address_i32))`
@@ -706,7 +706,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.load32_zero", "v128.load64_zero"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Load and Splat: `$x_v128 = ({op} $address_i32))`
@@ -719,7 +719,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Load Lane: `$x_v128 = ({op} u8 $address_i32 $x_v128))`
@@ -727,13 +727,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["v128.load8_lane", "v128.load16_lane"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load32_lane", "v128.load64_lane"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Vector Store Lane: `({op} u8 $address_i32 $x_v128)`
@@ -746,7 +746,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let name = format!("vmem/{op}");
         let code = &format!("({op} 1 {ADDRESS_I32} {X_V128})");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     benchmarks

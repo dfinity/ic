@@ -24,13 +24,17 @@ pub fn first_or_all<'a>(all: &'a [&'a str]) -> &'a [&'a str] {
 ///
 /// The confirmation benchmark is to make sure there is no compiler optimization
 /// for the repeated lines of code.
-pub fn benchmark_with_confirmation(name: &str, code: &str) -> Vec<common::Benchmark> {
+pub fn benchmark_with_confirmation(
+    name: &str,
+    code: &str,
+    wasm64_enabled: bool,
+) -> Vec<common::Benchmark> {
     let i = DEFAULT_LOOP_ITERATIONS;
     let r = DEFAULT_REPEAT_TIMES;
     let c = CONFIRMATION_REPEAT_TIMES;
     vec![
-        benchmark(name, i, r, code),
-        benchmark(&format!("{name}/confirmation"), i, c, code),
+        benchmark(name, i, r, code, wasm64_enabled),
+        benchmark(&format!("{name}/confirmation"), i, c, code, wasm64_enabled),
     ]
 }
 
@@ -38,26 +42,36 @@ pub fn benchmark_with_confirmation(name: &str, code: &str) -> Vec<common::Benchm
 ///
 /// The confirmation benchmark is to make sure there is no compiler optimization
 /// for the loop.
-pub fn benchmark_with_loop_confirmation(name: &str, code: &str) -> Vec<common::Benchmark> {
+pub fn benchmark_with_loop_confirmation(
+    name: &str,
+    code: &str,
+    wasm64_enabled: bool,
+) -> Vec<common::Benchmark> {
     let i = DEFAULT_LOOP_ITERATIONS;
     let c = CONFIRMATION_LOOP_ITERATIONS;
     let r = DEFAULT_REPEAT_TIMES;
     vec![
-        benchmark(name, i, r, code),
-        benchmark(&format!("{name}/confirmation"), c, r, code),
+        benchmark(name, i, r, code, wasm64_enabled),
+        benchmark(&format!("{name}/confirmation"), c, r, code, wasm64_enabled),
     ]
 }
 
 /// Creates a benchmark with a code block repeated specified number of times in a loop.
-pub fn benchmark(name: &str, i: usize, r: usize, repeat_code: &str) -> common::Benchmark {
+pub fn benchmark(
+    name: &str,
+    i: usize,
+    r: usize,
+    repeat_code: &str,
+    wasm64_enabled: bool,
+) -> common::Benchmark {
     common::Benchmark(
         name.into(),
         Block::default()
             .repeat_n(r, repeat_code)
             .loop_n(i)
-            .define_variables_and_functions(repeat_code)
+            .define_variables_and_functions(repeat_code, wasm64_enabled)
             .into_update_func()
-            .into_test_module_wat(),
+            .into_test_module_wat(wasm64_enabled),
         (i * r) as u64,
     )
 }
