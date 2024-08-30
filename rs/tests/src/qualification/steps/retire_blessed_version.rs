@@ -71,11 +71,18 @@ impl Step for RetireBlessedVersions {
                     )
                 });
 
+            info!(env.logger(), "Found record: {:?}", record);
+
             record
                 .release_package_urls
                 .iter()
                 .any(|url| url.contains("disk-img"))
         });
+
+        if versions_to_unelect.is_empty() {
+            info!(env.logger(), "No versions to retire");
+            return Ok(());
+        }
 
         let proposal_id = rt.block_on(submit_update_elected_replica_versions_proposal(
             &governance_canister,
