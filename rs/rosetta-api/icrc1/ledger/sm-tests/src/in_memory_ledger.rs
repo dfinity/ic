@@ -29,7 +29,7 @@ impl From<ApprovalKey> for (Account, Account) {
     }
 }
 
-trait InMemoryLedgerState {
+pub trait InMemoryLedgerState {
     type AccountId;
     type Tokens;
 
@@ -319,30 +319,29 @@ where
 }
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
-    fn new_from_icrc1_ledger_blocks(
-        blocks: &[ic_icrc1::Block<Tokens>],
-    ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger::default();
+    pub fn new() -> Self {
+        InMemoryLedger::default()
+    }
+
+    pub fn ingest_icrc1_ledger_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
         for block in blocks {
             if let Some(fee_collector) = block.fee_collector {
-                state.fee_collector = Some(fee_collector);
+                self.fee_collector = Some(fee_collector);
             }
             match &block.transaction.operation {
-                Operation::Mint { to, amount } => state.process_mint(to, amount),
+                Operation::Mint { to, amount } => self.process_mint(to, amount),
                 Operation::Transfer {
                     from,
                     to,
                     spender,
                     amount,
                     fee,
-                } => {
-                    state.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee))
-                }
+                } => self.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee)),
                 Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => state.process_burn(from, spender, amount),
+                } => self.process_burn(from, spender, amount),
                 Operation::Approve {
                     from,
                     spender,
@@ -350,7 +349,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     expected_allowance,
                     expires_at,
                     fee,
-                } => state.process_approve(
+                } => self.process_approve(
                     from,
                     spender,
                     amount,
@@ -360,12 +359,72 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            state.validate_invariants();
+            self.validate_invariants();
         }
-        state.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+        self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
             blocks.last().unwrap().timestamp,
         ));
-        state
+    }
+
+    pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
+        let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
+        let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        assert_eq!(
+            self.balances.len() as u64,
+            actual_num_balances,
+            "Mismatch in number of balances ({} vs {})",
+            self.balances.len(),
+            actual_num_balances
+        );
+        assert_eq!(
+            self.allowances.len() as u64,
+            actual_num_approvals,
+            "Mismatch in number of approvals ({} vs {})",
+            self.allowances.len(),
+            actual_num_approvals
+        );
+        println!(
+            "Checking {} balances and {} allowances",
+            actual_num_balances, actual_num_approvals
+        );
+        for (account, balance) in self.balances.iter() {
+            let actual_balance = Decode!(
+                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
+                    .expect("failed to query balance")
+                    .bytes(),
+                Nat
+            )
+            .expect("failed to decode balance_of response");
+
+            assert_eq!(
+                &Tokens::try_from(actual_balance.clone()).unwrap(),
+                balance,
+                "Mismatch in balance for account {:?} ({} vs {})",
+                account,
+                balance,
+                actual_balance
+            );
+        }
+        for (approval, allowance) in self.allowances.iter() {
+            let (from, spender): (Account, Account) = approval.clone().into();
+            assert!(
+                !allowance.amount.is_zero(),
+                "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
+                &from,
+                &spender
+            );
+            let actual_allowance = get_allowance(env, ledger_id, from, spender);
+            assert_eq!(
+                allowance.amount,
+                Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance
+            );
+        }
     }
 }
 
@@ -373,65 +432,9 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
     println!("retrieved all ledger and archive blocks");
-    let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
+    let mut expected_ledger_state = InMemoryLedger::new();
+    expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
-    let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
-    assert_eq!(
-        expected_ledger_state.balances.len() as u64,
-        actual_num_balances,
-        "Mismatch in number of balances ({} vs {})",
-        expected_ledger_state.balances.len(),
-        actual_num_balances
-    );
-    assert_eq!(
-        expected_ledger_state.allowances.len() as u64,
-        actual_num_approvals,
-        "Mismatch in number of approvals ({} vs {})",
-        expected_ledger_state.allowances.len(),
-        actual_num_approvals
-    );
-    println!(
-        "Checking {} balances and {} allowances",
-        actual_num_balances, actual_num_approvals
-    );
-    for (account, balance) in expected_ledger_state.balances.iter() {
-        let actual_balance = Decode!(
-            &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                .expect("failed to query balance")
-                .bytes(),
-            Nat
-        )
-        .expect("failed to decode balance_of response");
-
-        assert_eq!(
-            &Tokens::try_from(actual_balance.clone()).unwrap(),
-            balance,
-            "Mismatch in balance for account {:?} ({} vs {})",
-            account,
-            balance,
-            actual_balance
-        );
-    }
-    for (approval, allowance) in expected_ledger_state.allowances.iter() {
-        let (from, spender): (Account, Account) = approval.clone().into();
-        assert!(
-            !allowance.amount.is_zero(),
-            "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
-            &from,
-            &spender
-        );
-        let actual_allowance = get_allowance(env, ledger_id, from, spender);
-        assert_eq!(
-            allowance.amount,
-            Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-            "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
-            &from,
-            &spender,
-            approval,
-            allowance,
-            actual_allowance
-        );
-    }
+    expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
     println!("ledger state verified successfully");
 }
