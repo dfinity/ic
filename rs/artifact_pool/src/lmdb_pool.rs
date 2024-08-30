@@ -551,8 +551,6 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
         let index_db = self.get_index_db(&key.type_key);
         tx.del(index_db, &key.height_key, Some(&key.id_key.0))
-        //let min_height = tx_get_key(tx, index_db, GetOp::First)?;
-        //let max_height = tx_get_key(tx, index_db, GetOp::Last)?;
     }
 
     /// Remove all index entries for the given [`TypeKey`] with heights
@@ -705,8 +703,8 @@ where
     fn height_range(&self) -> Option<HeightRange> {
         let tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
         let index_db = self.get_index_db(&Message::type_key());
-        let min_height = tx_get_key(&tx, index_db, GetOp::First).ok()??;
-        let max_height = tx_get_key(&tx, index_db, GetOp::Last).ok()??;
+        let min_height = tx_get_key(&tx, index_db, GetOp::First).ok().flatten()?;
+        let max_height = tx_get_key(&tx, index_db, GetOp::Last).ok().flatten()?;
 
         Some(HeightRange::new(
             Height::from(min_height),
