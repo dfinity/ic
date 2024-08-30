@@ -12,7 +12,7 @@ pub struct NeuronPermission {
 }
 /// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
 /// (the account that holds the neuron's staked tokens).
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq, std::hash::Hash)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, std::hash::Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
@@ -29,7 +29,7 @@ pub struct NeuronIds {
     pub neuron_ids: ::prost::alloc::vec::Vec<NeuronId>,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq, Copy)]
+#[derive(Copy, Eq, candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -366,18 +366,18 @@ pub mod transfer_sns_treasury_funds {
     /// Whether to make the transfer from the NNS ledger (in ICP) or
     /// to make the transfer from the SNS ledger (in SNS tokens).
     #[derive(
+        Copy,
+        Clone,
+        Eq,
+        PartialEq,
+        Ord,
+        PartialOrd,
+        Hash,
+        Debug,
+        ::prost::Enumeration,
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum TransferFrom {
@@ -666,18 +666,18 @@ pub struct GovernanceError {
 /// Nested message and enum types in `GovernanceError`.
 pub mod governance_error {
     #[derive(
+        Copy,
+        Clone,
+        Eq,
+        PartialEq,
+        Ord,
+        PartialOrd,
+        Hash,
+        Debug,
+        ::prost::Enumeration,
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ErrorType {
@@ -1055,18 +1055,18 @@ pub mod valuation {
         pub xdrs_per_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
     }
     #[derive(
+        Copy,
+        Clone,
+        Eq,
+        PartialEq,
+        Ord,
+        PartialOrd,
+        Hash,
+        Debug,
+        ::prost::Enumeration,
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum Token {
@@ -1716,19 +1716,19 @@ pub mod governance {
         pub updated_at_timestamp_seconds: ::core::option::Option<u64>,
     }
     #[derive(
+        Copy,
+        Clone,
+        Eq,
+        PartialEq,
+        Ord,
+        PartialOrd,
+        Hash,
+        Debug,
+        ::prost::Enumeration,
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
         strum_macros::EnumIter,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum Mode {
@@ -2776,20 +2776,20 @@ pub struct Account {
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
-    comparable::Comparable,
     clap::ArgEnum,
+    comparable::Comparable,
     strum_macros::EnumIter,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum NeuronPermissionType {
@@ -2869,18 +2869,18 @@ impl NeuronPermissionType {
 }
 /// The types of votes a neuron can issue.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum Vote {
@@ -2916,18 +2916,18 @@ impl Vote {
     }
 }
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum LogVisibility {
@@ -2960,18 +2960,18 @@ impl LogVisibility {
     }
 }
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum ProposalDecisionStatus {
@@ -3018,18 +3018,18 @@ impl ProposalDecisionStatus {
 }
 /// A proposal's status, with respect to reward distribution.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum ProposalRewardStatus {
@@ -3076,18 +3076,18 @@ impl ProposalRewardStatus {
 /// the API (mainly the SNS Sale canister) to indicate the success of the
 /// operation.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum ClaimedSwapNeuronStatus {
@@ -3143,18 +3143,18 @@ impl ClaimedSwapNeuronStatus {
 /// An enum representing the errors that the `claim_swap_neurons` API may
 /// return.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum ClaimSwapNeuronsError {

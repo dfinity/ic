@@ -34,7 +34,7 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
     /// The minter withdraws BTC transfer fees from this amount.
@@ -59,7 +59,7 @@ pub struct RetrieveBtcRequest {
 }
 
 /// A transaction output storing the minter's change.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct ChangeOutput {
     /// The index of the output in the transaction.
     pub vout: u32,
@@ -68,7 +68,7 @@ pub struct ChangeOutput {
 }
 
 /// Represents a transaction sent to the Bitcoin network.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
     pub requests: Vec<RetrieveBtcRequest>,
@@ -87,7 +87,7 @@ pub struct SubmittedBtcTransaction {
 }
 
 /// Pairs a retrieve_btc request with its outcome.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FinalizedBtcRetrieval {
     /// The original retrieve_btc request that initiated the transaction.
     pub request: RetrieveBtcRequest,
@@ -96,7 +96,7 @@ pub struct FinalizedBtcRetrieval {
 }
 
 /// The outcome of a retrieve_btc request.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum FinalizedStatus {
     /// The request amount was to low to cover the fees.
     AmountTooLow,
@@ -108,7 +108,7 @@ pub enum FinalizedStatus {
 }
 
 /// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
@@ -117,7 +117,7 @@ pub enum InFlightStatus {
 }
 
 /// The status of a retrieve_btc request.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, candid::CandidType)]
 pub enum RetrieveBtcStatus {
     /// The minter has no data for this request.
     /// The request id is either invalid or too old.
@@ -136,7 +136,7 @@ pub enum RetrieveBtcStatus {
     Confirmed { txid: Txid },
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct BtcRetrievalStatusV2 {
     pub block_index: u64,
     pub status_v2: Option<RetrieveBtcStatusV2>,
@@ -156,7 +156,7 @@ impl From<RetrieveBtcStatus> for RetrieveBtcStatusV2 {
     }
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum RetrieveBtcStatusV2 {
     /// The minter has no data for this request.
     /// The request id is either invalid or too old.
@@ -180,7 +180,7 @@ pub enum RetrieveBtcStatusV2 {
 }
 
 /// Controls which operations the minter can perform.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize)]
 pub enum Mode {
     /// Minter's state is read-only.
     ReadOnly,
@@ -235,7 +235,7 @@ impl Default for Mode {
 }
 
 /// The outcome of a UTXO KYT check.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
 pub enum UtxoCheckStatus {
     /// The KYT check did not reveal any problems.
     Clean,
@@ -258,13 +258,13 @@ impl UtxoCheckStatus {
 }
 
 /// Indicates that fee distribution overdrafted.
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
 
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
@@ -390,14 +390,14 @@ pub struct CkBtcMinterState {
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimburseDepositTask {
     pub account: Account,
     pub amount: u64,
     pub reason: ReimbursementReason,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimbursedDeposit {
     pub account: Account,
     pub amount: u64,
@@ -405,7 +405,7 @@ pub struct ReimbursedDeposit {
     pub mint_block_index: u64,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum ReimbursementReason {
     TaintedDestination {
         kyt_provider: Principal,

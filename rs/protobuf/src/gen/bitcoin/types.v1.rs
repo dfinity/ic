@@ -1,15 +1,15 @@
 #[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
-    Hash,
-    PartialOrd,
+    PartialEq,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
     ::prost::Enumeration,
+    serde::Deserialize,
+    serde::Serialize,
 )]
 #[repr(i32)]
 pub enum RejectCode {

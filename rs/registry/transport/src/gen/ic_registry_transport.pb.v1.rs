@@ -16,7 +16,7 @@ pub struct RegistryError {
 }
 /// Nested message and enum types in `RegistryError`.
 pub mod registry_error {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Code {
         /// The message had a problem like a missing field
@@ -163,7 +163,7 @@ pub struct RegistryGetLatestVersionResponse {
     pub version: u64,
 }
 /// A single mutation in the registry.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryMutation {
@@ -182,7 +182,7 @@ pub struct RegistryMutation {
 }
 /// Nested message and enum types in `RegistryMutation`.
 pub mod registry_mutation {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Type {
         /// Key is expected to not exist in the registry at the current version.
@@ -228,7 +228,7 @@ pub mod registry_mutation {
 }
 /// A precondition on the version at which the value of a given key was
 /// last mutated.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Precondition {
@@ -241,7 +241,7 @@ pub struct Precondition {
 }
 /// Message corresponding to a list of mutations to apply, atomically, to the
 /// registry canister. If any of the mutations fails, the whole operation will fail.
-#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryAtomicMutateRequest {

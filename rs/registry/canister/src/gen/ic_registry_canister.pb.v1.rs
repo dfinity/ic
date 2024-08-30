@@ -67,7 +67,7 @@ pub mod registry_stable_storage {
     ///
     ///    * We sort keys in each mutation request.
     ///    * We replace INSERT/UPDATE/UPSERT with just UPSERT.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Version {
         /// The original representation that contains a list of

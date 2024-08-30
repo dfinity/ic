@@ -1,5 +1,5 @@
 /// Information about a Replica version
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReplicaVersionRecord {
@@ -18,7 +18,7 @@ pub struct ReplicaVersionRecord {
 ///
 /// New versions are added here after a vote has been accepted by token
 /// holders. Subnetworks can then be upgraded to any of those version.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlessedReplicaVersions {

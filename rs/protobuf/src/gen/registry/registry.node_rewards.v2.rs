@@ -1,5 +1,5 @@
 /// The reward rate for a node
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRate {
@@ -17,7 +17,7 @@ pub struct NodeRewardRate {
     pub reward_coefficient_percent: ::core::option::Option<i32>,
 }
 /// The reward rates for a set of node types
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardRates {
@@ -27,7 +27,7 @@ pub struct NodeRewardRates {
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, NodeRewardRate>,
 }
 /// Contains the node reward rates for each region where IC nodes are operated
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRewardsTable {
@@ -37,7 +37,7 @@ pub struct NodeRewardsTable {
         ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, NodeRewardRates>,
 }
 /// The payload of a proposal to update the node rewards table
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateNodeRewardsTableProposalPayload {

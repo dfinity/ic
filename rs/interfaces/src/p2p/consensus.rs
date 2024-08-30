@@ -5,7 +5,7 @@ use ic_types::{
     NodeId, Time,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     /// The value defines the strategy to deliver a message to all peers.
@@ -17,7 +17,7 @@ pub struct ArtifactWithOpt<T> {
 }
 
 /// Specifies an addition or removal to the outbound set of messages that are replicated.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ArtifactMutation<T: IdentifiableArtifact> {
     Insert(ArtifactWithOpt<T>),
     Remove(T::Id),
@@ -89,7 +89,7 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
 }
 
 /// Unvalidated artifact
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
@@ -102,7 +102,7 @@ impl<T> AsRef<T> for UnvalidatedArtifact<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Aborted;
 
 pub trait Peers {
@@ -130,7 +130,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 
 /// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BouncerValue {
     /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
     Unwanted,

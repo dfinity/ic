@@ -38,7 +38,7 @@ pub struct Delta {
     #[prost(message, repeated, tag = "2")]
     pub changelog: ::prost::alloc::vec::Vec<ChangelogEntry>,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum MutationType {
     /// Illegal state.

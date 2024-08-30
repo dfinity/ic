@@ -17,7 +17,7 @@ pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
 const EVM_RPC_SEPOLIA_PROVIDERS: [EvmEthSepoliaService; 2] =
     [EvmEthSepoliaService::Ankr, EvmEthSepoliaService::PublicNode];
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub(crate) enum RpcNodeProvider {
     Ethereum(EthereumProvider),
     Sepolia(SepoliaProvider),
@@ -37,7 +37,7 @@ impl RpcNodeProvider {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum EthereumProvider {
     // https://www.ankr.com/rpc/
     Ankr,
@@ -75,7 +75,7 @@ impl EthereumProvider {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum SepoliaProvider {
     // https://www.ankr.com/rpc/
     Ankr,

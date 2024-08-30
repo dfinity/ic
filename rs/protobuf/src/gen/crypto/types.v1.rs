@@ -1,32 +1,32 @@
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PrincipalId {
     #[prost(bytes = "vec", tag = "1")]
     pub raw: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterId {
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetId {
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserId {
     #[prost(message, optional, tag = "1")]
     pub principal_id: ::core::option::Option<PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeId {
@@ -34,7 +34,7 @@ pub struct NodeId {
     pub principal_id: ::core::option::Option<PrincipalId>,
 }
 /// A non-interactive distributed key generation (NI-DKG) ID.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NiDkgId {
@@ -47,7 +47,7 @@ pub struct NiDkgId {
     #[prost(message, optional, tag = "5")]
     pub remote_target_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NominalCycles {
@@ -58,17 +58,17 @@ pub struct NominalCycles {
 }
 /// A non-interactive distributed key generation (NI-DKG) tag.
 #[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
-    Hash,
-    PartialOrd,
+    PartialEq,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
     ::prost::Enumeration,
+    serde::Deserialize,
+    serde::Serialize,
 )]
 #[repr(i32)]
 pub enum NiDkgTag {

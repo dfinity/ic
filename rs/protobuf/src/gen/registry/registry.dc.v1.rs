@@ -1,5 +1,5 @@
 /// Identifies a Data Center where IC nodes reside
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DataCenterRecord {
@@ -17,7 +17,7 @@ pub struct DataCenterRecord {
 /// For example:
 /// latitude = 37.774929
 /// longitude = -122.419416
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Gps {
@@ -27,7 +27,7 @@ pub struct Gps {
     pub longitude: f32,
 }
 /// The proposal payload used to add or remove data centers to/from the Registry
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AddOrRemoveDataCentersProposalPayload {

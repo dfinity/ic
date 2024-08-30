@@ -71,7 +71,7 @@ pub mod master_public_key_id {
     }
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum AlgorithmId {
     Unspecified = 0,
@@ -152,7 +152,7 @@ impl AlgorithmId {
     }
 }
 /// Types of curves that can be used for ECDSA signatures.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum EcdsaCurve {
     Unspecified = 0,
@@ -179,7 +179,7 @@ impl EcdsaCurve {
     }
 }
 /// Types of curves that can be used for Schnorr signatures.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SchnorrAlgorithm {
     Unspecified = 0,

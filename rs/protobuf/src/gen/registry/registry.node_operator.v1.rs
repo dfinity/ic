@@ -3,7 +3,7 @@
 ///
 /// Note that while a node operator might host nodes for more than
 /// one funding partner, its principal ID must be unique.
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]
+#[derive(Eq, Hash, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeOperatorRecord {
@@ -32,7 +32,7 @@ pub struct NodeOperatorRecord {
     pub ipv6: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// The payload of a request to remove Node Operator records from the Registry
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]
+#[derive(Eq, Hash, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveNodeOperatorsPayload {

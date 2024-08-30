@@ -157,7 +157,7 @@ pub struct WasmMethod {
 }
 /// Nested message and enum types in `WasmMethod`.
 pub mod wasm_method {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum SystemMethod {
         Unspecified = 0,
@@ -373,7 +373,7 @@ pub mod execution_task {
             Ingress(super::super::super::super::ingress::v1::Ingress),
         }
     }
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum CanisterTask {
         Unspecified = 0,
@@ -714,7 +714,7 @@ pub mod canister_state_bits {
         Stopped(super::CanisterStatusStopped),
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CustomSectionType {
     Unspecified = 0,
@@ -743,7 +743,7 @@ impl CustomSectionType {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NextScheduledMethod {
     Unspecified = 0,
@@ -775,7 +775,7 @@ impl NextScheduledMethod {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CyclesUseCase {
     Unspecified = 0,
@@ -841,7 +841,7 @@ impl CyclesUseCase {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LongExecutionMode {
     Unspecified = 0,

@@ -422,7 +422,7 @@ pub struct Burn {
     #[prost(message, optional, tag = "4")]
     pub spender: ::core::option::Option<AccountIdentifier>,
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccountIdentifier {
@@ -451,7 +451,7 @@ pub struct Icrc1Memo {
     pub memo: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(
-    Eq, PartialOrd, Ord, Hash, Copy, candid::CandidType, serde::Deserialize, serde::Serialize,
+    Copy, Eq, Ord, PartialOrd, Hash, candid::CandidType, serde::Deserialize, serde::Serialize,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

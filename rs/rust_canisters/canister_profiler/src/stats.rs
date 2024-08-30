@@ -45,7 +45,7 @@ pub const BUCKETS: [u64; BUCKET_COUNT] = [
 /// `BUCKETS[-1]` is defined to be zero.
 type Histogram = [u64; BUCKET_COUNT];
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SpanInfo {
     /// The histogram of observed values.  The [BUCKETS] constant
     /// defines the bucket sizes.

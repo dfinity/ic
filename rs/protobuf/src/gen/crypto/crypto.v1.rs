@@ -14,7 +14,7 @@
 /// generating the corresponding I-DKG public key.
 /// This transition is now done and so we *always* expect the I-DKG public key to be present
 /// (and `version >= 1`).
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodePublicKeys {

@@ -122,7 +122,7 @@ pub struct Ordering {
     pub v_inner: ::core::option::Option<composite::NestedInner>,
 }
 /// An enum type with a couple of variants with a gap between them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Enum {
     Unspecified = 0,

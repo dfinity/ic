@@ -1,7 +1,7 @@
 /// This struct contains all the parameters necessary to initialize an SNS. All fields are optional
 /// to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
 /// must be populated.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsInitPayload {
@@ -219,7 +219,7 @@ pub mod sns_init_payload {
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+    #[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum InitialTokenDistribution {
@@ -243,7 +243,7 @@ pub mod sns_init_payload {
 ///     - swap_distribution.initial_swap_amount_e8s > 0
 ///     - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
 ///     - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FractionalDeveloperVotingPower {
@@ -261,7 +261,7 @@ pub struct FractionalDeveloperVotingPower {
     pub airdrop_distribution: ::core::option::Option<AirdropDistribution>,
 }
 /// The distributions awarded to developers at SNS genesis.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeveloperDistribution {
@@ -274,7 +274,7 @@ pub struct DeveloperDistribution {
 /// The funds for the SNS' Treasury account on the SNS Ledger. These funds are
 /// in the SNS Ledger at genesis, but unavailable until after the initial swap
 /// has successfully completed.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TreasuryDistribution {
@@ -285,7 +285,7 @@ pub struct TreasuryDistribution {
 }
 /// The funds for token swaps to decentralize an SNS. These funds are in the
 /// SNS Ledger at genesis.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SwapDistribution {
@@ -301,7 +301,7 @@ pub struct SwapDistribution {
     pub initial_swap_amount_e8s: u64,
 }
 /// The distributions airdropped at SNS genesis.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AirdropDistribution {
@@ -312,7 +312,7 @@ pub struct AirdropDistribution {
     pub airdrop_neurons: ::prost::alloc::vec::Vec<NeuronDistribution>,
 }
 /// A tuple of values used to create a Neuron available at SNS genesis.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronDistribution {
@@ -348,7 +348,7 @@ pub struct NeuronDistribution {
     pub vesting_period_seconds: ::core::option::Option<u64>,
 }
 /// / A Canister that will be transferred to an SNS.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
+#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DappCanisters {
