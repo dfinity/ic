@@ -540,9 +540,6 @@ fn test_cmc_create_canister_refunds() {
     assert_eq!(cmc_cycles_balance(), 10_000_100_000_000);
     assert_eq!(uc_cycles_balance(), u128::MAX - 10_000_100_000_000);
 
-    println!("{:?}", error);
-
-    //default settings
     let canister = cmc_create_canister_with_cycles(
         &state_machine,
         universal_canister,
@@ -761,10 +758,8 @@ fn test_cmc_cycles_create_with_settings() {
     let CreateCanisterError::Refunded {
         refund_amount,
         create_error,
-    } = error
-    else {
-        panic!("Refund failed: {:?}", error)
-    };
+    } = error;
+
     assert!(create_error.contains("subnet type fake_subnet_type does not exist"));
     assert_eq!(
         refund_amount,
