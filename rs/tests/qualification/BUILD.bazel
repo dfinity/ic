@@ -10,7 +10,7 @@ system_test_nns(
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "system_test_daily",
+        "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
