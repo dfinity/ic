@@ -103,7 +103,7 @@ LIB_SRCS = glob(
         "gen/**",
         "src/**",
     ],
-    exclude = ["**/*tests*/**"]
+    exclude = ["**/*tests*/**"],
 )
 
 cargo_build_script(
