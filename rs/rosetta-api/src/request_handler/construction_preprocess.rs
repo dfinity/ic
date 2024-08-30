@@ -47,7 +47,7 @@ impl RosettaRequestHandler {
 }
 
 /// Return the public key required to complete a request.
-pub fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier, ApiError> {
+fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier, ApiError> {
     match request {
         Request::Transfer(Operation::Transfer { from, spender, .. }) => {
             if spender.is_some() {

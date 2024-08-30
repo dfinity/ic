@@ -504,33 +504,9 @@ impl RosettaClient {
 
     pub async fn search_transactions(
         &self,
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-        type_: Option<String>,
-        max_block: Option<i64>,
-        limit: Option<i64>,
-        offset: Option<i64>,
+        request: &SearchTransactionsRequest,
     ) -> Result<SearchTransactionsResponse, Error> {
-        self.call_endpoint(
-            "/search/transactions",
-            &SearchTransactionsRequest {
-                network_identifier,
-                transaction_identifier,
-                account_identifier,
-                coin_identifier: None,
-                address: None,
-                type_,
-                success: None,
-                currency: None,
-                operator: None,
-                status: None,
-                offset,
-                max_block,
-                limit,
-            },
-        )
-        .await
+        self.call_endpoint("/search/transactions", request).await
     }
 
     pub async fn mempool(
