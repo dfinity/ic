@@ -4,7 +4,7 @@ use dfn_core::{
     api::{arg_data, caller, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::{CanisterId, NodeId, PrincipalId};
+use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
@@ -186,14 +186,23 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
     fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
-        // Canisters are not allowed to call us.
-        if let Ok(_) = CanisterId::try_from_principal_id(caller()) {
+        // Only self-authenticating and anonymous principals are allowed to call us.
+        const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
+            Ok(PrincipalIdClass::SelfAuthenticating),
+            Ok(PrincipalIdClass::Anonymous),
+        ];
+        let class = caller().class();
+        if !ALLOWED_CALLER_CLASSES.contains(&class) {
             return Err((
                 Code::Authorization,
-                "Caller must not be a canister.".to_string(),
+                format!(
+                    "Caller must be self-authenticating, or anonymous (but was {:?}).",
+                    class,
+                ),
             ));
         }
 
+        // Deserialize request.
         let version = match deserialize_get_changes_since_request(arg_data()) {
             Ok(ok) => ok,
             Err(err) => {

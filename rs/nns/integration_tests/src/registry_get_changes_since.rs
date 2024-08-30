@@ -11,7 +11,7 @@ use ic_registry_transport::pb::v1::{
 use std::str::FromStr;
 
 #[test]
-fn test_disallow_cannister_caller() {
+fn test_disallow_opaque_caller() {
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
 
@@ -49,7 +49,7 @@ fn test_disallow_cannister_caller() {
         Ok(registry_error::Code::Authorization)
     );
     let reason = reason.to_lowercase();
-    for key_word in ["caller", "canister"] {
+    for key_word in ["caller", "self-authenticating", "anonymous", "opaque"] {
         assert!(
             reason.contains(key_word),
             "{} not in {:?}",
@@ -60,7 +60,7 @@ fn test_disallow_cannister_caller() {
 }
 
 #[test]
-fn test_allow_non_canister_caller() {
+fn test_allow_self_authenticating_caller() {
     // Step 1: Prepare the world. (Same as the previous test.)
     let state_machine = state_machine_builder_for_nns_tests().build();
 
