@@ -63,6 +63,7 @@ use ic_types::{
     SubnetId,
 };
 use ic_utils_thread::JoinOnDrop;
+use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::convert::{From, TryFrom};
@@ -103,6 +104,10 @@ const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
 /// See note [Replicated State Invariants].
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
     "state_manager_checkpoint_soft_invariant_broken";
+
+/// Critical error tracking ReplicatedState altering after checkpoint.
+const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
+    "state_manager_replicated_state_altered_after_checkpoint";
 
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
@@ -186,6 +191,7 @@ pub struct CheckpointMetrics {
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
+    replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
@@ -220,6 +226,9 @@ impl CheckpointMetrics {
         let load_checkpoint_soft_invariant_broken =
             metrics_registry.error_counter(CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN);
 
+        let replicated_state_altered_after_checkpoint = metrics_registry
+            .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -242,6 +251,7 @@ impl CheckpointMetrics {
             load_checkpoint_step_duration,
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
+            replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
@@ -2501,6 +2511,26 @@ impl StateManagerImpl {
                 err
             ),
         };
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["validate_eq"])
+                .start_timer();
+            if let Err(err) = checkpointed_state.validate_eq(state) {
+                error!(
+                    self.log,
+                    "{}: Replicated state altered: {}",
+                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+                    err
+                );
+                self.metrics
+                    .checkpoint_metrics
+                    .replicated_state_altered_after_checkpoint
+                    .inc();
+            }
+        }
         {
             let _timer = self
                 .metrics

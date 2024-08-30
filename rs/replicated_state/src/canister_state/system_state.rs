@@ -7,7 +7,9 @@ pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
-use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
+use crate::{
+    CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
+};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_logger::{error, ReplicaLogger};
@@ -769,8 +771,9 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
+        metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
-        Self {
+        let system_state = Self {
             controllers,
             canister_id,
             queues,
@@ -797,7 +800,11 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-        }
+        };
+        system_state.check_invariants().unwrap_or_else(|msg| {
+            metrics.observe_broken_soft_invariant(msg);
+        });
+        system_state
     }
 
     pub fn new_running_for_testing(
