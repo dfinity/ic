@@ -32,7 +32,7 @@ impl Visitor for NoopVisitor {
 }
 
 /// An enum capturing a single call on visitor.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) enum TraceEntry {
     StartSubtree,
     EnterEdge(Vec<u8>),
@@ -121,13 +121,13 @@ pub(crate) struct PathVisitor {
     pos: usize,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Value {
     Blob(Vec<u8>),
     Num(u64),
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PathError {
     NotALeaf(Vec<u8>),
     PathTooLong,

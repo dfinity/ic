@@ -37,7 +37,7 @@ impl Storable for EncryptedPair {
     };
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
 pub struct BoundedString<const N: usize>(String);
 
 impl<const N: usize> Display for BoundedString<N> {
@@ -102,14 +102,14 @@ impl<const N: usize> Storable for BoundedString<N> {
     };
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct Name(String);
 
 // NAME_MAX_LEN is the maximum length a name is allowed to have.
 // Based on https://en.wikipedia.org/wiki/Domain_name#Domain_name_syntax
 pub const NAME_MAX_LEN: u32 = 253;
 
-#[derive(PartialEq, Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum NameError {
     #[error("Name has size '{0}' but must not exceed size {}", NAME_MAX_LEN)]
     InvalidSize(usize),
@@ -168,7 +168,7 @@ impl Storable for Name {
     };
 }
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub enum State {
     #[serde(rename = "failed")]
     Failed(BoundedString<127>),
@@ -186,7 +186,7 @@ pub enum State {
     Available,
 }
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub struct Registration {
     pub name: Name,
     pub canister: Principal,

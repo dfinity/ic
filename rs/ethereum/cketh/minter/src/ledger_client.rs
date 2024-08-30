@@ -16,13 +16,13 @@ pub struct LedgerClient {
     client: ICRC1Client<CdkRuntime>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CkLedger {
     pub token_symbol: CkTokenSymbol,
     pub id: Principal,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LedgerBurnError {
     TemporarilyUnavailable {
         message: String,

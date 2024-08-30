@@ -94,7 +94,7 @@ pub fn prorated_neuron_age(
 }
 
 /// The LedgerFixture allows for independent testing of Ledger functionality.
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub struct LedgerFixture {
     accounts: LedgerMap,
 }

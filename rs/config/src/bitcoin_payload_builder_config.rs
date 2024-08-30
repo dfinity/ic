@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// The duration bitcoin adapters have to respond before timing out.

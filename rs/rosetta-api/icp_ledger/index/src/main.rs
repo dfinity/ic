@@ -86,7 +86,7 @@ thread_local! {
     });
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
@@ -128,7 +128,7 @@ impl Storable for State {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 enum AccountIdentifierDataType {
     #[default]
     Balance = 0,

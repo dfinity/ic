@@ -235,7 +235,7 @@ fn fetch_shasum_for_disk_img(version: String) -> String {
     .to_string()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 struct IcConfig {
     subnets: Option<Vec<ConfigurableSubnet>>,
     unassigned_nodes: Option<ConfigurableUnassignedNodes>,
@@ -243,32 +243,32 @@ struct IcConfig {
     initial_version: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum ConfigurableSubnet {
     Simple(SubnetSimple),
     Complex(Box<Subnet>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 struct SubnetSimple {
     subnet_type: SubnetType,
     num_nodes: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum ConfigurableBoundaryNode {
     Simple(BoundaryNodeSimple),
     Complex(Box<BoundaryNode>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 struct BoundaryNodeSimple {
     name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum ConfigurableUnassignedNodes {
     Simple(usize),

@@ -213,7 +213,7 @@ impl fmt::Display for WatData {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 enum Method {
     Start,
     Init,

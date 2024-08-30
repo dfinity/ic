@@ -33,7 +33,7 @@ impl TryFrom<&PublicKeyProto> for PublicKeyBytes {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublicKeyBytesFromProtoError {
     pub key_bytes: Vec<u8>,
     pub internal_error: String,

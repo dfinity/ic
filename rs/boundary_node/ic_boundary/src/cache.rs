@@ -23,7 +23,7 @@ use crate::{
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
 
 // Reason why the caching was skipped
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CacheBypassReason {
     Nonce,
     NonAnonymous,
@@ -46,7 +46,7 @@ impl fmt::Display for CacheBypassReason {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum CacheStatus {
     #[default]
     Disabled,

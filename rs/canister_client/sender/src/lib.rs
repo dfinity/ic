@@ -24,7 +24,7 @@ pub struct Secp256k1KeyPair {
     pk: ic_crypto_secp256k1::PublicKey,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Ed25519KeyPair {
     pub secret_key: [u8; 32],
     pub public_key: [u8; 32],

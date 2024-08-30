@@ -37,7 +37,7 @@ const EVENT_DATA_ID: MemoryId = MemoryId::new(1);
 type RestrictedMemory = RM<DefaultMemoryImpl>;
 type VirtualMemory = VM<RestrictedMemory>;
 
-#[derive(Clone, Eq, PartialEq, Default)]
+#[derive(Default, Clone, PartialEq, Eq)]
 struct Cbor<T>(pub T);
 
 impl<T> std::ops::Deref for Cbor<T> {
@@ -83,7 +83,7 @@ fn default_kyt_mode() -> KytMode {
     KytMode::Normal
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Config {
     api_keys: BTreeMap<Principal, String>,
     minter_id: Principal,
@@ -107,7 +107,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
     #[serde(rename = "ts")]
     pub timestamp: u64,
@@ -165,7 +165,7 @@ impl Event {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventKind {
     #[serde(rename = "utxo_check")]
     UtxoCheck {

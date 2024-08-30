@@ -36,7 +36,7 @@ pub const MAX_REGISTRY_DELTAS_SIZE: usize =
 /// so that we're able to call pop_front().
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
 pub type Version = u64;
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Default)]
 pub struct EncodedVersion([u8; 8]);
 
 impl EncodedVersion {
@@ -74,7 +74,7 @@ impl AsRef<[u8]> for EncodedVersion {
 /// The registry is a versioned key value store.
 ///
 /// TODO(NNS1-487): Garbage collection.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(PartialEq, Default, Clone, Debug)]
 pub struct Registry {
     /// Global counter that is incremented each time a mutation is applied to
     /// the registry. Each set of changes is tagged with this version.

@@ -3,7 +3,7 @@ use serde::__private::Formatter;
 use std::fmt;
 
 /// Occurs if creating `TranscriptsToRetain` using its constructor fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TranscriptsToRetainValidationError {
     NoLowTranscripts,
     NoHighTranscripts,

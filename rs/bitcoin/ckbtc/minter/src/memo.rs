@@ -8,7 +8,7 @@ pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     encoder.into_writer()
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, Decode, Encode, Eq, PartialEq)]
 #[cbor(index_only)]
 pub enum Status {
     #[n(0)]
@@ -21,7 +21,7 @@ pub enum Status {
     CallFailed,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Decode, Encode, Debug, Eq, PartialEq)]
 pub enum MintMemo<'a> {
     #[n(0)]
     /// The minter converted a single UTXO to ckBTC.
@@ -54,7 +54,7 @@ pub enum MintMemo<'a> {
     },
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Decode, Encode, Debug, Eq, PartialEq)]
 pub enum BurnMemo<'a> {
     #[n(0)]
     /// The minter processed a retrieve_btc request.

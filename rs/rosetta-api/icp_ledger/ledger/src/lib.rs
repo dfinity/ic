@@ -61,7 +61,7 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]

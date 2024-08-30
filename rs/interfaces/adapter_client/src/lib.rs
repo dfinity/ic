@@ -5,7 +5,7 @@ use thiserror::Error;
 /// Describe RPC error -- can be either related to transport (i.e.
 /// failure to transport) or to server (i.e. server responded, but
 /// gave us a message indicating an error).
-#[derive(Debug, Error, IntoStaticStr)]
+#[derive(Debug, IntoStaticStr, Error)]
 pub enum RpcError {
     /// Failure at transport.
     #[error("ConnectionBroken")]
@@ -42,7 +42,7 @@ pub trait RpcAdapterClient<T>: Send + Sync {
 }
 
 /// The error type that can be returned on "send".
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, Debug, PartialEq)]
 pub enum SendError<Request> {
     /// Channel is full. Some responses must be consumes before new
     /// requests are send.
@@ -52,7 +52,7 @@ pub enum SendError<Request> {
 }
 
 /// The error type that can be returned on "try_receive".
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, Debug, PartialEq)]
 pub enum TryReceiveError {
     /// No new response are available.
     Empty,

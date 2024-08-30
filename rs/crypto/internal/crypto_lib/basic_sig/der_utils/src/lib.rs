@@ -12,7 +12,7 @@ mod tests;
 ///
 /// This enum can be extended to support alternate types as required
 /// when different algorithms are implemented
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PkixAlgorithmParameters {
     /// An ASN.1 object identifier
     ObjectIdentifier(OID),
@@ -21,7 +21,7 @@ pub enum PkixAlgorithmParameters {
 }
 
 /// An AlgorithmIdentifier as described in RFC 5480
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PkixAlgorithmIdentifier {
     pub oid: OID,
     pub params: Option<PkixAlgorithmParameters>,
@@ -76,7 +76,7 @@ pub fn subject_public_key_info_der(algorithm: OID, key: &[u8]) -> Result<Vec<u8>
 }
 
 /// The provided DER-encoded bytes are malformed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyDerParsingError {
     pub internal_error: String,
 }

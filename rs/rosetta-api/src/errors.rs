@@ -22,7 +22,7 @@ use ic_ledger_canister_blocks_synchronizer::blocks::BlockStoreError;
 /// Then add a `From<ApiError>` instance to allow `?` to convert
 /// your specific error to a general `ApiError`.
 /// See `ICError` for an example of this pattern.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ApiError {
     InternalError(bool, Details),
     InvalidRequest(bool, Details),
@@ -303,7 +303,7 @@ impl From<rosetta_core::miscellaneous::Error> for ApiError {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ICError {
     #[serde(skip)]
     pub retriable: bool,
@@ -341,7 +341,7 @@ impl TryFrom<Option<ObjectMap>> for ICError {
 
 /// A arbitrary JSON object passed to `RosettaError`.
 /// More specific error variants should be preferred.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Details {
     /// An extra, more detailed error message.
     /// This is distinct from Rosetta `Error.message`.

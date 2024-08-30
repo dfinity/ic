@@ -13,7 +13,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 /// A payload, that contains information needed during a regular round.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
@@ -22,7 +22,7 @@ pub struct DataPayload {
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
@@ -53,7 +53,7 @@ impl SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
@@ -138,7 +138,7 @@ impl BlockPayload {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
@@ -162,7 +162,7 @@ impl std::fmt::Display for PayloadType {
 /// pointer so that it is cheap to clone.
 ///
 /// It serializes to both the crypto hash and value of a `BlockPayload`.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Payload {
     payload_type: PayloadType,
     // It is not crucial that Arc used here is unique, because the data referenced remains

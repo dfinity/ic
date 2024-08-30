@@ -18,7 +18,7 @@ thread_local! {
     static STATE: RefCell<GeneratorState> = const { RefCell::new(GeneratorState::new()) };
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct RunScenarioResult {
     scenario: Scenario,
     success: bool,
@@ -26,14 +26,14 @@ pub struct RunScenarioResult {
     blocks: Nat,
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub enum Scenario {
     Accounts,
     Transactions,
     IndexPerf,
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct InitArgs {
     ledger_id: CanisterId,
     index_id: CanisterId,

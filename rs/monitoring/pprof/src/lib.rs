@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::{task::spawn_blocking, time::sleep};
 
 /// Errors returned by `profile()` and `flamegraph()`.
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 pub enum Error {
     /// Error encountered while collecting the CPU profile (e.g. profile already
     /// in progress).

@@ -19,7 +19,7 @@ use url::Url;
 
 /// Sub-command to submit a proposal to update the recovery CUP of a subnet.
 #[derive_common_proposal_fields]
-#[derive(Parser, ProposalMetadata)]
+#[derive(ProposalMetadata, Parser)]
 pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     #[clap(long, required = true, alias = "subnet-index")]
     /// The targeted subnet.

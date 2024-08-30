@@ -440,7 +440,7 @@ async fn install(
     principal: Option<PrincipalId>,
 ) -> Result<Canister<'_>, String> {
     if let Some(wallet_canister_id) = wallet_canister_id {
-        #[derive(Clone, CandidType, Deserialize)]
+        #[derive(CandidType, Clone, Deserialize)]
         struct CanisterSettings {
             controller: Option<PrincipalId>,
             compute_allocation: Option<candid::Nat>,

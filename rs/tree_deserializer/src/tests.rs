@@ -9,13 +9,13 @@ use proptest_derive::Arbitrary;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Arbitrary, Deserialize)]
+#[derive(Arbitrary, Deserialize, PartialEq, Eq, Debug, PartialOrd, Ord)]
 struct Key(String);
 
-#[derive(Eq, PartialEq, Debug, Arbitrary, Deserialize)]
+#[derive(Arbitrary, Deserialize, PartialEq, Eq, Debug)]
 struct Value(u32);
 
-#[derive(Eq, PartialEq, Debug, Arbitrary, Deserialize)]
+#[derive(Arbitrary, Deserialize, PartialEq, Eq, Debug)]
 struct S {
     int32: u32,
     int64: u64,

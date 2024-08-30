@@ -5,7 +5,7 @@ use std::path::PathBuf;
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;
 const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 30;
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Default, Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 /// The source of the unix domain socket to be used for inter-process
 /// communication.
 pub enum IncomingSource {
@@ -17,7 +17,7 @@ pub enum IncomingSource {
 }
 
 /// This struct contains configuration options for the HTTP Adapter.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(default)]
 pub struct Config {
     pub http_connect_timeout_secs: u64,

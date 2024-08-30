@@ -23,7 +23,7 @@ use std::{
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as
 /// a fixed-size array and a length.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize, Serialize, comparable::Comparable,
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, comparable::Comparable,
 )]
 #[describe_type(String)]
 #[describe_body(self.to_string())]
@@ -41,7 +41,7 @@ impl Hash for PrincipalId {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct PrincipalIdError(pub PrincipalError);

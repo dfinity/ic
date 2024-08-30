@@ -14,7 +14,7 @@ pub use super::dkg_errors::{
 };
 
 /// The receiver set isn't properly indexed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MisnumberedReceiverError {
     pub receiver_index: NodeIndex,
     pub number_of_receivers: NumberOfNodes,
@@ -45,7 +45,7 @@ impl From<MisnumberedReceiverError> for CspDkgVerifyDealingError {
 }
 
 /// Creation of a forward-secure keypair during DKG failed.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgCreateFsKeyError {
     InternalError(InternalError),
     DuplicateKeyId(String),
@@ -53,7 +53,7 @@ pub enum CspDkgCreateFsKeyError {
 }
 
 /// Verification of a DKG forward-secure key failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgVerifyFsKeyError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -64,7 +64,7 @@ pub enum CspDkgVerifyFsKeyError {
 }
 
 /// Updating the forward-secure epoch for DKG failed.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgUpdateFsEpochError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -78,7 +78,7 @@ pub enum CspDkgUpdateFsEpochError {
 }
 
 /// Encrypting or zero-knowledge proving during DKG failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EncryptAndZKProveError {
     /// One of the receiver public keys is invalid.
     MalformedFsPublicKeyError {
@@ -90,7 +90,7 @@ pub enum EncryptAndZKProveError {
 }
 
 /// Forward-secure decryption during DKG failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DecryptError {
     /// The ciphertext was malformed
     MalformedCiphertext(&'static str),
@@ -113,7 +113,7 @@ pub enum DecryptError {
 }
 
 /// Creation of a DKG dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgCreateDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -156,7 +156,7 @@ impl From<EncryptAndZKProveError> for CspDkgCreateDealingError {
 }
 
 /// Creation of a DKG resharing dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgCreateReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -282,7 +282,7 @@ impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
 }
 
 /// Verification of a DKG dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgVerifyDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -314,7 +314,7 @@ pub enum CspDkgVerifyDealingError {
 }
 
 /// Verification of a DKG resharing dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgVerifyReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -384,7 +384,7 @@ impl From<CspDkgVerifyDealingError> for CspDkgVerifyReshareDealingError {
 }
 
 /// Creation of a DKG transcript failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgCreateTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -406,7 +406,7 @@ pub enum CspDkgCreateTranscriptError {
 }
 
 /// Creation of a DKG transcript after resharing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspDkgCreateReshareTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -433,7 +433,7 @@ pub enum CspDkgCreateReshareTranscriptError {
 }
 
 /// A call to retain existing threshold keys failed.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgRetainThresholdKeysError {
     /// A key ID could not be computed from the public coefficients.
     KeyIdInstantiationError(String),
@@ -468,7 +468,7 @@ impl From<CspDkgCreateTranscriptError> for CspDkgCreateReshareTranscriptError {
 }
 
 /// Loading a private key from a DKG transcript failed.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgLoadPrivateKeyError {
     /// The AlgorithmId does not correspond to a NiDkg variant
     UnsupportedAlgorithmId(AlgorithmId),

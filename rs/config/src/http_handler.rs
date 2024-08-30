@@ -10,7 +10,7 @@ const DEFAULT_PORT: u16 = 8080u16;
 /// The internal configuration -- any historical warts from the external
 /// configuration are removed. Anything using this struct can trust that it
 /// has been validated.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// IP address and port to listen on

@@ -151,7 +151,7 @@ impl<H: HmacHashFunction> Hmac<H> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum HkdfError {
     RequestedOutputTooLong,
 }

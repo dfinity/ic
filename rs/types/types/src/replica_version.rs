@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ReplicaVersion {
     version_id: String,
 }
@@ -38,7 +38,7 @@ impl Default for ReplicaVersion {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DefaultVersionAlreadySetError;
 
 impl std::fmt::Display for ReplicaVersion {
@@ -92,7 +92,7 @@ impl TryFrom<String> for ReplicaVersion {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ReplicaVersionParseError(pub(crate) String);
 
 impl fmt::Display for ReplicaVersionParseError {

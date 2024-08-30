@@ -165,7 +165,7 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
         .map_err(|e| anyhow!(e))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct CanisterUpdate {
     canister_name: String,
     new_git_hash: String,

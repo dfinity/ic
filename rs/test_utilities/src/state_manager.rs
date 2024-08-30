@@ -324,7 +324,7 @@ impl StateReader for FakeStateManager {
 
 /// Local helper to enable serialization and deserialization of
 /// [`RequestOrResponse`] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 enum SerializableRequestOrResponse {
     Request(Request),
     Response(Response),
@@ -358,7 +358,7 @@ impl From<SerializableRequestOrResponse> for RequestOrResponse {
 
 /// Local helper to enable serialization and deserialization of
 /// ['StreamHeader'] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 struct SerializableStreamHeader {
     begin: StreamIndex,
     end: StreamIndex,
@@ -393,7 +393,7 @@ impl From<SerializableStreamHeader> for StreamHeader {
 
 /// Local helper to enable serialization and deserialization of
 /// ['RejectReason'] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 pub enum SerializableRejectReason {
     CanisterMigrating = 1,
     CanisterNotFound = 2,
@@ -434,7 +434,7 @@ impl From<SerializableRejectReason> for RejectReason {
 
 /// Local helper to enable serialization and deserialization of
 /// ['RejectSignal'] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SerializableRejectSignal {
     pub reason: SerializableRejectReason,
     pub index: StreamIndex,
@@ -460,7 +460,7 @@ impl From<SerializableRejectSignal> for RejectSignal {
 
 /// Local helper to enable serialization and deserialization of
 /// ['StreamFlags'] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SerializableStreamFlags {
     pub deprecated_responses_only: bool,
 }
@@ -483,7 +483,7 @@ impl From<SerializableStreamFlags> for StreamFlags {
 
 /// Local helper to enable serialization and deserialization of
 /// [`StreamIndexedQueue`] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
     queue: VecDeque<SerializableRequestOrResponse>,
@@ -510,7 +510,7 @@ impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrRespon
 
 /// Local helper to enable serialization and deserialization of
 /// [`StreamSlice`] for testing.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 struct SerializableStreamSlice {
     header: SerializableStreamHeader,
     messages: Option<SerializableStreamIndexedQueue>,

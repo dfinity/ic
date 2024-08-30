@@ -23,7 +23,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {
     Config,
     Registry,

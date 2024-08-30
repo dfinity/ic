@@ -13,7 +13,7 @@ fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(PartialEq, Eq, Hash, Clone, Default, PartialOrd, Ord)]
 struct Account(u64);
 
 type TestAllowanceTable = AllowanceTable<HeapAllowancesData<Account, Tokens>>;

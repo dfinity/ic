@@ -18,7 +18,7 @@ pub fn mint_sns_tokens_7_day_total_upper_bound_tokens(
 }
 
 /// Within a 7 day window, at most, this much of the treasury can be transferred (out via proposal).
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProposalsAmountTotalUpperBound {
     /// Any amount can be transferred (out via proposal).
     NoLimit,
@@ -144,7 +144,7 @@ impl ProposalsAmountTotalUpperBound {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposalsAmountTotalLimitError {
     pub error_type: ProposalsAmountTotalLimitErrorType,
     pub message: String,
@@ -159,7 +159,7 @@ impl ProposalsAmountTotalLimitError {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProposalsAmountTotalLimitErrorType {
     Arithmetic,
 }

@@ -72,13 +72,13 @@ pub struct SpyNnsRootCanisterClient {
     replies: Arc<Mutex<VecDeque<SpyNnsRootCanisterClientReply>>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpyNnsRootCanisterClientCall {
     ChangeCanisterControllers(ChangeCanisterControllersRequest),
     CanisterStatus(CanisterIdRecord),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum SpyNnsRootCanisterClientReply {
     ChangeCanisterControllers(Result<ChangeCanisterControllersResponse, (Option<i32>, String)>),

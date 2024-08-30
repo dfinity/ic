@@ -84,7 +84,7 @@ pub const MAX_RESPONSE_COUNT_BYTES: usize = size_of::<RequestOrResponse>()
     + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserSignature {
     /// The actual signature. End users should sign the `MessageId` computed
     /// from the message that they are signing.
@@ -101,7 +101,7 @@ pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
 
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum StopCanisterContext {
     Ingress {
@@ -269,7 +269,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// Bytes representation of signed HTTP requests, using CBOR as a serialization
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl AsRef<[u8]> for SignedRequestBytes {
@@ -326,7 +326,7 @@ impl SignedRequestBytes {
 }
 
 /// A wrapper around ingress messages and canister requests/responses.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterMessage {
     Response(Arc<Response>),
     Request(Arc<Request>),
@@ -368,7 +368,7 @@ impl From<RequestOrResponse> for CanisterMessage {
 }
 
 /// A wrapper around a canister request and an ingress message.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterCall {
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
@@ -445,7 +445,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 
 /// A canister task can be thought of as a special system message that the IC
 /// sends to the canister to execute its heartbeat or the global timer method.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumIter, Hash)]
 pub enum CanisterTask {
     Heartbeat = 1,
     GlobalTimer = 2,
@@ -501,7 +501,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterMessageOrTask {
     Message(CanisterMessage),
     Task(CanisterTask),
@@ -517,7 +517,7 @@ impl Display for CanisterMessageOrTask {
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterCallOrTask {
     Call(CanisterCall),
     Task(CanisterTask),

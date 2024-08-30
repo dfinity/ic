@@ -18,7 +18,7 @@ pub enum IDkgChangeAction {
 
 pub type IDkgChangeSet = Vec<IDkgChangeAction>;
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum IDkgPoolSectionOp {
     Insert(IDkgMessage),
     Remove(IDkgMessageId),

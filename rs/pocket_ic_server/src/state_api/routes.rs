@@ -293,7 +293,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct OpConversionError;
 
 #[async_trait]

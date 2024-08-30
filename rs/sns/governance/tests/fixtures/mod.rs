@@ -201,7 +201,7 @@ impl LedgerFixtureBuilder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub struct CmcFixture {
     pub maturity_modulation: Arc<Mutex<i32>>,
 }
@@ -398,7 +398,7 @@ impl NeuronBuilder {
 /// The GovernanceState is used to capture all of the salient details of the Governance
 /// canister, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(Clone, Debug, Default, comparable::Comparable)]
+#[derive(Clone, Default, comparable::Comparable, Debug)]
 #[compare_default]
 pub struct GovernanceState {
     pub now: u64,

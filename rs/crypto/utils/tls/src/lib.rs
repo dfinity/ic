@@ -13,7 +13,7 @@ use ic_base_types::{NodeId, PrincipalId};
 use thiserror::Error;
 use x509_parser::certificate::X509Certificate;
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 pub enum NodeIdFromCertificateDerError {
     /// The passed certificate could not be decoded.
     #[error("Invalid der encoded certificate: `{0}`.")]

@@ -26,7 +26,7 @@ use std::{
 };
 use tokio::net::UnixListener;
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogEvent {
     task_id: TaskId,
     log_record: LogRecord,
@@ -43,7 +43,7 @@ impl LogEvent {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogRecord {
     level: usize,
     file: String,

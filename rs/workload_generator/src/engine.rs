@@ -37,7 +37,7 @@ use crate::metrics::{
     LATENCY_HISTOGRAM, QUERY_REPLY, UPDATE_SENT, UPDATE_SENT_REPLY, UPDATE_WAIT_REPLY,
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct WaitRequest {
     request_id: MessageId,
     request_type: String,
@@ -49,7 +49,7 @@ const START_OFFSET: Duration = Duration::from_millis(500);
 const QUERY_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 const INGRESS_TIMEOUT: Duration = Duration::from_secs(60 * 6);
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 enum CallFailure {
     None,
     OnSubmit,

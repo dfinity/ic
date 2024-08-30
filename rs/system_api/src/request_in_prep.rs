@@ -29,7 +29,7 @@ use std::{convert::TryFrom, time::Duration};
 /// does not make much sense, actually -- it never needs to be transferred
 /// across processes. It should probably be moved out of ApiType (such that
 /// "mutable" bits are not part of it).
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RequestInPrep {
     sender: CanisterId,
     callee: PrincipalId,

@@ -32,7 +32,7 @@ impl Registry {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
     pub ssh_readonly_keys: Vec<String>,
 }

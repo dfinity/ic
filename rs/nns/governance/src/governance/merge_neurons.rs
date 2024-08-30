@@ -14,7 +14,7 @@ use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
 /// All possible effect of merging 2 neurons.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsEffect {
     /// The source neuron id.
     source_neuron_id: NeuronId,
@@ -81,7 +81,7 @@ impl MergeNeuronsEffect {
 }
 
 /// The effect of merge neurons on the source neuron (other than the ones involving ledger).
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsSourceEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     subtract_maturity: u64,
@@ -99,7 +99,7 @@ impl MergeNeuronsSourceEffect {
 }
 
 /// The effect of merge neurons on the target neuron (other than the ones involving ledger).
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsTargetEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     add_maturity: u64,
@@ -117,7 +117,7 @@ impl MergeNeuronsTargetEffect {
 }
 
 /// All possible errors that can occur when merging neurons
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MergeNeuronsError {
     SourceAndTargetSame,
     NoSourceNeuronId,

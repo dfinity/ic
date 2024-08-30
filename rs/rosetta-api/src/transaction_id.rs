@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 pub const NEURON_MANAGEMENT_PSEUDO_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransactionIdentifier(pub crate::models::TransactionIdentifier);
 
 impl TransactionIdentifier {

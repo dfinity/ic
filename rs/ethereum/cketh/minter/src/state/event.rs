@@ -13,7 +13,7 @@ use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
 /// The event describing the ckETH minter state transition.
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
 pub enum EventType {
     /// The minter initialization event.
     /// Must be the first event in the log.
@@ -175,7 +175,7 @@ impl ReceivedEvent {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Encode, Decode, Debug, PartialEq, Eq)]
 pub struct Event {
     /// The canister time at which the minter generated this event.
     #[n(0)]

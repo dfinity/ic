@@ -15,7 +15,7 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
@@ -125,7 +125,7 @@ impl ChangeCanisterRequest {
     }
 }
 
-#[derive(Clone, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone)]
 pub struct AddCanisterRequest {
     /// A unique name for this canister.
     pub name: String,
@@ -179,14 +179,14 @@ impl std::fmt::Display for AddCanisterRequest {
 }
 
 // The action to take on the canister.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,

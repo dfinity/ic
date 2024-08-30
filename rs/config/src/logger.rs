@@ -6,7 +6,7 @@ use std::path::PathBuf;
 // Note that `slog::Level` does not provide an implementation of `Deserialize`
 // so we use the approach for remote derives (https://serde.rs/remote-derive.html)
 // provided by serde.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum Level {
     Critical,
@@ -18,7 +18,7 @@ pub enum Level {
 }
 
 /// Possible formatting for log lines
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
     TextFull,
@@ -26,7 +26,7 @@ pub enum LogFormat {
 }
 
 /// Possible destitations where emitted logs can be written
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LogDestination {
     #[default]
     Stdout,
@@ -34,7 +34,7 @@ pub enum LogDestination {
     File(PathBuf),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub level: Level,

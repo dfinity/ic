@@ -133,7 +133,7 @@ impl<M: Memory> KnownNeuronIndex<M> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 struct KnownNeuronName(String);
 
 impl KnownNeuronName {

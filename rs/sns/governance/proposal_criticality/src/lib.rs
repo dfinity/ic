@@ -2,7 +2,7 @@ use ic_nervous_system_proto::pb::v1::{Duration, Percentage};
 
 /// It is more difficult to pass critical proposals. This controls voting power thresholds and
 /// voting duration parameters on proposals.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProposalCriticality {
     Normal,
     Critical,
@@ -40,7 +40,7 @@ impl ProposalCriticality {
 /// denominator of the former is not less than that of the latter (and the numerator for both is the
 /// same). However, if such a thing were to occur, it would still be possible for a proposal to
 /// pass. It's just that that *_of_exercised requirement would be superfluous.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VotingPowerThresholds {
     /// Out of the total available voting power, this much must vote to adopt.
     pub minimum_yes_proportion_of_total: Percentage,
@@ -56,7 +56,7 @@ pub struct VotingPowerThresholds {
 /// (i.e. becomes greater or becomes less than or equal). The amount that gets added to the deadline
 /// is complicated and described elsewhere. However, one notable property of wait for quiet is that
 /// the total amount of increase is at most 2 * wait_for_quiet_deadline_increase.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VotingDurationParameters {
     pub initial_voting_period: Duration,
     pub wait_for_quiet_deadline_increase: Duration,

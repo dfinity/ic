@@ -287,7 +287,7 @@ pub trait FakeVersion {
     fn fake_version(&self, version: ReplicaVersion) -> Self;
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct FakeBlock {
     version: ReplicaVersion,
     pub parent: CryptoHashOf<Block>,

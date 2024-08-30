@@ -12,7 +12,7 @@ use serde_bytes::ByteBuf;
 /// [bytes] <=> Account { owner: bytes, subaccount : None }
 /// [x: bytes, y: bytes] <=> Account { owner: x, subaccount: Some(y) }
 /// ```
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct CompactAccount(Vec<ByteBuf>);
 

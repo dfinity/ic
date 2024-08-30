@@ -461,7 +461,7 @@ pub fn empty_subtree_hash() -> Digest {
 }
 
 /// This error indicates that the algorithm exceeded the recursion depth limit.
-#[derive(PartialEq, Debug, thiserror::Error)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 #[error("The algorithm failed due to too deep recursion (depth={0})")]
 pub struct TooDeepRecursion(pub u8);
 

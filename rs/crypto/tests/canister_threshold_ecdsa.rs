@@ -189,7 +189,7 @@ mod sign_share {
         }
     }
 
-    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+    #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
     struct SignerState {
         retain_key_transcript: bool,
         retain_kappa_unmasked: bool,

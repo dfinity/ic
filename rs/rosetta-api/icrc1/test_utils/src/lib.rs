@@ -393,7 +393,7 @@ impl ArgWithCaller {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default, Debug)]
 struct TransactionsAndBalances {
     transactions: Vec<ArgWithCaller>,
     balances: HashMap<Account, u64>,

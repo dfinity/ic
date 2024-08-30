@@ -37,7 +37,7 @@ thread_local! {
     static OPS: RefCell<Vec<StableBTreeOperation>>  = const { RefCell::new(vec![]) }
 }
 
-#[derive(Clone, Debug, Arbitrary, Deserialize, Serialize)]
+#[derive(Arbitrary, Debug, Clone, Serialize, Deserialize)]
 enum StableBTreeOperation {
     Insert { key: [u8; KEY_SIZE], value: Vec<u8> },
     Remove { index: u16 },

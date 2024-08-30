@@ -13,7 +13,7 @@ use crate::work::ProcessError;
 
 pub type Id = String;
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum State {
     Failed(String),
     PendingOrder,
@@ -65,7 +65,7 @@ impl From<State> for ifc::State {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registration {
     pub name: String,
     pub canister: Principal,
@@ -82,7 +82,7 @@ impl From<ifc::Registration> for Registration {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UpdateType {
     Canister(Principal),
     State(State),

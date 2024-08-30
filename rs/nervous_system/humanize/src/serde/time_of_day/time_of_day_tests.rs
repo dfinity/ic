@@ -9,7 +9,7 @@ fn test_round_trip() {
         expected_seconds_after_utc_midnight: u64,
         expected_formatted_str: &str,
     ) {
-        #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+        #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
         struct T {
             #[serde(with = "crate::serde::time_of_day")]
             lunchtime: GlobalTimeOfDay,

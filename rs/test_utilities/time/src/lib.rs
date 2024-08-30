@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 pub struct FastForwardTimeSource(RwLock<TickTimeData>);
 
 /// Error when time update is not monotone.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct TimeNotMonotoneError;
 struct TickTimeData {
     current_time: Time,

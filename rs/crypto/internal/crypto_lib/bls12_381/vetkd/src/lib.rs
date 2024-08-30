@@ -185,7 +185,7 @@ pub enum DerivedPublicKeyDeserializationError {
     InvalidPublicKey,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 /// A derived public key
 pub struct DerivedPublicKey {
     pt: G2Affine,
@@ -280,7 +280,7 @@ pub enum EncryptedKeyCombinationError {
     InvalidKeyShares(Vec<NodeIndex>),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// An encrypted key
 pub struct EncryptedKey {
     c1: G1Affine,
@@ -383,7 +383,7 @@ impl EncryptedKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// A share of an encrypted key
 pub struct EncryptedKeyShare {
     c1: G1Affine,

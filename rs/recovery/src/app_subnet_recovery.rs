@@ -19,7 +19,7 @@ use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize, EnumMessage,
 )]
 pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
@@ -93,7 +93,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
+#[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
 #[clap(version = "1.0")]
 pub struct AppSubnetRecoveryArgs {
     /// Id of the broken subnet

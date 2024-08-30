@@ -4,7 +4,7 @@ use std::{fmt, ops::Add};
 /// Represents the content length of an http request. The ContentLength is
 /// a scalar value that represents the number of bytes (octets) in the
 /// payload of the request. This does not include header sizes.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub struct ContentLength(u64);
 
 impl ContentLength {

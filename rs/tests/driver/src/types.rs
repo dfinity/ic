@@ -5,7 +5,7 @@ pub use ic_utils::interfaces::management_canister::builders::InstallMode;
 use serde::Deserialize;
 
 #[allow(dead_code)] // Not all reject codes are used yet.
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
@@ -24,7 +24,7 @@ pub struct CanisterIdRecord {
     pub canister_id: Principal,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,

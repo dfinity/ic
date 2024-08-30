@@ -565,7 +565,7 @@ fn range_not_satisfiable<T: Into<Body>>(msg: T) -> Response<Body> {
 }
 
 /// The socket address for `XNetEndpoint` to listen on.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct XNetEndpointConfig {
     address: SocketAddr,
 }

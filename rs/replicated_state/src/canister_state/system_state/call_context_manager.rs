@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Contains all context information related to an incoming call.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// `CallContext` needed to form the eventual reply.
@@ -183,7 +183,7 @@ impl TryFrom<pb::CallContext> for CallContext {
 }
 
 /// The action the caller of `CallContext.on_canister_result` should take.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CallContextAction {
     /// The canister produced a `Reply` for the request which is returned along
     /// with the remaining cycles that the canister did not accept.
@@ -211,7 +211,7 @@ pub enum CallContextAction {
 
 /// Call context and callback stats to initialize and validate `CanisterQueues`
 /// guaranteed response memory reservation and queue capacity stats.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub(crate) struct CallContextManagerStats {
     /// The number of canister update call contexts that have not yet been responded
     /// to.
@@ -411,7 +411,7 @@ impl CallContextManagerStats {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
@@ -423,7 +423,7 @@ pub struct CallContextManager {
     stats: CallContextManagerStats,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
     CanisterUpdate(CanisterId, CallbackId, CoarseTime),

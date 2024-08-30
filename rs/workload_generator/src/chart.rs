@@ -1,5 +1,5 @@
 /// A chart that can be used to render some set of data.
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub struct Chart {
     height: u32,
     full: char,

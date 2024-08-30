@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 /// An Ethereum account address.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
+    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Encode, Decode,
 )]
 #[serde(transparent)]
 #[cbor(transparent)]

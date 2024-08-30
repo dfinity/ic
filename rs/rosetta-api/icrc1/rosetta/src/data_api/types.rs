@@ -2,7 +2,7 @@ use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use serde::Serialize;
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct QueryBlockRangeRequest {
     pub highest_block_index: u64,
     pub number_of_blocks: u64,
@@ -32,7 +32,7 @@ impl TryFrom<ObjectMap> for QueryBlockRangeRequest {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct QueryBlockRangeResponse {
     pub blocks: Vec<rosetta_core::objects::Block>,
 }

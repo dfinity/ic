@@ -29,7 +29,7 @@ use crate::{
     snapshot::{Node, Subnet},
 };
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CheckError {
     Generic(String),
     Network(String),  // Unable to make HTTP request
@@ -68,7 +68,7 @@ impl fmt::Display for CheckError {
 const WINDOW_SIZE: usize = 10;
 type LatencyMovAvg = SumTreeSMA<f64, f64, WINDOW_SIZE>;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct NodeState {
     healthy: bool,
     height: u64,

@@ -7,7 +7,7 @@ use std::net::Ipv6Addr;
 
 /// Map `Deployment` from `DeploymentArg` to avoid a dependency on `clap` in
 /// the lib.
-#[derive(Copy, Clone, ValueEnum)]
+#[derive(Clone, Copy, ValueEnum)]
 enum DeploymentArg {
     Mainnet,
     Testnet,

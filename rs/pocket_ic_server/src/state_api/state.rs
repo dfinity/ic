@@ -210,7 +210,7 @@ pub enum OpOut {
     CanisterHttp(Vec<CanisterHttpRequest>),
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
     BadIngressMessage(String),
@@ -333,7 +333,7 @@ pub enum InstanceState {
     Deleted,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateError {
     message: String,
 }
@@ -432,7 +432,7 @@ fn layer(methods: &[Method]) -> CorsLayer {
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 enum ErrorCause {
     ConnectionFailure(String),
     UnableToReadBody(String),

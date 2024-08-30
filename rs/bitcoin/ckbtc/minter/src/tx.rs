@@ -196,7 +196,7 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
@@ -206,14 +206,14 @@ pub struct SignedInput {
     pub pubkey: ByteBuf,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnsignedInput {
     pub previous_output: OutPoint,
     pub value: Satoshi,
     pub sequence: u32,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxOut {
     pub value: Satoshi,
     pub address: BitcoinAddress,
@@ -340,7 +340,7 @@ impl<'a> TxSigHasher<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UnsignedTransaction {
     pub inputs: Vec<UnsignedInput>,
     pub outputs: Vec<TxOut>,
@@ -357,7 +357,7 @@ impl UnsignedTransaction {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SignedTransaction {
     pub inputs: Vec<SignedInput>,
     pub outputs: Vec<TxOut>,

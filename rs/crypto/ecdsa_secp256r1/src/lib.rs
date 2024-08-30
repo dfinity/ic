@@ -308,7 +308,7 @@ impl PrivateKey {
 }
 
 /// An ECDSA public key
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
     key: p256::ecdsa::VerifyingKey,
 }

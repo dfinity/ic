@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum_macros::EnumIter;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
 }
@@ -20,7 +20,7 @@ pub enum TryFromError {
 /// of user-facing errors.
 ///
 /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#reject-codes>
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
@@ -167,7 +167,7 @@ impl From<ErrorCode> for RejectCode {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
+    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, EnumIter, Eq, Hash, Serialize, Deserialize,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -428,7 +428,7 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserError {
     code: ErrorCode,
     description: String,

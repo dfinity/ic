@@ -280,7 +280,7 @@ impl Registry {
 }
 
 /// A payload used to recover a subnet that has stalled
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RecoverSubnetPayload {
     /// The subnet ID to add the recovery CUP to
     pub subnet_id: PrincipalId,
@@ -308,7 +308,7 @@ pub struct RecoverSubnetPayload {
     pub chain_key_config: Option<InitialChainKeyConfig>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
@@ -374,13 +374,13 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct KeyConfigRequest {
     pub key_config: Option<KeyConfig>,
     pub subnet_id: Option<PrincipalId>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct KeyConfig {
     pub key_id: Option<MasterPublicKeyId>,
     pub pre_signatures_to_create_in_advance: Option<u32>,

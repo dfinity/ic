@@ -187,7 +187,7 @@ pub fn get_adjusted_notary_delay(
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NotaryDelay {
     /// Notary can notarize after this delay.
     CanNotarizeAfter(Duration),

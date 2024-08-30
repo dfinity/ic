@@ -25,7 +25,7 @@ impl Sink for PrintProxySink {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Deserialize, Debug, Copy)]
 pub enum Priority {
     Info,
     TraceHttp,
@@ -45,7 +45,7 @@ impl FromStr for Priority {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Deserialize, Debug, Copy)]
 pub enum Sort {
     Ascending,
     Descending,
@@ -63,7 +63,7 @@ impl FromStr for Sort {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub priority: Priority,
@@ -73,7 +73,7 @@ pub struct LogEntry {
     pub counter: u64,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
+#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
 pub struct Log {
     pub entries: Vec<LogEntry>,
 }

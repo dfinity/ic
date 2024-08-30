@@ -8,7 +8,7 @@ use ic_protobuf::types::v1 as pb;
 mod tests;
 
 /// The ID for non-interactive DKG. Identifies a DKG epoch.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgId {
     /// This field refers to the height of the block denoting the start of the
@@ -81,7 +81,7 @@ impl TryFrom<NiDkgIdProto> for NiDkgId {
 }
 
 /// Occurs if the target ID size is invalid.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct InvalidNiDkgTargetIdSizeError;
 
 /// Creates a target ID for the given data.
@@ -99,7 +99,7 @@ pub fn ni_dkg_target_id(data: &[u8]) -> Result<NiDkgTargetId, InvalidNiDkgTarget
 }
 
 /// Occurs if the `NiDkgId` cannot be obtained from the corresponding protobuf.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum NiDkgIdFromProtoError {
     InvalidPrincipalId(PrincipalIdBlobParseError),
     InvalidDkgTag,

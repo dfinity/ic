@@ -10,7 +10,7 @@ mod tests;
 /// Transcripts that should be retained when using
 /// `NiDkgAlgorithm::retain_only_active_keys`. See the invariants in
 /// `TranscriptsToRetain::new`.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TranscriptsToRetain {
     // fields must be private to avoid invariant violations
     transcripts: HashSet<NiDkgTranscript>,

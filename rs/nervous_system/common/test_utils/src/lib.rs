@@ -141,7 +141,7 @@ pub async fn drain_receiver_channel(
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LedgerCall {
     TransferFundsICRC1 {
         amount_e8s: u64,

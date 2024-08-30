@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct CanisterInfo {
     pub canister_id: String,
     pub controllers: Vec<String>,
@@ -24,7 +24,7 @@ impl CanisterInfo {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct CanisterUpgradeInfo {
     pub executed_timestamp_seconds: u64,
     pub module_hash: String,

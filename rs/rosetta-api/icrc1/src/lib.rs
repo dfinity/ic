@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound = "")]
 #[serde(tag = "op")]
 pub enum Operation<Tokens: TokensType> {
@@ -82,7 +82,7 @@ pub enum Operation<Tokens: TokensType> {
 // fields are mixed with [Transaction] fields.
 // We have to flatten the structure as a workaround for
 // https://github.com/serde-rs/json/issues/625.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
 struct FlattenedTransaction<Tokens: TokensType> {
     // [Transaction] fields.
@@ -227,7 +227,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound = "")]
 #[serde(try_from = "FlattenedTransaction<Tokens>")]
 #[serde(into = "FlattenedTransaction<Tokens>")]
@@ -520,7 +520,7 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound = "")]
 pub struct Block<Tokens: TokensType> {
     #[serde(rename = "phash")]

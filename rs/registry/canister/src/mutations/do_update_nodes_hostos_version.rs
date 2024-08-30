@@ -41,7 +41,7 @@ impl Registry {
 }
 
 /// Deprecated; please use `DeployHostosToSomeNodes` instead.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateNodesHostosVersionPayload {
     /// The node to update.
     pub node_ids: Vec<NodeId>,
@@ -53,7 +53,7 @@ pub struct UpdateNodesHostosVersionPayload {
 /// node to a specific version.
 ///
 /// The record will be mutated only if the given version exists.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct DeployHostosToSomeNodes {
     /// The node to update.
     pub node_ids: Vec<NodeId>,

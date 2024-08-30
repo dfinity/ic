@@ -38,7 +38,7 @@ use std::{
 };
 
 /// The `Batch` provided to Message Routing for deterministic processing.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
@@ -68,7 +68,7 @@ pub struct Batch {
 
 /// The context built by Consensus for deterministic processing. Captures all
 /// fields that have semantic meaning within the Chain Consensus protocol.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ValidationContext {
     /// The registry version to be associated with the payload.
@@ -102,7 +102,7 @@ impl ValidationContext {
 /// The payload of a batch.
 ///
 /// Contains ingress messages, XNet messages and self-validating messages.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BatchPayload {
     pub ingress: IngressPayload,
@@ -113,7 +113,7 @@ pub struct BatchPayload {
 }
 
 /// Batch properties collected form the last DKG summary block.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BatchSummary {
     /// The next checkpoint height.
     ///
@@ -129,7 +129,7 @@ pub struct BatchSummary {
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
@@ -170,7 +170,7 @@ impl BatchPayload {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockmakerMetrics {
     pub blockmaker: NodeId,
     pub failed_blockmakers: Vec<NodeId>,
@@ -189,7 +189,7 @@ impl BlockmakerMetrics {
 ///
 /// Only holds the payload and callback ID, Execution populates other fields
 /// (originator, respondent, refund) from the incoming request.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ConsensusResponse {
     pub callback: CallbackId,

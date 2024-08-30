@@ -20,12 +20,12 @@ const U64_MAX: u256 = u256::from_words(/* hi = */ 0, /* lo = */ u64::MAX as u128
 type TaggedRepr = Required<U256Repr, BIGNUM_CBOR_TAG>;
 
 /// The representation of u256 used for serialization.
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 struct U256Repr(#[serde(with = "ethnum::serde::compressed_bytes::be")] u256);
 
 /// 256-bit token amounts.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct U256(u256);
 
 impl U256 {

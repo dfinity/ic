@@ -9,7 +9,7 @@ use serde_bytes::ByteBuf;
 pub type BlockIndex = u64;
 
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+    Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 #[serde(transparent)]
 pub struct EncodedBlock(pub ByteBuf);
@@ -38,7 +38,7 @@ impl EncodedBlock {
     }
 }
 
-#[derive(Clone, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Hash, PartialEq, Serialize)]
 pub struct FeeCollector<Account> {
     pub fee_collector: Account,
     /// The block index of the block where the fee_collector has

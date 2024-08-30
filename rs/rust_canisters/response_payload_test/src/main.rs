@@ -8,7 +8,7 @@ use serde::Serialize;
 /// # Fields
 ///
 /// * `response_size_bytes` - size of the response payload in bytes.
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug)]
 struct Operation {
     response_size_bytes: usize,
 }

@@ -132,7 +132,7 @@ impl<T> Plan<T> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvalOrder {
     Sequential,
     Parallel,

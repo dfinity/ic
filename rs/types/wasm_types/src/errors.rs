@@ -34,7 +34,7 @@ pub trait AsErrorHelp {
 }
 
 /// Represents an error that can happen when parsing or encoding a Wasm module
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WasmError(String);
 
 impl WasmError {
@@ -51,7 +51,7 @@ impl std::fmt::Display for WasmError {
 }
 
 /// Different errors that be returned by `validate_wasm_binary`
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmValidationError {
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
@@ -275,7 +275,7 @@ impl AsErrorHelp for WasmValidationError {
 }
 
 /// Different errors that can be returned by `instrument`
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmInstrumentationError {
     /// Failure in deserialization the wasm module
     WasmDeserializeError(WasmError),
@@ -330,7 +330,7 @@ impl AsErrorHelp for WasmInstrumentationError {
 }
 
 /// Different errors that be returned by the Wasm engine
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmEngineError {
     FailedToInitializeEngine,
     FailedToInstantiateModule(String),

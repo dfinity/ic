@@ -4,21 +4,21 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use std::fmt::{Display, Formatter};
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum OrchestratorArg {
     InitArg(InitArg),
     UpgradeArg(UpgradeArg),
     AddErc20Arg(AddErc20Arg),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct InitArg {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
     pub cycles_management: Option<CyclesManagement>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArg {
     pub git_commit_hash: Option<String>,
     pub ledger_compressed_wasm_hash: Option<String>,
@@ -35,7 +35,7 @@ impl UpgradeArg {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddErc20Arg {
     pub contract: Erc20Contract,
     pub ledger_init_arg: LedgerInitArg,
@@ -47,13 +47,13 @@ impl AddErc20Arg {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Erc20Contract {
     pub chain_id: Nat,
     pub address: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, serde::Serialize)]
+#[derive(CandidType, Deserialize, serde::Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerInitArg {
     pub transfer_fee: Nat,
     pub decimals: u8,
@@ -62,7 +62,7 @@ pub struct LedgerInitArg {
     pub token_logo: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ManagedCanisterIds {
     pub ledger: Option<Principal>,
     pub index: Option<Principal>,
@@ -111,7 +111,7 @@ impl Display for ManagedCanisterIds {
 }
 
 // TODO XC-47: extract type to separate crate since used between ckETH minter and LSO
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct AddCkErc20Token {
     pub chain_id: Nat,
     pub address: String,
@@ -120,7 +120,7 @@ pub struct AddCkErc20Token {
 }
 
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, serde::Serialize,
+    CandidType, serde::Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Ord, PartialOrd,
 )]
 pub struct CyclesManagement {
     pub cycles_for_ledger_creation: Nat,
@@ -161,7 +161,7 @@ impl CyclesManagement {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ManagedCanisterStatus {
     Created {
         canister_id: Principal,
@@ -185,7 +185,7 @@ impl<T> From<&Canister<T>> for ManagedCanisterStatus {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ManagedCanisters {
     pub erc20_contract: Erc20Contract,
     pub ckerc20_token_symbol: String,
@@ -209,7 +209,7 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerSuiteVersion {
     pub ledger_compressed_wasm_hash: String,
     pub index_compressed_wasm_hash: String,
@@ -226,7 +226,7 @@ impl From<crate::state::LedgerSuiteVersion> for LedgerSuiteVersion {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OrchestratorInfo {
     pub managed_canisters: Vec<ManagedCanisters>,
     pub cycles_management: CyclesManagement,
@@ -236,7 +236,7 @@ pub struct OrchestratorInfo {
 }
 
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, CandidType, Deserialize, serde::Serialize,
+    CandidType, serde::Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, Ord, PartialOrd,
 )]
 pub struct UpdateCyclesManagement {
     pub cycles_for_ledger_creation: Option<Nat>,

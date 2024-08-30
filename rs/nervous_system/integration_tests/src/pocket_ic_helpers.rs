@@ -371,7 +371,7 @@ pub fn install_nns_canisters(
     nns_neurons
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SnsTestCanisterIds {
     pub root_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
@@ -1578,7 +1578,7 @@ pub mod sns {
         use super::*;
 
         /// Copied from rs/rosetta-api/icrc1/index-ng/src/lib.rs
-        #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+        #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
         pub struct Status {
             pub num_blocks_synced: BlockIndex,
         }
@@ -2520,7 +2520,7 @@ pub mod sns {
         }
 
         /// Subset of `Lifecycle` indicating terminal statuses.
-        #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum SwapFinalizationStatus {
             Aborted,
             Committed,

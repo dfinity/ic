@@ -380,7 +380,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
         .wasm_binary = WasmBinary::new(wasm);
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum StateSyncErrorCode {
     MetaManifestVerificationFailed,
     ManifestVerificationFailed,

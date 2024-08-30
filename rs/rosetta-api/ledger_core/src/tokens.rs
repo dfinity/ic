@@ -104,18 +104,18 @@ impl<T> TokensType for T where
 }
 
 #[derive(
-    Copy,
+    Serialize,
+    Deserialize,
+    CandidType,
     Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
+    Copy,
     Hash,
     Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
     Default,
-    CandidType,
-    Deserialize,
-    Serialize,
 )]
 pub struct Tokens {
     /// Number of 10^-8 Tokens.

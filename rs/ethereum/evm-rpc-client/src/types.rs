@@ -6,7 +6,7 @@ pub mod candid {
     use std::iter;
     use thiserror::Error;
 
-    #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize, Default)]
     pub enum BlockTag {
         #[default]
         Latest,
@@ -17,7 +17,7 @@ pub mod candid {
         Number(Nat),
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
     pub struct Block {
         #[serde(rename = "baseFeePerGas")]
         pub base_fee_per_gas: Nat,
@@ -57,7 +57,7 @@ pub mod candid {
         pub uncles: Vec<String>,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
     pub struct LogEntry {
         /// The address from which this log originated.
         pub address: String,
@@ -93,7 +93,7 @@ pub mod candid {
         pub removed: bool,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq, CandidType)]
     pub struct GetLogsArgs {
         #[serde(rename = "fromBlock")]
         pub from_block: Option<BlockTag>,
@@ -103,7 +103,7 @@ pub mod candid {
         pub topics: Option<Vec<Vec<String>>>,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize)]
     pub struct FeeHistoryArgs {
         /// Number of blocks in the requested range.
         /// Typically, providers request this to be between 1 and 1024.
@@ -123,7 +123,7 @@ pub mod candid {
         pub reward_percentiles: Option<Vec<u8>>,
     }
 
-    #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
     pub struct FeeHistory {
         /// Lowest number block of the returned range.
         #[serde(rename = "oldestBlock")]
@@ -142,7 +142,7 @@ pub mod candid {
         pub reward: Vec<Vec<Nat>>,
     }
 
-    #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CandidType)]
     pub struct TransactionReceipt {
         #[serde(rename = "blockHash")]
         pub block_hash: String,
@@ -167,7 +167,7 @@ pub mod candid {
         pub r#type: String,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
     pub struct GetTransactionCountArgs {
         /// The address for which the transaction count is requested.
         pub address: String,
@@ -175,7 +175,7 @@ pub mod candid {
         pub block: BlockTag,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
     pub enum SendRawTransactionStatus {
         Ok(Option<String>),
         InsufficientFunds,
@@ -185,7 +185,7 @@ pub mod candid {
 
     pub type RpcResult<T> = Result<T, RpcError>;
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
     pub enum MultiRpcResult<T> {
         Consistent(RpcResult<T>),
         Inconsistent(Vec<(RpcService, RpcResult<T>)>),
@@ -202,7 +202,7 @@ pub mod candid {
         }
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Error)]
+    #[derive(Clone, Error, Debug, PartialEq, Eq, CandidType, Deserialize)]
     pub enum RpcError {
         #[error("Provider error: {0}")]
         ProviderError(ProviderError),
@@ -220,7 +220,7 @@ pub mod candid {
         }
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Error)]
+    #[derive(Clone, Error, Debug, PartialEq, Eq, CandidType, Deserialize)]
     pub enum ProviderError {
         #[error("No permission to call this provider")]
         NoPermission,
@@ -232,7 +232,7 @@ pub mod candid {
         MissingRequiredProvider,
     }
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error)]
+    #[derive(Clone, Error, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
     pub enum HttpOutcallError {
         /// Error from the IC system API.
         #[error("IC error (code: {code:?}): {message}")]
@@ -253,7 +253,7 @@ pub mod candid {
     }
 
     #[derive(
-        Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error, Serialize,
+        Clone, Error, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Serialize, Deserialize,
     )]
     #[error("JSON-RPC error (code: {code}): {message}")]
     pub struct JsonRpcError {
@@ -261,7 +261,7 @@ pub mod candid {
         pub message: String,
     }
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error)]
+    #[derive(Clone, Error, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
     pub enum ValidationError {
         #[error("Custom: {0}")]
         Custom(String),
@@ -277,7 +277,7 @@ pub mod candid {
         CredentialHeaderNotAllowed,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
     pub enum RpcServices {
         Custom {
             #[serde(rename = "chainId")]
@@ -288,13 +288,13 @@ pub mod candid {
         EthSepolia(Option<Vec<EthSepoliaService>>),
     }
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType)]
     pub struct RpcApi {
         pub url: String,
         pub headers: Option<Vec<HttpHeader>>,
     }
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType)]
     pub enum RpcService {
         Custom(RpcApi),
         EthMainnet(EthMainnetService),
@@ -302,7 +302,7 @@ pub mod candid {
     }
 
     #[derive(
-        Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize,
+        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType,
     )]
     pub enum EthMainnetService {
         Alchemy,
@@ -313,7 +313,7 @@ pub mod candid {
     }
 
     #[derive(
-        Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize,
+        Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, CandidType,
     )]
     pub enum EthSepoliaService {
         Alchemy,
@@ -322,7 +322,7 @@ pub mod candid {
         PublicNode,
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, Default, CandidType, Deserialize)]
     pub struct RpcConfig {
         #[serde(rename = "responseSizeEstimate")]
         pub response_size_estimate: Option<u64>,

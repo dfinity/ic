@@ -249,7 +249,7 @@ mod schema_upgrades {
     use serde::Serialize;
     use std::collections::BTreeSet;
 
-    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
     pub struct StatePreviousVersion {
         managed_canisters: ManagedCanisters,
         cycles_management: CyclesManagement,

@@ -32,7 +32,7 @@ impl PbArtifact for Message {
 }
 
 /// Identifier of a DKG message.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DkgMessageId {
     pub hash: CryptoHashOf<Message>,
     pub height: Height,
@@ -68,7 +68,7 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
 }
 
 /// Holds the content of a DKG dealing
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DealingContent {
     pub version: ReplicaVersion,
@@ -134,7 +134,7 @@ impl HasVersion for DealingContent {
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Summary {
     /// The registry version used to create this summary.
@@ -475,7 +475,7 @@ impl TryFrom<pb::Summary> for Summary {
 /// The DKG payload is either the DKG Summary, if this payload belongs to a
 /// start block of a new DKG interval, or a tuple containing the start height
 /// and the set of valid dealings corresponding to the current interval.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
@@ -488,7 +488,7 @@ pub type DealingMessages = Vec<Message>;
 
 /// Dealings contains dealing messages and the height at which this DKG interval
 /// started
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Dealings {
     /// The height of the DKG interval that this object belongs to

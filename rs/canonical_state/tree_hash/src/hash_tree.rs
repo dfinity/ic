@@ -30,7 +30,7 @@ const LEAF_KIND: u32 = 0x4000_0000;
 const NODE_KIND: u32 = 0x8000_0000;
 const FORK_KIND: u32 = 0xc000_0000;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum NodeKind {
     Empty,
     Fork,
@@ -49,7 +49,7 @@ enum NodeKind {
 ///
 /// The reason for storing vectors of vectors is because it lends itself to parallelism
 /// when computing the HashTree.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default)]
 pub struct NodeId {
     bucket: u32,
     index_and_kind: u32,
@@ -765,7 +765,7 @@ pub enum HashTreeView<'a> {
 }
 
 /// Error produced when computing hash trees
-#[derive(Copy, Clone, PartialEq, Debug, thiserror::Error)]
+#[derive(thiserror::Error, Debug, PartialEq, Copy, Clone)]
 pub enum HashTreeError {
     #[error("Hash tree calculation failed due to too deep recursion (depth={0})")]
     RecursionTooDeep(u32),

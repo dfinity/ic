@@ -31,7 +31,7 @@ use strum_macros::EnumIter;
 pub(crate) type Bytes = Vec<u8>;
 
 /// Canonical representation of `ic_types::xnet::StreamHeader`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeader {
     pub begin: u64,
@@ -57,7 +57,7 @@ pub struct StreamHeader {
 /// the current one.
 ///
 /// Note that `signals_end` is NOT part of the reject signals.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RejectSignals {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -89,7 +89,7 @@ impl RejectSignals {
 }
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,7 +98,7 @@ pub struct RequestOrResponse {
     pub response: Option<Response>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RequestMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_depth: Option<u64>,
@@ -109,7 +109,7 @@ pub struct RequestMetadata {
 }
 
 /// Canonical representation of `ic_types::messages::Request`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     #[serde(with = "serde_bytes")]
@@ -130,7 +130,7 @@ pub struct Request {
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Response {
     #[serde(with = "serde_bytes")]
@@ -147,7 +147,7 @@ pub struct Response {
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Cycles {
     pub low: u64,
@@ -157,7 +157,7 @@ pub struct Cycles {
 }
 
 /// Canonical representation of `ic_types::funds::Funds`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Funds {
     pub cycles: Cycles,
@@ -173,7 +173,7 @@ where
 }
 
 /// Canonical representation of `ic_types::messages::Payload`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Payload {
     #[serde(with = "serde_bytes", skip_serializing_if = "Option::is_none", default)]
@@ -183,7 +183,7 @@ pub struct Payload {
 }
 
 /// Canonical representation of `ic_types::messages::RejectContext`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RejectContext {
     pub code: u8,
@@ -200,7 +200,7 @@ pub struct SystemMetadata {
     pub prev_state_hash: Option<Vec<u8>>,
 }
 
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SubnetMetrics {
     /// The number of canisters on this subnet.
     pub num_canisters: u64,

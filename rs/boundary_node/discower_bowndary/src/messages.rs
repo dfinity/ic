@@ -1,6 +1,6 @@
 use crate::{check::HealthCheckResult, node::Node};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct FetchedNodes {
     pub nodes: Vec<Node>,
 }

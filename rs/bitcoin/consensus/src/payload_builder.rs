@@ -44,7 +44,7 @@ const BUILD_PAYLOAD_STATUS_SUCCESS: &str = "success";
 const VALIDATION_STATUS_VALID: &str = "valid";
 
 // Internal error type, to simplify error handling.
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 enum GetPayloadError {
     #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),

@@ -81,10 +81,10 @@ pub struct AssetCanisterClient {
     pub canister_id: Principal,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct CreateBatchRequest {}
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct CreateBatchResponse {
     pub batch_id: Nat,
 }
@@ -110,14 +110,14 @@ impl AssetCanisterClient {
     }
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct CreateChunkRequest {
     pub batch_id: Nat,
     #[serde(with = "serde_bytes")]
     pub content: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct CreateChunkResponse {
     pub chunk_id: Nat,
 }
@@ -148,13 +148,13 @@ impl AssetCanisterClient {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct CommitBatchRequest {
     pub batch_id: Nat,
     pub operations: Vec<BatchOperationKind>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum BatchOperationKind {
     #[allow(dead_code)]
     Clear(ClearArguments),
@@ -167,7 +167,7 @@ pub enum BatchOperationKind {
 
 pub type HeadersConfig = BTreeMap<String, String>;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct CreateAssetArguments {
     pub key: String,
     pub content_type: String,
@@ -177,7 +177,7 @@ pub struct CreateAssetArguments {
     pub allow_raw_access: Option<bool>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct SetAssetContentArguments {
     pub key: String,
     pub content_encoding: String,
@@ -185,13 +185,13 @@ pub struct SetAssetContentArguments {
     pub sha256: Option<Vec<u8>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct UnsetAssetContentArguments {
     pub key: String,
     pub content_encoding: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetAssetPropertiesArguments {
     pub key: String,
     pub max_age: Option<Option<u64>>,
@@ -200,10 +200,10 @@ pub struct SetAssetPropertiesArguments {
     pub is_aliased: Option<Option<bool>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct ClearArguments {}
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialOrd, PartialEq, Eq, Ord)]
 pub struct DeleteAssetArguments {
     pub key: String,
 }
@@ -291,16 +291,16 @@ impl AssetCanisterClient {
     }
 }
 
-#[derive(Debug, CandidType)]
+#[derive(CandidType, Debug)]
 pub struct ListAssetsRequest {}
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct AssetEncodingDetails {
     pub content_encoding: String,
     pub sha256: Option<Vec<u8>>,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Deserialize)]
 pub struct AssetDetails {
     pub key: String,
     pub encodings: Vec<AssetEncodingDetails>,

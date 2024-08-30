@@ -7,7 +7,7 @@ use ic_wasm_types::{
 use serde::{Deserialize, Serialize};
 
 /// Various traps that a canister can create.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TrapCode {
     StackOverflow,
     HeapOutOfBounds,
@@ -46,7 +46,7 @@ impl std::fmt::Display for TrapCode {
 ///
 /// Should be used as the wrapped error by various components that need to
 /// handle such cases.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterOutOfCyclesError {
     pub canister_id: CanisterId,
     pub available: Cycles,
@@ -70,7 +70,7 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
 }
 
 /// Errors returned by the Hypervisor.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HypervisorError {
     /// The message sent to the canister refers a function not found in the
     /// table. The payload contains the index of the table and the index of the

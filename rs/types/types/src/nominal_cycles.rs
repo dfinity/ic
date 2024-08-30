@@ -18,7 +18,7 @@ use std::convert::{From, TryFrom};
 //
 // EXC-24 will introduce a separation of concepts between Cycles and NominalCycles.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Deserialize, Serialize,
+    Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize,
 )]
 pub struct NominalCycles(u128);
 

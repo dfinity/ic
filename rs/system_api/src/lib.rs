@@ -105,7 +105,7 @@ fn summarize(heap: &[u8], start: usize, size: usize) -> u64 {
 /// Supports operations to reduce the message limit while keeping the maximum
 /// slice limit the same, which is useful for messages that have multiple
 /// execution steps such as install, upgrade, and response.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct InstructionLimits {
     /// The total instruction limit for message execution. With deterministic
     /// time slicing this limit may exceed the per-round instruction limit.  The
@@ -171,7 +171,7 @@ impl InstructionLimits {
 }
 
 // Canister and subnet configuration parameters required for execution.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
@@ -184,7 +184,7 @@ pub struct ExecutionParameters {
     pub subnet_memory_saturation: ResourceSaturation,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[doc(hidden)]
 pub enum ResponseStatus {
     // Indicates that the current call context was never replied.
@@ -200,7 +200,7 @@ pub enum ResponseStatus {
 /// should keep track of the state or not. The distinction is necessary
 /// because some non-replicated queries can call other queries. In such
 /// a case the caller has too keep the state until the callee returns.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum NonReplicatedQueryKind {
     Stateful {
@@ -214,7 +214,7 @@ pub enum NonReplicatedQueryKind {
 
 /// This enum indicates whether state modifications are important for
 /// an API type or not.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModificationTracking {
     Ignore,
     Track,
@@ -227,7 +227,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {

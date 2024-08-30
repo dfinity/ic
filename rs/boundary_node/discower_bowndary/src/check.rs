@@ -10,7 +10,7 @@ use url::Url;
 
 const SERVICE_NAME: &str = "HealthCheckImpl";
 
-#[derive(Clone, PartialEq, Debug, Error)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum HealthCheckError {
     #[error(r#"Cannot parse url: "{0}""#)]
     UrlParseError(#[from] url::ParseError),

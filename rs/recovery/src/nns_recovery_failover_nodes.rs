@@ -21,7 +21,7 @@ use url::Url;
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize, EnumMessage,
 )]
 pub enum StepType {
     StopReplica,
@@ -41,7 +41,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Parser)]
 #[clap(version = "1.0")]
 pub struct NNSRecoveryFailoverNodesArgs {
     /// Id of the broken subnet

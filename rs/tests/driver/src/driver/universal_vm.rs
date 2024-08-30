@@ -39,7 +39,7 @@ use crate::driver::constants::SSH_USERNAME;
 
 /// A builder for the initial configuration of a universal VM.
 /// See: https://github.com/dfinity-lab/farm/tree/master/universal-vm
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniversalVm {
     pub name: String,
     pub vm_resources: VmResources,
@@ -50,7 +50,7 @@ pub struct UniversalVm {
     pub config: Option<UniversalVmConfig>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum UniversalVmConfig {
     Dir(PathBuf),
     Img(PathBuf),

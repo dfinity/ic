@@ -37,7 +37,7 @@ impl TryFrom<&PublicKeyProto> for PublicKeyBytes {
 }
 
 /// Parsing a public key from protobuf failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PublicKeyBytesFromProtoError {
     pub key_bytes: Vec<u8>,
     pub internal_error: String,
@@ -86,7 +86,7 @@ impl TryFrom<&PublicKeyProto> for PopBytes {
 }
 
 /// Parsing a PoP from protobuf failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PopBytesFromProtoError {
     UnknownAlgorithm {
         algorithm: i32,

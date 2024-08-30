@@ -19,7 +19,7 @@ struct Cli {
     metrics_file: PathBuf,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct Counter {
     family: String,
     name: String,

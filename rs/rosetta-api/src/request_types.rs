@@ -45,7 +45,7 @@ pub const FOLLOW: &str = "FOLLOW";
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
 /// if it cannot be parsed from the submit payload.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum RequestType {
     // Aliases for backwards compatibility
     #[serde(rename = "TRANSACTION")]
@@ -163,7 +163,7 @@ impl TryFrom<RequestResultMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RequestResultMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -191,7 +191,7 @@ impl TryFrom<Option<ObjectMap>> for RequestResultMetadata {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(tag = "status", content = "response")]
 pub enum Status {
@@ -229,7 +229,7 @@ impl Status {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct GetProposalInfo {
     #[serde(default)]
     pub proposal_id: u64,
@@ -258,7 +258,7 @@ impl TryFrom<Option<ObjectMap>> for GetProposalInfo {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SetDissolveTimestamp {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
@@ -267,7 +267,7 @@ pub struct SetDissolveTimestamp {
     pub timestamp: Seconds,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ChangeAutoStakeMaturity {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
@@ -275,27 +275,27 @@ pub struct ChangeAutoStakeMaturity {
     pub requested_setting_for_auto_stake_maturity: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct StartDissolve {
     pub account: icp_ledger::AccountIdentifier,
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct StopDissolve {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Stake {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Disburse {
     pub account: icp_ledger::AccountIdentifier,
     pub amount: Option<Tokens>,
@@ -303,7 +303,7 @@ pub struct Disburse {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct AddHotKey {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
@@ -311,7 +311,7 @@ pub struct AddHotKey {
     pub key: PublicKeyOrPrincipal,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct RemoveHotKey {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
@@ -319,7 +319,7 @@ pub struct RemoveHotKey {
     pub key: PublicKeyOrPrincipal,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Spawn {
     pub account: icp_ledger::AccountIdentifier,
     pub spawned_neuron_index: u64,
@@ -329,7 +329,7 @@ pub struct Spawn {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct MergeMaturity {
     pub account: icp_ledger::AccountIdentifier,
     pub percentage_to_merge: u32,
@@ -337,7 +337,7 @@ pub struct MergeMaturity {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RegisterVote {
     pub account: icp_ledger::AccountIdentifier,
     pub proposal: Option<u64>,
@@ -346,7 +346,7 @@ pub struct RegisterVote {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct StakeMaturity {
     pub account: icp_ledger::AccountIdentifier,
     pub percentage_to_stake: Option<u32>,
@@ -354,7 +354,7 @@ pub struct StakeMaturity {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct NeuronInfo {
     pub account: icp_ledger::AccountIdentifier,
     pub controller: Option<PrincipalId>,
@@ -362,12 +362,12 @@ pub struct NeuronInfo {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ListNeurons {
     pub account: icp_ledger::AccountIdentifier,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Follow {
     pub account: icp_ledger::AccountIdentifier,
     pub topic: i32,
@@ -377,7 +377,7 @@ pub struct Follow {
     pub neuron_index: u64,
 }
 
-#[derive(Clone, Eq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 // Externally tagged by default.
 pub enum PublicKeyOrPrincipal {
@@ -409,7 +409,7 @@ impl PartialEq for PublicKeyOrPrincipal {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SetDissolveTimestampMetadata {
     #[serde(default)]
     pub neuron_index: u64,
@@ -418,7 +418,7 @@ pub struct SetDissolveTimestampMetadata {
     pub timestamp: Seconds,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ChangeAutoStakeMaturityMetadata {
     #[serde(default)]
     pub neuron_index: u64,
@@ -479,7 +479,7 @@ impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Deserialize, Serialize)]
 pub struct NeuronIdentifierMetadata {
     #[serde(default)]
     pub neuron_index: u64,
@@ -508,7 +508,7 @@ impl TryFrom<NeuronIdentifierMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct DisburseMetadata {
     #[serde(default)]
     pub neuron_index: u64,
@@ -541,7 +541,7 @@ impl TryFrom<DisburseMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct KeyMetadata {
     #[serde(flatten)]
     pub key: PublicKeyOrPrincipal,
@@ -614,7 +614,7 @@ fn test_parse_key_metadata() {
     );
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct SpawnMetadata {
     #[serde(default)]
     #[serde(rename = "neuron_index")]
@@ -656,7 +656,7 @@ impl TryFrom<SpawnMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct RegisterVoteMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proposal: Option<u64>,
@@ -687,7 +687,7 @@ impl TryFrom<RegisterVoteMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct MergeMaturityMetadata {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -719,7 +719,7 @@ impl TryFrom<MergeMaturityMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct StakeMaturityMetadata {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -751,7 +751,7 @@ impl TryFrom<StakeMaturityMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct NeuronInfoMetadata {
     pub controller: Option<PublicKeyOrPrincipal>,
     #[serde(default)]
@@ -844,7 +844,7 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct FollowMetadata {
     pub topic: i32,
     pub followees: Vec<u64>,
@@ -876,7 +876,7 @@ impl TryFrom<FollowMetadata> for ObjectMap {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ApproveMetadata {
     pub from: AccountIdentifier,
     pub spender: AccountIdentifier,
@@ -1431,7 +1431,7 @@ fn pkp_from_principal(pid: &Option<PrincipalId>) -> Option<PublicKeyOrPrincipal>
     pid.as_ref().map(|p| PublicKeyOrPrincipal::Principal(*p))
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct RosettaStatus {
     pub rosetta_blocks_mode: RosettaBlocksMode,
 }

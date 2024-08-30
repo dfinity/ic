@@ -4,12 +4,12 @@ use serde_bytes::ByteBuf;
 use serde_json::json;
 use std::time::SystemTime;
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct LogsResponseBody {
     entries: Vec<JsonLogEntry>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct JsonLogEntry {
     severity: String,
     timestamp: u128,
@@ -294,7 +294,7 @@ fn test_serve_logs_malformed_request() {
 
     // Step 3.2: Inspect body.
     let body = String::from_utf8(body.into_vec()).unwrap();
-    #[derive(Debug, serde::Deserialize)]
+    #[derive(serde::Deserialize, Debug)]
     struct ResponseBody {
         error_description: String,
     }

@@ -12,7 +12,7 @@ use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
 use super::MINIMUM_CHAIN_LENGTH;
 
 /// Summary of when the consensus pool exceeds certain bounds.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExcessEvent {
     /// The expected number of artifacts in the pool (i.e. our bound).
     pub expected: ArtifactCounts,
@@ -21,7 +21,7 @@ pub struct ExcessEvent {
 }
 
 /// Number of artifacts in the consensus pool.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ArtifactCounts {
     block_proposals: usize,
     notarizations: usize,

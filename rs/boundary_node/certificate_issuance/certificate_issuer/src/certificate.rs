@@ -15,7 +15,7 @@ use crate::{
     verification::Verify,
 };
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, CandidType, Clone, Deserialize, PartialEq, Serialize)]
 pub struct Pair(
     pub Vec<u8>, // Private Key
     pub Vec<u8>, // Certificate Chain
@@ -49,7 +49,7 @@ pub trait Upload: Sync + Send {
     async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError>;
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, CandidType, Clone, Deserialize, Serialize)]
 pub struct Package {
     pub id: String,
     pub name: String,

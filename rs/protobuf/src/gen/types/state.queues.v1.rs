@@ -289,7 +289,7 @@ pub mod canister_queues {
         #[prost(message, optional, tag = "3")]
         pub output_queue: ::core::option::Option<super::CanisterQueue>,
     }
-    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
         Unspecified = 0,
@@ -322,7 +322,7 @@ pub mod canister_queues {
         }
     }
 }
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum RejectReason {
     Unspecified = 0,

@@ -122,7 +122,7 @@ struct FirstMoveSharing {
 }
 
 /// Creating or verifying a proof of sharing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ZkProofSharingError {
     InvalidProof,
     InvalidInstance,

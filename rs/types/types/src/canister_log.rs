@@ -17,7 +17,7 @@ fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
 
 // Helper struct to hold canister log records and keep track of the used space.
 // This is needed to avoid iterating over all records to calculate the used space.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, ValidateEq)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ValidateEq)]
 struct Records {
     #[validate_eq(Ignore)]
     records: VecDeque<CanisterLogRecord>,
@@ -99,7 +99,7 @@ impl Records {
 }
 
 /// Holds canister log records and keeps track of the next canister log record index.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, ValidateEq)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ValidateEq)]
 pub struct CanisterLog {
     next_idx: u64,
     #[validate_eq(CompareWithValidateEq)]

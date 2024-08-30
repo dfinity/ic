@@ -16,7 +16,7 @@ use std::fmt::Debug;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallError {
     pub method: String,
     pub reason: Reason,
@@ -44,7 +44,7 @@ impl fmt::Display for CallError {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// The reason for the management call failure.
 pub enum Reason {
     /// The canister does not have enough cycles to submit the request.
@@ -147,7 +147,7 @@ pub trait CanisterRuntime {
         O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub struct IcCanisterRuntime {}
 
 impl IcCanisterRuntime {

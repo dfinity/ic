@@ -12,13 +12,13 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_blessed};
 
 /// Deprecated; please use `DeployGuestosToSomeApiBoundaryNodes` instead.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateApiBoundaryNodesVersionPayload {
     pub node_ids: Vec<NodeId>,
     pub version: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct DeployGuestosToSomeApiBoundaryNodes {
     pub node_ids: Vec<NodeId>,
     pub version: String,

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 const MAX_CONCURRENT: usize = 100;
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum GuardError {
     AlreadyProcessing,
     TooManyConcurrentRequests,

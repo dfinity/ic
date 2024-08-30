@@ -4,7 +4,7 @@ use core::fmt;
 
 /// Occurs if creating a transcript using `NiDkgAlgorithm::create_transcript`
 /// fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DkgCreateTranscriptError {
     InsufficientDealings(InvalidArgumentError),
     MalformedResharingTranscriptInConfig(MalformedPublicKeyError),

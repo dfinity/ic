@@ -37,7 +37,7 @@ impl TryFrom<u32> for RateLimit {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 struct SubnetRateToken;
 
 impl KeyExtractor for SubnetRateToken {

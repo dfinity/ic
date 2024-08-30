@@ -1,7 +1,7 @@
 use super::*;
 use serde::Serialize;
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 struct T {
     #[serde(default, with = "crate::serde::optional_time_of_day")]
     lunchtime: Option<GlobalTimeOfDay>,

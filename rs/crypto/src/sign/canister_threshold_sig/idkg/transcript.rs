@@ -537,7 +537,7 @@ fn ensure_matching_transcript_ids_and_dealer_ids(
     Ok(())
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VerifySignatureBatchError {
     InvalidSignatureBatch {
         error: String,

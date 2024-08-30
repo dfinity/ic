@@ -413,7 +413,7 @@ pub fn setup_unix_socket(uri: Uri) -> Result<impl HyperService<Body>, Error> {
     })
 }
 
-#[derive(Clone, Eq, Debug)]
+#[derive(Clone, Debug, Eq)]
 struct Uncased(Name);
 
 impl PartialEq<Uncased> for Uncased {

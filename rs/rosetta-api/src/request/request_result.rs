@@ -7,7 +7,7 @@ use rosetta_core::objects::ObjectMap;
 use crate::errors;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RequestResult {
     #[serde(rename = "type")]
     pub _type: Request,

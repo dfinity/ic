@@ -25,7 +25,7 @@ use std::time::Instant;
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
 
 /// Validated artifact
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ValidatedArtifact<T> {
     pub msg: T,
     pub timestamp: Time,
@@ -41,7 +41,7 @@ pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ChangeAction {
     /// Add the given artifact to the validated section of the pool.
     AddToValidated(ValidatedConsensusArtifact),
@@ -66,7 +66,7 @@ pub enum ChangeAction {
 }
 
 /// A type of consensus artifact which can be selectively deleted from the consensus pool.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PurgeableArtifactType {
     NotarizationShare,
     FinalizationShare,
@@ -167,7 +167,7 @@ impl TryFrom<pb::ValidatedConsensusArtifact> for ValidatedConsensusArtifact {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeightRange {
     pub min: Height,
     pub max: Height,
@@ -425,7 +425,7 @@ pub trait ConsensusBlockChain: Send + Sync {
     fn len(&self) -> usize;
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsensusBlockChainErr {
     BlockNotFound(Height),
 }

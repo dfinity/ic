@@ -6,18 +6,18 @@ use strum_macros::{AsRefStr, EnumIter, EnumString};
 
 /// Defines the different types of subnets that can exist on the IC.
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Debug,
-    Default,
-    AsRefStr,
     CandidType,
+    Clone,
+    Copy,
     Deserialize,
+    Debug,
+    Eq,
+    AsRefStr,
     EnumIter,
     EnumString,
+    PartialEq,
     Serialize,
+    Default,
 )]
 pub enum SubnetType {
     /// The application subnet type where most of the normal applications will

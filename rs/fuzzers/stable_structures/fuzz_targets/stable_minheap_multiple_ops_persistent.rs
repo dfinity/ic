@@ -32,7 +32,7 @@ thread_local! {
     static OPS: RefCell<Vec<StableMinHeapOperation>>  = const { RefCell::new(vec![]) };
 }
 
-#[derive(Clone, Debug, Arbitrary, Deserialize, Serialize)]
+#[derive(Arbitrary, Debug, Serialize, Deserialize, Clone)]
 enum StableMinHeapOperation {
     Push { value: Vec<u8> },
     Pop,

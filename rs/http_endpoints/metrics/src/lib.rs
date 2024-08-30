@@ -39,7 +39,7 @@ pub struct MetricsHttpEndpoint {
     metrics: MetricsEndpointMetrics,
 }
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 struct HttpError {
     response: Response<Body>,
 }

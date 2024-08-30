@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use ic_types::CanisterId;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub(crate) struct EvictionCandidate {
     pub id: CanisterId,
     pub last_used: Instant,

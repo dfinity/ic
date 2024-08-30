@@ -34,7 +34,7 @@ impl NestedNode {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NestedNetwork {
     pub guest_ip: Ipv6Addr,
     pub host_ip: Ipv6Addr,

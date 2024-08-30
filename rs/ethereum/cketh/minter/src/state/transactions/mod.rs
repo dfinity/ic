@@ -116,7 +116,7 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
 }
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
 pub struct EthWithdrawalRequest {
     /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
@@ -139,7 +139,7 @@ pub struct EthWithdrawalRequest {
 }
 
 /// ERC-20 withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
 pub struct Erc20WithdrawalRequest {
     /// Amount of burn ckETH that can be used to pay for the Ethereum transaction fees.
     #[n(0)]
@@ -173,7 +173,7 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
 pub enum ReimbursementIndex {
     #[n(0)]
     CkEth {
@@ -230,7 +230,7 @@ impl ReimbursementIndex {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
     #[cbor(n(0), with = "crate::cbor::id")]
@@ -249,7 +249,7 @@ pub struct ReimbursementRequest {
     pub transaction_hash: Option<Hash>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
@@ -264,7 +264,7 @@ pub struct Reimbursed {
 
 pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ReimbursedError {
     /// Whether reimbursement was minted or not is unknown,
     /// most likely because there was an unexpected panic in the callback.
@@ -273,7 +273,7 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-#[derive(Clone, Eq, PartialEq, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
@@ -355,7 +355,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EthTransactions {
     pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
@@ -374,7 +374,7 @@ pub struct EthTransactions {
     pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateTransactionError {
     InsufficientTransactionFee {
         cketh_ledger_burn_index: LedgerBurnIndex,
@@ -383,7 +383,7 @@ pub enum CreateTransactionError {
     },
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResubmitTransactionError {
     InsufficientTransactionFee {
         ledger_burn_index: LedgerBurnIndex,
@@ -1177,7 +1177,7 @@ pub fn create_transaction(
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransactionCallData {
     Erc20Transfer { to: Address, value: Erc20Value },
 }

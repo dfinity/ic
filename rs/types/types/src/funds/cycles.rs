@@ -16,18 +16,18 @@ use thousands::Separable;
 /// simple u128. We implement our own arithmetic functions on them so that we
 /// can ensure that they never overflow or underflow.
 #[derive(
-    Copy,
     Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
+    Copy,
     Debug,
     Default,
-    CandidType,
-    Deserialize,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Hash,
     Serialize,
+    Deserialize,
+    CandidType,
 )]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Cycles(u128);

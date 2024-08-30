@@ -8,7 +8,7 @@ use std::fmt;
 /// threshold signature data store. Refer to the documentation of
 /// `ThresholdSigner` and `ThresholdSigVerifier` for details on how to act upon
 /// this error.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ThresholdSigDataNotFoundError {
     ThresholdSigDataNotFound { dkg_id: NiDkgId },
 }

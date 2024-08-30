@@ -230,7 +230,7 @@ trait Clock {
     fn set_time_warp(&mut self, new_time_warp: TimeWarp);
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct IcClock {
     time_warp: TimeWarp,
 }

@@ -68,7 +68,7 @@ fn derive_rho(
     Ok((rho, key_tweak, randomizer, randomized_pre_sig))
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigShareInternal {
     sigma_numerator: CommitmentOpening,
     sigma_denominator: CommitmentOpening,
@@ -229,7 +229,7 @@ impl ThresholdEcdsaSigShareInternal {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ThresholdEcdsaCombinedSigInternal {
     r: EccScalar,
     s: EccScalar,

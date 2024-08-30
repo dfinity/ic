@@ -19,7 +19,7 @@ pub mod ni_dkg;
 mod tests;
 
 /// A threshold signature public key.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ThresholdSigPublicKey {
     internal: CspThresholdSigPublicKey,
 }
@@ -123,7 +123,7 @@ impl From<ThresholdSigPublicKey> for PublicKeyProto {
 }
 
 /// The Internet Computer's root of trust.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct IcRootOfTrust(ThresholdSigPublicKey);
 
 impl AsRef<IcRootOfTrust> for IcRootOfTrust {

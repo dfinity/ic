@@ -54,7 +54,7 @@ impl Registry {
 /// to a specific version.
 ///
 /// The replica will be mutated only if the given version is, indeed, blessed.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct DeployGuestosToAllSubnetNodesPayload {
     /// The subnet to update.
     pub subnet_id: PrincipalId, // SubnetId See NNS-73

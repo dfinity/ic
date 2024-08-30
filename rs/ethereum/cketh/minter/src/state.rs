@@ -34,7 +34,7 @@ thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MintedEvent {
     pub deposit_event: ReceivedEvent,
     pub mint_block_index: LedgerMintIndex,
@@ -48,7 +48,7 @@ impl MintedEvent {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
@@ -103,7 +103,7 @@ pub struct State {
     pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum InvalidStateError {
     InvalidTransactionNonce(String),
     InvalidEcdsaKeyName(String),
@@ -115,7 +115,7 @@ pub enum InvalidStateError {
     InvalidLastErc20ScrapedBlockNumber(String),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum InvalidEventReason {
     /// Deposit is invalid and was never minted.
     /// This is most likely due to a user error (e.g., user's IC principal cannot be decoded)
@@ -641,7 +641,7 @@ pub async fn minter_address() -> Address {
     ecdsa_public_key_to_address(&lazy_call_ecdsa_public_key().await)
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EthBalance {
     /// Amount of ETH controlled by the minter's address via tECDSA.
     /// Note that invalid deposits are not accounted for and so this value
@@ -723,7 +723,7 @@ impl EthBalance {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Erc20Balances {
     balance_by_erc20_contract: BTreeMap<Address, Erc20Value>,
 }
@@ -773,7 +773,7 @@ impl Erc20Balances {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+#[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
 pub enum TaskType {
     Mint,
     RetrieveEth,

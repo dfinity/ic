@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub mod client;
 
 /// The request structure to the `change_canister_controllers` API.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub struct ChangeCanisterControllersRequest {
     /// The principal of the target canister that will have its controllers changed. This
     /// canister must be controlled by the canister executing a ChangeCanisterControllersRequest
@@ -20,7 +20,7 @@ pub struct ChangeCanisterControllersRequest {
 }
 
 /// The possible results from calling the `change_canister_controllers` API.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub enum ChangeCanisterControllersResult {
     /// The successful result.
     Ok(()),
@@ -30,7 +30,7 @@ pub enum ChangeCanisterControllersResult {
 }
 
 /// The structure encapsulating errors encountered in the `change_canister_controllers` API.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub struct ChangeCanisterControllersError {
     /// The optional error code encountered during execution. This maps to the IC replica error
     /// codes.
@@ -41,7 +41,7 @@ pub struct ChangeCanisterControllersError {
 }
 
 /// The response structure to the `change_canister_controllers` API.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub struct ChangeCanisterControllersResponse {
     /// The result of the request to the API.
     pub change_canister_controllers_result: ChangeCanisterControllersResult,
@@ -63,7 +63,7 @@ impl ChangeCanisterControllersResponse {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub struct UpdateCanisterSettingsRequest {
     // The canister ID of the target canister.
     pub canister_id: PrincipalId,
@@ -71,13 +71,13 @@ pub struct UpdateCanisterSettingsRequest {
     pub settings: CanisterSettings,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub enum UpdateCanisterSettingsResponse {
     Ok(()),
     Err(UpdateCanisterSettingsError),
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub struct UpdateCanisterSettingsError {
     pub code: Option<i32>,
     pub description: String,

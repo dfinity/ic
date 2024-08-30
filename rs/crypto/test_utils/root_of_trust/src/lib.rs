@@ -2,7 +2,7 @@ use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use mockall::mock;
 use thiserror::Error;
 
-#[derive(Clone, Eq, PartialEq, Debug, Error)]
+#[derive(Error, Clone, Debug, PartialEq, Eq)]
 #[error("{0}")]
 pub struct MockRootOfTrustProviderError(String);
 

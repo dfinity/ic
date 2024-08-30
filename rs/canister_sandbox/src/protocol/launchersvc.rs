@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct LaunchSandboxRequest {
     pub sandbox_exec_path: String,
     pub argv: Vec<String>,
@@ -23,12 +23,12 @@ impl EnumerateInnerFileDescriptors for LaunchSandboxRequest {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct LaunchSandboxReply {
     pub pid: u32,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LaunchCompilerRequest {
     pub exec_path: String,
     pub argv: Vec<String>,
@@ -41,20 +41,20 @@ impl EnumerateInnerFileDescriptors for LaunchCompilerRequest {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct LaunchCompilerReply {
     pub pid: u32,
 }
 
 /// Instruct the Sandbox Launcher process to terminate.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TerminateRequest {}
 
 /// Ack signal to the controller that termination was complete.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TerminateReply {}
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum Request {
     LaunchSandbox(LaunchSandboxRequest),
     LaunchCompiler(LaunchCompilerRequest),
@@ -72,7 +72,7 @@ impl EnumerateInnerFileDescriptors for Request {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum Reply {
     LaunchSandbox(LaunchSandboxReply),
     LaunchCompiler(LaunchCompilerReply),

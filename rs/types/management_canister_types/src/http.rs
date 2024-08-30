@@ -8,7 +8,7 @@ use serde::Serialize;
 ///     response : http_response;
 ///     context : blob;
 /// }`
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransformArgs {
     pub response: CanisterHttpResponsePayload,
     #[serde(with = "serde_bytes")]
@@ -25,7 +25,7 @@ candid::define_function!(pub TransformFunc : (TransformArgs) -> (CanisterHttpRes
 //       function : func (record {response : http_response; context : blob}) -> (http_response) query;
 //       context : blob;
 //   }`
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, PartialEq)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
     pub function: TransformFunc,
@@ -71,7 +71,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 //       context : blob;
 //     };
 //   })`
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug, Clone, PartialEq)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
@@ -246,7 +246,7 @@ fn test_http_headers_max_element_size() {
 /// name: text;
 /// value: text;
 /// })`;
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Deserialize, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
@@ -282,7 +282,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,
@@ -299,7 +299,7 @@ pub enum HttpMethod {
 ///     headers: vec http_header;
 ///     body: blob;
 /// })`;
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u128,
     pub headers: Vec<HttpHeader>,

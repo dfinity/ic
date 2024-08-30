@@ -8,7 +8,7 @@ fn test_round_trip() {
         expected_basis_points: u64,
         expected_formatted_str: &str,
     ) {
-        #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+        #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
         struct T {
             #[serde(with = "crate::serde::percentage")]
             homelessness_rate: Percentage,

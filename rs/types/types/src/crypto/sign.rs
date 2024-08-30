@@ -219,7 +219,7 @@ fn domain_with_prepended_length(domain: &str) -> Vec<u8> {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SignableMock {
     pub domain: Vec<u8>,
     pub signed_bytes_without_domain: Vec<u8>,

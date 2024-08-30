@@ -82,7 +82,7 @@ pub struct BoundaryNodeCustomDomainsConfig {
 }
 
 /// A builder for the initial configuration of an IC boundary node.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
@@ -905,7 +905,7 @@ impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Playnet {
     playnet_cert: PlaynetCertificate,
     aaaa_records: Vec<String>,
@@ -913,7 +913,7 @@ struct Playnet {
 }
 
 pub fn emit_bn_aaaa_records_event(log: &slog::Logger, bn_fqdn: &str, aaaa_records: Vec<String>) {
-    #[derive(Deserialize, Serialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct BoundaryNodeAAAARecords {
         url: String,
         aaaa_records: Vec<String>,

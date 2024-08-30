@@ -346,7 +346,7 @@ impl EthRpcClient {
 
 /// Aggregates responses of different providers to the same query.
 /// Guaranteed to be non-empty.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiCallResults<T> {
     ok_results: BTreeMap<RpcNodeProvider, T>,
     errors: BTreeMap<RpcNodeProvider, SingleCallError>,
@@ -474,7 +474,7 @@ impl<T: PartialEq> MultiCallResults<T> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Ord, PartialOrd)]
 pub enum SingleCallError {
     HttpOutcallError(HttpOutcallError),
     JsonRpcError { code: i64, message: String },
@@ -501,7 +501,7 @@ impl From<HttpOutcallError> for SingleCallError {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
     ConsistentHttpOutcallError(HttpOutcallError),
     ConsistentJsonRpcError { code: i64, message: String },
@@ -509,7 +509,7 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ReducedResult<T> {
     result: Result<T, MultiCallError<T>>,
 }

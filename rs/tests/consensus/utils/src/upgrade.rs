@@ -19,7 +19,7 @@ use prost::Message;
 use slog::{info, Logger};
 use std::{convert::TryFrom, fs, io::Read, path::Path};
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum UpdateImageType {
     Image,
     ImageTest,

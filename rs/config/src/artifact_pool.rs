@@ -11,7 +11,7 @@ pub const BACKUP_GROUP_SIZE: u64 = 10000;
 
 /// External configuration for artifact pools meant to be used by replica's
 /// config file.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArtifactPoolTomlConfig {
     /// The path in which to store the validated section of the consensus pool.
     pub consensus_pool_path: PathBuf,
@@ -44,7 +44,7 @@ impl ArtifactPoolTomlConfig {
 }
 
 /// Configuration of the consensus artifact backup.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackupConfig {
     /// Path to a folder with write permissions, for consensus artifact backup.
     /// If no path was provided, no backup will be saved.

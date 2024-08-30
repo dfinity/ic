@@ -67,7 +67,7 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Copy, CandidType, Eq, PartialEq, Debug)]
 pub enum UpdateExchangeRateState {
     Disabled = 0,
     GetRateAt(u64) = 1,

@@ -11,7 +11,7 @@ use std::{
 use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
-#[derive(Clone, Debug, ArgEnum)]
+#[derive(Debug, Clone, ArgEnum)]
 enum PemOrDer {
     Pem,
     Der,
@@ -30,7 +30,7 @@ impl std::fmt::Display for PemOrDer {
     }
 }
 
-#[derive(Debug, Parser)]
+#[derive(Parser, Debug)]
 #[clap(
     name = "ic-principal-id",
     about = r#"

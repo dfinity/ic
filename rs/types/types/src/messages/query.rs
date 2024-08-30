@@ -9,7 +9,7 @@ use ic_management_canister_types::IC_00;
 use std::convert::TryFrom;
 
 /// Represents the source of a query that is sent to a canister.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum QuerySource {
     /// A query sent by the IC to itself.
     Anonymous,
@@ -22,7 +22,7 @@ pub enum QuerySource {
 }
 
 /// Represents a Query that is sent by an end user to a canister.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Query {
     pub source: QuerySource,
     pub receiver: CanisterId,

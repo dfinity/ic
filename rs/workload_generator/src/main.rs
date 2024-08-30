@@ -68,7 +68,7 @@ fn write_output_json(filename: &str, summaries: &[Summary]) -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Copy, Clone, Debug, ArgEnum)]
+#[derive(Clone, Copy, Debug, ArgEnum)]
 #[clap(rename_all = "camel")]
 pub enum RequestType {
     // Needs to expose "read"
@@ -85,7 +85,7 @@ pub enum RequestType {
     Query,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ArgEnum)]
+#[derive(ArgEnum, Debug, Eq, PartialEq, Clone, Copy)]
 #[clap(rename_all = "camel")]
 pub enum ChartSize {
     None,

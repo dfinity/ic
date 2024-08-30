@@ -9,7 +9,7 @@ use std::fmt;
 ///
 /// It's much easier to compute diffs on labeled rose trees comparing to
 /// HashTrees provided by the crypto.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum RoseHashTree {
     Leaf(Digest),
     Fork {
@@ -83,7 +83,7 @@ impl From<&HashTree> for RoseHashTree {
 }
 
 /// A change to perform on a sub-tree addressed by some path.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
     /// Insert a leaf with the specified hash at the path.  If the path already
     /// existed before, replace it.

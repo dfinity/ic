@@ -27,7 +27,7 @@ fn is_manifest_chunk(chunk_id: ChunkId) -> bool {
     chunk_id.get() > (u32::MAX >> 2)
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct StateInner {
     height: Height,
     /// Chunks part of this state. The actual chunks always consist of zeros for this
@@ -35,7 +35,7 @@ struct StateInner {
     chunks: BTreeMap<ChunkId, usize>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct State(Arc<Mutex<StateInner>>);
 
 impl Default for State {

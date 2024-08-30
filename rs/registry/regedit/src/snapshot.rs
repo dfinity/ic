@@ -7,7 +7,7 @@ use thiserror::Error;
 pub const VERSION_FIELD: &str = "__version";
 pub const SPECIAL_FIELD_PREFIX: &str = "__";
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot(pub Value);
 
 pub fn changelog_to_snapshot(changelog: Changelog, version: VersionSpec) -> Result<Snapshot> {

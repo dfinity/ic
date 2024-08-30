@@ -84,7 +84,7 @@ impl Registry {
 }
 
 /// The argument for the `reroute_canister_range` update call.
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct RerouteCanisterRangesPayload {
     /// The list of canister ID ranges that needs to be mapped to the new
     /// destination.

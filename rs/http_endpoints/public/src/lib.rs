@@ -133,7 +133,7 @@ const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 /// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
 const TLS_HANDHAKE_BYTES: u8 = 22;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,

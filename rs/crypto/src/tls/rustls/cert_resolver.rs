@@ -40,7 +40,7 @@ impl StaticCertResolver {
 }
 
 /// Occurs if a certified key is incompatible with a signature scheme.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct KeyIncompatibleWithSigSchemeError {}
 
 impl ResolvesClientCert for StaticCertResolver {

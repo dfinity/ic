@@ -10,14 +10,14 @@ use std::sync::{Arc, Mutex};
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallRequest {
     RegisterDappCanisters(RegisterDappCanistersRequest),
     SetDappControllers(SetDappControllersRequest),
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallReply {
     Response(Vec<u8>),

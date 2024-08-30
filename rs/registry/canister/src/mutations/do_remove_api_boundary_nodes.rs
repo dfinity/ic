@@ -10,7 +10,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::check_api_boundary_nodes_exist;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveApiBoundaryNodesPayload {
     pub node_ids: Vec<NodeId>,
 }

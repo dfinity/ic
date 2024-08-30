@@ -7,7 +7,7 @@ use ic_crypto_internal_hmac::{hkdf, Hmac, Sha512};
 /// integers. We support an extension of BIP32 which uses arbitrary
 /// byte strings. If each of the index values is 4 bytes long
 /// then the derivation is compatable with standard BIP32 / SLIP-0010
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DerivationIndex(pub Vec<u8>);
 
 /// Derivation Path for BIP32 / SLIP-0010
@@ -17,7 +17,7 @@ pub struct DerivationIndex(pub Vec<u8>);
 /// Implements SLIP-0010
 /// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
 /// which is an extension of BIP32 to additional curves.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
 }

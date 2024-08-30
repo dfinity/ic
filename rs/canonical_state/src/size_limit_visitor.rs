@@ -8,7 +8,7 @@ use crate::visitor::{Control, Visitor};
 mod tests;
 
 /// Simple label matcher: either any label matches; or only equal labels.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Matcher {
     /// Match any label.
     Any,

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// The possible errors in registry responses.
 /// Per key errors are associated with a particular
 /// key.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Error {
     MalformedMessage(String),
     KeyNotPresent(Vec<u8>),

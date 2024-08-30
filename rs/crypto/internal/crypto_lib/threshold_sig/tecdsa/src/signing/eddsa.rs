@@ -108,7 +108,7 @@ impl RerandomizedPresignature {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThresholdEd25519SignatureShareInternal {
     s: EccScalar,
 }
@@ -234,7 +234,7 @@ impl ThresholdEd25519SignatureShareInternal {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThresholdEd25519CombinedSignatureInternal {
     r: EccPoint,
     s: EccScalar,
@@ -365,5 +365,5 @@ impl ThresholdEd25519CombinedSignatureInternal {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ThresholdEd25519SignatureShareInternalSerializationError(pub String);

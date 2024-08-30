@@ -12,14 +12,14 @@ use strum_macros::IntoStaticStr;
 mod tests;
 
 /// Forward secure encryption public key
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, IntoStaticStr, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, IntoStaticStr, PartialEq, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum CspFsEncryptionPublicKey {
     Groth20_Bls12_381(groth20_bls12_381::FsEncryptionPublicKey),
 }
 
 /// Forward secure encryption proof of possession.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, IntoStaticStr, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoStaticStr, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum CspFsEncryptionPop {
     Groth20WithPop_Bls12_381(groth20_bls12_381::FsEncryptionPop),
@@ -62,7 +62,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPublicKey {
 }
 
 /// A forward secure encryption public key is malformed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MalformedFsEncryptionPublicKeyError {
     pub key_bytes: Vec<u8>,
     pub internal_error: String,
@@ -105,7 +105,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPop {
 
 /// The forward secure encryption proof of possession (PoP) cannot be obtained
 /// from its protobuf.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CspFsEncryptionPopFromPublicKeyProtoError {
     UnknownAlgorithm {
         algorithm: i32,
@@ -150,7 +150,7 @@ pub mod groth20_bls12_381 {
     use std::convert::TryFrom;
 
     /// Forward secure encryption public key used in Groth20.
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
     pub struct FsEncryptionPublicKey(pub G1Bytes);
 
     impl FsEncryptionPublicKey {
@@ -163,7 +163,7 @@ pub mod groth20_bls12_381 {
     }
 
     /// Forward secure encryption proof of possession.
-    #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
     pub struct FsEncryptionPop {
         pub pop_key: G1Bytes,
         pub challenge: FrBytes,
@@ -175,7 +175,7 @@ pub mod groth20_bls12_381 {
 
     // Note: the spec currently has: Vec<(r,s,z)>; this could be represented more
     // strongly as [(G1,G1,G2);NUM_CHUNKS], which is equivalent to the below.
-    #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+    #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
     pub struct FsEncryptionCiphertextBytes {
         pub rand_r: [G1Bytes; NUM_CHUNKS],
         pub rand_s: [G1Bytes; NUM_CHUNKS],

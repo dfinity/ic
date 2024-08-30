@@ -124,7 +124,7 @@ mod header {
     use std::convert::TryFrom;
 
     /// Wrapper around serialized header plus transient metadata.
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub(super) struct Header {
         /// Serialized stream header.
         bytes: Vec<u8>,
@@ -178,7 +178,7 @@ mod messages {
     use super::*;
 
     /// Wrapper around slice messages plus transient metadata.
-    #[derive(Clone, PartialEq, Debug)]
+    #[derive(Clone, Debug, PartialEq)]
     pub(super) struct Messages {
         /// Slice messages.
         ///
@@ -342,7 +342,7 @@ mod messages {
 }
 
 /// Unpacked `CertifiedStreamSlice::payload`, plus transient metadata.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Payload {
     /// The intended destination subnet of this stream slice.
     subnet_id: Label,
@@ -743,7 +743,7 @@ impl From<Payload> for Vec<u8> {
 /// An unpacked `CertifiedStreamSlice`: a slice of the stream of messages
 /// produced by a subnet together with a cryptographic proof that the majority
 /// of that subnet agrees on it.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UnpackedStreamSlice {
     /// Stream slice contents.
     payload: Payload,
@@ -982,7 +982,7 @@ pub enum CertifiedSliceError {
 
 /// `CertifiedSliceError::InvalidPayload` and
 /// `CertifiedSliceError::InvalidWitness` detail.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InvalidSlice {
     ExtraContents,
     EmptyMessages,
@@ -997,7 +997,7 @@ pub enum InvalidSlice {
 }
 
 /// Root cause of `append()` failure.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InvalidAppend {
     DifferentSubnet,
     SignalsEndRegresses,

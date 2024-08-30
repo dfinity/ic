@@ -16,6 +16,6 @@ proptest! {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 struct TestData(#[serde(with = "crate::serde_data")] Vec<u8>);

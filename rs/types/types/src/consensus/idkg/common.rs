@@ -50,7 +50,7 @@ pub type PseudoRandomId = [u8; 32];
 ///
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
     pub pre_signature_id: PreSigId,
@@ -89,7 +89,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSigId(pub u64);
 
@@ -99,7 +99,7 @@ impl PreSigId {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptRef {
     /// The on chain location of the IDkgTranscript.
@@ -147,14 +147,14 @@ impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct TranscriptCastError {
     pub transcript_id: IDkgTranscriptId,
     pub from_type: IDkgTranscriptType,
     pub expected_type: &'static str,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MaskedTranscript(TranscriptRef);
 
@@ -203,7 +203,7 @@ impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscript(TranscriptRef);
 
@@ -291,7 +291,7 @@ impl TranscriptAttributes for IDkgTranscriptParamsRef {
 }
 
 /// Attributes of `IDkgTranscript`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptAttributes {
     receivers: BTreeSet<NodeId>,
@@ -358,7 +358,7 @@ impl TranscriptAttributes for IDkgTranscriptAttributes {
 
 /// Wrappers for the common types.
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomTranscriptParams {
@@ -407,7 +407,7 @@ impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomUnmaskedTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomUnmaskedTranscriptParams {
@@ -456,7 +456,7 @@ impl TryFrom<&pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptPa
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
@@ -505,7 +505,7 @@ impl TryFrom<&pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
@@ -585,7 +585,7 @@ impl TryFrom<&pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
@@ -683,7 +683,7 @@ pub trait IDkgBlockReader: Send + Sync {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptOperationRef {
     Random,
@@ -843,7 +843,7 @@ impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptParamsRef {
     pub transcript_id: IDkgTranscriptId,
@@ -968,7 +968,7 @@ impl IDkgTranscriptParamsRef {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureInCreation {
     Ecdsa(QuadrupleInCreation),
@@ -1031,7 +1031,7 @@ impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureRef {
     Ecdsa(PreSignatureQuadrupleRef),
@@ -1114,7 +1114,7 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
     Err(ThresholdSigInputsError::Schnorr(err))
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
@@ -1163,13 +1163,13 @@ pub enum ThresholdSigInputs {
     Schnorr(ThresholdSchnorrSigInputs),
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,

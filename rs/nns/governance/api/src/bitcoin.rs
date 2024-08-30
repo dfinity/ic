@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-#[derive(Copy, Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug, Copy)]
 pub enum BitcoinNetwork {
     #[serde(rename = "mainnet")]
     Mainnet,
@@ -21,7 +21,7 @@ impl FromStr for BitcoinNetwork {
 }
 
 // A proposal payload to set the Bitcoin configuration.
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,

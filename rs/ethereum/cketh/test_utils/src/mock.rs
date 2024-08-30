@@ -25,7 +25,7 @@ pub struct MockJsonRpcProviders {
 
 //variants are prefixed by Eth because it's the names of those methods in the Ethereum JSON-RPC API
 #[allow(clippy::enum_variant_names)]
-#[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
+#[derive(Debug, PartialEq, strum_macros::EnumString, Clone, strum_macros::Display)]
 pub enum JsonRpcMethod {
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
@@ -46,7 +46,7 @@ pub enum JsonRpcMethod {
     EthSendRawTransaction,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
+#[derive(Copy, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, strum_macros::EnumIter)]
 pub enum JsonRpcProvider {
     //order is top-to-bottom and must match order used in production
     Ankr,
@@ -93,7 +93,7 @@ impl FromStr for JsonRpcRequest {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct JsonRpcRequestMatcher {
     http_method: CanisterHttpMethod,
     provider: JsonRpcProvider,
@@ -196,7 +196,7 @@ impl Matcher for JsonRpcRequestMatcher {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 struct StubOnce {
     matcher: JsonRpcRequestMatcher,
     response_result: serde_json::Value,

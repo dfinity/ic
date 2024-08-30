@@ -680,7 +680,7 @@ impl XNetClient for FakeXNetClient {
 
 /// A replacement for `XNetClientError` because `XNetClientError` is not `Clone`
 /// and thus can't be used directly by `FakeXNetClient`.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 #[allow(dead_code)]
 enum FakeXNetClientError {
     ErrorResponse,
