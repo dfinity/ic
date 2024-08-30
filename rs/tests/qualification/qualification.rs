@@ -6,7 +6,8 @@ use ic_system_test_driver::driver::{
 use ic_tests::qualification::{
     defs::QualificationExecutor,
     steps::{
-        ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType,
+        ensure_blessed_version::EnsureBlessedVersion,
+        retire_blessed_version::RetireBlessedVersions, update_subnet_type::UpdateSubnetType,
         workload::Workload, xnet::XNet,
     },
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
@@ -142,6 +143,14 @@ pub fn main() -> anyhow::Result<()> {
                         // Run xnet tests
                         // uses `rs/tests/src/message_routing/global_reboot_test`
                         Box::new(XNet {}),
+                        // Retire old version if it has disk-img
+                        Box::new(RetireBlessedVersions {
+                            versions: vec![initial_version.clone()],
+                        }),
+                        // Ensure that the old version is blessed
+                        Box::new(EnsureBlessedVersion {
+                            version: initial_version.clone(),
+                        }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {
                             subnet_type: Some(SubnetType::Application),

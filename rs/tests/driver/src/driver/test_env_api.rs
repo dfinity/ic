@@ -167,13 +167,16 @@ use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
-    node::v1 as pb_node, replica_version::v1::BlessedReplicaVersions, subnet::v1 as pb_subnet,
+    node::v1 as pb_node,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -468,6 +471,32 @@ impl TopologySnapshot {
             ))?
             .blessed_version_ids
             .clone())
+    }
+
+    pub fn replica_version_records(&self) -> anyhow::Result<Vec<(String, ReplicaVersionRecord)>> {
+        Ok(self
+            .local_registry
+            .get_key_family(
+                REPLICA_VERSION_KEY_PREFIX,
+                self.local_registry.get_latest_version(),
+            )
+            .map_err(anyhow::Error::from)?
+            .iter()
+            .map(|key| {
+                let r = self
+                    .local_registry
+                    .get_versioned_value(key, self.local_registry.get_latest_version())
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to get entry {} for replica version {}", key)
+                    });
+                (
+                    key,
+                    r.as_ref().map(|v| {
+                        ReplicaVersionRecord::decode(v.as_slice()).expect("Invalid registry value")
+                    }),
+                )
+            })
+            .collect_vec())
     }
 
     /// The subnet id of the root subnet.

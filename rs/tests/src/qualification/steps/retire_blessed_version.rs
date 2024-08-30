@@ -21,6 +21,7 @@ pub struct RetireBlessedVersions {
     pub versions: Vec<String>,
 }
 
+// Retire only if the version uses "disk-img"
 impl Step for RetireBlessedVersions {
     fn execute(
         &self,
@@ -28,8 +29,9 @@ impl Step for RetireBlessedVersions {
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         let blessed_versions = env.topology_snapshot().blessed_replica_versions()?;
+        let replica_versions = env.topology_snapshot().replica_version_records()?;
 
-        let versions_to_unelect = self
+        let mut versions_to_unelect = self
             .versions
             .iter()
             .filter(|version| blessed_versions.contains(version))
@@ -51,6 +53,28 @@ impl Step for RetireBlessedVersions {
 
         let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
         let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+
+        versions_to_unelect.retain(|r| {
+            let record = replica_versions
+                .iter()
+                .find_map(|(key, rec)| {
+                    if key.eq(&r) {
+                        return Some(rec);
+                    }
+                    None
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Blessed replica version with key {} not found in records",
+                        r
+                    )
+                });
+
+            record
+                .release_package_urls
+                .iter()
+                .any(|url| url.contains("disk-img"))
+        });
 
         let proposal_id = rt.block_on(submit_update_elected_replica_versions_proposal(
             &governance_canister,
