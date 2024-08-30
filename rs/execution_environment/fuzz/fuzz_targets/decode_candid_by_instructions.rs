@@ -6,6 +6,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::ptr::addr_of;
+use std::time::Duration;
 
 use libafl::{
     corpus::InMemoryCorpus,
@@ -73,7 +74,10 @@ pub fn main() {
             _ => 0,
         };
 
-        let result = test.execute_ingress(canister_id, "export_coverage", vec![]);
+        test.advance_time(Duration::from_secs(1));
+        test.tick();
+
+        let result = test.query(canister_id, "export_coverage", vec![]);
         match result {
             Ok(WasmResult::Reply(result)) => {
                 println!(

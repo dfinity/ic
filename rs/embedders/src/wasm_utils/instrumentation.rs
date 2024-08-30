@@ -942,8 +942,10 @@ pub(super) fn instrument(
     module = export_mutable_globals(module, &mut extra_strs);
 
     // Inject two new globals
+    // Will record the prev_location of each branch traversal
     // prev_location => mutable: true, value: 0
-    // mem_ptr => mutable: true, value: 0
+    // Address of our coverage map store.
+    // mem_ptr => mutable: false, value: 0
 
     let prev_location = Global {
         ty: GlobalType {
@@ -957,7 +959,7 @@ pub(super) fn instrument(
     let mem_ptr = Global {
         ty: GlobalType {
             content_type: ValType::I32,
-            mutable: true,
+            mutable: false,
             shared: false,
         },
         init_expr: Operator::I32Const { value: 0 },
