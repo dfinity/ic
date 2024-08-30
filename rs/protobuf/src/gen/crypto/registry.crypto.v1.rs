@@ -1,6 +1,6 @@
 /// A list of subnets that can sign with this ECDSA key.
 /// This allows replicas to route their signing requests to the right subnets.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaSigningSubnetList {
@@ -9,7 +9,7 @@ pub struct EcdsaSigningSubnetList {
 }
 /// A list of subnets that can sign with a given chain key.
 /// This allows replicas to route their signing requests to the right subnets.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChainKeySigningSubnetList {
@@ -17,7 +17,7 @@ pub struct ChainKeySigningSubnetList {
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublicKey {
@@ -34,14 +34,14 @@ pub struct PublicKey {
     pub timestamp: ::core::option::Option<u64>,
 }
 /// DER-encoded X509 public key certificate
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct X509PublicKeyCert {
     #[prost(bytes = "vec", tag = "1")]
     pub certificate_der: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyId {
@@ -50,7 +50,7 @@ pub struct EcdsaKeyId {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrKeyId {
@@ -59,7 +59,7 @@ pub struct SchnorrKeyId {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterPublicKeyId {
@@ -68,7 +68,7 @@ pub struct MasterPublicKeyId {
 }
 /// Nested message and enum types in `MasterPublicKeyId`.
 pub mod master_public_key_id {
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum KeyId {
@@ -80,17 +80,17 @@ pub mod master_public_key_id {
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
 #[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
-    Hash,
-    PartialOrd,
+    PartialEq,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
     ::prost::Enumeration,
+    serde::Deserialize,
+    serde::Serialize,
 )]
 #[repr(i32)]
 pub enum AlgorithmId {
@@ -173,17 +173,17 @@ impl AlgorithmId {
 }
 /// Types of curves that can be used for ECDSA signatures.
 #[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
-    Hash,
-    PartialOrd,
+    PartialEq,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
     ::prost::Enumeration,
+    serde::Deserialize,
+    serde::Serialize,
 )]
 #[repr(i32)]
 pub enum EcdsaCurve {
@@ -212,17 +212,17 @@ impl EcdsaCurve {
 }
 /// Types of curves that can be used for Schnorr signatures.
 #[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
     Copy,
-    Debug,
-    PartialEq,
+    Clone,
     Eq,
-    Hash,
-    PartialOrd,
+    PartialEq,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
     ::prost::Enumeration,
+    serde::Deserialize,
+    serde::Serialize,
 )]
 #[repr(i32)]
 pub enum SchnorrAlgorithm {

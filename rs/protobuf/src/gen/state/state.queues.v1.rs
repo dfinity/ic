@@ -1,11 +1,11 @@
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Cycles {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_cycles: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Funds {
@@ -90,7 +90,7 @@ pub struct Request {
     #[prost(uint32, tag = "9")]
     pub deadline_seconds: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RejectContext {
@@ -99,7 +99,7 @@ pub struct RejectContext {
     #[prost(string, tag = "2")]
     pub reject_message: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Response {
@@ -121,7 +121,7 @@ pub struct Response {
 }
 /// Nested message and enum types in `Response`.
 pub mod response {
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum ResponsePayload {
@@ -294,7 +294,7 @@ pub mod canister_queues {
         #[prost(message, optional, tag = "3")]
         pub output_queue: ::core::option::Option<super::CanisterQueue>,
     }
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
         Unspecified = 0,
@@ -327,7 +327,7 @@ pub mod canister_queues {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum RejectReason {
     Unspecified = 0,

@@ -36,7 +36,7 @@ pub struct UpdateNodeRewardsTableProposalPayload {
 }
 /// Some nodes will have different properties (e.g. upgraded storage capacity)
 /// that require a unique reward rate.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NodeRewardType {
     /// This field is treated as the default reward type

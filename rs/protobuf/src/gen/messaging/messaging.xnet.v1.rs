@@ -1,5 +1,5 @@
 /// State tree root hash.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationContent {
@@ -7,7 +7,7 @@ pub struct CertificationContent {
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Certification of state tree root hash.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Certification {
@@ -19,7 +19,7 @@ pub struct Certification {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignature>,
 }
 /// Certification signed by a single replica
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationShare {
@@ -31,7 +31,7 @@ pub struct CertificationShare {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignatureShare>,
 }
 /// XNet stream slice with certification and matching Merkle proof.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertifiedStreamSlice {
@@ -46,7 +46,7 @@ pub struct CertifiedStreamSlice {
     pub certification: ::core::option::Option<Certification>,
 }
 /// Tree with ordered, labeled edges.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LabeledTree {
@@ -56,7 +56,7 @@ pub struct LabeledTree {
 /// Nested message and enum types in `LabeledTree`.
 pub mod labeled_tree {
     /// Inner node with zero or more ordered, labeled children.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct SubTree {
@@ -65,7 +65,7 @@ pub mod labeled_tree {
         pub children: ::prost::alloc::vec::Vec<Child>,
     }
     /// A `SubTree`'s labeled child.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Child {
@@ -74,7 +74,7 @@ pub mod labeled_tree {
         #[prost(message, optional, tag = "2")]
         pub node: ::core::option::Option<super::LabeledTree>,
     }
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum NodeEnum {
@@ -85,7 +85,7 @@ pub mod labeled_tree {
     }
 }
 /// A tree containing both data and merkle proofs.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MixedHashTree {
@@ -94,7 +94,7 @@ pub struct MixedHashTree {
 }
 /// Nested message and enum types in `MixedHashTree`.
 pub mod mixed_hash_tree {
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Fork {
@@ -103,7 +103,7 @@ pub mod mixed_hash_tree {
         #[prost(message, optional, boxed, tag = "2")]
         pub right_tree: ::core::option::Option<::prost::alloc::boxed::Box<super::MixedHashTree>>,
     }
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Labeled {
@@ -112,7 +112,7 @@ pub mod mixed_hash_tree {
         #[prost(message, optional, boxed, tag = "2")]
         pub subtree: ::core::option::Option<::prost::alloc::boxed::Box<super::MixedHashTree>>,
     }
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum TreeEnum {
@@ -129,7 +129,7 @@ pub mod mixed_hash_tree {
     }
 }
 /// Merkle proof - a subset of a `HashTree`.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Witness {
@@ -139,7 +139,7 @@ pub struct Witness {
 /// Nested message and enum types in `Witness`.
 pub mod witness {
     /// Binary fork.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Fork {
@@ -149,7 +149,7 @@ pub mod witness {
         pub right_tree: ::core::option::Option<::prost::alloc::boxed::Box<super::Witness>>,
     }
     /// Labeled leaf or subtree.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Node {
@@ -159,7 +159,7 @@ pub mod witness {
         pub sub_witness: ::core::option::Option<::prost::alloc::boxed::Box<super::Witness>>,
     }
     /// Pruned leaf or subtree.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Pruned {
@@ -167,11 +167,11 @@ pub mod witness {
         pub digest: ::prost::alloc::vec::Vec<u8>,
     }
     /// Marker for provided data (leaf or subtree).
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Known {}
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Deserialize, serde::Serialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WitnessEnum {

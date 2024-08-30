@@ -18,8 +18,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// A fictional versioning CLI
-#[derive(Debug, Parser)] // requires `derive` feature
-#[command(about = "CLI to make canister upgrade proposals", long_about = None)]
+#[derive(Debug, Parser)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -77,7 +76,7 @@ enum Commands {
     },
 }
 
-#[derive(Debug, Clone, Subcommand)]
+#[derive(Clone, Debug, Subcommand)]
 enum SubmitProposal {
     /// Generate the `ic-admin` command to submit the proposal.
     /// The proposal will *not* be automatically submitted.

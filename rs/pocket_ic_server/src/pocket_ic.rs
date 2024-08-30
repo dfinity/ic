@@ -127,10 +127,10 @@ fn compute_subnet_seed(
     hasher.finish()
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal(pub BTreeMap<String, RawSubnetConfigInternal>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct RawSubnetConfigInternal {
     pub subnet_config: SubnetConfigInternal,
     pub time: SystemTime,
@@ -139,7 +139,7 @@ struct RawSubnetConfigInternal {
 #[derive(Clone)]
 struct TopologyInternal(pub BTreeMap<[u8; 32], SubnetConfigInternal>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
@@ -871,7 +871,7 @@ struct SubnetConfigInfo {
 // Operations on PocketIc
 
 // When raw (rest) types are cast to operations, errors can occur.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ConversionError {
     message: String,
 }
@@ -895,7 +895,7 @@ impl Operation for SetTime {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetTopology;
 
 impl Operation for GetTopology {
@@ -908,7 +908,7 @@ impl Operation for GetTopology {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetTime;
 
 impl Operation for GetTime {
@@ -923,7 +923,7 @@ impl Operation for GetTime {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetCanisterHttp;
 
 fn http_method_from(
@@ -1146,7 +1146,7 @@ impl Operation for MockCanisterHttp {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct PubKey {
     pub subnet_id: SubnetId,
 }
@@ -1165,7 +1165,7 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct Tick;
 
 impl Operation for Tick {
@@ -1181,7 +1181,7 @@ impl Operation for Tick {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct AdvanceTimeAndTick(pub Duration);
 
 impl Operation for AdvanceTimeAndTick {
@@ -1892,7 +1892,7 @@ impl Operation for SubnetReadStateRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum EffectivePrincipal {
     None,
     SubnetId(SubnetId),
@@ -1999,7 +1999,7 @@ impl CanisterCall {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SetStableMemory {
     pub canister_id: CanisterId,
     pub data: Vec<u8>,
@@ -2069,7 +2069,7 @@ impl Operation for SetStableMemory {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetStableMemory {
     pub canister_id: CanisterId,
 }

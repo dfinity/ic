@@ -1,11 +1,11 @@
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MaliciousBehaviourLogEntry {
     #[prost(enumeration = "MaliciousBehaviour", tag = "1")]
     pub malicious_behaviour: i32,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum MaliciousBehaviour {
     Unspecified = 0,

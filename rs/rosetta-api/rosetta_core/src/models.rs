@@ -12,7 +12,7 @@ use ic_crypto_secp256k1::{PrivateKey as Secp256k1PrivateKey, PublicKey as Secp25
 use ic_types::PrincipalId;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Ed25519KeyPair {
     secret_key: Ed25519SecretKey,
     public_key: Ed25519PublicKey,

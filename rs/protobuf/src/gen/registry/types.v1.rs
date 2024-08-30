@@ -50,7 +50,7 @@ pub struct NominalCycles {
     pub low: u64,
 }
 /// A non-interactive distributed key generation (NI-DKG) tag.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NiDkgTag {
     Unspecified = 0,

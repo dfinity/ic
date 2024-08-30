@@ -1,5 +1,5 @@
 /// Config applied to the set of all unassigned nodes.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UnassignedNodesConfigRecord {

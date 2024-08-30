@@ -1,5 +1,5 @@
 /// A connection endpoint.
-#[derive(serde::Serialize, serde::Deserialize, Eq, PartialOrd, Ord)]
+#[derive(Eq, Ord, PartialOrd, serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConnectionEndpoint {
@@ -15,7 +15,7 @@ pub struct ConnectionEndpoint {
     #[prost(uint32, tag = "2")]
     pub port: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IPv4InterfaceConfig {
@@ -27,7 +27,7 @@ pub struct IPv4InterfaceConfig {
     pub prefix_length: u32,
 }
 /// A node: one machine running a replica instance.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRecord {
