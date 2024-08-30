@@ -4360,45 +4360,27 @@ impl Governance {
 
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        // Filter all the neurons that have some disbursing maturity in progress.
-        let neurons_with_disbursal: Vec<Neuron> = self
+        // Filter all the neurons that are ready to disburse.
+        let neuron_id_and_disbursements: Vec<(NeuronId, DisburseMaturityInProgress)> = self
             .proto
             .neurons
             .values()
-            .filter(|n| !n.disburse_maturity_in_progress.is_empty())
-            .cloned()
+            .filter_map(|neuron| {
+                let id = neuron.id.as_ref()?;
+                let first_disbursement = neuron.disburse_maturity_in_progress.first()?;
+                if first_disbursement
+                    .finalize_disbursement_timestamp_seconds
+                    .is_some_and(|finalize_disbursement_timestamp_seconds| {
+                        finalize_disbursement_timestamp_seconds > now_seconds
+                    })
+                {
+                    Some((id.clone(), first_disbursement.clone()))
+                } else {
+                    None
+                }
+            })
             .collect();
-        for neuron in neurons_with_disbursal {
-            // The first entry is the oldest one, check whether it can be completed.
-            let disbursement = match neuron.disburse_maturity_in_progress.first() {
-                Some(disbursement) => disbursement.clone(),
-                None => continue,
-            };
-
-            match disbursement.finalize_disbursement_timestamp_seconds {
-                Some(finalize_disbursement_timestamp_seconds) => {
-                    if now_seconds < finalize_disbursement_timestamp_seconds {
-                        // It's not time to disbuse yet
-                        continue;
-                    }
-                }
-                None => {
-                    log!(
-                        ERROR,
-                        "Finalize disbursement timestamp is not set. Cannot disburse."
-                    );
-                    continue;
-                }
-            }
-
-            let neuron_id = match neuron.id.as_ref() {
-                None => {
-                    log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
-                    continue;
-                }
-                Some(id) => id,
-            };
-
+        for (neuron_id, disbursement) in neuron_id_and_disbursements.into_iter() {
             let maturity_to_disburse_after_modulation_e8s: u64 = match apply_maturity_modulation(
                 disbursement.amount_e8s,
                 maturity_modulation_basis_points,
@@ -4426,7 +4408,7 @@ impl Governance {
                     fdm,
                 )),
             };
-            let _neuron_lock = match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+            let _neuron_lock = match self.lock_neuron_for_command(&neuron_id, in_flight_command) {
                 Ok(neuron_lock) => neuron_lock,
                 Err(_) => continue, // if locking fails, try next neuron
             };
@@ -4472,7 +4454,7 @@ impl Governance {
                                 "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
                                 disbursement, neuron_id, block_index
                             );
-                    let neuron = match self.get_neuron_result_mut(neuron_id) {
+                    let neuron = match self.get_neuron_result_mut(&neuron_id) {
                         Ok(neuron) => neuron,
                         Err(e) => {
                             log!(
