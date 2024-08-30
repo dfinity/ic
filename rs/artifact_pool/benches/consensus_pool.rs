@@ -1,7 +1,9 @@
 //! This tests the speed of loading blocks from persistence with varying payload
 //! sizes.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use std::time::Duration;
+
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
     ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
@@ -25,7 +27,7 @@ use ic_types::{
 // Helper to run the persistence tests below.
 // It creates the config and logger that is passed to the instances and then
 // makes sure that the the databases are destroyed before the test fails.
-fn run_test<T>(_test_name: &str, test: T)
+fn run_test<T>(test: T)
 where
     T: FnOnce(&mut ConsensusPoolImpl),
 {
@@ -43,7 +45,7 @@ where
     })
 }
 
-fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
+fn prepare_changeset(pool: &mut ConsensusPoolImpl, num: usize) -> ChangeSet {
     let cup = pool
         .validated()
         .catch_up_package()
@@ -77,6 +79,12 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             timestamp: UNIX_EPOCH,
         }));
     }
+
+    changeset
+}
+
+fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
+    let changeset = prepare_changeset(pool, num);
     pool.apply_changes(changeset);
 }
 
@@ -103,7 +111,8 @@ fn sum_ingress_counts(pool: &dyn ConsensusPool) -> usize {
 /// Speed test for loading and copying block proposals.
 fn load_blocks(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("block_loading");
-    run_test("load_blocks", |pool: &mut ConsensusPoolImpl| {
+    group.measurement_time(Duration::from_secs(60));
+    run_test(|pool: &mut ConsensusPoolImpl| {
         prepare(pool, 20);
         group.bench_function("Load blocks and sum their heights", |bench| {
             bench.iter(|| {
@@ -118,6 +127,42 @@ fn load_blocks(criterion: &mut Criterion) {
     })
 }
 
-criterion_group!(benches, load_blocks);
+fn get_height_range(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("height range");
+    group.measurement_time(Duration::from_secs(60));
+    run_test(|pool: &mut ConsensusPoolImpl| {
+        prepare(pool, 500);
+        group.bench_function("Load the validated block proposals height range", |bench| {
+            bench.iter(|| {
+                let _range = pool.validated().block_proposal().height_range().unwrap();
+            })
+        });
+    })
+}
+
+fn insert_and_purge_blocks(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("insert and purge blocks");
+    group.measurement_time(Duration::from_secs(60));
+    run_test(|pool: &mut ConsensusPoolImpl| {
+        let changeset = prepare_changeset(pool, 20);
+        group.bench_function("Apply changes", |bench| {
+            bench.iter_batched(
+                || changeset.clone(),
+                |changeset| {
+                    pool.apply_changes(changeset);
+                    pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::new(22))]);
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    })
+}
+
+criterion_group!(
+    benches,
+    load_blocks,
+    insert_and_purge_blocks,
+    get_height_range
+);
 
 criterion_main!(benches);

@@ -86,9 +86,9 @@ rust_test(
 )
 
 rust_bench(
-    name = "load_blocks_bench",
+    name = "consensus_pool_bench",
     testonly = True,
-    srcs = ["benches/load_blocks.rs"],
+    srcs = ["benches/consensus_pool.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":artifact_pool"],
