@@ -101,33 +101,30 @@ impl CanisterId {
     pub fn try_from_principal_id(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
         // Must be opaque.
         if principal_id.class() != Ok(PrincipalIdClass::Opaque) {
-            return Err(CanisterIdError::InvalidPrincipalId(
-                format!(
-                    "Principal ID {} is of class {:?} (not Opaque).",
-                    principal_id, principal_id.class(),
-                )
-            ));
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Principal ID {} is of class {:?} (not Opaque).",
+                principal_id,
+                principal_id.class(),
+            )));
         }
 
         // Must be of length 10.
         let raw = principal_id.as_slice();
         if raw.len() != 10 {
-            return Err(CanisterIdError::InvalidPrincipalId(
-                format!(
-                    "Principal ID {} consists of {} bytes (not 10).",
-                    principal_id, raw.len(),
-                )
-            ));
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Principal ID {} consists of {} bytes (not 10).",
+                principal_id,
+                raw.len(),
+            )));
         }
 
         // Byte 8 (penultimate) must be 0x01.
         if raw[8] != 0x01 {
-            return Err(CanisterIdError::InvalidPrincipalId(
-                format!(
-                    "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
-                    principal_id, hex::encode(raw),
-                )
-            ));
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
+                principal_id,
+                hex::encode(raw),
+            )));
         }
 
         Ok(CanisterId(principal_id))
