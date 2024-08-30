@@ -111,26 +111,19 @@ impl UpdateExchangeRateState {
     }
 }
 
+/// Get the "next multiple" of a value, that is, the smallest number which (1) can be divided by
+/// `multiple`, and (2) is greater than `value`. Returns None if `multiple` zero or if the result
+/// would overflow u64.
 fn get_next_multiple_of(value: u64, multiple: u64) -> Option<u64> {
-    let cast_value = i128::from(value);
-    let cast_multiple = i128::from(multiple);
-    let base = cast_multiple.checked_sub(cast_value)?;
-    if multiple == 0 {
-        return None;
-    }
+    // If `multiple` is 0, None will be returned here as expected.
+    let quotient = value.checked_div(multiple)?;
 
-    let diff = base.rem_euclid(cast_multiple);
+    // This should not overflow since `quotient` * `multiple` should be no more than `value`,
+    // although the compiler doesn't know that.
+    let previous_multiple = quotient.checked_mul(multiple)?;
 
-    if diff > i128::from(u64::MAX) {
-        return None;
-    }
-
-    let diff_seconds = diff as u64;
-    if diff_seconds == 0 {
-        value.checked_add(multiple)
-    } else {
-        value.checked_add(diff_seconds)
-    }
+    // This could overflow (e.g. if `value` is u64::MAX and `multiple` is 2), but that's fine.
+    previous_multiple.checked_add(multiple)
 }
 
 /// Only one UpdateExchangeRateGuard can be created at a time.
