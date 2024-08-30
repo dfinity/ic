@@ -19,11 +19,14 @@ DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "//rs/types/types",
+    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities/logger",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

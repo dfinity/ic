@@ -1147,7 +1147,7 @@ mod tests {
 
     fn test_update_summary_refs(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
@@ -1406,7 +1406,7 @@ mod tests {
     }
 
     fn test_summary_proto_conversion(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
@@ -1697,7 +1697,7 @@ mod tests {
     }
 
     fn test_no_creation_after_successful_creation(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
                 registry,
@@ -1837,7 +1837,7 @@ mod tests {
     }
 
     fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
                 registry,
@@ -2184,7 +2184,7 @@ mod tests {
     }
 
     fn test_if_next_in_creation_continues(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
                 registry_data_provider,
@@ -2334,7 +2334,7 @@ mod tests {
     }
 
     fn test_next_in_creation_with_initial_dealings(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
                 registry,

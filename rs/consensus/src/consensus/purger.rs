@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_purger() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 state_manager,
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_purge_finalization_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 state_manager,
@@ -634,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_purge_equivocation_proofs() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 state_manager,
@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn test_get_purge_height() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
 
             // Initial purge height is None.
@@ -705,7 +705,7 @@ mod tests {
 
     #[test]
     fn purging_non_finalized_blocks_test() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 state_manager,

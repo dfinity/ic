@@ -23,6 +23,7 @@ DEV_DEPENDENCIES = [
     "//rs/consensus",
     "//rs/consensus/mocks",
     "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",

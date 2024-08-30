@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn test_exists() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn test_not_exists() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn test_insert_remove() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn test_get_all_validated() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let time = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn test_timestamp() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let time_0 = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn test_purge_below() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
@@ -696,7 +696,7 @@ mod tests {
     #[test]
     fn test_exceeds_threshold_msgcount() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|mut pool_config| {
                 // 3 ingress messages, each with 153 bytes (subject to change)
                 pool_config.ingress_pool_max_bytes = 153 * 5;
                 pool_config.ingress_pool_max_count = 3;
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn test_exceeds_threshold_bytes() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|mut pool_config| {
                 // 3 ingress messages, each with 153 bytes (subject to change)
                 pool_config.ingress_pool_max_bytes = 153 * 3;
                 pool_config.ingress_pool_max_count = 5;
@@ -754,7 +754,7 @@ mod tests {
     #[test]
     fn test_throttling_disabled() {
         with_test_replica_logger(|log| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|mut pool_config| {
                 pool_config.ingress_pool_max_count = usize::MAX;
                 pool_config.ingress_pool_max_bytes = usize::MAX;
                 let time_source = FastForwardTimeSource::new();

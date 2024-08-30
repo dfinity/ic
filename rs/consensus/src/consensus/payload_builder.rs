@@ -348,7 +348,7 @@ pub(crate) mod test {
         provided_responses_from_adapter: Vec<BitcoinAdapterResponse>,
         provided_canister_http_responses: Vec<CanisterHttpResponseWithConsensus>,
     ) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { registry, .. } = dependencies(pool_config, 1);
             let payload_builder = make_test_payload_impl(
                 registry,

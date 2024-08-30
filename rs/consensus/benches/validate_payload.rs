@@ -83,7 +83,7 @@ fn run_test<T>(_test_name: &str, test_fn: T)
 where
     T: FnOnce(Time, &mut ConsensusPoolImpl, &dyn PayloadBuilder),
 {
-    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
         let time_source = FastForwardTimeSource::new();
         let now = time_source.get_relative_time();
         let metrics_registry = MetricsRegistry::new();

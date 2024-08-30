@@ -495,7 +495,7 @@ mod test {
 
     #[test]
     fn test_consensus_cache() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let subnet_id = subnet_test_id(1);
             let committee = vec![node_test_id(0)];
@@ -588,7 +588,7 @@ mod test {
     /// Tests that `is_replica_behind` (trait method of [`ConsensusPoolCache`]) works as expected
     #[test]
     fn test_is_replica_behind() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_records = vec![(
                 1,
                 SubnetRecordBuilder::from(&[node_test_id(0)])

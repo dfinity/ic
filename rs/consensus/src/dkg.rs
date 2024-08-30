@@ -623,7 +623,7 @@ mod tests {
     #[test]
     // In this test we test the creation of dealing payloads.
     fn test_create_dealings_payload() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let nodes: Vec<_> = (0..3).map(node_test_id).collect();
                 let dkg_interval_len = 30;
@@ -776,7 +776,7 @@ mod tests {
 
     #[test]
     fn test_create_dealing_works() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let Dependencies {
                     mut pool, crypto, ..
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn test_create_dealing_works_for_remote_dkg() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             with_test_replica_logger(|logger| {
                 let node_ids = vec![node_test_id(0), node_test_id(1)];
@@ -959,7 +959,7 @@ mod tests {
 
     #[test]
     fn test_config_generation_failures_are_added_to_the_summary() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
@@ -1045,8 +1045,8 @@ mod tests {
     }
 
     fn run_validation_test(f: &dyn Fn(ValidationTestComponents, ValidationTestComponents, NodeId)) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_1| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config_1| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 let crypto = Arc::new(CryptoReturningOk::default());
                 let node_id_1 = node_test_id(1);
                 // This is not a dealer!
@@ -1434,8 +1434,8 @@ mod tests {
 
     #[test]
     fn test_validate_dealing_works_for_remote_dkg() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_1| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config_2| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config_1| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config_2| {
                 use ic_types::crypto::threshold_sig::ni_dkg::*;
                 with_test_replica_logger(|logger| {
                     let node_ids = vec![node_test_id(0), node_test_id(1)];
@@ -1644,7 +1644,7 @@ mod tests {
 
     #[test]
     fn test_dkg_payload_has_transcripts_for_new_subnets() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
             let subnet_id = subnet_test_id(0);
@@ -1802,7 +1802,7 @@ mod tests {
      */
     #[test]
     fn test_create_summary_registry_versions() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // We'll have a DKG summary inside every 5th block.
             let dkg_interval_length = 4;
             // Original committee are nodes 0, 1, 2, 3.

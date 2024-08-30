@@ -219,7 +219,7 @@ mod tests {
     /// objects are not constructed a second time (now that the full object
     /// is already in the pool).
     fn test_basic_on_state_change() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 membership,
@@ -323,7 +323,7 @@ mod tests {
     fn catch_up_package_aggregation(
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> CatchUpPackage {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
             let interval_length = 3;
             let Dependencies {

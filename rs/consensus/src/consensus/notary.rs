@@ -213,7 +213,7 @@ mod tests {
     /// Do basic notary validations
     #[test]
     fn test_notary_behavior() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = vec![node_test_id(0)];
             let dkg_interval_length = 30;
             let Dependencies {
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_out_of_sync_notarization() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = vec![node_test_id(0)];
             let dkg_interval_length = 30;
             let Dependencies {

@@ -748,7 +748,7 @@ mod tests {
 
     #[test]
     fn test_halt_subnet_via_registry() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let interval_length = 99;
 

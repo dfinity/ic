@@ -502,7 +502,7 @@ pub mod test {
 
     #[test]
     pub fn test_validation_of_shares_above_known_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,
@@ -599,7 +599,7 @@ pub mod test {
 
     #[test]
     pub fn test_invalidation_of_redundant_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,
@@ -720,7 +720,7 @@ pub mod test {
 
     #[test]
     pub fn test_already_created_shares_not_re_requested() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,
@@ -808,7 +808,7 @@ pub mod test {
 
     #[test]
     pub fn test_create_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,
@@ -867,7 +867,7 @@ pub mod test {
 
     #[test]
     pub fn test_submit_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,

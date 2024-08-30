@@ -1434,7 +1434,7 @@ mod tests {
     }
 
     fn test_send_dealings(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1481,7 +1481,7 @@ mod tests {
     // Tests that dealings are purged once the finalized height increases
     #[test]
     fn test_ecdsa_dealings_purging() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer, mut consensus_pool) =
                     create_pre_signer_dependencies_and_pool(pool_config, logger);
@@ -1536,7 +1536,7 @@ mod tests {
     }
 
     fn test_non_dealers_dont_send_dealings(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2) = (create_transcript_id(1), create_transcript_id(2));
@@ -1563,7 +1563,7 @@ mod tests {
     // Tests that dealing is not issued if the crypto component returns an error
     #[test]
     fn test_ecdsa_crypto_error_results_in_no_dealing() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let crypto = crypto_without_keys();
@@ -1596,7 +1596,7 @@ mod tests {
     }
 
     fn test_send_dealings_with_complaints(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1635,7 +1635,7 @@ mod tests {
     #[test]
     fn test_crypto_verify_dealing() {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let subnet_nodes: BTreeSet<_> = env.nodes.ids();
@@ -1716,7 +1716,7 @@ mod tests {
         );
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1733,7 +1733,7 @@ mod tests {
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated.
         // Dealings for requested target subnet xnet transcripts (even for future heights) should also be validated.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let block_reader = block_reader
                     .clone()
@@ -1758,7 +1758,7 @@ mod tests {
 
         // Validate dealings using an empty transcript resolver. Dealings should fail to be resolved and thus
         // be handled invalid.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1777,7 +1777,7 @@ mod tests {
 
         // Validate dealings using a crypto component without keys. Crypto validation should return a
         // permanent error, thus the requested dealings should be handled as invalid.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
                     pool_config,
@@ -1797,7 +1797,7 @@ mod tests {
 
         // Validate dealings for a transcript with a registry version that isn't available locally (yet).
         // Crypto validation should return a transient error, thus the requested dealings should be deferred.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
                     pool_config,
@@ -1843,7 +1843,7 @@ mod tests {
     }
 
     fn test_duplicate_dealing(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1888,7 +1888,7 @@ mod tests {
     }
 
     fn test_duplicate_dealing_in_batch(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1955,7 +1955,7 @@ mod tests {
     }
 
     fn test_unexpected_dealing(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -1992,7 +1992,7 @@ mod tests {
     }
 
     fn test_send_support(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2036,7 +2036,7 @@ mod tests {
 
     fn test_defer_sending_dealing_support(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
                     pool_config,
@@ -2084,7 +2084,7 @@ mod tests {
 
     fn test_dont_send_support_for_invalid(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
                     pool_config,
@@ -2124,7 +2124,7 @@ mod tests {
     }
 
     fn test_non_receivers_dont_send_support(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2149,7 +2149,7 @@ mod tests {
     // Tests that support shares are not sent for transcripts we are not building
     #[test]
     fn test_ecdsa_no_support_for_missing_transcript_params() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2172,7 +2172,7 @@ mod tests {
     #[test]
     fn test_crypto_verify_dealing_support() {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let subnet_nodes: BTreeSet<_> = env.nodes.ids();
@@ -2281,7 +2281,7 @@ mod tests {
         });
 
         // Using CryptoReturningOK one of the shares with id_2 should be accepted, the other handled invalid
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2309,7 +2309,7 @@ mod tests {
 
         // Simulate failure of resolving refs by clearing transcripts of the block reader,
         // dealings for requested (but unresolvable) transcripts should be handled invalid.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2332,7 +2332,7 @@ mod tests {
         });
 
         // Mark t2 as a source_subnet_xnet_transcript, its dealings should no longer be accepted.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
@@ -2361,7 +2361,7 @@ mod tests {
     // are dropped.
     #[test]
     fn test_ecdsa_duplicate_support_from_node() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2404,7 +2404,7 @@ mod tests {
     // transcript are dropped.
     #[test]
     fn test_ecdsa_unexpected_support_from_node() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2435,7 +2435,7 @@ mod tests {
     // Tests that support with a meta data mismatch is dropped.
     #[test]
     fn test_ecdsa_dealing_support_meta_data_mismatch() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2474,7 +2474,7 @@ mod tests {
     // Tests that support with a dealing hash mismatch is dropped.
     #[test]
     fn test_ecdsa_dealing_support_missing_hash_meta_data_mismatch() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2513,7 +2513,7 @@ mod tests {
     // Tests that support with a missing dealing hash and invalid dealer is dropped.
     #[test]
     fn test_ecdsa_dealing_support_missing_hash_invalid_dealer() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2553,7 +2553,7 @@ mod tests {
     // Tests purging of dealings from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_dealings() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2602,7 +2602,7 @@ mod tests {
     // Tests purging of dealings from validated pool
     #[test]
     fn test_ecdsa_purge_validated_dealings() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2650,7 +2650,7 @@ mod tests {
     // Tests purging of dealing support from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_dealing_support() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2699,7 +2699,7 @@ mod tests {
     // Tests purging of dealing support from validated pool
     #[test]
     fn test_ecdsa_purge_validated_dealing_support() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
@@ -2767,7 +2767,7 @@ mod tests {
         let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
         let crypto = first_crypto(&env);
 
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) =
                     create_pre_signer_dependencies(pool_config, logger.clone());

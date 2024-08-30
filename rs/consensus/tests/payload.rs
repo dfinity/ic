@@ -39,7 +39,7 @@ use tokio::sync::watch;
 #[test]
 fn consensus_produces_expected_batches() {
     const DKG_INTERVAL_LENGTH: u64 = 4;
-    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
         let ingress0 = SignedIngressBuilder::new().nonce(0).build();
         let ingress1 = SignedIngressBuilder::new().nonce(1).build();
         let ingress_selector = FakeIngressSelector::new();

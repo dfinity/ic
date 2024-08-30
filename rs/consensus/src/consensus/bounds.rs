@@ -191,7 +191,7 @@ mod tests {
 
         // Simple check: advance pool without purging, until we have too many
         // finalized blocks.
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = (0..40).map(node_test_id).collect::<Vec<_>>();
             let record = SubnetRecordBuilder::from(&committee)
                 .with_dkg_interval_length(499)

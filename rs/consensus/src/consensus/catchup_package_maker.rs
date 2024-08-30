@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_catch_up_package_maker() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 5;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let Dependencies {
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_catch_up_package_maker_with_registry_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 5;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
             let Dependencies {
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_invoke_state_sync() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
             let committee: Vec<_> = (0..5).map(node_test_id).collect();
             let Dependencies {
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_state_divergence_report() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
             let committee: Vec<_> = (0..5).map(node_test_id).collect();
             let Dependencies {

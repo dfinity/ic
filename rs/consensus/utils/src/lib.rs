@@ -655,7 +655,7 @@ mod tests {
 
     #[test]
     fn test_get_adjusted_notary_delay_cup_delay() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let settings = NotarizationDelaySettings {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay: Duration::from_secs(0),
@@ -1006,7 +1006,7 @@ mod tests {
 
     #[test]
     fn test_ignore_disqualified_ranks() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             const SUBNET_SIZE: u64 = 10;
             let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
 

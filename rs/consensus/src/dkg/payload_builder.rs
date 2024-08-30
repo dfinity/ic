@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn test_return_errors_for_repeatedly_failing_remote_dkg_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             use ic_types::crypto::threshold_sig::ni_dkg::*;
             with_test_replica_logger(|logger| {
                 let node_ids = vec![node_test_id(0), node_test_id(1)];
@@ -1052,7 +1052,7 @@ mod tests {
     /// Tests, which transcripts get reshared, when DKG succeeded or failed.
     #[test]
     fn test_transcript_resharing() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
             let dkg_interval_len = 3;
             let subnet_id = subnet_test_id(222);
@@ -1139,7 +1139,7 @@ mod tests {
     // contain the expected contents.
     #[test]
     fn test_make_genesis_summary() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
             let initial_registry_version = 145;
             let dkg_interval_len = 66;
@@ -1216,7 +1216,7 @@ mod tests {
     // to the presence or contents of transcripts, as this would require using a
     // real CSP.
     fn test_create_regular_summaries() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let nodes: Vec<_> = (7..14).map(node_test_id).collect();
             let dkg_interval_len = 3;
             let subnet_id = subnet_test_id(222);

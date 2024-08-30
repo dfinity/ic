@@ -171,7 +171,7 @@ where
     ),
 {
     ic_test_utilities_logger::with_test_replica_logger(|log| {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             // Set initial time to non-zero
             time_source.advance_time(Duration::from_secs(1));
