@@ -9,7 +9,7 @@ use std::fmt;
 use std::fmt::Formatter;
 
 /// Occurs if key removal using `NiDkgAlgorithm::retain_only_active_keys` fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DkgKeyRemovalError {
     InputValidationError(TranscriptsToRetainValidationError),
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),

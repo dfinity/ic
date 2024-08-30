@@ -55,7 +55,7 @@ pub const MAXIMUM_EPOCH: u32 = ((1u64 << LAMBDA_T) - 1) as u32;
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Zeroize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
 pub(crate) enum Bit {
     Zero = 0,
     One = 1,
@@ -93,7 +93,7 @@ impl From<&Bit> for u32 {
 ///
 /// The bits are the encoding (in big-endian ordering) of an
 /// integer which represents a prefix of an epoch.
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Debug, Clone, Zeroize)]
 pub(crate) struct Tau(pub Vec<Bit>);
 
 impl Tau {
@@ -905,7 +905,7 @@ pub fn verify_ciphertext_integrity(
     Ok(())
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CiphertextIntegrityError {
     CrszVectorsLengthMismatch,
     InvalidNidkgCiphertext,

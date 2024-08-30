@@ -29,7 +29,7 @@ use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
     /// Insert the artifact into the pool section.
     Insert(T),

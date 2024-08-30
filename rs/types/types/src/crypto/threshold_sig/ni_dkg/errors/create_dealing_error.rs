@@ -5,7 +5,7 @@ use crate::crypto::error::{InternalError, InvalidArgumentError, KeyNotFoundError
 use crate::registry::RegistryClientError;
 
 /// Occurs if creating a dealing using `NiDkgAlgorithm::create_dealing` fails.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum DkgCreateDealingError {
     NotADealer(NotADealerError),
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),

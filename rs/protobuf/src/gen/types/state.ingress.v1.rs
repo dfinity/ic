@@ -141,7 +141,7 @@ pub struct Ingress {
     #[prost(message, optional, tag = "7")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, ::prost::Enumeration)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ErrorCode {
     Unspecified = 0,

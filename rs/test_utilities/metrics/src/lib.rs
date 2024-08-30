@@ -2,7 +2,7 @@ use ic_metrics::MetricsRegistry;
 use prometheus::proto::MetricType;
 use std::collections::BTreeMap;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct HistogramStats {
     pub count: u64,
     pub sum: f64,

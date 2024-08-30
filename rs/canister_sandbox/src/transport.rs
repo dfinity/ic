@@ -699,7 +699,7 @@ mod tests {
     use std::os::unix::io::FromRawFd;
     use std::sync::mpsc::sync_channel;
 
-    #[derive(Clone, Deserialize, Serialize)]
+    #[derive(Serialize, Deserialize, Clone)]
     struct TestMessage {
         fd: std::os::unix::io::RawFd,
     }
@@ -866,7 +866,7 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Deserialize, Serialize)]
+    #[derive(Serialize, Deserialize, Clone)]
     struct StringMessage {
         payload: String,
     }

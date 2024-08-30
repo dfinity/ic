@@ -59,7 +59,7 @@ impl std::fmt::Debug for EmbedderCache {
 }
 
 /// An enum representing the possible values of a global variable.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Global {
     I32(i32),
     I64(i64),
@@ -146,7 +146,7 @@ impl TryFrom<pb::Global> for Global {
 /// A set of the functions that a Wasm module exports.
 ///
 /// Arc is used to make cheap clones of this during snapshots.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportedFunctions {
     /// Since the value is only shared when taking a snapshot, there is no
     /// problem with serializing this field.
@@ -256,7 +256,7 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Clone, Debug, ValidateEq)]
+#[derive(Debug, Clone, ValidateEq)]
 pub struct Memory {
     /// The contents of this memory.
     #[validate_eq(CompareWithValidateEq)]
@@ -376,7 +376,7 @@ impl SandboxMemoryHandle {
 }
 
 /// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumIter)]
+#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
 pub enum NextScheduledMethod {
     #[default]
     GlobalTimer = 1,
@@ -590,7 +590,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, serde::Serialize, serde::Deserialize)]
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,
@@ -620,7 +620,7 @@ impl TryFrom<pb::CustomSectionType> for CustomSectionType {
 }
 
 /// Represents the data a custom section holds.
-#[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CustomSection {
     visibility: CustomSectionType,
     content: Vec<u8>,
@@ -688,7 +688,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
 }
 
 /// A struct that holds all the custom sections exported by the Wasm module.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct WasmMetadata {
     /// Arc is used to make cheap clones of this during snapshots.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]

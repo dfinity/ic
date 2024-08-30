@@ -66,7 +66,7 @@ pub fn remove_neuron_id_principal_ids<NeuronId>(
 }
 
 /// An in-memory implementation of the neuron principal index.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct HeapNeuronPrincipalIndex<NeuronId>
 where
     NeuronId: Hash + Eq,
@@ -211,7 +211,7 @@ mod tests {
     use num_traits::bounds::LowerBounded;
     use std::borrow::Cow;
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
+    #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
     struct TestNeuronId([u8; 32]);
 
     impl Storable for TestNeuronId {

@@ -250,7 +250,7 @@ pub struct DeployNewSnsResponse {
     pub dapp_canisters_transfer_result: ::core::option::Option<DappCanistersTransferResult>,
 }
 /// The CanisterIds of the SNS canisters that are created.
-#[derive(Copy, candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Copy)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsCanisterIds {
@@ -326,7 +326,7 @@ pub struct DeployedSns {
     pub index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// Specifies the version of an SNS.
-#[derive(Eq, Hash, candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsVersion {
@@ -572,18 +572,18 @@ pub mod get_wasm_metadata_response {
 }
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum SnsCanisterType {

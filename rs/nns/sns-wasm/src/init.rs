@@ -1,6 +1,6 @@
 use ic_base_types::{PrincipalId, SubnetId};
 
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct SnsWasmCanisterInitPayload {
     pub sns_subnet_ids: Vec<SubnetId>,
     pub access_controls_enabled: bool,

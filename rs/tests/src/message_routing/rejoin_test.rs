@@ -38,7 +38,7 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     nodes_count: usize,
 }

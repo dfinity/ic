@@ -313,7 +313,7 @@ fn dkg_dealing_encryption_key_id<T: PublicKeyStoreCspVault + ?Sized>(
     Ok(KeyId::from(&pk))
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum DkgDealingEncryptionKeyIdRetrievalError {
     /// Missing DKG dealing encryption key
     KeyNotFound,

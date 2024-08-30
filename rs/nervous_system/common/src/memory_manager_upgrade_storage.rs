@@ -15,7 +15,7 @@ const STORAGE_ENCODING_BYTES_RESERVED: u8 = 1;
 /// For forwards compatibility we write a magic byte to allow for the storage implementation to evolve.
 /// We keep the implementation private, and expose methods that take Memory and some payload.
 /// The currently exposed methods take protobuf.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum StorageEncoding {
     Unknown = 0,
     SizeAware = 1,

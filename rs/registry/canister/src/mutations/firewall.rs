@@ -214,7 +214,7 @@ pub fn update_firewall_rules_compute_entries(
 /// The payload of a proposal to add firewall rules
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AddFirewallRulesPayload {
     /// Scope of application (with node/subnet prefix as applicable)
     pub scope: FirewallRulesScope,
@@ -229,7 +229,7 @@ pub struct AddFirewallRulesPayload {
 /// The payload of a proposal to remove firewall rules
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct RemoveFirewallRulesPayload {
     /// Scope of application (with node/subnet prefix as applicable)
     pub scope: FirewallRulesScope,
@@ -242,7 +242,7 @@ pub struct RemoveFirewallRulesPayload {
 /// The payload of a proposal to update firewall rules
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct UpdateFirewallRulesPayload {
     /// Scope of application (with node/subnet prefix as applicable)
     pub scope: FirewallRulesScope,

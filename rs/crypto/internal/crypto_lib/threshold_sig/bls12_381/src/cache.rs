@@ -5,7 +5,7 @@ use cached::{Cached, SizedCache};
 #[cfg(test)]
 mod tests;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SignatureCacheStatistics {
     pub size: usize,
     pub hits: u64,
@@ -18,7 +18,7 @@ impl SignatureCacheStatistics {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct SignatureCacheEntry {
     hash: [u8; 32],
 }

@@ -18,7 +18,7 @@ use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Arbitrary, ExhaustiveSet))]
 pub struct Time(u64);
 
@@ -201,7 +201,7 @@ impl Time {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Error, Serialize)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeInstantiationError {
     #[error("Time cannot be instantiated as it would overflow: {0}")]
     Overflow(String),
@@ -310,7 +310,7 @@ pub fn expiry_time_from_now() -> Time {
 /// Only intended for storing and passing around low resolution timestamps.
 /// For any time arithmetic or pretty printing, convert to `Time` first. Like
 /// `Time`, does not implement the `Default` trait.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CoarseTime(u32);
 

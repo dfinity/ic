@@ -14,7 +14,7 @@ use std::hash::Hash;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct ApprovalKey(Account, Account);
 
 impl From<(&Account, &Account)> for ApprovalKey {

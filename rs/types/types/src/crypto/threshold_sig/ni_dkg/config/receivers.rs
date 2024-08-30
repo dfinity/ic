@@ -7,7 +7,7 @@ mod tests;
 
 /// A set of receivers for non-interactive DKG. Satisfies invariants, see
 /// `NiDkgReceivers::new`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NiDkgReceivers {
     receivers: BTreeSet<NodeId>,
     // The count equals receivers.len().

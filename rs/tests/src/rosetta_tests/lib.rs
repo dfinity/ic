@@ -714,7 +714,7 @@ pub fn create_neuron(
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct NeuronDetails {
     pub(crate) account_id: AccountIdentifier,
     pub(crate) key_pair: EdKeypair,

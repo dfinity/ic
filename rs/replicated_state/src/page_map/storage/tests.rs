@@ -326,7 +326,7 @@ fn storage_as_buffer(storage: &Storage) -> Vec<u8> {
     result
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Eq, Clone, Debug, PartialEq)]
 struct StorageFiles {
     base: Option<PathBuf>,
     overlays: Vec<PathBuf>,
@@ -440,7 +440,7 @@ fn merge_assert_num_files(
 }
 
 /// An instruction to modify a storage.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "fuzzing_code", derive(Arbitrary))]
 pub enum Instruction {
     /// Create an overlay file with provided list of `PageIndex` to write.

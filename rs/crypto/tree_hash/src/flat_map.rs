@@ -50,7 +50,7 @@ macro_rules! flatmap {
 ///  * Insert a value with an arbitrary key.
 ///
 /// Remove by key is supported, but requires O(N) time worst case.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FlatMap<K: Ord, V> {
     keys: Vec<K>,
     values: Vec<V>,

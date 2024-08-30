@@ -108,7 +108,7 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display, Default, Deserialize, IntoStaticStr)]
+#[derive(Debug, Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum RequestType {
@@ -128,7 +128,7 @@ impl RequestType {
     }
 }
 
-#[derive(Clone, Debug, Display)]
+#[derive(Debug, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
     Normal,
@@ -138,7 +138,7 @@ pub enum RateLimitCause {
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum ErrorCause {
     UnableToReadBody(String),
     PayloadTooLarge(usize),
@@ -247,7 +247,7 @@ impl IntoResponse for ErrorCause {
     }
 }
 
-#[derive(Clone, PartialEq, Hash, CandidType, Deserialize)]
+#[derive(Clone, CandidType, Deserialize, Hash, PartialEq)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -257,7 +257,7 @@ pub struct HttpRequest {
 }
 
 // Object that holds per-request information
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub struct RequestContext {
     pub request_type: RequestType,
     pub request_size: u32,
@@ -318,7 +318,7 @@ impl PartialEq for RequestContext {
 impl Eq for RequestContext {}
 
 // This is the subset of the request fields
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
@@ -328,7 +328,7 @@ struct ICRequestContent {
     arg: Option<Blob>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ICRequestEnvelope {
     content: ICRequestContent,
 }

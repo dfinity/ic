@@ -1,8 +1,8 @@
 /// A container for a NeuronId blob, which uniquely identifies
 /// a Neuron.
-#[derive(Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
+#[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]
 #[self_describing]
-#[derive(Copy, Ord, PartialOrd, std::hash::Hash)]
+#[derive(PartialOrd, Ord, Copy, std::hash::Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
@@ -10,7 +10,7 @@ pub struct NeuronId {
     pub id: u64,
 }
 /// The id of a specific proposal.
-#[derive(Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
+#[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]
 #[self_describing]
 #[derive(Copy)]
 #[allow(clippy::derive_partial_eq_without_eq)]

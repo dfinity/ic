@@ -6,13 +6,13 @@ use std::borrow::Cow;
 
 pub const MAX_VALUE_SIZE: u32 = 100;
 
-#[derive(PartialEq, PartialOrd, Debug, Arbitrary, Deserialize, Serialize)]
+#[derive(Arbitrary, Serialize, Deserialize, Debug, PartialOrd, PartialEq)]
 pub struct BoundedFuzzStruct {
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,
 }
 
-#[derive(PartialEq, PartialOrd, Debug, Arbitrary, Deserialize, Serialize)]
+#[derive(Arbitrary, Serialize, Deserialize, Debug, PartialOrd, PartialEq)]
 pub struct UnboundedFuzzStruct {
     #[serde(with = "serde_bytes")]
     pub data: Vec<u8>,

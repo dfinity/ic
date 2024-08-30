@@ -1,6 +1,6 @@
 use strum_macros::{EnumCount, EnumIter};
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumCount, EnumIter)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter)]
 pub enum CertificationVersion {
     /// Initial version.
     V0 = 0,
@@ -48,7 +48,7 @@ pub enum CertificationVersion {
     V19 = 19,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UnsupportedCertificationVersion(u32);
 
 impl std::fmt::Display for UnsupportedCertificationVersion {

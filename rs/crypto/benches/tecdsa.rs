@@ -343,7 +343,7 @@ fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
     test_cases
 }
 
-#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
+#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
 enum VaultType {
     Local,
     #[default]

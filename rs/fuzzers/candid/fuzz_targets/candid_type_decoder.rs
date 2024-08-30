@@ -18,7 +18,7 @@ pub struct CallbackStrategy {
     pub token: Token,
 }
 
-#[derive(Clone, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Deserialize)]
 pub struct HeaderField(pub String, pub String);
 
 #[derive(CandidType, Deserialize)]

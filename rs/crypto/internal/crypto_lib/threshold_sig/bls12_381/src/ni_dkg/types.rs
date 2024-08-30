@@ -15,7 +15,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use proptest_derive::Arbitrary;
 
 /// Forward secure encryption secret key.
-#[derive(Clone, Eq, PartialEq, Deserialize, IntoStaticStr, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, IntoStaticStr, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[allow(non_camel_case_types)]
 pub enum CspFsEncryptionSecretKey {
     Groth20_Bls12_381(groth20_bls12_381::FsEncryptionSecretKey),
@@ -35,7 +35,7 @@ impl fmt::Debug for CspFsEncryptionSecretKey {
 /// Forward secure encryption keys (secret and public keys, and
 /// proof-of-possession)
 #[derive(
-    Clone, Eq, PartialEq, Debug, Deserialize, IntoStaticStr, Serialize, Zeroize, ZeroizeOnDrop,
+    Clone, Debug, Eq, PartialEq, IntoStaticStr, Serialize, Deserialize, Zeroize, ZeroizeOnDrop,
 )]
 #[cfg_attr(test, derive(Arbitrary))]
 #[allow(non_camel_case_types)]

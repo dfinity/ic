@@ -20,7 +20,7 @@ pub const MAX_BITCOIN_PAYLOAD_IN_BYTES: u64 =
     MAX_BITCOIN_BLOCK_IN_BYTES + BITCOIN_PAYLOAD_BUFFER_IN_BYTES;
 
 /// Payload that contains SelfValidating messages.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SelfValidatingPayload(pub(super) Vec<BitcoinAdapterResponse>);
 

@@ -5,7 +5,7 @@ use std::future::Future;
 
 /// Future executor that utilises `tokio` threads.
 #[non_exhaustive]
-#[derive(Clone, Debug, Default)]
+#[derive(Default, Debug, Clone)]
 pub struct TokioExecutor {}
 
 impl<Fut> Executor<Fut> for TokioExecutor

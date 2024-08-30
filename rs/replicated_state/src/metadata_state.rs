@@ -64,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -179,7 +179,7 @@ pub struct SystemMetadata {
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -205,7 +205,7 @@ pub struct NetworkTopology {
 /// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
 /// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
 /// The converse statement is not true.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiBoundaryNodeEntry {
     /// Domain name, required field from NodeRecord
     pub domain: String,
@@ -349,7 +349,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
@@ -412,7 +412,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
@@ -1213,7 +1213,7 @@ impl SystemMetadata {
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
 /// collection of exceptions, i.e. `reject_signals`.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<RequestOrResponse>,
@@ -1519,7 +1519,7 @@ impl From<Stream> for StreamSlice {
 }
 
 /// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Streams {
     /// Map of streams by destination `SubnetId`.
     streams: StreamMap,
@@ -1752,7 +1752,7 @@ impl<'a> StreamHandle<'a> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
@@ -2096,10 +2096,10 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// There is an invariant (including checks at deserialization):
 /// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
 ///   by `days_since_unix_epoch()`).
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlockmakerStats {
     /// Successfully proposed blocks (blocks that became part of the blockchain).
     blocks_proposed_total: u64,
@@ -2109,7 +2109,7 @@ pub struct BlockmakerStats {
 }
 
 /// Per-node and overall blockmaker stats.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlockmakerStatsMap {
     /// Maps a node ID to it's blockmaker stats.
     node_stats: BTreeMap<NodeId, BlockmakerStats>,

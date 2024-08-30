@@ -353,14 +353,14 @@ impl HttpRequestEnvelopeContent for HttpReadState {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, EnumCount)]
+#[derive(Debug, Clone, Eq, PartialEq, EnumCount)]
 pub enum AuthenticationScheme {
     Anonymous,
     Direct(DirectAuthenticationScheme),
     Delegation(DelegationChain),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CanisterSigner {
     pub seed: Vec<u8>,
     pub canister_id: CanisterId,
@@ -411,7 +411,7 @@ impl CanisterSigner {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DirectAuthenticationScheme {
     UserKeyPair(Ed25519KeyPair),
     CanisterSignature(CanisterSigner),
@@ -519,7 +519,7 @@ impl DirectAuthenticationScheme {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DelegationChain {
     start: DirectAuthenticationScheme,
     end: DirectAuthenticationScheme,
@@ -540,7 +540,7 @@ impl DelegationChain {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DelegationChainBuilder {
     start: DirectAuthenticationScheme,
     end: Option<DirectAuthenticationScheme>,
@@ -697,7 +697,7 @@ fn oid_canister_signature() -> OID {
     oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2)
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RootOfTrust {
     pub public_key: ThresholdSigPublicKey,
     pub secret_key: SecretKeyBytes,

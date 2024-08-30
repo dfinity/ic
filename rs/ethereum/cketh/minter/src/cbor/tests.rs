@@ -21,43 +21,43 @@ enum IdTag {}
 type U256Newtype = CheckedAmountOf<IdTag>;
 type U64Newtype = Id<IdTag, u64>;
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct U256Container {
     #[cbor(n(0), with = "crate::cbor::u256")]
     pub value: u256,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct NatContainer {
     #[cbor(n(0), with = "crate::cbor::nat")]
     pub value: Nat,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct OptNatContainer {
     #[cbor(n(0), with = "crate::cbor::nat::option")]
     pub value: Option<Nat>,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct PrincipalContainer {
     #[cbor(n(0), with = "crate::cbor::principal")]
     pub value: Principal,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct OptPrincipalContainer {
     #[cbor(n(0), with = "crate::cbor::principal::option")]
     pub value: Option<Principal>,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct U256NewtypeContainer {
     #[cbor(n(0))]
     pub value: U256Newtype,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct U64NewtypeContainer {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub value: U64Newtype,

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
-#[derive(Clone, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Debug, EnumIter, Clone, Eq, PartialEq)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
     CkBtcArchive,

@@ -1,7 +1,7 @@
 use crate::scheduler::Task;
 use crate::state::mutate_state;
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TimerGuard {
     task: Task,
 }

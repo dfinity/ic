@@ -13,14 +13,14 @@ pub mod upgrade;
 
 pub use upgrade::post_upgrade;
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum MinterArg {
     InitArg(InitArg),
     UpgradeArg(UpgradeArg),
 }
 
 #[derive(
-    Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Decode, Deserialize, Encode,
+    CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Hash, Encode, Decode,
 )]
 #[cbor(index_only)]
 pub enum EthereumNetwork {

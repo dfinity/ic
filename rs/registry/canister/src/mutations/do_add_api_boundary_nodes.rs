@@ -12,7 +12,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::check_replica_version_is_blessed;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddApiBoundaryNodesPayload {
     pub node_ids: Vec<NodeId>,
     pub version: String,

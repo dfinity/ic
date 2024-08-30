@@ -4,7 +4,7 @@ use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
 
 /// Represents a change in the cycles balance.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CyclesBalanceChange {
     Added(Cycles),
     Removed(Cycles),

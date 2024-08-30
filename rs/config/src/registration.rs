@@ -4,7 +4,7 @@ use std::path::PathBuf;
 /// We assume pre-agreed values when interacting with the USB HSM. The purpose
 /// of this configuration is to override one or more of the default values if
 /// necessary.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Config {
     /// The transport PIN required for the DC-owned USB HSM.
     #[serde(default = "pin_default")]

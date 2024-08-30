@@ -32,7 +32,7 @@ struct KeyConfigRequest {
 }
 
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct AdminHelper {
     pub binary: PathBuf,
     pub nns_url: Url,

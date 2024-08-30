@@ -21,26 +21,26 @@ thread_local! {
     static LEDGER_PRINCIPAL: RefCell<Option<PrincipalId>> = const { RefCell::new(None) };
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct InitArgs {
     pub ledger_id: CanisterId,
     pub rand_seed: Nat,
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub enum Scenario {
     Accounts,
     Transactions,
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct BatchArgs {
     pub transactions: Nat,
     pub scenario: Scenario,
     pub users: Option<Vec<Principal>>,
 }
 
-#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct BatchResult {
     success: bool,
     duration_sec: Nat,

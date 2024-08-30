@@ -700,7 +700,7 @@ pub fn generate_sns_workload_with_many_users<T, R>(
     env.emit_report(format!("{metrics}"));
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SnsUsers {
     participants: Vec<SaleParticipant>,
 }
@@ -713,7 +713,7 @@ impl TestEnvAttribute for SnsUsers {
 
 /// An SNS sale participant.
 /// Warning: This type should be used for testing purposes only.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaleParticipant {
     name: String,
     secret_key: [u8; 32],
@@ -723,7 +723,7 @@ pub struct SaleParticipant {
     starting_sns_balance: Tokens,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsSaleParticipants {
     pub participants: Vec<SaleParticipant>,
 }

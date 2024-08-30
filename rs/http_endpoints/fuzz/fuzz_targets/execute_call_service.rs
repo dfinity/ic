@@ -44,7 +44,7 @@ type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
-#[derive(Clone, Debug, Arbitrary)]
+#[derive(Arbitrary, Clone, Debug)]
 struct CallServiceImpl {
     content: AnonymousContent,
     allow_ingress_filter: bool,

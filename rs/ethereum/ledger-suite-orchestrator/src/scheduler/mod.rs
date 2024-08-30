@@ -48,7 +48,7 @@ thread_local! {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Ord, PartialOrd)]
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
     UpgradeLedgerSuite(UpgradeLedgerSuite),
@@ -72,7 +72,7 @@ impl Task {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Deserialize, Serialize)]
 pub struct TaskExecution {
     pub execute_at_ns: u64,
     pub task_type: Task,
@@ -221,7 +221,7 @@ async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Ord, PartialOrd)]
 pub struct UpgradeLedgerSuite {
     subtasks: Vec<UpgradeLedgerSuiteSubtask>,
     next_subtask_index: usize,
@@ -327,7 +327,7 @@ impl UpgradeLedgerSuiteBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Ord, PartialOrd)]
 pub enum UpgradeLedgerSuiteSubtask {
     UpgradeIndex {
         contract: Erc20Token,
@@ -445,14 +445,14 @@ impl Iterator for UpgradeLedgerSuite {
 
 impl ExactSizeIterator for UpgradeLedgerSuite {}
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Eq, Ord, PartialOrd)]
 pub struct UpgradeOrchestratorArgs {
     ledger_compressed_wasm_hash: Option<WasmHash>,
     index_compressed_wasm_hash: Option<WasmHash>,
     archive_compressed_wasm_hash: Option<WasmHash>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum InvalidUpgradeArgError {
     WasmHashError(WasmHashError),
 }
@@ -506,7 +506,7 @@ impl UpgradeOrchestratorArgs {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
     contract: Erc20Token,
     minter_id: Principal,
@@ -533,7 +533,7 @@ impl InstallLedgerSuiteArgs {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
     Erc20ContractAlreadyManaged(Erc20Token),
@@ -595,7 +595,7 @@ impl InstallLedgerSuiteArgs {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TaskError {
     CanisterCreationError(CallError),
     InstallCodeError(CallError),
@@ -628,7 +628,7 @@ impl TaskError {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DiscoverArchivesError {
     InterCanisterCallError(CallError),
 }
@@ -647,7 +647,7 @@ impl From<DiscoverArchivesError> for TaskError {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UpgradeLedgerSuiteError {
     Erc20TokenNotFound(Erc20Token),
     CanisterNotReady {
@@ -1300,7 +1300,7 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
     Ok(())
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
 pub struct Erc20Token(ChainId, Address);
 
 impl Erc20Token {
@@ -1313,7 +1313,7 @@ impl Erc20Token {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Eq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ChainId(u64);
 

@@ -279,7 +279,7 @@ impl<T: TaskIdT> ActionGraph<T> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Node {
     /// A scheduled Node has a capacity for running `capacity` many children in
     /// parallel at most when being started.
@@ -347,21 +347,21 @@ impl Node {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Cond {
     Started,
     Stopped,
     Failed,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Effect {
     Start,
     Decrease,
     Fail,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Action {
     source: usize,
     condition: Cond,
@@ -373,7 +373,7 @@ struct Action {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeEvent<T: TaskIdT> {
     pub handle: NodeHandle<T>,
     pub event_type: NodeEventType,
@@ -385,14 +385,14 @@ impl<T: TaskIdT> NodeEvent<T> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum NodeEventType {
     Start,
     Stop,
     Fail,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeHandle<T: TaskIdT>(T, usize);
 
 impl<T: TaskIdT> NodeHandle<T> {

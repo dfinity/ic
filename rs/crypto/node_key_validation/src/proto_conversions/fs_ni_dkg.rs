@@ -38,7 +38,7 @@ fn clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FsNiDkgPubkeyFromPubkeyProtoError {
     PublicKeyConversion { error: String },
     PopConversion { error: String },

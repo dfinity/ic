@@ -3,7 +3,7 @@ use std::fmt;
 
 /// 64-bit unsigned integer that is deserialized from a byte array using LEB-128
 /// encoding.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Leb128EncodedU64(pub u64);
 
 /// Error indicating that conversion from bytes to an integer failed.

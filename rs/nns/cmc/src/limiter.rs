@@ -10,7 +10,7 @@ use std::{
 /// A record of how many cycles have been minted in the last `max_age`
 /// period. Minting events are aggregated into windows of `resolution`
 /// seconds in size to limit memory consumption.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 pub struct Limiter {
     time_windows: VecDeque<TimeWindowCount>,
     total_count: Cycles,
@@ -87,7 +87,7 @@ impl Limiter {
 
 type TimeWindow = u32;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 struct TimeWindowCount {
     window: TimeWindow,
     count: Cycles,

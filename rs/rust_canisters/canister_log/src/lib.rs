@@ -68,7 +68,7 @@ pub trait Sink {
 }
 
 /// An entry in the canister log.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LogEntry {
     pub timestamp: u64,
     // The index of this entry starting from the last canister upgrade.

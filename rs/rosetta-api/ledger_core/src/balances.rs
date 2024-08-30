@@ -86,7 +86,7 @@ pub enum BalanceError<Tokens> {
 }
 
 /// Describes the state of users accounts at the tip of the chain
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Balances<S: BalancesStore> {
     // This uses a mutable map because we don't want to risk a space leak and we only require the
     // account balances at the tip of the chain

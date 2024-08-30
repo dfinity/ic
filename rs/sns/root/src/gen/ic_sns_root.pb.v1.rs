@@ -176,18 +176,18 @@ pub struct ManageDappCanisterSettingsResponse {
     pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum LogVisibility {

@@ -9,14 +9,14 @@ use tracing::{
 };
 use tracing_subscriber::{fmt::layer, layer::SubscriberExt, Registry};
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub(crate) enum OptMode {
     StdErr,
     Tee,
     File,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub(crate) enum OptFormat {
     Default,
     Compact,

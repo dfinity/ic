@@ -19,7 +19,7 @@ pub(crate) struct ConsensusCacheImpl {
 }
 
 /// Things that can be updated in the consensus cache.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum CacheUpdateAction {
     Finalization,
     CatchUpPackage,

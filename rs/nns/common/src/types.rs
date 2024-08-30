@@ -12,15 +12,15 @@ use std::{
 
 // A unique Id for a Neuron.
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Hash,
-    Debug,
     CandidType,
-    Deserialize,
+    Clone,
+    Copy,
+    Debug,
     Serialize,
+    Deserialize,
+    Eq,
+    Hash,
+    PartialEq,
     comparable::Comparable,
 )]
 pub struct NeuronId(pub u64);
@@ -49,7 +49,7 @@ impl FromStr for NeuronId {
 
 /// Proposal IDs are simply u64. All proposals are public, therefore it is a
 /// non-goal to make IDs hard to guess.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, CandidType, Deserialize)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, CandidType, Deserialize)]
 pub struct ProposalId(pub u64);
 
 impl From<ProposalIdProto> for ProposalId {
@@ -77,7 +77,7 @@ impl Display for ProposalId {
 }
 
 /// The reason for why an exchange rate proposal is created.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum UpdateIcpXdrConversionRatePayloadReason {
     /// The timestamp of the rate stored in the CMC is older than the execution interval.
     OldRate,
@@ -90,7 +90,7 @@ pub enum UpdateIcpXdrConversionRatePayloadReason {
 }
 
 /// The payload of a proposal to update the ICP/XDR conversion rate in the CMC.
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateIcpXdrConversionRatePayload {
     pub data_source: String,
     pub timestamp_seconds: u64,
@@ -99,7 +99,7 @@ pub struct UpdateIcpXdrConversionRatePayload {
 }
 
 // A proposal payload to call a canister.
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
 pub struct CallCanisterProposal {
     pub canister_id: CanisterId,
     pub method_name: String,

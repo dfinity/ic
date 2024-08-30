@@ -4,7 +4,7 @@ use std::fmt::Display;
 use strum::EnumIter;
 
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, EnumIter, Serialize, Deserialize,
 )]
 pub enum StateSyncVersion {
     /// Initial version.

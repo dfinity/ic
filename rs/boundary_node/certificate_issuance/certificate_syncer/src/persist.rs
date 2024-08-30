@@ -17,7 +17,7 @@ use crate::{
     render::{Context, Render},
 };
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PersistStatus {
     Completed,
     SkippedUnchanged,

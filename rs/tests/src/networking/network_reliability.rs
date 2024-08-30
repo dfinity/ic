@@ -67,7 +67,7 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // Thi
 
 // Test can be run with different setup/configuration parameters.
 // This config holds these parameters.
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
     pub nodes_system_subnet: usize,
     pub nodes_app_subnet: usize,

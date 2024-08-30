@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 pub const MAX_CK_TOKEN_SYMBOL_NUM_BYTES: usize = 20;
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct CkErc20Token {
     #[n(0)]
     pub erc20_ethereum_network: EthereumNetwork,
@@ -27,7 +27,7 @@ pub struct CkErc20Token {
     pub ckerc20_ledger_id: Principal,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
 #[cbor(transparent)]
 pub struct CkTokenSymbol(#[n(0)] String);
 

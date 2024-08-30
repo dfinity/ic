@@ -24,7 +24,7 @@ use std::{
 };
 
 /// Expect that no SNS root calls will be made. Explode otherwise.
-#[derive(Debug, Default)]
+#[derive(Default, Debug)]
 pub struct ExplodingSnsRootClient;
 
 #[async_trait]
@@ -38,7 +38,7 @@ impl SnsRootClient for ExplodingSnsRootClient {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SnsRootClientCall {
     SetDappControllers(SetDappControllersRequest),
 }
@@ -59,13 +59,13 @@ impl SnsRootClientCall {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SnsRootClientReply {
     SetDappControllers(SetDappControllersResponse),
 }
 
 /// SnsRootClient that lets the test spy on the calls made
-#[derive(Debug, Default)]
+#[derive(Default, Debug)]
 pub struct SpySnsRootClient {
     pub observed_calls: Vec<SnsRootClientCall>,
     pub replies: Vec<SnsRootClientReply>,
@@ -104,7 +104,7 @@ impl SnsRootClientReply {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SnsGovernanceClientCall {
     ClaimSwapNeurons(ClaimSwapNeuronsRequest),
     ManageNeuron(ManageNeuron),
@@ -112,7 +112,7 @@ pub enum SnsGovernanceClientCall {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(unused)]
 pub enum SnsGovernanceClientReply {
     ClaimSwapNeurons(ClaimSwapNeuronsResponse),
@@ -121,7 +121,7 @@ pub enum SnsGovernanceClientReply {
     CanisterCallError(CanisterCallError),
 }
 
-#[derive(Debug, Default)]
+#[derive(Default, Debug)]
 pub struct SpySnsGovernanceClient {
     pub calls: Vec<SnsGovernanceClientCall>,
     pub replies: VecDeque<SnsGovernanceClientReply>,
@@ -198,19 +198,19 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NnsGovernanceClientCall {
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationRequest),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NnsGovernanceClientReply {
     SettleNeuronsFundParticipation(SettleNeuronsFundParticipationResponse),
     CanisterCallError(CanisterCallError),
 }
 
 /// NnsGovernanceClient that allows tests to spy on the calls made
-#[derive(Clone, Debug, Default)]
+#[derive(Default, Debug, Clone)]
 pub struct SpyNnsGovernanceClient {
     pub calls: Vec<NnsGovernanceClientCall>,
     pub replies: Vec<NnsGovernanceClientReply>,
@@ -255,13 +255,13 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
 }
 
 /// Expectation of one call on the mock Ledger.
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum LedgerExpect {
     AccountBalance(Account, Result<Tokens, i32>),
     TransferFunds(u64, u64, Option<Subaccount>, Account, u64, Result<u64, i32>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct MockLedger {
     pub expect: Arc<Mutex<Vec<LedgerExpect>>>,
 }

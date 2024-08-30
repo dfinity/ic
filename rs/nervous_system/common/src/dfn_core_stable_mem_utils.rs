@@ -47,7 +47,7 @@ impl StableMemory for StableMemoryImplementation {
 }
 
 #[cfg(test)]
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct FakeStableMemory(Arc<Mutex<Vec<u8>>>);
 
 #[cfg(test)]

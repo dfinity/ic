@@ -42,7 +42,7 @@ pub mod option {
     use super::*;
     use minicbor::{Decode, Encode};
 
-    #[derive(Decode, Encode)]
+    #[derive(Encode, Decode)]
     #[cbor(transparent)]
     struct CborNat(#[cbor(n(0), with = "crate::cbor::nat")] pub Nat);
 

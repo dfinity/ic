@@ -51,7 +51,7 @@ use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UpgradeContent {
     All,
     Orchestrator,

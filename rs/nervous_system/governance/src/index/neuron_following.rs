@@ -153,7 +153,7 @@ where
 }
 
 /// An in-memory implementation of the neuron following index.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct HeapNeuronFollowingIndex<NeuronId, Category> {
     category_to_followee_to_followers: BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
 }
@@ -348,7 +348,7 @@ mod tests {
     use maplit::btreeset;
     use std::borrow::Cow;
 
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+    #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
     struct TestNeuronId([u8; 32]);
 
     impl Storable for TestNeuronId {
@@ -378,7 +378,7 @@ mod tests {
         }
     }
 
-    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+    #[derive(Copy, Eq, Ord, PartialEq, PartialOrd, Debug, Default, Clone)]
     enum Topic {
         #[default]
         Unspecified = 0,

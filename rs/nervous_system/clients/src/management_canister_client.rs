@@ -233,13 +233,13 @@ impl MockManagementCanisterClient {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),

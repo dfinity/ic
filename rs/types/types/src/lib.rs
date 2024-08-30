@@ -217,7 +217,7 @@ pub type AccumulatedPriority = AmountOf<AccumulatedPriorityTag, i64>;
 /// equivalently a rational number A/100. Having an `ComputeAllocation` of A/100
 /// guarantees that the canister will get a full round at least A out of 100
 /// execution rounds.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
@@ -318,7 +318,7 @@ fn display_canister_id() {
 }
 
 /// Represents Canister timer.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub enum CanisterTimer {
     /// The canister timer is not set.
     Inactive,
@@ -392,7 +392,7 @@ impl From<LongExecutionMode> for pb_state_bits::LongExecutionMode {
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, EnumIter)]
+#[derive(Clone, Copy, Debug, EnumIter, Eq, PartialEq, PartialOrd, Ord, Default)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.
@@ -404,7 +404,7 @@ pub enum LongExecutionMode {
 }
 
 /// Represents the memory allocation of a canister.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub enum MemoryAllocation {
     /// A reserved number of bytes between 0 and 2^48 inclusively that is
     /// guaranteed to be available to the canister. Charging happens based on

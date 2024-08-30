@@ -34,7 +34,7 @@ fn canister_id_into_u128(canister_id: CanisterId) -> u128 {
 }
 
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize,
+    CandidType, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize,
 )]
 /// A range of canister IDs between `start` and `end`, both inclusive.
 pub struct CanisterIdRange {
@@ -85,7 +85,7 @@ impl CanisterIdRange {
 }
 
 /// Errors encountered while parsing `CanisterIdRange` from string representations.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum CanisterIdRangeError {
     CanisterIdRangeEmpty(String),
     CanisterIdParseError(CanisterIdError),
@@ -133,7 +133,7 @@ impl std::str::FromStr for CanisterIdRange {
 
 // EXE-96: Currently the `String`s just offer informative messages about the
 // error.  This could be further improved.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum WellFormedError {
     CanisterIdRangeEmptyRange(String),
     CanisterIdRangeNotSortedOrNotDisjoint(String),
@@ -152,7 +152,7 @@ impl From<WellFormedError> for ProxyDecodeError {
 }
 
 /// A list of closed `CanisterId` ranges that are present in the `RoutingTable`
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterIdRanges(Vec<CanisterIdRange>);
 
 impl TryFrom<Vec<CanisterIdRange>> for CanisterIdRanges {
@@ -260,7 +260,7 @@ pub fn routing_table_insert_subnet(
 /// tracked are inclusive of start and end, i.e. can be denoted as `[a, b]`.
 ///
 /// INVARIANT: `self.well_formed() == Ok(())`
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutingTable(BTreeMap<CanisterIdRange, SubnetId>);
 
 impl TryFrom<BTreeMap<CanisterIdRange, SubnetId>> for RoutingTable {
@@ -570,7 +570,7 @@ impl IntoIterator for RoutingTable {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanisterMigrations(BTreeMap<CanisterIdRange, Vec<SubnetId>>);
 
 impl TryFrom<BTreeMap<CanisterIdRange, Vec<SubnetId>>> for CanisterMigrations {

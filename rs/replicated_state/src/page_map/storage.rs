@@ -46,18 +46,18 @@ const MAX_SUPPORTED_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;
 const BUF_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(
-    Copy,
     Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
+    Copy,
     Debug,
-    Deserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
     EnumCount,
     EnumIter,
+    Hash,
     Serialize,
+    Deserialize,
 )]
 pub enum OverlayVersion {
     /// The overlay file consists of 3 sections (from back to front):
@@ -151,7 +151,7 @@ impl BaseFile {
 /// For any page that appears in multiple overlay files, its contents are read
 /// from the newest overlay containing the page.
 /// The contents of pages that appear in no overlay file are read from `base`.
-#[derive(Clone, Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Storage {
     /// The lowest level data we mmap during loading.
     base: BaseFile,
@@ -887,7 +887,7 @@ impl dyn StorageLayout + '_ {
 }
 
 /// Whether to merge into a base file or an overlay.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum MergeDestination {
     /// Serialize as a base file.
     BaseFile(PathBuf),
@@ -1364,7 +1364,7 @@ struct FileIndexTag;
 type FileIndex = Id<FileIndexTag, u64>;
 
 /// A representation of a range of `PageIndex` backed by an overlay file.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
     start_page: PageIndex,
@@ -1633,19 +1633,19 @@ fn write_overlay(
     Ok(())
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum BaseFileSerialization {
     Base(CheckpointSerialization),
     Overlay(Vec<OverlayFileSerialization>),
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct StorageSerialization {
     pub base: BaseFileSerialization,
     pub overlays: Vec<OverlayFileSerialization>,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }

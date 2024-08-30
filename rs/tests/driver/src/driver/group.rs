@@ -69,7 +69,7 @@ const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
 
-#[derive(Debug, Parser)]
+#[derive(Parser, Debug)]
 pub struct CliArgs {
     #[clap(flatten)]
     group_dir: GroupDir,
@@ -151,7 +151,7 @@ impl CliArgs {
     }
 }
 
-#[derive(Clone, Debug, clap::Args)]
+#[derive(clap::Args, Clone, Debug)]
 pub struct GroupDir {
     #[clap(
         long = "working-dir",
@@ -162,7 +162,7 @@ all test environments including the one of the setup."#
     pub path: PathBuf,
 }
 
-#[derive(Clone, Debug, clap::Subcommand)]
+#[derive(clap::Subcommand, Clone, Debug)]
 pub enum SystemTestsSubcommand {
     /// run all tests in this test group
     Run,

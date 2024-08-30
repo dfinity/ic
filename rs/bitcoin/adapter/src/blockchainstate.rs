@@ -11,7 +11,7 @@ use thiserror::Error;
 pub type Work = bitcoin::util::uint::Uint256;
 
 /// Contains the necessary information about a tip.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Tip {
     /// This field stores a Bitcoin header.
     pub header: BlockHeader,

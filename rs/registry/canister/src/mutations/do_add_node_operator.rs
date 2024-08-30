@@ -36,7 +36,7 @@ impl Registry {
 /// The payload of a proposal to add a new Node Operator
 ///
 /// See /rs/protobuf/def/registry/node_operator/v1/node_operator.proto
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Message)]
 pub struct AddNodeOperatorPayload {
     /// The principal id of the node operator. This principal is the entity that
     /// is able to add and remove nodes.

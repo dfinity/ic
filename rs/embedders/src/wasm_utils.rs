@@ -24,7 +24,7 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,
@@ -35,12 +35,12 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
-#[derive(Eq, PartialEq, Debug, Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
@@ -48,7 +48,7 @@ pub struct WasmValidationDetails {
     pub max_complexity: Complexity,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct Segment {
     offset: usize,
     #[serde(with = "serde_bytes")]
@@ -56,7 +56,7 @@ struct Segment {
 }
 
 /// Vector of heap data chunks with their offsets.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Segments(Vec<Segment>);
 
 impl FromIterator<(usize, Vec<u8>)> for Segments {
@@ -146,7 +146,7 @@ impl Segments {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SystemApiFunc {
     StableGrow,
     Stable64Grow,

@@ -25,7 +25,7 @@ fn unexpected(desc: &str) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(desc.to_string()))
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct PlainWasm {
     #[serde(with = "serde_bytes")]
     pub wasm_src: Vec<u8>,
@@ -35,7 +35,7 @@ impl crate::fdenum::EnumerateInnerFileDescriptors for PlainWasm {
     fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct CompiledWasm {
     result: HypervisorResult<(CompilationResult, SerializedModule)>,
 }

@@ -337,7 +337,7 @@ mod mega_cipher_text {
         }
     }
 
-    #[derive(PartialEq, Debug)]
+    #[derive(Debug, PartialEq)]
     enum MEGaPlaintext {
         Single(EccScalar),
         Pair((EccScalar, EccScalar)),

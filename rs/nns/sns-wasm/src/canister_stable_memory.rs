@@ -5,7 +5,7 @@ use ic_cdk::api::stable::{
 use std::sync::{Arc, Mutex};
 
 /// Provides a `StableMemory` implementation backed by ic_cdk
-#[derive(Copy, Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct CanisterStableMemory {}
 
 impl StableMemory for CanisterStableMemory {

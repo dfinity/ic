@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]
 #[serde(transparent)]
 pub struct U64(u64);
 

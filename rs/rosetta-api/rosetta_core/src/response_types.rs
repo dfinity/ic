@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// A NetworkListResponse contains all NetworkIdentifiers that the node can
 /// serve information for.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkListResponse {
     pub network_identifiers: Vec<NetworkIdentifier>,
 }
@@ -19,7 +19,7 @@ impl NetworkListResponse {
 }
 
 /// NetworkOptionsResponse contains information about the versioning of the node and the allowed operation statuses, operation types, and errors.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NetworkOptionsResponse {
     /// The Version object is utilized to inform the client of the versions of different components of the Rosetta implementation.
     pub version: Version,
@@ -45,7 +45,7 @@ impl NetworkOptionsResponse {
 /// populated so that clients can still monitor healthiness. Without this field,
 /// it may appear that the implementation is stuck syncing and needs to be
 /// terminated.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkStatusResponse {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub current_block_identifier: BlockIdentifier,
@@ -98,7 +98,7 @@ impl NetworkStatusResponse {
 /// connected chain of blocks where each block has a unique index. In other
 /// words, the `PartialBlockIdentifier` of a block after an omitted block should
 /// reference the last non-omitted block.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BlockResponse {
     /// Blocks contain an array of Transactions that occurred at a particular BlockIdentifier. A hard requirement for blocks returned by Rosetta implementations is that they MUST be inalterable: once a client has requested and received a block identified by a specific BlockIndentifier, all future calls for that same BlockIdentifier must return the same block contents.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,7 +123,7 @@ impl BlockResponse {
 }
 
 /// A BlockTransactionResponse contains information about a block transaction.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockTransactionResponse {
     /// Transactions contain an array of Operations that are attributable to the same TransactionIdentifier.
     pub transaction: Transaction,
@@ -137,7 +137,7 @@ impl BlockTransactionResponse {
 
 /// A MempoolResponse contains all transaction identifiers in the mempool for a
 /// particular network_identifier.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MempoolResponse {
     #[serde(rename = "transaction_identifiers")]
     pub transaction_identifiers: Vec<TransactionIdentifier>,
@@ -154,7 +154,7 @@ impl MempoolResponse {
 /// A MempoolTransactionResponse contains an estimate of a mempool transaction.
 /// It may not be possible to know the full impact of a transaction in the
 /// mempool (ex: fee paid).
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MempoolTransactionResponse {
     #[serde(rename = "transaction")]
     pub transaction: Transaction,
@@ -168,7 +168,7 @@ impl MempoolTransactionResponse {
 
 /// ConstructionDeriveResponse is returned by the `/construction/derive`
 /// endpoint.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ConstructionDeriveResponse {
     /// [DEPRECATED by `account_identifier` in `v1.4.4`] Address in
     /// network-specific format.
@@ -204,7 +204,7 @@ impl ConstructionDeriveResponse {
 /// `required_public_keys` with the AccountIdentifiers associated with the
 /// desired PublicKeys. If it is not necessary to retrieve any PublicKeys for
 /// construction, `required_public_keys` should be omitted.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ConstructionPreprocessResponse {
     /// The options that will be sent directly to `/construction/metadata` by
     /// the caller.
@@ -231,7 +231,7 @@ impl ConstructionPreprocessResponse {
 /// transaction with a different account that can pay the suggested fee.
 /// Suggested fee is an array in case fee payment must occur in multiple
 /// currencies.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionMetadataResponse {
     pub metadata: ObjectMap,
 
@@ -243,7 +243,7 @@ pub struct ConstructionMetadataResponse {
 /// contains an unsigned transaction blob (that is usually needed to construct
 /// the a network transaction from a collection of signatures) and an array of
 /// payloads that must be signed by the caller.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionPayloadsResponse {
     /// CBOR+hex-encoded 'UnsignedTransaction'
     pub unsigned_transaction: String,
@@ -266,7 +266,7 @@ impl ConstructionPayloadsResponse {
 /// ConstructionParseResponse contains an array of operations that occur in a
 /// transaction blob. This should match the array of operations provided to
 /// `/construction/preprocess` and `/construction/payloads`.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionParseResponse {
     pub operations: Vec<Operation>,
 
@@ -289,7 +289,7 @@ impl ConstructionParseResponse {
 
 /// ConstructionCombineResponse is returned by `/construction/combine`. The
 /// network payload will be sent directly to the `construction/submit` endpoint.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionCombineResponse {
     /// CBOR+hex-encoded 'SignedTransaction'
     pub signed_transaction: String,
@@ -298,7 +298,7 @@ pub struct ConstructionCombineResponse {
 // This file is generated from https://github.com/coinbase/rosetta-specifications using openapi-generator
 // Then heavily tweaked because openapi-generator no longer generates valid rust
 // code
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionSubmitResponse {
     /// Transfers produce a real transaction identifier,
     /// Neuron management requests produce a constant (pseudo) identifier.
@@ -314,7 +314,7 @@ pub struct ConstructionSubmitResponse {
 /// an account has a balance for each AccountIdentifier describing it (ex: an
 /// ERC-20 token balance on a few smart contracts), an account balance request
 /// must be made with each AccountIdentifier.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountBalanceResponse {
     #[serde(rename = "block_identifier")]
     pub block_identifier: BlockIdentifier,
@@ -331,7 +331,7 @@ pub struct AccountBalanceResponse {
     pub metadata: Option<ObjectMap>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,
     pub metadata: ObjectMap,
@@ -340,7 +340,7 @@ pub struct ConstructionHashResponse {
 /// SearchTransactionsResponse contains an ordered collection of
 /// BlockTransactions that match the query in SearchTransactionsRequest. These
 /// BlockTransactions are sorted from most recent block to oldest block.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SearchTransactionsResponse {
     /// transactions is an array of BlockTransactions sorted by most recent BlockIdentifier (meaning that transactions in recent blocks appear first).
     /// If there are many transactions for a particular search, transactions may not contain all matching transactions. It is up to the caller to paginate these transactions using the max_block field.
@@ -355,7 +355,7 @@ pub struct SearchTransactionsResponse {
     pub next_offset: Option<i64>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CallResponse {
     /// Result contains the result of the `/call` invocation. This result will not be inspected or interpreted by Rosetta tooling and is left to the caller to decode.
     #[serde(rename = "result")]

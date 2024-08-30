@@ -21,7 +21,7 @@ use std::fmt;
 /// assert_eq!("0xdeadbeef", format!("{:?}", DebugBlob(&[0xde, 0xad, 0xbe, 0xef][..])));
 /// assert_eq!("30×01", format!("{:?}", DebugBlob(&vec![1; 30][..])));
 /// ```
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq, Eq)]
 pub struct DebugBlob<'a>(pub &'a [u8]);
 
 impl fmt::Debug for DebugBlob<'_> {

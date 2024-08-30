@@ -29,7 +29,7 @@ const PAGE_SIZE: usize = 4096;
 /// * `size` - size of the memory region in bytes.
 /// * `step` - optional interval between reads/writes in bytes (contig. by default).
 /// * `value` - optional value to assert/write (no assertion/random by default)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Operation {
     repeat: Option<usize>,
     // Note: the WASM target is 32 bit, so we need to explicitly use u64, not usize
@@ -41,7 +41,7 @@ struct Operation {
 
 /// The result of `read` and `read_write` operations. Represents the sum
 /// of all 8 byte words in the given memory region.
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Sum {
     value: u64,
 }

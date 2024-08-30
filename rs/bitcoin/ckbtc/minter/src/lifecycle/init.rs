@@ -20,7 +20,7 @@ pub enum MinterArg {
 // (refer to [PR171](https://github.com/dfinity/bitcoin-canister/pull/171)),
 // instead it uses lower-case candid variants.
 // A temporary fix for ckbtc minter is to create a new enum with capital letter variants.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
 pub enum BtcNetwork {
     Mainnet,
     Testnet,
@@ -47,7 +47,7 @@ impl From<Network> for BtcNetwork {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InitArgs {
     /// The bitcoin network that the minter will connect to
     pub btc_network: BtcNetwork,

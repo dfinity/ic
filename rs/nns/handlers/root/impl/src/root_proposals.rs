@@ -32,7 +32,7 @@ const MAX_TIME_FOR_GOVERNANCE_UPGRADE_ROOT_PROPOSAL: u64 = 60 * 60 * 24 * 7;
 /// Root proposals are initialized with one ballot per node at creation
 /// in the "Undecided" state. These ballots are then changed when the node
 /// operators vote.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize)]
 pub enum RootProposalBallot {
     Yes,
     No,
@@ -78,7 +78,7 @@ impl FromStr for RootProposalBallot {
 /// indicate the hash of the wasm that they intend to upgrade. This way if two
 /// proposals to upgrade the same wasm are submitted before any of them is
 /// executed, only the the first proposal gets to be executed.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Clone, Deserialize)]
 pub struct GovernanceUpgradeRootProposal {
     /// The id of the NNS subnet.
     pub nns_subnet_id: SubnetId,

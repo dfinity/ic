@@ -63,7 +63,7 @@ lazy_static! {
 // sense in the context of NNS, because there is a new reward round every
 // day.
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Instant {
     days_since_start_time: Decimal,
 }
@@ -76,7 +76,7 @@ impl Instant {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Duration {
     days: Decimal,
 }
@@ -110,7 +110,7 @@ impl Duration {
 /// tokens, but we only wait 1 week (7 days), then, you would end up with 100 *
 /// (0.05 * 7 / 365.25) = 0.0958_2477 (rounded towards zero) token's worth of
 /// maturity.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct RewardRate {
     per_year: Decimal,
 }
@@ -128,7 +128,7 @@ impl RewardRate {
 
 /// A function that linearly maps values in the from Range to the to Range.
 // TODO: Generic-ify, and (move to a place where this can be) share(d) more broadly.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct LinearMap {
     from: Range<Decimal>,
     to: Range<Decimal>,

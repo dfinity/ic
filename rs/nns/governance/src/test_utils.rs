@@ -110,7 +110,7 @@ impl CMC for StubCMC {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ExpectedCallCanisterMethodCallArguments {
     target: CanisterId,
     method_name: String,

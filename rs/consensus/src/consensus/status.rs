@@ -6,7 +6,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Status {
     /// The Consensus is running normally.
     Running,

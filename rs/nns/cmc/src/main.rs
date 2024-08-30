@@ -122,7 +122,7 @@ impl Environment for CanisterEnvironment {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
 pub enum NotificationStatus {
     /// We are waiting for a reply from ledger to complete the notification processing.
     Processing,
@@ -155,7 +155,7 @@ pub enum NotificationStatus {
 ///                To be safe we don't support this and will panic.
 ///                Instead a hotfix should be performed.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CandidType,
 )]
 struct StateVersion(u64);
 
@@ -175,7 +175,7 @@ struct StateVersion(u64);
 ///   because they are no longer needed.
 type State = StateV1;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
 
@@ -257,7 +257,7 @@ impl StateV1 {
 /// around blocks_notified and last_purged_notification.
 ///
 /// TODO: remove this type once the CMC has upgraded to this version.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
 pub struct StateV0 {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,

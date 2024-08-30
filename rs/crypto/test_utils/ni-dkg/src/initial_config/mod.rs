@@ -34,7 +34,7 @@ mod tests;
 
 /// A config used to create an initial NI-DKG transcript. Such a transcript is
 /// used to bootstrap a subnet for testing purposes.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InitialNiDkgConfig {
     dkg_config: NiDkgConfig,
 }
@@ -125,7 +125,7 @@ pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SecretKeyBytes {
     val: [u8; 32],
 }
@@ -192,7 +192,7 @@ pub fn dummy_initial_dkg_transcript_with_master_key<R: rand::Rng + rand::CryptoR
     (transcript, master_secret_bytes)
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct CombinedSignatureBytes {
     val: [u8; 48],
 }

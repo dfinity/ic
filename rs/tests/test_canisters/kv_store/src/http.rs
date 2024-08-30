@@ -15,7 +15,7 @@ use crate::chunk::ChunkWriter;
 const STREAMING_CHUNK_SIZE: usize = 10;
 
 /// A key-value pair for a HTTP header.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, Deserialize)]
 struct HeaderField(String, String);
 
 impl HeaderField {
@@ -25,7 +25,7 @@ impl HeaderField {
 }
 
 /// The important components of an HTTP request.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 pub struct HttpRequest {
     /// The HTTP method string.
     method: String,
@@ -38,7 +38,7 @@ pub struct HttpRequest {
 }
 
 /// A HTTP response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub struct HttpResponse {
     /// The HTTP status code.
     status_code: u16,
@@ -53,21 +53,21 @@ pub struct HttpResponse {
 }
 
 /// A Streaming HTTP response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub struct StreamingCallbackHttpResponse {
     body: Vec<u8>,
     token: Option<Token>,
 }
 
 /// Possible strategies for a streaming response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 enum StreamingStrategy {
     /// A callback-based streaming strategy, where a callback function is provided for continuing the stream.
     Callback(CallbackStrategy),
 }
 
 /// A callback-token pair for a callback streaming strategy.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 struct CallbackStrategy {
     /// The callback function to be called to continue the stream.
     callback: Callback,
@@ -75,7 +75,7 @@ struct CallbackStrategy {
     token: Token,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct Callback(Func);
 
 impl From<&str> for Callback {
@@ -96,13 +96,13 @@ impl CandidType for Callback {
     }
 }
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+#[derive(Default, Debug, Clone, CandidType, Deserialize)]
 pub struct Token {
     path: String,
     encoding: Option<Encoding>,
     next: usize,
 }
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 enum Encoding {
     Gzip,
     Deflate,

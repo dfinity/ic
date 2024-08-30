@@ -91,7 +91,7 @@ async fn spinup_canisters(args: SpinupCanistersArgs) {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
 pub struct SpinupCanistersArgs {
     pub canisters_number: u64,
     pub wasm_module: Vec<u8>,

@@ -19,7 +19,7 @@ use url::Url;
 use crate::{Recovery, Step};
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Debug, Copy, Clone, EnumIter, EnumMessage, EnumString, PartialEq, Deserialize, Serialize,
 )]
 pub enum StepType {
     StopReplica,
@@ -38,7 +38,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
+#[derive(Debug, Clone, PartialEq, Parser, Deserialize, Serialize)]
 #[clap(version = "1.0")]
 pub struct NNSRecoverySameNodesArgs {
     /// Id of the broken subnet

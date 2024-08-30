@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, convert::TryFrom};
 use crate::{xnet::CertifiedStreamSlice, CountBytes};
 
 /// Payload that contains XNet messages.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct XNetPayload {
     pub stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,

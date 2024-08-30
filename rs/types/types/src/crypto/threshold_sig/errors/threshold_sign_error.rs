@@ -5,7 +5,7 @@ use crate::crypto::{AlgorithmId, CryptoError};
 use std::fmt;
 
 /// A threshold signing error.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ThresholdSignError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     SecretKeyNotFound {

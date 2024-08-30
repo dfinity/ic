@@ -8,7 +8,7 @@ use phantom_newtype::BitMask;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StateManagerError {
     /// The state at the specified height was removed and cannot be recovered
     /// anymore.
@@ -23,7 +23,7 @@ pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
 /// Errors for functions returning state hashes that are permanent (i.e. no
 /// point in retrying)
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PermanentStateHashError {
     #[error("state at height {0} has already been removed and cannot be recovered anymore")]
     StateRemoved(Height),
@@ -33,7 +33,7 @@ pub enum PermanentStateHashError {
 
 /// Errors for functions returning state hashes that rely on asynchronous
 /// computations that have not finished yet.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TransientStateHashError {
     #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
@@ -42,7 +42,7 @@ pub enum TransientStateHashError {
 }
 
 /// Errors for functions returning state hashes
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StateHashError {
     /// The error is permanent and will not change if retried later
     #[error(transparent)]
@@ -54,7 +54,7 @@ pub enum StateHashError {
 }
 
 /// Indicates the subset of the state that needs to be certified.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CertificationScope {
     /// Only certify the system metadata.
     Metadata,
@@ -77,7 +77,7 @@ pub const CERT_ANY: CertificationMask = CertificationMask::new(1 | 2);
 
 /// A node state with a `height` attached to it, indicating that the state was
 /// obtained by executing a block with the given `height`.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Labeled<State> {
     height: Height,
     state: State,

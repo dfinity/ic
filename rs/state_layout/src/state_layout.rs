@@ -179,7 +179,7 @@ pub struct CanisterStateBits {
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
@@ -2573,7 +2573,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum FilePermissions {
     ReadOnly,
     ReadWrite,
@@ -2662,7 +2662,7 @@ fn sync_and_mark_files_readonly(
     Ok(())
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 enum FSync {
     Yes,
     No,

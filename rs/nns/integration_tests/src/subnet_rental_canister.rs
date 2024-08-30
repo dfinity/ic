@@ -39,18 +39,18 @@ pub struct SubnetRentalRequest {
 
 // The following three Subnet Rental Canister types
 // are copied from the Subnet Rental Canister's repository.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Copy, Clone, CandidType, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize)]
 pub enum RentalConditionId {
     App13CH,
 }
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Clone, CandidType, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize)]
 pub struct SubnetRentalProposalPayload {
     pub user: PrincipalId,
     pub rental_condition_id: RentalConditionId,
     pub proposal_id: u64,
     pub proposal_creation_time_seconds: u64,
 }
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Clone, CandidType, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize)]
 pub struct RentalRequest {
     pub user: PrincipalId,
     pub initial_cost_icp: Tokens,

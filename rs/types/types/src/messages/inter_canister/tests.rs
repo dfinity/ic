@@ -11,7 +11,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 /// Old version of `Response`, to ensure `Hash` consistency with the "`Request`
 /// with `deadline`" type.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct OldResponse {
     pub originator: CanisterId,

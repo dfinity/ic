@@ -20,7 +20,7 @@ use url::Url;
 
 /// Sub-command to submit a proposal to update a subnet.
 #[derive_common_proposal_fields]
-#[derive(Parser, ProposalMetadata)]
+#[derive(ProposalMetadata, Parser)]
 pub(crate) struct ProposeToUpdateSubnetCmd {
     /// The subnet that should be updated.
     #[clap(long, required = true, alias = "subnet-id")]

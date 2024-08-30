@@ -7,7 +7,7 @@ use ic_management_canister_types::{
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, CandidType)]
 struct Options {
     derivation_path: Vec<Vec<u8>>,
     key_name: String,

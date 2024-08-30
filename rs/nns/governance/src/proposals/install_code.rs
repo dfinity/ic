@@ -14,7 +14,7 @@ use serde::Serialize;
 
 // When calling lifeline's upgrade_root method, this is the request. Keep this in sync with
 // `rs/nns/handlers/lifeline/impl/lifeline.mo`.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, CandidType, Deserialize, Serialize)]
 struct UpgradeRootProposalPayload {
     wasm_module: Vec<u8>,
     module_arg: Vec<u8>,

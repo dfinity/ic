@@ -1,4 +1,4 @@
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProvisionalWhitelist {
@@ -11,17 +11,17 @@ pub struct ProvisionalWhitelist {
 /// Nested message and enum types in `ProvisionalWhitelist`.
 pub mod provisional_whitelist {
     #[derive(
-        Copy,
-        Clone,
-        Eq,
-        PartialEq,
-        Ord,
-        PartialOrd,
-        Hash,
-        Debug,
-        ::prost::Enumeration,
-        serde::Deserialize,
         serde::Serialize,
+        serde::Deserialize,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
     )]
     #[repr(i32)]
     pub enum ListType {

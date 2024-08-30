@@ -141,7 +141,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFro
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StandardRecord {
     pub name: String,
     pub url: String,

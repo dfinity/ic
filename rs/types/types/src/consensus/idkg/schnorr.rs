@@ -21,7 +21,7 @@ use super::{
 };
 
 /// Schnorr pre-signature in creation.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptInCreation {
     pub key_id: SchnorrKeyId,
@@ -113,7 +113,7 @@ impl TryFrom<&pb::TranscriptInCreation> for TranscriptInCreation {
 
 /// Counterpart of PreSignatureTranscript that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureTranscriptRef {
     pub key_id: SchnorrKeyId,
@@ -201,7 +201,7 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,

@@ -7,13 +7,13 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 
 /// Registry for remote process adapters.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct AdapterMetricsRegistry {
     adapters: Arc<RwLock<Vec<AdapterMetrics>>>,
     metrics: AdapterMetricsScrapeMetrics,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct AdapterMetricsScrapeMetrics {
     /// Records per-adapter metric scrape attempt outcome.
     scrape_duration: HistogramVec,

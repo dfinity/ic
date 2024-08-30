@@ -29,7 +29,7 @@ fn is_multiple_of_page_size(size: usize) -> bool {
     size == round_up_to_page_size(size, PAGE_SIZE)
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Hash, PartialEq, Eq)]
 pub(crate) struct MemoryStart(pub(crate) usize);
 
 pub(crate) struct MemoryPageSize(Arc<AtomicUsize>);

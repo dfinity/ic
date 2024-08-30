@@ -8,7 +8,7 @@ use ic_types::{
 };
 
 /// Errors that `MessageRouting` may return.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MessageRoutingError {
     /// The batch was not delivered because the batch queue is full.
     QueueIsFull,
@@ -110,7 +110,7 @@ pub const LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED: &str = "SubnetMethodNotAllowed"
 pub const LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD: &str = "InvalidManagementPayload";
 pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IngressInductionError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),

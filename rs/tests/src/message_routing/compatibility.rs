@@ -47,7 +47,7 @@ use std::time::Duration;
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     with_prometheus: bool,
 }

@@ -25,7 +25,7 @@ macro_rules! try_from_u8 {
 }
 
 try_from_u8!(
-    #[derive(Eq, PartialEq, Debug)]
+    #[derive(Debug, Eq, PartialEq)]
     pub enum Ops {
         Noop = 0,
         Drop = 1,

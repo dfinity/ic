@@ -243,7 +243,7 @@ impl InitializedNode {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
     /// Node index
@@ -279,7 +279,7 @@ impl Display for Node {
 }
 
 /// Structured definition of a node provided by the `--node` flag.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
@@ -325,7 +325,7 @@ impl From<NodeConfiguration> for pbNodeRecord {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 pub enum InitializeNodeError {
     #[error("could not create node path: {path}: {source}")]
     CreateNodePathFailed { path: String, source: io::Error },
@@ -377,7 +377,7 @@ impl NodeConfiguration {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
     pub node_pks: ValidNodePublicKeys,

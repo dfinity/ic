@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 use std::fmt;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub enum KytMode {
     /// In this mode, the canister will not make any HTTP calls and return empty
     /// alert lists for all requests.
@@ -23,7 +23,7 @@ impl fmt::Display for KytMode {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct InitArg {
     /// The principal of the minter canister.
     pub minter_id: Principal,
@@ -33,32 +33,32 @@ pub struct InitArg {
     pub mode: KytMode,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct SetApiKeyArg {
     pub api_key: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct UpgradeArg {
     pub minter_id: Option<Principal>,
     pub maintainers: Option<Vec<Principal>>,
     pub mode: Option<KytMode>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub enum LifecycleArg {
     InitArg(InitArg),
     UpgradeArg(UpgradeArg),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub struct DepositRequest {
     pub caller: Principal,
     pub txid: [u8; 32],
     pub vout: u32,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub enum AlertLevel {
     Severe,
     High,
@@ -66,13 +66,13 @@ pub enum AlertLevel {
     Low,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub enum ExposureType {
     Direct,
     Indirect,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub struct Alert {
     pub level: AlertLevel,
     pub category: Option<String>,
@@ -80,14 +80,14 @@ pub struct Alert {
     pub exposure_type: ExposureType,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub struct FetchAlertsResponse {
     pub external_id: String,
     pub alerts: Vec<Alert>,
     pub provider: Principal,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct WithdrawalAttempt {
     /// The caller who initiated the request.
     pub caller: Principal,
@@ -101,7 +101,7 @@ pub struct WithdrawalAttempt {
     pub timestamp_nanos: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub enum Error {
     TemporarilyUnavailable(String),
 }

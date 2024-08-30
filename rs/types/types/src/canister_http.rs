@@ -98,7 +98,7 @@ pub const MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE: usize = 48 * 1024;
 /// is used to uniquely identify the request and it's associated artifacts.
 pub type CanisterHttpRequestId = CallbackId;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Transform {
     pub method_name: String,
     #[serde(with = "serde_bytes")]
@@ -114,7 +114,7 @@ impl From<TransformContext> for Transform {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
@@ -449,7 +449,7 @@ impl From<CanisterHttpRequestContextError> for UserError {
 
 /// Contains the information that the pool manager hands to the canister http
 /// client to make a request
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CanisterHttpRequest {
     /// Timestamp indicating when this request will be considered timed out.
     pub timeout: Time,
@@ -460,7 +460,7 @@ pub struct CanisterHttpRequest {
 }
 
 /// The content of a response after the transformation
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
@@ -476,7 +476,7 @@ impl CountBytes for CanisterHttpResponse {
 }
 
 /// Content of a [`CanisterHttpResponse`]
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CanisterHttpResponseContent {
     /// In the case of a success, this will be the data returned by the server.
@@ -497,7 +497,7 @@ impl CountBytes for CanisterHttpResponseContent {
 
 /// If a [`CanisterHttpRequest`] is rejected, the [`CanisterHttpReject`] provides additional
 /// information about the rejection.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpReject {
     /// The [`RejectCode`] of the request
@@ -519,14 +519,14 @@ impl CountBytes for CanisterHttpReject {
 }
 
 /// A header to be included in a [`CanisterHttpRequest`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
+#[derive(Clone, Debug, Eq, EnumIter, Hash, PartialEq, Serialize, Deserialize)]
 pub enum CanisterHttpMethod {
     GET = 1,
     POST = 2,
@@ -560,7 +560,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 }
 
 /// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
@@ -577,7 +577,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 ///
 /// This can be used as a proof that consensus can not be reached for this call
 /// as sufficiently many nodes have seen divergent content.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
@@ -590,7 +590,7 @@ impl CountBytes for CanisterHttpResponseDivergence {
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,

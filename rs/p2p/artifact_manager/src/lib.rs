@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn send_initial_artifacts() {
-        #[derive(Eq, PartialEq, Debug)]
+        #[derive(Debug, PartialEq, Eq)]
         struct DummyArtifact(u64);
 
         impl From<u64> for DummyArtifact {

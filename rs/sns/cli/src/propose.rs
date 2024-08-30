@@ -400,7 +400,7 @@ fn all_canisters_have_all_required_controllers(
     ))
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum SaveToErrors {
     FileOpenFailed(PathBuf, String),
     FileWriteFailed(PathBuf, String),

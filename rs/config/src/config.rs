@@ -30,7 +30,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 /// The config struct for the replica.  Just consists of `Config`s for
 /// the components.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub registry_client: RegistryClientConfig,
     pub transport: TransportConfig,
@@ -62,7 +62,7 @@ pub struct Config {
 
 /// Mirrors the Config struct except that fields are made optional. This is
 /// meant for use with config_parser, where sections can be omitted.
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct ConfigOptional {
     pub registry_client: Option<RegistryClientConfig>,
     pub transport: Option<TransportConfig>,

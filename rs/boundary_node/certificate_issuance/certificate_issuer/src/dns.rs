@@ -21,7 +21,7 @@ impl Resolve for Resolver {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Record {
     Txt(String),
 }

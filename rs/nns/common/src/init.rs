@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct LifelineCanisterInitPayload {}
 
 pub struct LifelineCanisterInitPayloadBuilder {}

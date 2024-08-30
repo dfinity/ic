@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::hash::Hash;
 use url::Url;
 
-#[derive(Clone, Hash, Debug, Deserialize)]
+#[derive(Debug, Clone, Hash, Deserialize)]
 pub struct NodeSoftwareVersion {
     pub replica_version: ReplicaVersion,
     pub replica_url: Url,

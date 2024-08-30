@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::default::Default;
 
 /// The transport format specified in the ic.json
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TransportConfig {
     pub node_ip: String,

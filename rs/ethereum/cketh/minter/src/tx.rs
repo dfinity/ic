@@ -18,7 +18,7 @@ use rlp::RlpStream;
 
 const EIP1559_TX_ID: u8 = 2;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct AccessList(#[n(0)] pub Vec<AccessListItem>);
 
@@ -40,11 +40,11 @@ impl rlp::Encodable for AccessList {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 #[cbor(transparent)]
 pub struct StorageKey(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Encode, Decode)]
 pub struct AccessListItem {
     /// Accessed address
     #[n(0)]
@@ -68,7 +68,7 @@ impl rlp::Encodable for AccessListItem {
 }
 
 /// <https://eips.ethereum.org/EIPS/eip-1559>
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct Eip1559TransactionRequest {
     #[n(0)]
     pub chain_id: u64,
@@ -96,7 +96,7 @@ impl AsRef<Eip1559TransactionRequest> for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resubmittable<T> {
     pub transaction: T,
     pub resubmission: ResubmissionStrategy,
@@ -120,7 +120,7 @@ impl<T> AsRef<T> for Resubmittable<T> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResubmissionStrategy {
     ReduceEthAmount { withdrawal_amount: Wei },
     GuaranteeEthAmount { allowed_max_transaction_fee: Wei },
@@ -137,7 +137,7 @@ impl ResubmissionStrategy {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResubmitTransactionError {
     InsufficientTransactionFee {
         allowed_max_transaction_fee: Wei,
@@ -190,7 +190,7 @@ impl rlp::Encodable for Eip1559TransactionRequest {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
+#[derive(Default, Clone, PartialEq, Eq, Hash, Debug, Encode, Decode)]
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
@@ -211,7 +211,7 @@ impl rlp::Encodable for Eip1559Signature {
 /// Immutable signed EIP-1559 transaction.
 /// Use `Eip1559TransactionRequest::sign()` to create a newly signed transaction or
 /// `SignedEip1559TransactionRequest::from()` if the signature is already known
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignedEip1559TransactionRequest {
     inner: InnerSignedTransactionRequest,
     /// Hash of the signed transaction. Since computation of the hash is an expensive operation,
@@ -228,7 +228,7 @@ impl AsRef<Eip1559TransactionRequest> for SignedEip1559TransactionRequest {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 struct InnerSignedTransactionRequest {
     #[n(0)]
     transaction: Eip1559TransactionRequest,
@@ -280,7 +280,7 @@ impl<'b, C> minicbor::Decode<'b, C> for SignedEip1559TransactionRequest {
 
 /// Immutable finalized transaction.
 /// Use `SignedEip1559TransactionRequest::try_finalize()` to create a finalized transaction.
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 pub struct FinalizedEip1559Transaction {
     #[n(0)]
     transaction: SignedEip1559TransactionRequest,
@@ -496,7 +496,7 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
         })
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GasFeeEstimate {
     pub base_fee_per_gas: WeiPerGas,
     pub max_priority_fee_per_gas: WeiPerGas,
@@ -531,7 +531,7 @@ impl GasFeeEstimate {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionPrice {
     pub gas_limit: GasAmount,
     pub max_fee_per_gas: WeiPerGas,
@@ -666,7 +666,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
         _ => do_refresh().await,
     }
 }
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TransactionFeeEstimationError {
     InvalidFeeHistory(String),
     Overflow(String),

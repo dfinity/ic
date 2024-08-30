@@ -12,7 +12,7 @@ const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
 
 /// The argument for the `prepare_canister_migration` update call.
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct PrepareCanisterMigrationPayload {
     /// The list of canister ID ranges to be added into canister migrations.
     pub canister_id_ranges: Vec<CanisterIdRange>,

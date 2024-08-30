@@ -15,7 +15,7 @@ struct State {
 }
 
 /// A key-value pair for a HTTP header.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, Deserialize)]
 pub struct HeaderField(String, String);
 
 impl HeaderField {
@@ -25,7 +25,7 @@ impl HeaderField {
 }
 
 /// The important components of an HTTP request.
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 struct HttpRequest {
     /// The HTTP method string.
     pub method: String,
@@ -38,7 +38,7 @@ struct HttpRequest {
 }
 
 /// A HTTP response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub struct HttpResponse {
     /// The HTTP status code.
     pub status_code: u16,
@@ -53,21 +53,21 @@ pub struct HttpResponse {
 }
 
 /// A Streaming HTTP response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub struct StreamingCallbackHttpResponse {
     body: Vec<u8>,
     token: Option<Token>,
 }
 
 /// Possible strategies for a streaming response.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub enum StreamingStrategy {
     /// A callback-based streaming strategy, where a callback function is provided for continuing the stream.
     Callback(CallbackStrategy),
 }
 
 /// A callback-token pair for a callback streaming strategy.
-#[derive(Clone, Debug, CandidType)]
+#[derive(Debug, Clone, CandidType)]
 pub struct CallbackStrategy {
     /// The callback function to be called to continue the stream.
     pub callback: Callback,
@@ -75,7 +75,7 @@ pub struct CallbackStrategy {
     pub token: Token,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Callback(Func);
 
 impl From<&str> for Callback {
@@ -96,13 +96,13 @@ impl CandidType for Callback {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 pub struct Token {
     // Add whatever fields you'd like
     arbitrary_data: TokenState,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 pub enum TokenState {
     Start,
     Next,

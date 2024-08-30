@@ -81,7 +81,7 @@ pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";
 pub const READONLY: &str = "readonly";
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NeuronArgs {
     dfx_hsm_pin: String,
     slot: String,
@@ -96,7 +96,7 @@ pub struct NodeMetrics {
     pub certification_height: Height,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,

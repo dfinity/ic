@@ -103,7 +103,7 @@ pub fn push_response(
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum SplitError {
     NotOneBlock,
     ResponseTooLarge,

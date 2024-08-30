@@ -103,7 +103,7 @@ pub async fn cleanup(canisters: Vec<CanisterLocator<'_>>, delete_canister_retrie
         src: Canister<'a>,
         dst: Canister<'b>,
     ) -> Result<Canister<'a>, String> {
-        #[derive(Debug, CandidType, Deserialize)]
+        #[derive(CandidType, Deserialize, Debug)]
         struct DepositCycleArgs {
             canister_id: Principal,
         }

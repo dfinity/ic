@@ -8,7 +8,7 @@ use core::fmt;
 
 /// Occurs if loading a transcript using `NiDkgAlgorithm::load_transcript`
 /// fails.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DkgLoadTranscriptError {
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),
     Registry(RegistryClientError),

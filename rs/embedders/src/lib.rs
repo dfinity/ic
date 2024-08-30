@@ -37,7 +37,7 @@ pub struct WasmExecutionInput {
     pub compilation_cache: Arc<CompilationCache>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct InstanceRunResult {
     pub wasm_dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
@@ -46,7 +46,7 @@ pub struct InstanceRunResult {
 
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,

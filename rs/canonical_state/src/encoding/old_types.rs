@@ -24,7 +24,7 @@ use std::collections::VecDeque;
 
 /// Copy of `types::RequestOrResponse` at canonical version 17 (before the
 /// addition of `deadline` to `types::Request` and `types::Response`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponseV17 {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -76,7 +76,7 @@ impl TryFrom<RequestOrResponseV17> for ic_types::messages::RequestOrResponse {
 }
 
 /// Copy of `types::Request` at canonical version 17 (before the addition of `deadline`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestV17 {
     #[serde(with = "serde_bytes")]
@@ -146,7 +146,7 @@ impl TryFrom<RequestV17> for ic_types::messages::Request {
 }
 
 /// Copy of `types::Response` at canonical version 17 (before the addition of `deadline`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResponseV17 {
     #[serde(with = "serde_bytes")]
@@ -207,7 +207,7 @@ impl TryFrom<ResponseV17> for ic_types::messages::Response {
 
 /// Copy of `types::RequestOrResponse` at canonical version 13 (before the
 /// addition of `metadata` to `types::Request`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponseV13 {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,7 +217,7 @@ pub struct RequestOrResponseV13 {
 }
 
 /// Copy of `types::Request` at canonical version 13 (before the addition of `metadata`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestV13 {
     #[serde(with = "serde_bytes")]
@@ -323,7 +323,7 @@ impl TryFrom<RequestV13> for ic_types::messages::Request {
 }
 
 /// Copy of `types::Request` at canonical version 3 (before the addition of `cycles_payment`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestV3 {
     #[serde(with = "serde_bytes")]
@@ -378,7 +378,7 @@ impl TryFrom<RequestV3> for ic_types::messages::Request {
 }
 
 /// Copy of `types::Response` at canonical version 3 (before the addition of `cycles_refund`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResponseV3 {
     #[serde(with = "serde_bytes")]
@@ -429,7 +429,7 @@ impl TryFrom<ResponseV3> for ic_types::messages::Response {
 
 /// Copy of `types::RequestOrResponse` at canonical version 3 (before the
 /// addition of `cycles_refund` to `types::Request` and `types::Response`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestOrResponseV3 {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -489,7 +489,7 @@ where
 
 /// Copy of `types::StreamHeader` at canonical version 18 (before the addition of
 /// `reject_signals` and deprecation of `reject_signal_deltas`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeaderV18 {
     pub begin: u64,
@@ -605,7 +605,7 @@ impl TryFrom<StreamHeaderV18> for ic_types::xnet::StreamHeader {
 }
 
 /// Copy of `types::StreamHeader` at canonical version 16 (before the addition of `flags`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeaderV16 {
     pub begin: u64,
@@ -699,7 +699,7 @@ impl TryFrom<StreamHeaderV16> for StreamHeader {
 
 /// Copy of `types::StreamHeader` at canonical version 6 (before the addition of
 /// `reject_signals`).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StreamHeaderV6 {
     pub begin: u64,

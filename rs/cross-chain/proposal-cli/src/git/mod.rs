@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::{fs, iter};
 use tempfile::TempDir;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Hash<const N: usize>([u8; N]);
 
 impl<const N: usize> FromStr for Hash<N> {
@@ -170,7 +170,7 @@ impl GitRepository {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ReleaseNotes {
     pub command: String,
     pub output: String,

@@ -21,7 +21,7 @@ use url::Url;
 
 /// Sub-command to submit a proposal to create a new subnet.
 #[derive_common_proposal_fields]
-#[derive(Parser, ProposalMetadata)]
+#[derive(ProposalMetadata, Parser)]
 pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     #[allow(dead_code)]

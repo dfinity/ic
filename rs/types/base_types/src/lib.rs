@@ -108,7 +108,7 @@ impl From<CanisterIdError> for ProxyDecodeError {
 }
 
 /// Represents an error that can occur when constructing a [`SnapshotId`].
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SnapshotIdError {
     /// A [`SnapshotID`] with invalid length was given.
     InvalidLength(String),
@@ -127,7 +127,7 @@ impl fmt::Display for SnapshotIdError {
 
 /// A type representing a canister's snapshot ID.
 /// The ID is unique across all subnets.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SnapshotId {
     /// The length of the canister ID.
     len: usize,

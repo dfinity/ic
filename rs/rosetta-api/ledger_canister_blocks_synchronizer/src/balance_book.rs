@@ -11,7 +11,7 @@ pub type BalanceBook = Balances<ClientBalancesStore>;
 
 const EMPTY_HISTORY: [(BlockIndex, Tokens); 0] = [];
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BalanceHistory {
     // TODO consider switching to VecDeque, to have more efficient pruning
     // Unfortunately binary_search on VecDeque is only available on nightly,
@@ -136,7 +136,7 @@ impl BalanceHistory {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct ClientBalancesStore {
     pub acc_to_hist: HashMap<AccountIdentifier, BalanceHistory>,
     pub transaction_context: Option<BlockIndex>,

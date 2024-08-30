@@ -42,15 +42,15 @@ const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
 
 #[derive(
+    Debug,
     Copy,
     Clone,
     PartialEq,
-    Debug,
-    Deserialize,
     EnumIter,
-    EnumMessage,
     EnumString,
     Serialize,
+    Deserialize,
+    EnumMessage,
     clap::ValueEnum,
 )]
 pub enum StepType {
@@ -78,7 +78,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
+#[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
 #[clap(version = "1.0")]
 pub struct SubnetSplittingArgs {
     /// Id of the subnet whose state will be split.

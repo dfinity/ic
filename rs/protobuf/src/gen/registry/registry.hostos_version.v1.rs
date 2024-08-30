@@ -4,7 +4,7 @@
 /// accepted by token holders. Nodes can then be upgraded to any of those
 /// versions. hostos_version_id commonly matches release_package_sha256_hex,
 /// and is used in the key for this record.
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HostosVersionRecord {

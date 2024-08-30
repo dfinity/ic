@@ -56,7 +56,7 @@ pub(crate) enum RegistryValue {
 
 /// User-friendly representation of a v1::SubnetRecord. For instance,
 /// the `membership` field is a `Vec<String>` to pretty-print the node IDs.
-#[derive(Clone, Default, Serialize)]
+#[derive(Default, Serialize, Clone)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
@@ -136,7 +136,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
 
 /// User-friendly representation of the v1::IPv4InterfaceConfig.
 /// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
-#[derive(Clone, Serialize)]
+#[derive(Serialize, Clone)]
 pub(crate) struct IPv4Interface {
     pub address: Ipv4Addr,
     pub gateways: Vec<Ipv4Addr>,
@@ -144,7 +144,7 @@ pub(crate) struct IPv4Interface {
 }
 
 /// Encapsulates a node/node operator id pair.
-#[derive(Clone, Serialize)]
+#[derive(Serialize, Clone)]
 pub(crate) struct NodeDetails {
     pub ipv6: Ipv6Addr,
     pub ipv4: Option<IPv4Interface>,
@@ -205,7 +205,7 @@ pub trait ProposalMetadata {
 }
 
 /// A description of a subnet, either by index, or by id.
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub enum SubnetDescriptor {
     Id(PrincipalId),
     Index(usize),
@@ -246,7 +246,7 @@ impl SubnetDescriptor {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Copy)]
 pub enum LogVisibility {
     #[strum(serialize = "controllers")]
     Controllers,

@@ -140,7 +140,7 @@ impl std::hash::Hash for CanisterModule {
 }
 
 /// The hash of an __uninstrumented__ canister wasm.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
 impl WasmHash {

@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum TargetSubnet {
     Source,
     Destination,

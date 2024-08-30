@@ -37,7 +37,7 @@ use std::{
 pub mod metrics;
 pub(crate) use metrics::NeuronMetrics;
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
     NeuronNotFound {
         neuron_id: NeuronId,
@@ -188,7 +188,7 @@ dyn_clone::clone_trait_object!(PracticalClock);
 impl PracticalClock for IcClock {}
 
 /// This structure represents a whole Neuron's Fund neuron.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,

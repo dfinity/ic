@@ -1096,7 +1096,7 @@ impl EcdsaSubnetConfig {
 }
 
 /// Selects which keys should be generated for a `TempCryptoComponent`.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NodeKeysToGenerate {
     pub generate_node_signing_keys: bool,
     pub generate_committee_signing_keys: bool,

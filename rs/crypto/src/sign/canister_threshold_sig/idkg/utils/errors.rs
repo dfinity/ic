@@ -7,7 +7,7 @@ use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 
 /// Errors encountered while looking-up a MEGa public key from the registry
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MegaKeyFromRegistryError {
     RegistryError(RegistryClientError),
     PublicKeyNotFound {

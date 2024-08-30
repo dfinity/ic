@@ -83,7 +83,7 @@ pub struct RemoteCspVault {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RemoteCspVaultError {
     TransportError {
         server_address: String,

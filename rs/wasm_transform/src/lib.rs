@@ -44,7 +44,7 @@ pub struct DataSegment<'a> {
 }
 
 /// The kind of data segment.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum DataSegmentKind<'a> {
     /// The data segment is passive.
     Passive,
@@ -62,7 +62,7 @@ pub struct Global<'a> {
     pub init_expr: Operator<'a>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     BinaryReaderError(BinaryReaderError),
     UnknownVersion(u32),

@@ -60,7 +60,7 @@ const FILE_TO_GROUP: &str = CANISTER_FILE;
 ///     will decrease by at least two orders of magnitude, which is significant enough.
 const MAX_FILE_SIZE_TO_GROUP: u32 = 1 << 13; // 8 KiB
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ManifestValidationError {
     InvalidRootHash {
         expected_hash: Vec<u8>,
@@ -118,7 +118,7 @@ impl fmt::Display for ManifestValidationError {
 
 impl std::error::Error for ManifestValidationError {}
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ChunkValidationError {
     InvalidChunkHash {
         chunk_ix: usize,
@@ -174,10 +174,10 @@ impl fmt::Display for ChunkValidationError {
 impl std::error::Error for ChunkValidationError {}
 
 /// Relative path to a file and the size of the file.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct FileWithSize(PathBuf, u64);
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ChunkAction {
     /// Recompute the hash of the chunk, as no previously computed hash is
     /// available
@@ -195,7 +195,7 @@ pub type NewIndex = usize;
 pub type OldIndex = usize;
 
 /// A script describing how to turn an old state into a new state.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DiffScript {
     /// Copy some files from the old state.
     /// Keys are indices of the file table in the new manifest file,

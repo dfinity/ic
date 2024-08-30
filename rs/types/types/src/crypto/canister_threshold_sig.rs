@@ -25,7 +25,7 @@ mod tests;
 /// The public key itself is stored as raw bytes.
 ///
 /// The chain key is included for BIP32-style key derivation.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -37,7 +37,7 @@ pub struct PublicKey {
 /// A master public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MasterPublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -47,7 +47,7 @@ pub struct MasterPublicKey {
 /// A combined threshold ECDSA signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -76,7 +76,7 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
 /// * a masked transcript for sharing of another random value `lambda`
 /// * a masked transcript for sharing the value `kappa * lambda`
 /// * a masked transcript for sharing the value `private_key * lambda`
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaPreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
     lambda_masked: IDkgTranscript,
@@ -276,7 +276,7 @@ impl EcdsaPreSignatureQuadruple {
 
 /// Metadata used to derive a specific ECDSA keypair.
 #[serde_with::serde_as]
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
@@ -303,7 +303,7 @@ impl fmt::Debug for ExtendedDerivationPath {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
@@ -480,7 +480,7 @@ impl ThresholdEcdsaSigInputs {
 }
 
 /// A single threshold ECDSA signature share.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,
@@ -501,7 +501,7 @@ impl fmt::Debug for ThresholdEcdsaSigShare {
 /// A combined threshold Schnorr signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdSchnorrCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -520,7 +520,7 @@ impl fmt::Debug for ThresholdSchnorrCombinedSignature {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdSchnorrSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
@@ -683,7 +683,7 @@ impl ThresholdSchnorrSigInputs {
 ///
 /// Each signature, in addition to the transcript for the sharing of the private
 /// key, requires a presignature.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SchnorrPreSignatureTranscript {
     blinder_unmasked: IDkgTranscript,
 }
@@ -747,7 +747,7 @@ impl SchnorrPreSignatureTranscript {
 }
 
 /// A single threshold Schnorr signature share.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdSchnorrSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,

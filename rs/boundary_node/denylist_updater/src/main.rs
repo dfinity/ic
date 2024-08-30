@@ -180,13 +180,13 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Clone, PartialEq, Hash, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
 struct Entry {
     id: String,
     localities: Vec<String>,
 }
 
-#[derive(Clone, PartialEq, Hash, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
 struct Entries(Vec<Entry>);
 
 impl Entries {

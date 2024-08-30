@@ -406,7 +406,7 @@ fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
     make_module_wat_with_write_fun(heap_size, write_fun)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,

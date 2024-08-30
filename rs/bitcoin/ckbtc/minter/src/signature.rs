@@ -15,7 +15,7 @@ const FAKE_SIG: [u8; MAX_ENCODED_SIGNATURE_LEN] = [
 
 // DER-encoded ECDSA signature with an trailing byte indicating
 // the signature type (SIGHASH_ALL in our case).
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodedSignature(Cow<'static, [u8]>);
 
 impl fmt::Display for EncodedSignature {

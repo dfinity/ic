@@ -6,7 +6,7 @@ use crate::{governance::MAX_DISSOLVE_DELAY_SECONDS, pb::v1::NeuronState};
 /// changes. After we make sure all neuron mutations or creations must mutate states to valid ones
 /// and the invalid states have been migrated to valid ones on the mainnet, we can panic in
 /// conversion when invalid states are encountered.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DissolveStateAndAge {
     /// A non-dissolving neuron has a dissolve delay and an aging since timestamp.
     NotDissolving {

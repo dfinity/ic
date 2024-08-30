@@ -20,7 +20,7 @@ lazy_static::lazy_static! {
     static ref ARCHIVE_STATE: RwLock<ArchiveNodeState> = RwLock::new(ArchiveNodeState::new(ic_nns_constants::LEDGER_CANISTER_ID, 0, None));
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct ArchiveNodeState {
     pub max_memory_size_bytes: usize,
     pub block_height_offset: u64,

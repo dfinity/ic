@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::PathBuf};
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Exporter {
     /// Log metrics at `TRACE` level every 30 seconds.
@@ -22,7 +22,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub exporter: Exporter,

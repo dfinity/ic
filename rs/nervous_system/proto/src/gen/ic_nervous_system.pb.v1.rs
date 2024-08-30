@@ -1,5 +1,5 @@
 #[derive(
-    Copy, Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize,
+    Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize, Copy,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -8,7 +8,7 @@ pub struct Duration {
     pub seconds: ::core::option::Option<u64>,
 }
 #[derive(
-    Copy, Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize,
+    Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize, Copy,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -17,7 +17,7 @@ pub struct GlobalTimeOfDay {
     pub seconds_after_utc_midnight: ::core::option::Option<u64>,
 }
 #[derive(
-    Copy, Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize,
+    Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize, Copy,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -36,14 +36,14 @@ pub struct Image {
     pub base64_encoding: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
-    Copy,
     Eq,
-    Ord,
-    PartialOrd,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     serde::Serialize,
+    Copy,
+    PartialOrd,
+    Ord,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -62,14 +62,14 @@ pub struct Principals {
 }
 /// A Canister that will be transferred to an SNS.
 #[derive(
-    Copy,
     Eq,
-    Ord,
-    PartialOrd,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     serde::Serialize,
+    Ord,
+    PartialOrd,
+    Copy,
 )]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

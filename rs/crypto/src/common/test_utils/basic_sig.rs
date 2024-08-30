@@ -42,7 +42,7 @@ pub fn testvec(
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, EnumIter)]
 pub enum TestVector {
     ED25519_STABILITY_1,
     ED25519_STABILITY_2,

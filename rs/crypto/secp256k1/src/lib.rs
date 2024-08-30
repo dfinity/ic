@@ -46,13 +46,13 @@ lazy_static::lazy_static! {
 }
 
 /// A component of a derivation path
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DerivationIndex(pub Vec<u8>);
 
 /// Derivation Path
 ///
 /// A derivation path is simply a sequence of DerivationIndex
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
 }
@@ -606,7 +606,7 @@ impl PrivateKey {
 }
 
 /// A secp256k1 public key, suitable for verifying ECDSA or BIP340 signatures
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
     key: k256::PublicKey,
 }
@@ -916,7 +916,7 @@ impl PublicKey {
 }
 
 /// An error indicating that recovering the recovery of the signature y parity bit failed.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RecoveryError {
     /// The signature is syntactically invalid and cannot be parsed.
     SignatureParseError(String),
@@ -943,7 +943,7 @@ pub enum RecoveryError {
 /// where `y`, `y'` are computed from the affine x-coordinate together with the curve equation and `n` is the order of the curve.
 /// Note that because the affine coordinates are over `𝔽ₚ`, where `p > n` but `p` and `n` are somewhat close from each other,
 /// the last 2 possibilities often do not exist, see [`RecoveryId::is_x_reduced`].
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryId {
     recid: k256::ecdsa::RecoveryId,
 }

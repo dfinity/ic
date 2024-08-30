@@ -32,7 +32,7 @@ impl Registry {
 /// The payload of a proposal to set the firewall configuration
 ///
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Message)]
 pub struct SetFirewallConfigPayload {
     /// The firewall configuration content
     #[prost(string, tag = "1")]

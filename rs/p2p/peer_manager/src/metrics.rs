@@ -1,7 +1,7 @@
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use prometheus::{Histogram, IntCounter};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct PeerManagerMetrics {
     pub topology_updates: IntCounter,
     pub topology_watcher_update_duration: Histogram,

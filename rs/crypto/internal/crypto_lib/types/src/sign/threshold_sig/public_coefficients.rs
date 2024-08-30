@@ -9,7 +9,7 @@ use strum_macros::IntoStaticStr;
 /// Public coefficients for threshold signatures. This is a generalized public
 /// key.
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, IntoStaticStr, Serialize,
+    Clone, Eq, Debug, IntoStaticStr, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord,
 )]
 pub enum PublicCoefficients {
     Bls12_381(bls12_381::PublicCoefficientsBytes),
@@ -40,7 +40,7 @@ pub mod bls12_381 {
     /// Given a polynomial with secret coefficients <a0, ..., ak> the public
     /// coefficients are the public keys <A0, ..., Ak> corresponding to those
     /// secret keys.
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Eq, Debug, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
     pub struct PublicCoefficientsBytes {
         pub coefficients: Vec<PublicKeyBytes>,
     }

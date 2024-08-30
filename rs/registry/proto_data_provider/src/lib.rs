@@ -21,7 +21,7 @@ pub struct ProtoRegistryDataProvider {
     records: Arc<RwLock<Vec<ProtoRegistryRecord>>>,
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Error, Clone, Debug)]
 pub enum ProtoRegistryDataProviderError {
     #[error("key {key} already exists at version {version}")]
     KeyAlreadyExists {

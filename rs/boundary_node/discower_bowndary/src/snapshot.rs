@@ -3,10 +3,10 @@ use std::fmt::Debug;
 
 pub const IC0_SEED_DOMAIN: &str = "ic0.app";
 
-#[derive(PartialEq, Debug, Default)]
+#[derive(Debug, PartialEq, Default)]
 pub struct NodesChanged(pub bool);
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum NodesSnapshotError {}
 
 pub trait Snapshot: Send + Sync + Clone + Debug {

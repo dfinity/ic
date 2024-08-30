@@ -17,7 +17,7 @@ use std::{
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallRequest {
     ListDeployedSnses(ListDeployedSnsesRequest),
@@ -26,7 +26,7 @@ pub enum CanisterCallRequest {
     DeployNewSns(DeployNewSnsRequest),
     GetBuildMetadata(()),
 }
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Ord, PartialOrd, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum CanisterCallReply {
     Response(Vec<u8>),

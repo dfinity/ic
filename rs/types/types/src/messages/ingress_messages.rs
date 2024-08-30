@@ -34,7 +34,7 @@ use std::{
 };
 
 /// The contents of a signed ingress message.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SignedIngressContent {
     sender: UserId,
     canister_id: CanisterId,
@@ -353,7 +353,7 @@ impl CountBytes for SignedIngress {
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
 /// the message as it was received from the `HttpHandler`.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, ValidateEq)]
 pub struct Ingress {
     pub source: UserId,
     pub receiver: CanisterId,
@@ -448,7 +448,7 @@ impl CountBytes for Ingress {
 }
 
 /// Errors returned when parsing an ingress payload.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ParseIngressError {
     /// The requested subnet method is not available.
     UnknownSubnetMethod,

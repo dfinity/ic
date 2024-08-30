@@ -107,7 +107,7 @@ impl TryFrom<&PublicKeyProto> for CspPop {
 }
 
 /// A problem while reading PoP from a public key protobuf
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CspPopFromPublicKeyProtoError {
     NoPopForAlgorithm {
         algorithm: AlgorithmId,

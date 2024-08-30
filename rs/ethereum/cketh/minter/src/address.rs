@@ -20,7 +20,7 @@ fn keccak(bytes: &[u8]) -> [u8; 32] {
     ic_crypto_sha3::Keccak256::hash(bytes)
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AddressValidationError {
     Invalid { error: String },
     NotSupported(Address),

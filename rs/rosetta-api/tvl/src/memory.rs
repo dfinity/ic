@@ -10,7 +10,7 @@ use std::cell::RefCell;
 const TIMESERIES: MemoryId = MemoryId::new(0);
 
 // All the exchange rates are expressed with USD as base quote.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 pub enum EntryType {
     ICPrice = 0,
     LockedIcp = 1,

@@ -42,7 +42,7 @@ pub struct Testnet {
     routing_table: RoutingTable,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default, Debug)]
 struct Subnet {
     node_ids: Vec<NodeId>,
     nodes: BTreeMap<NodeId, Node>,

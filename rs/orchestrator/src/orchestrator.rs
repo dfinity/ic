@@ -65,7 +65,7 @@ pub struct Orchestrator {
     ipv4_configurator: Option<Ipv4Configurator>,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum OrchestratorInstantiationError {
     /// If an error occurs during key generation
     KeyGenerationError(String),

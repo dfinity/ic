@@ -21,7 +21,7 @@ use crate::{
     TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Action {
     Order,
     Ready,
@@ -46,7 +46,7 @@ impl From<State> for Action {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Task {
     pub name: String,
     pub action: Action,

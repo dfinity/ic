@@ -14,7 +14,7 @@ use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 
 // Payload of the request to update the domain name of an existing node
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateNodeDomainDirectlyPayload {
     pub node_id: NodeId,
     pub domain: Option<String>,

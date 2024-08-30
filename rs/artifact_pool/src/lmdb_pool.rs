@@ -144,7 +144,7 @@ pub(crate) trait PoolArtifact: Sized {
 }
 
 /// A unique representation for each type of supported message.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, AsRefStr, FromRepr)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, AsRefStr, FromRepr)]
 #[repr(u8)]
 pub(crate) enum TypeKey {
     // Consensus messages
@@ -307,7 +307,7 @@ where
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub(crate) struct HeightKey([u8; 8]);
 
 impl AsRef<[u8]> for HeightKey {
@@ -339,7 +339,7 @@ impl From<HeightKey> for Height {
 
 /// DB Meta info about each message type is their min and max height
 /// (inclusive).
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Meta {
     min: HeightKey,
     max: HeightKey,

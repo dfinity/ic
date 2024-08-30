@@ -20,25 +20,25 @@ thread_local! {
 // Registering a transaction
 // https://docs.chainalysis.com/api/kyt/#registration
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Network {
     #[serde(alias = "BITCOIN")]
     Bitcoin,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Asset {
     Btc,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
     Received,
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterTransferRequest {
     pub network: Network,
@@ -47,7 +47,7 @@ pub struct RegisterTransferRequest {
     pub direction: Direction,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterTransferResponse {
     pub transfer_reference: String,
@@ -68,21 +68,21 @@ impl RegisterTransferResponse {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetSummaryRequest {
     pub external_id: ExternalId,
 }
 
 // https://docs.chainalysis.com/api/kyt/#transfers-get-a-summary
-#[derive(Eq, PartialEq, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferSummaryResponse {
     pub updated_at: Option<String>,
 }
 
 // https://docs.chainalysis.com/api/kyt/#withdrawal-attempts-get-a-summary
-#[derive(Eq, PartialEq, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawalSummaryResponse {
     pub updated_at: Option<String>,
@@ -90,7 +90,7 @@ pub struct WithdrawalSummaryResponse {
 
 // Register withdrawal
 // https://docs.chainalysis.com/api/kyt/#transfers-get-a-summary
-#[derive(PartialEq, Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterWithdrawalRequest {
     pub network: Network,
@@ -101,7 +101,7 @@ pub struct RegisterWithdrawalRequest {
     pub attempt_timestamp: String,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterWithdrawalResponse {
     pub updated_at: Option<String>,
@@ -119,13 +119,13 @@ impl RegisterWithdrawalResponse {
 // Alerts
 // https://docs.chainalysis.com/api/kyt/#transfers-get-alerts
 
-#[derive(Eq, PartialEq, Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetAlertsRequest {
     pub external_id: ExternalId,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum AlertLevel {
     Severe,
@@ -134,14 +134,14 @@ pub enum AlertLevel {
     Low,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum ExposureType {
     Direct,
     Indirect,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Alert {
     pub alert_level: AlertLevel,
@@ -155,7 +155,7 @@ pub struct GetAlertsResponse {
     pub alerts: Vec<Alert>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Error {
     pub status: u16,
     pub error: Option<String>,

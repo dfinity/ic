@@ -51,7 +51,7 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
@@ -90,7 +90,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -259,7 +259,7 @@ impl std::fmt::Debug for Request {
 }
 
 /// The context attached when an inter-canister message is rejected.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
     code: RejectCode,
@@ -329,7 +329,7 @@ impl From<UserError> for RejectContext {
 }
 
 /// A union of all possible message payloads.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
@@ -412,7 +412,7 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
@@ -464,7 +464,7 @@ impl Hash for Response {
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),

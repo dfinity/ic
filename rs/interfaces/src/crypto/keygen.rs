@@ -72,7 +72,7 @@ pub trait KeyManager {
     ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckKeysWithRegistryError {
     /// Public key for given (entity, purpose) pair not found at given registry
     /// version.
@@ -121,7 +121,7 @@ impl From<CryptoError> for CheckKeysWithRegistryError {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyRotationOutcome {
     KeyRotated { new_key: PublicKeyProto },
     KeyNotRotated { existing_key: PublicKeyProto },
@@ -138,7 +138,7 @@ impl From<KeyRotationOutcome> for PublicKeyProto {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IDkgKeyRotationResult {
     /// If no key rotation is necessary because the latest rotation was too recent
     LatestRotationTooRecent,

@@ -63,7 +63,7 @@ impl<'de> de::Visitor<'de> for ActionVisitor {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Action {
     Block,
     Limit(u32, Duration),
@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for Action {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Rule {
     subnet_id: Option<Principal>,
     canister_id: Option<Principal>,

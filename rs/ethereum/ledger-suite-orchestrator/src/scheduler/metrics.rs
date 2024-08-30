@@ -95,13 +95,13 @@ impl OrchestratorMetrics {
     }
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct TaskExecutionResult {
     task_name: String,
     result: MetricsResult,
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 enum MetricsResult {
     Ok,
     Err,

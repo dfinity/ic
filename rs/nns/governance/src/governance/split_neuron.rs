@@ -1,5 +1,5 @@
 /// The effect of splitting a neuron. This only includes maturity and staked maturity for now.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SplitNeuronEffect {
     pub transfer_maturity_e8s: u64,
     pub transfer_staked_maturity_e8s: u64,

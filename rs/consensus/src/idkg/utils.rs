@@ -43,7 +43,7 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InvalidChainCacheError(String);
 
 impl Display for InvalidChainCacheError {

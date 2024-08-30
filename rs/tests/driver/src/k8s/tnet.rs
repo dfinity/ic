@@ -90,7 +90,7 @@ impl K8sClient {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 pub struct TNode {
     pub node_id: Option<String>,
     pub name: Option<String>,

@@ -2,7 +2,7 @@ use crate::flag_status::FlagStatus;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LsmtConfig {
     /// Whether LSMT is enabled or not.
     pub lsmt_status: FlagStatus,
@@ -10,7 +10,7 @@ pub struct LsmtConfig {
     pub shard_num_pages: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub state_root: PathBuf,
     /// A feature flag that enables/disables the file backed memory allocator.

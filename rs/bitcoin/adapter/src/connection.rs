@@ -36,7 +36,7 @@ pub struct ConnectionConfig {
 }
 
 /// This enum represents the various states that the connection could be in.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum ConnectionState {
     /// This variant represents that the connection has not yet been connected.
     Initializing,

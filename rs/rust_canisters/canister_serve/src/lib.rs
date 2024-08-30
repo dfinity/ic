@@ -345,7 +345,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,

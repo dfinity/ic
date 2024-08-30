@@ -1,5 +1,5 @@
 /// Firewall configuration - Deprecated
-#[derive(candid::CandidType, serde::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallConfig {
@@ -13,7 +13,7 @@ pub struct FirewallConfig {
     #[prost(string, repeated, tag = "3")]
     pub ipv6_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-#[derive(candid::CandidType, serde::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallRule {
@@ -32,7 +32,7 @@ pub struct FirewallRule {
     #[prost(enumeration = "FirewallRuleDirection", optional, tag = "7")]
     pub direction: ::core::option::Option<i32>,
 }
-#[derive(candid::CandidType, serde::Deserialize, serde::Serialize)]
+#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FirewallRuleSet {
@@ -41,18 +41,18 @@ pub struct FirewallRuleSet {
 }
 /// Available actions for firewall rules
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    ::prost::Enumeration,
     candid::CandidType,
-    serde::Deserialize,
     serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum FirewallAction {
@@ -89,18 +89,18 @@ impl FirewallAction {
     }
 }
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    ::prost::Enumeration,
     candid::CandidType,
-    serde::Deserialize,
     serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum FirewallRuleDirection {

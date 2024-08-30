@@ -252,7 +252,7 @@ fn compute_tls_certificate_key_id(
     Ok(KeyId::try_from(&public_key_cert)?)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct LocalNodePublicKeys {
     pub node_signing_public_key: Option<PublicKeyProto>,
     pub committee_signing_public_key: Option<PublicKeyProto>,

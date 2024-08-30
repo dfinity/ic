@@ -26,7 +26,7 @@ use std::cmp::max;
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
 /// The arguments of the [retrieve_btc] endpoint.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcArgs {
     // amount to retrieve in satoshi
     pub amount: u64,
@@ -36,7 +36,7 @@ pub struct RetrieveBtcArgs {
 }
 
 /// The arguments of the [retrieve_btc_with_approval] endpoint.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcWithApprovalArgs {
     // amount to retrieve in satoshi
     pub amount: u64,
@@ -48,7 +48,7 @@ pub struct RetrieveBtcWithApprovalArgs {
     pub from_subaccount: Option<Subaccount>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcOk {
     // the index of the burn block on the ckbtc ledger
     pub block_index: u64,
@@ -60,7 +60,7 @@ pub enum ErrorCode {
     KytCallFailed = 2,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum RetrieveBtcError {
     /// There is another request for this principal.
     AlreadyProcessing,
@@ -85,7 +85,7 @@ pub enum RetrieveBtcError {
     },
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum RetrieveBtcWithApprovalError {
     /// There is another request for this principal.
     AlreadyProcessing,
@@ -586,7 +586,7 @@ async fn burn_ckbtcs_icrc2(
 }
 
 /// The outcome of an address KYT check.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
     /// The KYT check did not find any issues with the address.
     Clean,

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub suggested_fee: bool,
 }
@@ -35,7 +35,7 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
 
 // A signed transaction contains a list of envelopes. The list exists because we do not know when we create the envelopes which ingress interval is going to be used by the user
 // To support the 24h window of valid transactions a single signed transaction does not contain a single envelope but 24*3600/INGRESS_INTERVAL envelopes, one for every possible ingress interval.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTransaction<'a> {
     pub envelopes: Vec<Envelope<'a>>,
 }
@@ -68,7 +68,7 @@ impl<'a> SignedTransaction<'a> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CanisterMethodName {
     Icrc2Approve,
     Icrc2TransferFrom,
@@ -134,7 +134,7 @@ impl FromStr for CanisterMethodName {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnsignedTransaction {
     pub envelope_contents: Vec<EnvelopeContent>,
 }
@@ -169,7 +169,7 @@ impl UnsignedTransaction {
 }
 
 /// Typed metadata of ConstructionPayloadsRequest.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionPayloadsRequestMetadata {
     /// The memo to use for a ledger transfer.
     #[serde(skip_serializing_if = "Option::is_none")]

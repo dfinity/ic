@@ -2,7 +2,7 @@
 ///
 /// Corresponding mutations are handled by the `root` handler:
 /// See /rs/nns/handlers/root/impl
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NnsCanisterRecord {
@@ -15,7 +15,7 @@ pub struct NnsCanisterRecord {
 /// proposals, and are not reflected in the registry. After genesis, new NNS canisters can only
 /// be added through proposals (see AddNnsCanisterProposalPayload in particular). NNS canisters
 /// added post-genesis are registered in this record.
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NnsCanisterRecords {

@@ -80,7 +80,7 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -96,13 +96,13 @@ pub struct InitArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
+#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
 pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
@@ -114,7 +114,7 @@ pub struct UpgradeArgs {
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
+#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChangeArchiveOptions {
     pub trigger_threshold: Option<usize>,
     pub num_blocks_to_archive: Option<usize>,
@@ -127,7 +127,7 @@ pub struct ChangeArchiveOptions {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),

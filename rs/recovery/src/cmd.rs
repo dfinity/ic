@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
-#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
+#[derive(Clone, Debug, PartialEq, Parser, Serialize, Deserialize)]
 pub enum SubCommand {
     /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),

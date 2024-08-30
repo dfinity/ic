@@ -36,7 +36,7 @@ use std::{
 
 /// Errors which could occur when creating a Dkg payload.
 #[allow(missing_docs)]
-#[derive(PartialEq, Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PayloadCreationError {
     CryptoError(CryptoError),
     StateManagerError(StateManagerError),

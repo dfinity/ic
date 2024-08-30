@@ -546,7 +546,7 @@ impl Peers for PeerWatcher {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 struct SlotEntry<T> {
     conn_id: ConnId,
     commit_id: CommitId,
@@ -1509,7 +1509,7 @@ mod tests {
     async fn large_artifact() {
         use ic_protobuf::p2p::v1 as pb;
 
-        #[derive(Clone, Eq, PartialEq, Debug)]
+        #[derive(PartialEq, Eq, Debug, Clone)]
         pub struct BigArtifact(Vec<u8>);
         impl IdentifiableArtifact for BigArtifact {
             const NAME: &'static str = "big";

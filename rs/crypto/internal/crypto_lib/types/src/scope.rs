@@ -28,7 +28,7 @@ mod tests;
 ///   functionality may include scopes for delegated keys, canister keys and
 ///   others and that design space must not be restricted.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumDiscriminants, IntoStaticStr, Serialize,
+    Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, EnumDiscriminants,
 )]
 // Create an enum `ScopeSchemeNames` used for string matching.
 #[strum_discriminants(name(ScopeSchemeNames))]
@@ -83,7 +83,7 @@ impl From<&Scope> for String {
 ///
 /// Adding a variant here requires no further code changes.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumIter, EnumString, IntoStaticStr, Serialize,
+    Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, EnumString, EnumIter,
 )]
 pub enum ConstScope {
     /// Placeholders, used for testing.
