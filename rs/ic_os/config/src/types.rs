@@ -1,4 +1,5 @@
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
@@ -30,7 +31,7 @@ pub struct IcConfig {
     ic_crypto_path: Option<String>,
     ic_state_path: Option<String>,
     ic_registry_local_store_path: Option<String>,
-    accounts_ssh_authorized_keys_path: Option<String>,
+    ssh_authorized_keys_path: Option<PathBuf>,
     backup_retention_time_seconds: Option<String>,
     backup_purging_interval_seconds: Option<String>,
     malicious_behavior: Option<MaliciousBehaviour>,
@@ -42,13 +43,14 @@ pub struct IcConfig {
 
 #[derive(Debug)]
 pub struct Networking {
-    ipv6_address: String,
-    ipv6_gateway: String,
-    ipv4_address: Option<String>,
-    ipv4_gateway: Option<String>,
-    domain: Option<String>,
+    pub ipv6_prefix: Option<String>,
+    pub ipv6_address: Option<Ipv6Addr>,
+    pub ipv6_gateway: Ipv6Addr,
+    pub ipv4_address: Option<Ipv4Addr>,
+    pub ipv4_gateway: Option<Ipv4Addr>,
+    pub ipv4_prefix_length: Option<u8>,
+    pub domain: Option<String>,
 }
-
 
 impl SetuposConfig {
     pub fn new(
@@ -60,17 +62,19 @@ impl SetuposConfig {
         elasticsearch_tags: Option<String>,
         hostname: String,
         node_operator_private_key_path: Option<PathBuf>,
-        ipv6_address: String,
-        ipv6_gateway: String,
-        ipv4_address: Option<String>,
-        ipv4_gateway: Option<String>,
+        ipv6_prefix: Option<String>,
+        ipv6_address: Option<Ipv6Addr>,
+        ipv6_gateway: Ipv6Addr,
+        ipv4_address: Option<Ipv4Addr>,
+        ipv4_gateway: Option<Ipv4Addr>,
+        ipv4_prefix_length: Option<u8>,
         domain: Option<String>,
         // todo: change verbose to a bool
         verbose: Option<String>,
         ic_crypto_path: Option<String>,
         ic_state_path: Option<String>,
         ic_registry_local_store_path: Option<String>,
-        accounts_ssh_authorized_keys_path: Option<String>,
+        ssh_authorized_keys_path: Option<PathBuf>,
         backup_retention_time_seconds: Option<String>,
         backup_purging_interval_seconds: Option<String>,
         malicious_behavior: Option<MaliciousBehaviour>,
@@ -86,16 +90,18 @@ impl SetuposConfig {
             elasticsearch_tags,
             hostname,
             node_operator_private_key_path,
+            ipv6_prefix,
             ipv6_address,
             ipv6_gateway,
             ipv4_address,
             ipv4_gateway,
+            ipv4_prefix_length,
             domain,
             verbose,
             ic_crypto_path,
             ic_state_path,
             ic_registry_local_store_path,
-            accounts_ssh_authorized_keys_path,
+            ssh_authorized_keys_path,
             backup_retention_time_seconds,
             backup_purging_interval_seconds,
             malicious_behavior,
@@ -129,16 +135,18 @@ impl IcConfig {
         elasticsearch_tags: Option<String>,
         hostname: String,
         node_operator_private_key_path: Option<PathBuf>,
-        ipv6_address: String,
-        ipv6_gateway: String,
-        ipv4_address: Option<String>,
-        ipv4_gateway: Option<String>,
+        ipv6_prefix: Option<String>,
+        ipv6_address: Option<Ipv6Addr>,
+        ipv6_gateway: Ipv6Addr,
+        ipv4_address: Option<Ipv4Addr>,
+        ipv4_gateway: Option<Ipv4Addr>,
+        ipv4_prefix_length: Option<u8>,
         domain: Option<String>,
         verbose: Option<String>,
         ic_crypto_path: Option<String>,
         ic_state_path: Option<String>,
         ic_registry_local_store_path: Option<String>,
-        accounts_ssh_authorized_keys_path: Option<String>,
+        ssh_authorized_keys_path: Option<PathBuf>,
         backup_retention_time_seconds: Option<String>,
         backup_purging_interval_seconds: Option<String>,
         malicious_behavior: Option<MaliciousBehaviour>,
@@ -148,10 +156,12 @@ impl IcConfig {
         socks_proxy: Option<String>,
     ) -> Self {
         let networking = Networking::new(
+            ipv6_prefix,
             ipv6_address,
             ipv6_gateway,
             ipv4_address,
             ipv4_gateway,
+            ipv4_prefix_length,
             domain,
         );
 
@@ -167,7 +177,7 @@ impl IcConfig {
             ic_crypto_path,
             ic_state_path,
             ic_registry_local_store_path,
-            accounts_ssh_authorized_keys_path,
+            ssh_authorized_keys_path,
             backup_retention_time_seconds,
             backup_purging_interval_seconds,
             malicious_behavior,
@@ -180,18 +190,22 @@ impl IcConfig {
 }
 
 impl Networking {
-    fn new(
-        ipv6_address: String,
-        ipv6_gateway: String,
-        ipv4_address: Option<String>,
-        ipv4_gateway: Option<String>,
+    pub fn new(
+        ipv6_prefix: Option<String>,
+        ipv6_address: Option<Ipv6Addr>,
+        ipv6_gateway: Ipv6Addr,
+        ipv4_address: Option<Ipv4Addr>,
+        ipv4_gateway: Option<Ipv4Addr>,
+        ipv4_prefix_length: Option<u8>,
         domain: Option<String>,
     ) -> Self {
         Networking {
+            ipv6_prefix,
             ipv6_address,
             ipv6_gateway,
             ipv4_address,
             ipv4_gateway,
+            ipv4_prefix_length,
             domain,
         }
     }
