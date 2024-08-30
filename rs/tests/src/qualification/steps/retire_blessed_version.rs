@@ -58,7 +58,7 @@ impl Step for RetireBlessedVersions {
             let record = replica_versions
                 .iter()
                 .find_map(|(key, rec)| {
-                    if key.eq(&r) {
+                    if key.eq(r) {
                         return Some(rec);
                     }
                     None

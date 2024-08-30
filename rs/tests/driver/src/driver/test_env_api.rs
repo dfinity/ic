@@ -486,14 +486,15 @@ impl TopologySnapshot {
                 let r = self
                     .local_registry
                     .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to get entry {} for replica version {}", key)
-                    });
+                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {}", key));
                 (
-                    key,
-                    r.as_ref().map(|v| {
-                        ReplicaVersionRecord::decode(v.as_slice()).expect("Invalid registry value")
-                    }),
+                    key.clone(),
+                    r.as_ref()
+                        .map(|v| {
+                            ReplicaVersionRecord::decode(v.as_slice())
+                                .expect("Invalid registry value")
+                        })
+                        .unwrap(),
                 )
             })
             .collect_vec())
