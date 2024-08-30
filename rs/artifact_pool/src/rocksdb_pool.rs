@@ -1251,11 +1251,13 @@ mod tests {
     where
         T: FnOnce(RocksDBConfig, ReplicaLogger) + panic::UnwindSafe,
     {
-        ic_test_artifact_pool::artifact_pool_config::with_test_rocksdb_pool_config(|config| {
-            let result = panic::catch_unwind(|| test(config.clone(), make_logger()));
-            destroy(&config);
-            check_ok!(result);
-        })
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_rocksdb_pool_config(
+            |config| {
+                let result = panic::catch_unwind(|| test(config.clone(), make_logger()));
+                destroy(&config);
+                check_ok!(result);
+            },
+        )
     }
 
     impl PoolTestHelper for RocksDBConfig {
@@ -1265,12 +1267,14 @@ mod tests {
         where
             T: FnOnce(RocksDBConfig, ReplicaLogger) -> R + panic::UnwindSafe,
         {
-            ic_test_artifact_pool::artifact_pool_config::with_test_rocksdb_pool_config(|config| {
-                let result = panic::catch_unwind(|| test(config.clone(), make_logger()));
-                destroy(&config);
-                assert!(result.is_ok());
-                result.unwrap()
-            })
+            ic_test_utilities_artifact_pool::artifact_pool_config::with_test_rocksdb_pool_config(
+                |config| {
+                    let result = panic::catch_unwind(|| test(config.clone(), make_logger()));
+                    destroy(&config);
+                    assert!(result.is_ok());
+                    result.unwrap()
+                },
+            )
         }
 
         fn new_consensus_pool(self, log: ReplicaLogger) -> Self::PersistentHeightIndexedPool {

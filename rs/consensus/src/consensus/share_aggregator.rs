@@ -219,62 +219,64 @@ mod tests {
     /// objects are not constructed a second time (now that the full object
     /// is already in the pool).
     fn test_basic_on_state_change() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies {
-                mut pool,
-                membership,
-                crypto,
-                ..
-            } = dependencies(pool_config, 1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    crypto,
+                    ..
+                } = dependencies(pool_config, 1);
 
-            let block = pool.make_next_block();
-            let signer = block.signature.signer;
-            let current_beacon = pool.validated().random_beacon().get_highest().unwrap();
-            let beacon_share = RandomBeaconShare::fake(&current_beacon, signer);
-            let notarization_share = NotarizationShare::fake(block.as_ref(), signer);
+                let block = pool.make_next_block();
+                let signer = block.signature.signer;
+                let current_beacon = pool.validated().random_beacon().get_highest().unwrap();
+                let beacon_share = RandomBeaconShare::fake(&current_beacon, signer);
+                let notarization_share = NotarizationShare::fake(block.as_ref(), signer);
 
-            // Initialize pool
-            pool.insert_validated(beacon_share);
-            pool.insert_validated(block.clone());
-            pool.insert_validated(notarization_share);
+                // Initialize pool
+                pool.insert_validated(beacon_share);
+                pool.insert_validated(block.clone());
+                pool.insert_validated(notarization_share);
 
-            let message_routing = Arc::new(FakeMessageRouting::new());
+                let message_routing = Arc::new(FakeMessageRouting::new());
 
-            let aggregator =
-                ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
-            let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+                let aggregator =
+                    ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
+                let messages = aggregator.on_state_change(&PoolReader::new(&pool));
 
-            let beacon_was_created = messages.iter().any(|x| match x {
-                ConsensusMessage::RandomBeacon(random_beacon) => {
-                    pool.insert_validated(random_beacon.clone());
-                    true
-                }
-                _ => false,
-            });
+                let beacon_was_created = messages.iter().any(|x| match x {
+                    ConsensusMessage::RandomBeacon(random_beacon) => {
+                        pool.insert_validated(random_beacon.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            let notarization_was_created = messages.iter().any(|x| match x {
-                ConsensusMessage::Notarization(notarization) => {
-                    pool.insert_validated(notarization.clone());
-                    true
-                }
-                _ => false,
-            });
+                let notarization_was_created = messages.iter().any(|x| match x {
+                    ConsensusMessage::Notarization(notarization) => {
+                        pool.insert_validated(notarization.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            assert!(beacon_was_created);
-            assert!(notarization_was_created);
-            assert_eq!(messages.len(), 2);
+                assert!(beacon_was_created);
+                assert!(notarization_was_created);
+                assert_eq!(messages.len(), 2);
 
-            let finalization_share = FinalizationShare::fake(block.as_ref(), signer);
-            pool.insert_validated(finalization_share);
+                let finalization_share = FinalizationShare::fake(block.as_ref(), signer);
+                pool.insert_validated(finalization_share);
 
-            let messages = aggregator.on_state_change(&PoolReader::new(&pool));
-            let finalization_was_created = messages
-                .iter()
-                .any(|x| matches!(x, ConsensusMessage::Finalization(_)));
+                let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+                let finalization_was_created = messages
+                    .iter()
+                    .any(|x| matches!(x, ConsensusMessage::Finalization(_)));
 
-            assert!(finalization_was_created);
-            assert_eq!(messages.len(), 1);
-        })
+                assert!(finalization_was_created);
+                assert_eq!(messages.len(), 1);
+            },
+        )
     }
 
     #[test]
@@ -323,74 +325,76 @@ mod tests {
     fn catch_up_package_aggregation(
         oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> CatchUpPackage {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
-            let interval_length = 3;
-            let Dependencies {
-                mut pool,
-                membership,
-                crypto,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    INITIAL_REGISTRY_VERSION,
-                    SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                )],
-            );
-            let message_routing = Arc::new(FakeMessageRouting::new());
-            let aggregator =
-                ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
+                let interval_length = 3;
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    crypto,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(
+                        INITIAL_REGISTRY_VERSION,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(interval_length)
+                            .build(),
+                    )],
+                );
+                let message_routing = Arc::new(FakeMessageRouting::new());
+                let aggregator =
+                    ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
 
-            // Skip till next DKG interval.
-            pool.advance_round_normal_operation_n(interval_length);
+                // Skip till next DKG interval.
+                pool.advance_round_normal_operation_n(interval_length);
 
-            // Prepare beacon and block
-            let beacon = pool.make_next_beacon();
-            pool.insert_validated(beacon.clone());
-            let block = pool.make_next_block();
-            assert!(block.content.as_ref().payload.is_summary());
-            pool.insert_validated(block.clone());
-            pool.notarize(&block);
-            pool.finalize(&block);
+                // Prepare beacon and block
+                let beacon = pool.make_next_beacon();
+                pool.insert_validated(beacon.clone());
+                let block = pool.make_next_block();
+                assert!(block.content.as_ref().payload.is_summary());
+                pool.insert_validated(block.clone());
+                pool.notarize(&block);
+                pool.finalize(&block);
 
-            // Insert a few CUP shares
-            let new_cup_share = |node_id: NodeId| -> CatchUpPackageShare {
-                let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
-                CatchUpPackageShare {
-                    content: (&CatchUpContent::new(
-                        HashedBlock::new(
-                            ic_types::crypto::crypto_hash,
-                            block.content.as_ref().clone(),
-                        ),
-                        HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon.clone()),
-                        state_hash,
-                        oldest_registry_version_in_use_by_replicated_state,
-                    ))
-                        .into(),
-                    signature: ThresholdSignatureShare::fake(node_id),
-                }
-            };
-            let share0 = new_cup_share(node_test_id(0));
-            let share1 = new_cup_share(node_test_id(1));
-            let share2 = new_cup_share(node_test_id(2));
-            pool.insert_validated(share0.clone());
-            pool.insert_validated(share1);
-            pool.insert_validated(share2);
+                // Insert a few CUP shares
+                let new_cup_share = |node_id: NodeId| -> CatchUpPackageShare {
+                    let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
+                    CatchUpPackageShare {
+                        content: (&CatchUpContent::new(
+                            HashedBlock::new(
+                                ic_types::crypto::crypto_hash,
+                                block.content.as_ref().clone(),
+                            ),
+                            HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon.clone()),
+                            state_hash,
+                            oldest_registry_version_in_use_by_replicated_state,
+                        ))
+                            .into(),
+                        signature: ThresholdSignatureShare::fake(node_id),
+                    }
+                };
+                let share0 = new_cup_share(node_test_id(0));
+                let share1 = new_cup_share(node_test_id(1));
+                let share2 = new_cup_share(node_test_id(2));
+                pool.insert_validated(share0.clone());
+                pool.insert_validated(share1);
+                pool.insert_validated(share2);
 
-            // Check if CUP is made from the shares
-            let mut messages = aggregator.on_state_change(&PoolReader::new(&pool));
-            assert!(messages.len() == 1);
-            let cup = match messages.pop() {
-                Some(ConsensusMessage::CatchUpPackage(x)) => x,
-                x => panic!("Expecting CatchUpPackageShare but got {:?}\n", x),
-            };
+                // Check if CUP is made from the shares
+                let mut messages = aggregator.on_state_change(&PoolReader::new(&pool));
+                assert!(messages.len() == 1);
+                let cup = match messages.pop() {
+                    Some(ConsensusMessage::CatchUpPackage(x)) => x,
+                    x => panic!("Expecting CatchUpPackageShare but got {:?}\n", x),
+                };
 
-            assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);
-            cup
-        })
+                assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);
+                cup
+            },
+        )
     }
 }

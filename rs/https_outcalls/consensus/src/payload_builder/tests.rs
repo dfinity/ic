@@ -964,7 +964,7 @@ pub(crate) fn test_config_with_http_feature<T>(
     let committee = (0..num_nodes)
         .map(|id| node_test_id(id as u64))
         .collect::<Vec<_>>();
-    ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
+    ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut subnet_record = SubnetRecordBuilder::from(&committee).build();
 
         subnet_record.features = Some(

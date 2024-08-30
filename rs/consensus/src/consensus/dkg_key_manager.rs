@@ -563,114 +563,116 @@ mod tests {
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let nodes: Vec<_> = (0..1).map(node_test_id).collect();
-                let dkg_interval_len = 3;
-                let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
-                    pool_config,
-                    subnet_test_id(222),
-                    vec![(
-                        1,
-                        SubnetRecordBuilder::from(&nodes)
-                            .with_dkg_interval_length(dkg_interval_len)
-                            .build(),
-                    )],
-                );
-                let csp = Arc::new(CryptoReturningOk::default());
-                let mut key_manager = DkgKeyManager::new(
-                    MetricsRegistry::new(),
-                    csp.clone(),
-                    logger,
-                    &PoolReader::new(&pool),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let nodes: Vec<_> = (0..1).map(node_test_id).collect();
+                    let dkg_interval_len = 3;
+                    let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                        pool_config,
+                        subnet_test_id(222),
+                        vec![(
+                            1,
+                            SubnetRecordBuilder::from(&nodes)
+                                .with_dkg_interval_length(dkg_interval_len)
+                                .build(),
+                        )],
+                    );
+                    let csp = Arc::new(CryptoReturningOk::default());
+                    let mut key_manager = DkgKeyManager::new(
+                        MetricsRegistry::new(),
+                        csp.clone(),
+                        logger,
+                        &PoolReader::new(&pool),
+                    );
 
-                // Emulate the first invocation of the dkg key manager and make sure all
-                // transcripts (exactly 2) were loaded from the genesis summary.
-                let block = pool.get_cache().finalized_block();
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert_eq!(dkg_summary.height, Height::from(0));
-                key_manager.on_state_change(&PoolReader::new(&pool));
-                key_manager.sync();
-                let summary_0_transcripts = dkg_summary
-                    .current_transcripts()
-                    .values()
-                    .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id)
-                    .collect::<HashSet<_>>();
-                // We expect the genesis summary to contain exactly 2 current transcripts.
-                assert_eq!(summary_0_transcripts.len(), 2);
-                // All of them should be among the loaded transcripts.
-                summary_0_transcripts.iter().for_each(|id| {
-                    assert!(csp.loaded_transcripts.read().unwrap().contains(id));
+                    // Emulate the first invocation of the dkg key manager and make sure all
+                    // transcripts (exactly 2) were loaded from the genesis summary.
+                    let block = pool.get_cache().finalized_block();
+                    let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                    assert_eq!(dkg_summary.height, Height::from(0));
+                    key_manager.on_state_change(&PoolReader::new(&pool));
+                    key_manager.sync();
+                    let summary_0_transcripts = dkg_summary
+                        .current_transcripts()
+                        .values()
+                        .chain(dkg_summary.next_transcripts().values())
+                        .map(|t| t.dkg_id)
+                        .collect::<HashSet<_>>();
+                    // We expect the genesis summary to contain exactly 2 current transcripts.
+                    assert_eq!(summary_0_transcripts.len(), 2);
+                    // All of them should be among the loaded transcripts.
+                    summary_0_transcripts.iter().for_each(|id| {
+                        assert!(csp.loaded_transcripts.read().unwrap().contains(id));
+                    });
+                    // Also all of them should be submitted for a retention.
+                    assert_eq!(
+                        csp.retained_transcripts.read().unwrap()[0],
+                        summary_0_transcripts
+                    );
+
+                    // Fast-forward to the third summary block.
+                    // We skip the second block, because our mocked crypto would always return a
+                    // mocked transcript, even if there are not enough dealings. So in the second
+                    // block we would have next transcripts with the mocked crypto, but not with the
+                    // real crypto. Hence we skip this step and repeat the checks for the 3rd
+                    // summary. We first check in the situation where there is no CUP.
+                    pool.advance_round_normal_operation_no_cup_n(2 * (dkg_interval_len + 1));
+                    assert_eq!(
+                        pool.get_cache().catch_up_package().height(),
+                        Height::from(0)
+                    );
+
+                    let block = pool.get_cache().finalized_block();
+                    let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                    assert_eq!(dkg_summary.height, Height::from(2 * (dkg_interval_len + 1)));
+                    let summary_2_transcripts = dkg_summary
+                        .current_transcripts()
+                        .values()
+                        .chain(dkg_summary.next_transcripts().values())
+                        .map(|t| t.dkg_id)
+                        .collect::<HashSet<_>>();
+                    // For the 3rd summary we expect 2 current and 2 next transcripts.
+                    assert_eq!(summary_2_transcripts.len(), 4);
+                    key_manager.on_state_change(&PoolReader::new(&pool));
+                    key_manager.sync();
+                    summary_2_transcripts.iter().for_each(|id| {
+                        assert!(csp.loaded_transcripts.read().unwrap().contains(id));
+                    });
+                    let retained = csp.retained_transcripts.read().unwrap()[1].clone();
+                    assert_eq!(
+                        retained,
+                        summary_2_transcripts
+                            .union(&summary_0_transcripts)
+                            .cloned()
+                            .collect()
+                    );
+
+                    pool.advance_round_normal_operation_n(dkg_interval_len + 1);
+                    assert_eq!(
+                        pool.get_cache().catch_up_package().height(),
+                        Height::from(3 * (dkg_interval_len + 1))
+                    );
+                    let block = pool.get_cache().finalized_block();
+                    let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                    assert_eq!(dkg_summary.height, Height::from(3 * (dkg_interval_len + 1)));
+                    let summary_3_transcripts = dkg_summary
+                        .current_transcripts()
+                        .values()
+                        .chain(dkg_summary.next_transcripts().values())
+                        .map(|t| t.dkg_id)
+                        .collect::<HashSet<_>>();
+                    // For the 3rd summary we expect 2 current and 2 next transcripts.
+                    assert_eq!(summary_3_transcripts.len(), 4);
+                    key_manager.on_state_change(&PoolReader::new(&pool));
+                    key_manager.sync();
+                    summary_3_transcripts.iter().for_each(|id| {
+                        assert!(csp.loaded_transcripts.read().unwrap().contains(id));
+                    });
+                    let retained = csp.retained_transcripts.read().unwrap()[2].clone();
+                    assert_eq!(retained, summary_3_transcripts);
                 });
-                // Also all of them should be submitted for a retention.
-                assert_eq!(
-                    csp.retained_transcripts.read().unwrap()[0],
-                    summary_0_transcripts
-                );
-
-                // Fast-forward to the third summary block.
-                // We skip the second block, because our mocked crypto would always return a
-                // mocked transcript, even if there are not enough dealings. So in the second
-                // block we would have next transcripts with the mocked crypto, but not with the
-                // real crypto. Hence we skip this step and repeat the checks for the 3rd
-                // summary. We first check in the situation where there is no CUP.
-                pool.advance_round_normal_operation_no_cup_n(2 * (dkg_interval_len + 1));
-                assert_eq!(
-                    pool.get_cache().catch_up_package().height(),
-                    Height::from(0)
-                );
-
-                let block = pool.get_cache().finalized_block();
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert_eq!(dkg_summary.height, Height::from(2 * (dkg_interval_len + 1)));
-                let summary_2_transcripts = dkg_summary
-                    .current_transcripts()
-                    .values()
-                    .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id)
-                    .collect::<HashSet<_>>();
-                // For the 3rd summary we expect 2 current and 2 next transcripts.
-                assert_eq!(summary_2_transcripts.len(), 4);
-                key_manager.on_state_change(&PoolReader::new(&pool));
-                key_manager.sync();
-                summary_2_transcripts.iter().for_each(|id| {
-                    assert!(csp.loaded_transcripts.read().unwrap().contains(id));
-                });
-                let retained = csp.retained_transcripts.read().unwrap()[1].clone();
-                assert_eq!(
-                    retained,
-                    summary_2_transcripts
-                        .union(&summary_0_transcripts)
-                        .cloned()
-                        .collect()
-                );
-
-                pool.advance_round_normal_operation_n(dkg_interval_len + 1);
-                assert_eq!(
-                    pool.get_cache().catch_up_package().height(),
-                    Height::from(3 * (dkg_interval_len + 1))
-                );
-                let block = pool.get_cache().finalized_block();
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert_eq!(dkg_summary.height, Height::from(3 * (dkg_interval_len + 1)));
-                let summary_3_transcripts = dkg_summary
-                    .current_transcripts()
-                    .values()
-                    .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id)
-                    .collect::<HashSet<_>>();
-                // For the 3rd summary we expect 2 current and 2 next transcripts.
-                assert_eq!(summary_3_transcripts.len(), 4);
-                key_manager.on_state_change(&PoolReader::new(&pool));
-                key_manager.sync();
-                summary_3_transcripts.iter().for_each(|id| {
-                    assert!(csp.loaded_transcripts.read().unwrap().contains(id));
-                });
-                let retained = csp.retained_transcripts.read().unwrap()[2].clone();
-                assert_eq!(retained, summary_3_transcripts);
-            });
-        });
+            },
+        );
     }
 }

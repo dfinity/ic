@@ -665,12 +665,12 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
+    use ic_test_utilities_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -748,32 +748,34 @@ mod tests {
 
     #[test]
     fn test_halt_subnet_via_registry() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let interval_length = 99;
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let committee: Vec<_> = (0..4).map(node_test_id).collect();
+                let interval_length = 99;
 
-            // ensure that a consensus implementation with a subnet record with is_halted =
-            // false returns changes
-            let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(interval_length)
-                    .with_is_halted(false)
-                    .build(),
-                pool_config.clone(),
-            );
+                // ensure that a consensus implementation with a subnet record with is_halted =
+                // false returns changes
+                let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .with_is_halted(false)
+                        .build(),
+                    pool_config.clone(),
+                );
 
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
+                assert!(!consensus_impl.on_state_change(&pool).is_empty());
 
-            // ensure that an consensus_impl with a subnet record with is_halted =
-            // true returns no changes
-            let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(interval_length)
-                    .with_is_halted(true)
-                    .build(),
-                pool_config,
-            );
-            assert!(consensus_impl.on_state_change(&pool).is_empty());
-        })
+                // ensure that an consensus_impl with a subnet record with is_halted =
+                // true returns no changes
+                let (consensus_impl, pool, _) = set_up_consensus_with_subnet_record(
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .with_is_halted(true)
+                        .build(),
+                    pool_config,
+                );
+                assert!(consensus_impl.on_state_change(&pool).is_empty());
+            },
+        )
     }
 }

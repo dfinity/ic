@@ -213,273 +213,277 @@ mod tests {
     /// Do basic notary validations
     #[test]
     fn test_notary_behavior() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
-            let dkg_interval_length = 30;
-            let Dependencies {
-                mut pool,
-                membership,
-                replica_config,
-                time_source,
-                crypto,
-                state_manager,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::new(0));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let committee = vec![node_test_id(0)];
+                let dkg_interval_length = 30;
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    replica_config,
+                    time_source,
+                    crypto,
+                    state_manager,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
+                );
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::new(0));
 
-            pool.advance_round_normal_operation();
+                pool.advance_round_normal_operation();
 
-            let h = PoolReader::new(&pool).get_notarized_height();
-            assert_eq!(h, Height::from(1));
+                let h = PoolReader::new(&pool).get_notarized_height();
+                assert_eq!(h, Height::from(1));
 
-            // 1. insert a new block proposal and check if notarization share is created
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
+                // 1. insert a new block proposal and check if notarization share is created
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
 
-            let metrics_registry = MetricsRegistry::new();
+                let metrics_registry = MetricsRegistry::new();
 
-            let notary = Notary::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config,
-                membership.clone(),
-                crypto,
-                state_manager.clone(),
-                metrics_registry,
-                no_op_logger(),
-            );
-            // Time has not expired for rank 0 initially
-            let run_notary = |pool: &dyn ConsensusPool| {
-                let reader = PoolReader::new(pool);
-                notary.on_state_change(&reader)
-            };
-            assert!(run_notary(&pool).is_empty());
+                let notary = Notary::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    membership.clone(),
+                    crypto,
+                    state_manager.clone(),
+                    metrics_registry,
+                    no_op_logger(),
+                );
+                // Time has not expired for rank 0 initially
+                let run_notary = |pool: &dyn ConsensusPool| {
+                    let reader = PoolReader::new(pool);
+                    notary.on_state_change(&reader)
+                };
+                assert!(run_notary(&pool).is_empty());
 
-            // Time has expired for rank 0, do something
-            time_source
-                .set_time(
-                    time_source.get_relative_time()
-                        + get_adjusted_notary_delay(
-                            membership.as_ref(),
-                            &PoolReader::new(&pool),
-                            state_manager.as_ref(),
-                            &no_op_logger(),
-                            Height::from(1),
-                            Rank(0),
-                        )
-                        .unwrap(),
-                )
-                .unwrap();
-            assert!(match run_notary(&pool).as_slice() {
-                [share] => {
-                    pool.insert_validated(share.clone());
-                    true
-                }
-                _ => false,
-            });
+                // Time has expired for rank 0, do something
+                time_source
+                    .set_time(
+                        time_source.get_relative_time()
+                            + get_adjusted_notary_delay(
+                                membership.as_ref(),
+                                &PoolReader::new(&pool),
+                                state_manager.as_ref(),
+                                &no_op_logger(),
+                                Height::from(1),
+                                Rank(0),
+                            )
+                            .unwrap(),
+                    )
+                    .unwrap();
+                assert!(match run_notary(&pool).as_slice() {
+                    [share] => {
+                        pool.insert_validated(share.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            // 2. Make sure we do not create a duplicate share
-            assert!(run_notary(&pool).is_empty());
+                // 2. Make sure we do not create a duplicate share
+                assert!(run_notary(&pool).is_empty());
 
-            pool.notarize(&block);
-            assert_eq!(
-                PoolReader::new(&pool).get_notarized_height(),
-                Height::from(2)
-            );
+                pool.notarize(&block);
+                assert_eq!(
+                    PoolReader::new(&pool).get_notarized_height(),
+                    Height::from(2)
+                );
 
-            // 3. Make sure the lowest block is selected for notarization
-            pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
+                // 3. Make sure the lowest block is selected for notarization
+                pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
 
-            // Insert block with rank 20
-            let base_block = pool.make_next_block();
-            let mut twenty_block = base_block.clone();
-            twenty_block.content.as_mut().rank = Rank(20);
-            twenty_block.update_content();
-            pool.insert_validated(twenty_block.clone());
-            run_notary(&pool);
+                // Insert block with rank 20
+                let base_block = pool.make_next_block();
+                let mut twenty_block = base_block.clone();
+                twenty_block.content.as_mut().rank = Rank(20);
+                twenty_block.update_content();
+                pool.insert_validated(twenty_block.clone());
+                run_notary(&pool);
 
-            // Insert block with lower rank 10
-            let mut ten_block = base_block.clone();
-            ten_block.content.as_mut().rank = Rank(10);
-            ten_block.update_content();
-            pool.insert_validated(ten_block.clone());
+                // Insert block with lower rank 10
+                let mut ten_block = base_block.clone();
+                ten_block.content.as_mut().rank = Rank(10);
+                ten_block.update_content();
+                pool.insert_validated(ten_block.clone());
 
-            // Time has not expired for the lowest ranked block
-            time_source
-                .set_time(
-                    time_source.get_relative_time()
-                        + get_adjusted_notary_delay(
-                            membership.as_ref(),
-                            &PoolReader::new(&pool),
-                            state_manager.as_ref(),
-                            &no_op_logger(),
-                            Height::from(1),
-                            Rank(9),
-                        )
-                        .unwrap(),
-                )
-                .unwrap();
-            assert!(run_notary(&pool).is_empty());
+                // Time has not expired for the lowest ranked block
+                time_source
+                    .set_time(
+                        time_source.get_relative_time()
+                            + get_adjusted_notary_delay(
+                                membership.as_ref(),
+                                &PoolReader::new(&pool),
+                                state_manager.as_ref(),
+                                &no_op_logger(),
+                                Height::from(1),
+                                Rank(9),
+                            )
+                            .unwrap(),
+                    )
+                    .unwrap();
+                assert!(run_notary(&pool).is_empty());
 
-            // Time has expired for both rank 10 and 20
-            time_source
-                .set_time(
-                    time_source.get_relative_time()
-                        + get_adjusted_notary_delay(
-                            membership.as_ref(),
-                            &PoolReader::new(&pool),
-                            state_manager.as_ref(),
-                            &no_op_logger(),
-                            Height::from(1),
-                            twenty_block.rank(),
-                        )
-                        .unwrap(),
-                )
-                .unwrap();
-            assert!(match run_notary(&pool).as_slice() {
-                [share] => {
-                    assert_eq!(&share.content.block, ten_block.content.get_hash());
-                    pool.insert_validated(share.clone());
-                    true
-                }
-                _ => false,
-            });
+                // Time has expired for both rank 10 and 20
+                time_source
+                    .set_time(
+                        time_source.get_relative_time()
+                            + get_adjusted_notary_delay(
+                                membership.as_ref(),
+                                &PoolReader::new(&pool),
+                                state_manager.as_ref(),
+                                &no_op_logger(),
+                                Height::from(1),
+                                twenty_block.rank(),
+                            )
+                            .unwrap(),
+                    )
+                    .unwrap();
+                assert!(match run_notary(&pool).as_slice() {
+                    [share] => {
+                        assert_eq!(&share.content.block, ten_block.content.get_hash());
+                        pool.insert_validated(share.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            // 4. Make sure blocks with lower ranks do get notarized even after higher ranks
-            // are notarized
-            let mut five_block = base_block.clone();
-            five_block.content.as_mut().rank = Rank(5);
-            five_block.update_content();
-            pool.insert_validated(five_block.clone());
+                // 4. Make sure blocks with lower ranks do get notarized even after higher ranks
+                // are notarized
+                let mut five_block = base_block.clone();
+                five_block.content.as_mut().rank = Rank(5);
+                five_block.update_content();
+                pool.insert_validated(five_block.clone());
 
-            assert!(match run_notary(&pool).as_slice() {
-                [share] => {
-                    assert_eq!(&share.content.block, five_block.content.get_hash());
-                    pool.insert_validated(share.clone());
-                    true
-                }
-                _ => false,
-            });
+                assert!(match run_notary(&pool).as_slice() {
+                    [share] => {
+                        assert_eq!(&share.content.block, five_block.content.get_hash());
+                        pool.insert_validated(share.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            // 5. Test how we deal with equivocating block makers, resulting in multiple
-            // blocks with the same rank
+                // 5. Test how we deal with equivocating block makers, resulting in multiple
+                // blocks with the same rank
 
-            // create and insert a rank 1 block, and ensure a notarization share is created
-            // for it
-            let mut one_block = base_block;
-            one_block.content.as_mut().rank = Rank(1);
-            one_block.update_content();
-            pool.insert_validated(one_block.clone());
-            println!("one_block.hash {:?}", one_block.content.get_hash());
+                // create and insert a rank 1 block, and ensure a notarization share is created
+                // for it
+                let mut one_block = base_block;
+                one_block.content.as_mut().rank = Rank(1);
+                one_block.update_content();
+                pool.insert_validated(one_block.clone());
+                println!("one_block.hash {:?}", one_block.content.get_hash());
 
-            assert!(match run_notary(&pool).as_slice() {
-                [share] => {
-                    assert_eq!(&share.content.block, one_block.content.get_hash());
-                    pool.insert_validated(share.clone());
-                    true
-                }
-                _ => false,
-            });
+                assert!(match run_notary(&pool).as_slice() {
+                    [share] => {
+                        assert_eq!(&share.content.block, one_block.content.get_hash());
+                        pool.insert_validated(share.clone());
+                        true
+                    }
+                    _ => false,
+                });
 
-            // create and insert another rank 1 block (by modifying the time stamp in the
-            // other rank 1 block), and ensure that this one will also be
-            // notarized
-            let mut one_block_prime = one_block.clone();
-            one_block_prime.content.as_mut().context.time =
-                one_block.content.as_ref().context.time + Duration::from_millis(1);
-            one_block_prime.update_content();
-            pool.insert_validated(one_block_prime.clone());
+                // create and insert another rank 1 block (by modifying the time stamp in the
+                // other rank 1 block), and ensure that this one will also be
+                // notarized
+                let mut one_block_prime = one_block.clone();
+                one_block_prime.content.as_mut().context.time =
+                    one_block.content.as_ref().context.time + Duration::from_millis(1);
+                one_block_prime.update_content();
+                pool.insert_validated(one_block_prime.clone());
 
-            assert!(match run_notary(&pool).as_slice() {
-                [share] => {
-                    assert_eq!(&share.content.block, one_block_prime.content.get_hash());
-                    pool.insert_validated(share.clone());
-                    true
-                }
-                _ => false,
-            });
-        })
+                assert!(match run_notary(&pool).as_slice() {
+                    [share] => {
+                        assert_eq!(&share.content.block, one_block_prime.content.get_hash());
+                        pool.insert_validated(share.clone());
+                        true
+                    }
+                    _ => false,
+                });
+            },
+        )
     }
 
     #[test]
     fn test_out_of_sync_notarization() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = vec![node_test_id(0)];
-            let dkg_interval_length = 30;
-            let Dependencies {
-                mut pool,
-                membership,
-                replica_config,
-                time_source,
-                crypto,
-                state_manager,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![(
-                    1,
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(dkg_interval_length)
-                        .build(),
-                )],
-            );
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::new(0));
-            let metrics_registry = MetricsRegistry::new();
-            let notary = Notary::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config,
-                membership.clone(),
-                crypto,
-                state_manager.clone(),
-                metrics_registry,
-                no_op_logger(),
-            );
-            let run_notary = |pool: &dyn ConsensusPool| {
-                let reader = PoolReader::new(pool);
-                notary.on_state_change(&reader)
-            };
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let committee = vec![node_test_id(0)];
+                let dkg_interval_length = 30;
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    replica_config,
+                    time_source,
+                    crypto,
+                    state_manager,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval_length)
+                            .build(),
+                    )],
+                );
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::new(0));
+                let metrics_registry = MetricsRegistry::new();
+                let notary = Notary::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    membership.clone(),
+                    crypto,
+                    state_manager.clone(),
+                    metrics_registry,
+                    no_op_logger(),
+                );
+                let run_notary = |pool: &dyn ConsensusPool| {
+                    let reader = PoolReader::new(pool);
+                    notary.on_state_change(&reader)
+                };
 
-            // Play 5 rounds, finalizing one block per second.
-            for _ in 0..5 {
-                time_source.advance_time(Duration::from_secs(1));
-                pool.advance_round_normal_operation();
-            }
+                // Play 5 rounds, finalizing one block per second.
+                for _ in 0..5 {
+                    time_source.advance_time(Duration::from_secs(1));
+                    pool.advance_round_normal_operation();
+                }
 
-            // Insert new block. Must not get notarized, because no additional
-            // time has passed.
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
-            assert!(run_notary(&pool).is_empty());
+                // Insert new block. Must not get notarized, because no additional
+                // time has passed.
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                assert!(run_notary(&pool).is_empty());
 
-            // Stall the relative clock, and only advance monotonic clock past
-            // the notary delay. This should get notarized.
-            time_source.advance_only_monotonic(
-                get_adjusted_notary_delay(
-                    membership.as_ref(),
-                    &PoolReader::new(&pool),
-                    state_manager.as_ref(),
-                    &no_op_logger(),
-                    Height::from(5),
-                    Rank(0),
-                )
-                .unwrap(),
-            );
-            assert!(!run_notary(&pool).is_empty());
-        })
+                // Stall the relative clock, and only advance monotonic clock past
+                // the notary delay. This should get notarized.
+                time_source.advance_only_monotonic(
+                    get_adjusted_notary_delay(
+                        membership.as_ref(),
+                        &PoolReader::new(&pool),
+                        state_manager.as_ref(),
+                        &no_op_logger(),
+                        Height::from(5),
+                        Rank(0),
+                    )
+                    .unwrap(),
+                );
+                assert!(!run_notary(&pool).is_empty());
+            },
+        )
     }
 }

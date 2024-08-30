@@ -536,170 +536,172 @@ mod tests {
     #[test]
     fn test_block_maker() {
         let subnet_id = subnet_test_id(0);
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
-            let dkg_interval_length = 300;
-            let Dependencies {
-                mut pool,
-                membership,
-                registry,
-                crypto,
-                time_source,
-                replica_config,
-                state_manager,
-                dkg_pool,
-                idkg_pool,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config,
-                subnet_id,
-                vec![
-                    (
-                        1,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    ),
-                    (
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    ),
-                ],
-            );
-
-            pool.advance_round_normal_operation_n(4);
-
-            let payload_builder = MockPayloadBuilder::new();
-            let certified_height = Height::from(1);
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
-
-            let block_maker = BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config.clone(),
-                Arc::clone(&registry) as Arc<dyn RegistryClient>,
-                membership.clone(),
-                crypto.clone(),
-                Arc::new(payload_builder),
-                dkg_pool.clone(),
-                idkg_pool.clone(),
-                state_manager.clone(),
-                Duration::from_millis(0),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            );
-
-            // Check first block is created immediately because rank 1 has to wait.
-            let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader)
-            };
-            assert!(run_block_maker().is_none());
-
-            // Check that block creation works properly.
-            pool.advance_round_normal_operation_n(4);
-
-            let mut payload_builder = MockPayloadBuilder::new();
-            let start = pool.validated().block_proposal().get_highest().unwrap();
-            let next_height = start.height().increment();
-            let start_hash = start.content.get_hash();
-            let expected_payloads = PoolReader::new(&pool)
-                .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
-            let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
-            let expected_time = expected_payloads[0].1
-                + get_block_maker_delay(
-                    &no_op_logger(),
-                    registry.as_ref(),
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
+                let dkg_interval_length = 300;
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    crypto,
+                    time_source,
+                    replica_config,
+                    state_manager,
+                    dkg_pool,
+                    idkg_pool,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
                     subnet_id,
-                    RegistryVersion::from(10),
+                    vec![
+                        (
+                            1,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .build(),
+                        ),
+                        (
+                            10,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .build(),
+                        ),
+                    ],
+                );
+
+                pool.advance_round_normal_operation_n(4);
+
+                let payload_builder = MockPayloadBuilder::new();
+                let certified_height = Height::from(1);
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
+
+                let block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config.clone(),
+                    Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                    membership.clone(),
+                    crypto.clone(),
+                    Arc::new(payload_builder),
+                    dkg_pool.clone(),
+                    idkg_pool.clone(),
+                    state_manager.clone(),
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
+
+                // Check first block is created immediately because rank 1 has to wait.
+                let run_block_maker = || {
+                    let reader = PoolReader::new(&pool);
+                    block_maker.on_state_change(&reader)
+                };
+                assert!(run_block_maker().is_none());
+
+                // Check that block creation works properly.
+                pool.advance_round_normal_operation_n(4);
+
+                let mut payload_builder = MockPayloadBuilder::new();
+                let start = pool.validated().block_proposal().get_highest().unwrap();
+                let next_height = start.height().increment();
+                let start_hash = start.content.get_hash();
+                let expected_payloads = PoolReader::new(&pool)
+                    .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
+                let returned_payload =
+                    dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                let expected_time = expected_payloads[0].1
+                    + get_block_maker_delay(
+                        &no_op_logger(),
+                        registry.as_ref(),
+                        subnet_id,
+                        RegistryVersion::from(10),
+                        Rank(4),
+                    )
+                    .unwrap();
+                let expected_context = ValidationContext {
+                    certified_height,
+                    registry_version: RegistryVersion::from(10),
+                    time: expected_time,
+                };
+                let matches_expected_payloads =
+                    move |payloads: &[(Height, Time, Payload)]| payloads == &*expected_payloads;
+                let expected_block = Block::new(
+                    start_hash.clone(),
+                    Payload::new(ic_types::crypto::crypto_hash, returned_payload.into()),
+                    next_height,
                     Rank(4),
-                )
-                .unwrap();
-            let expected_context = ValidationContext {
-                certified_height,
-                registry_version: RegistryVersion::from(10),
-                time: expected_time,
-            };
-            let matches_expected_payloads =
-                move |payloads: &[(Height, Time, Payload)]| payloads == &*expected_payloads;
-            let expected_block = Block::new(
-                start_hash.clone(),
-                Payload::new(ic_types::crypto::crypto_hash, returned_payload.into()),
-                next_height,
-                Rank(4),
-                expected_context.clone(),
-            );
+                    expected_context.clone(),
+                );
 
-            payload_builder
-                .expect_get_payload()
-                .withf(move |_, payloads, context, _| {
-                    matches_expected_payloads(payloads) && context == &expected_context
-                })
-                .return_const(BatchPayload::default());
-
-            let pool_reader = PoolReader::new(&pool);
-            let replica_config = ReplicaConfig {
-                node_id: (0..13)
-                    .map(node_test_id)
-                    .find(|node_id| {
-                        let h = pool_reader.get_notarized_height();
-                        let prev_beacon = pool_reader.get_random_beacon(h).unwrap();
-                        membership.get_block_maker_rank(h.increment(), &prev_beacon, *node_id)
-                            == Ok(Some(Rank(4)))
+                payload_builder
+                    .expect_get_payload()
+                    .withf(move |_, payloads, context, _| {
+                        matches_expected_payloads(payloads) && context == &expected_context
                     })
-                    .unwrap(),
-                subnet_id: replica_config.subnet_id,
-            };
+                    .return_const(BatchPayload::default());
 
-            let block_maker = BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config,
-                registry.clone(),
-                membership,
-                Arc::clone(&crypto) as Arc<_>,
-                Arc::new(payload_builder),
-                dkg_pool,
-                idkg_pool,
-                state_manager,
-                Duration::from_millis(0),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            );
-            let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader)
-            };
+                let pool_reader = PoolReader::new(&pool);
+                let replica_config = ReplicaConfig {
+                    node_id: (0..13)
+                        .map(node_test_id)
+                        .find(|node_id| {
+                            let h = pool_reader.get_notarized_height();
+                            let prev_beacon = pool_reader.get_random_beacon(h).unwrap();
+                            membership.get_block_maker_rank(h.increment(), &prev_beacon, *node_id)
+                                == Ok(Some(Rank(4)))
+                        })
+                        .unwrap(),
+                    subnet_id: replica_config.subnet_id,
+                };
 
-            // kick start another round
-            assert!(run_block_maker().is_none());
+                let block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    registry.clone(),
+                    membership,
+                    Arc::clone(&crypto) as Arc<_>,
+                    Arc::new(payload_builder),
+                    dkg_pool,
+                    idkg_pool,
+                    state_manager,
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
+                let run_block_maker = || {
+                    let reader = PoolReader::new(&pool);
+                    block_maker.on_state_change(&reader)
+                };
 
-            time_source.set_time(expected_time).unwrap();
-            if let Some(proposal) = run_block_maker() {
-                assert_eq!(proposal.as_ref(), &expected_block);
-            } else {
-                panic!("Expected a new block proposal");
-            }
+                // kick start another round
+                assert!(run_block_maker().is_none());
 
-            // insert a rank 0 block for the current round
-            let next_block = pool.make_next_block();
-            // ensure that `make_next_block` creates a rank 0 block
-            assert_eq!(next_block.rank(), Rank(0));
-            pool.insert_validated(pool.make_next_block());
+                time_source.set_time(expected_time).unwrap();
+                if let Some(proposal) = run_block_maker() {
+                    assert_eq!(proposal.as_ref(), &expected_block);
+                } else {
+                    panic!("Expected a new block proposal");
+                }
 
-            let run_block_maker = || {
-                let reader = PoolReader::new(&pool);
-                block_maker.on_state_change(&reader)
-            };
+                // insert a rank 0 block for the current round
+                let next_block = pool.make_next_block();
+                // ensure that `make_next_block` creates a rank 0 block
+                assert_eq!(next_block.rank(), Rank(0));
+                pool.insert_validated(pool.make_next_block());
 
-            // check that the block maker does not create a block, as a lower ranked block
-            // is already available.
-            assert!(run_block_maker().is_none());
-        })
+                let run_block_maker = || {
+                    let reader = PoolReader::new(&pool);
+                    block_maker.on_state_change(&reader)
+                };
+
+                // check that the block maker does not create a block, as a lower ranked block
+                // is already available.
+                assert!(run_block_maker().is_none());
+            },
+        )
     }
 
     // We expect block maker to correctly detect version change and start making only empty blocks.
@@ -719,242 +721,250 @@ mod tests {
     }
 
     fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dkg_interval_length = 3;
-            let node_ids = [node_test_id(0)];
-            let Dependencies {
-                mut pool,
-                registry,
-                crypto,
-                time_source,
-                replica_config,
-                state_manager,
-                ..
-            } = dependencies_with_subnet_params(
-                pool_config.clone(),
-                subnet_test_id(0),
-                vec![
-                    (
-                        1,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .build(),
-                    ),
-                    (
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(dkg_interval_length)
-                            .with_replica_version(replica_version.as_ref())
-                            .with_halt_at_cup_height(halt_at_cup_height)
-                            .build(),
-                    ),
-                ],
-            );
-            let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
-                no_op_logger(),
-            )));
-            let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            )));
-
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
-            let certified_height = Height::from(1);
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
-            state_manager
-                .get_mut()
-                .expect_get_state_at()
-                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                    Height::new(0),
-                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let dkg_interval_length = 3;
+                let node_ids = [node_test_id(0)];
+                let Dependencies {
+                    mut pool,
+                    registry,
+                    crypto,
+                    time_source,
+                    replica_config,
+                    state_manager,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config.clone(),
+                    subnet_test_id(0),
+                    vec![
+                        (
+                            1,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .build(),
+                        ),
+                        (
+                            10,
+                            SubnetRecordBuilder::from(&node_ids)
+                                .with_dkg_interval_length(dkg_interval_length)
+                                .with_replica_version(replica_version.as_ref())
+                                .with_halt_at_cup_height(halt_at_cup_height)
+                                .build(),
+                        ),
+                    ],
+                );
+                let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                )));
+                let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
                 )));
 
-            let mut payload_builder = MockPayloadBuilder::new();
-            payload_builder
-                .expect_get_payload()
-                .return_const(BatchPayload::default());
-            let membership =
-                Membership::new(pool.get_cache(), registry.clone(), replica_config.subnet_id);
-            let membership = Arc::new(membership);
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                let certified_height = Height::from(1);
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
+                state_manager
+                    .get_mut()
+                    .expect_get_state_at()
+                    .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                        Height::new(0),
+                        Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                    )));
 
-            let block_maker = BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config.clone(),
-                Arc::clone(&registry) as Arc<dyn RegistryClient>,
-                membership.clone(),
-                crypto.clone(),
-                Arc::new(payload_builder),
-                dkg_pool.clone(),
-                idkg_pool.clone(),
-                state_manager.clone(),
-                Duration::from_millis(0),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            );
+                let mut payload_builder = MockPayloadBuilder::new();
+                payload_builder
+                    .expect_get_payload()
+                    .return_const(BatchPayload::default());
+                let membership =
+                    Membership::new(pool.get_cache(), registry.clone(), replica_config.subnet_id);
+                let membership = Arc::new(membership);
 
-            // Skip the first DKG interval
-            pool.advance_round_normal_operation_n(dkg_interval_length);
+                let block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config.clone(),
+                    Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                    membership.clone(),
+                    crypto.clone(),
+                    Arc::new(payload_builder),
+                    dkg_pool.clone(),
+                    idkg_pool.clone(),
+                    state_manager.clone(),
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
 
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
-            assert!(proposal.is_some());
-            let mut proposal = proposal.unwrap();
-            let block = proposal.content.as_mut();
-            assert!(block.payload.is_summary());
-            pool.advance_round_with_block(&proposal);
-            pool.insert_validated(pool.make_catch_up_package(proposal.height()));
+                // Skip the first DKG interval
+                pool.advance_round_normal_operation_n(dkg_interval_length);
 
-            // Skip the second DKG interval
-            pool.advance_round_normal_operation_n(dkg_interval_length);
-            assert_eq!(
-                PoolReader::new(&pool).registry_version(Height::from(dkg_interval_length * 2)),
-                Some(RegistryVersion::from(1))
-            );
+                let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+                assert!(proposal.is_some());
+                let mut proposal = proposal.unwrap();
+                let block = proposal.content.as_mut();
+                assert!(block.payload.is_summary());
+                pool.advance_round_with_block(&proposal);
+                pool.insert_validated(pool.make_catch_up_package(proposal.height()));
 
-            // 2. Make CUP block at next start block
+                // Skip the second DKG interval
+                pool.advance_round_normal_operation_n(dkg_interval_length);
+                assert_eq!(
+                    PoolReader::new(&pool).registry_version(Height::from(dkg_interval_length * 2)),
+                    Some(RegistryVersion::from(1))
+                );
 
-            // We do not anticipate payload builder to be called since we will be making
-            // empty blocks (including the next CUP block).
-            let payload_builder = MockPayloadBuilder::new();
+                // 2. Make CUP block at next start block
 
-            let block_maker = BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config,
-                Arc::clone(&registry) as Arc<dyn RegistryClient>,
-                membership,
-                crypto,
-                Arc::new(payload_builder),
-                dkg_pool,
-                idkg_pool,
-                state_manager,
-                Duration::from_millis(0),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            );
+                // We do not anticipate payload builder to be called since we will be making
+                // empty blocks (including the next CUP block).
+                let payload_builder = MockPayloadBuilder::new();
 
-            // Check CUP block is made.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
-            assert!(proposal.is_some());
-            let cup_proposal = proposal.unwrap();
-            let block = cup_proposal.content.as_ref();
-            assert!(block.payload.is_summary());
-            assert_eq!(block.context.registry_version, RegistryVersion::from(10));
+                let block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                    membership,
+                    crypto,
+                    Arc::new(payload_builder),
+                    dkg_pool,
+                    idkg_pool,
+                    state_manager,
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
 
-            // only notarized but not finalize this CUP block.
-            pool.insert_validated(cup_proposal.clone());
-            pool.insert_validated(pool.make_next_beacon());
-            pool.notarize(&cup_proposal);
+                // Check CUP block is made.
+                let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+                assert!(proposal.is_some());
+                let cup_proposal = proposal.unwrap();
+                let block = cup_proposal.content.as_ref();
+                assert!(block.payload.is_summary());
+                assert_eq!(block.context.registry_version, RegistryVersion::from(10));
 
-            // 3. Make one more block, payload builder should not have been called.
-            let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
-            assert!(proposal.is_some());
-            let proposal = proposal.unwrap();
-            let block = proposal.content.as_ref();
-            // blocks still uses default version, not the new version.
-            assert_eq!(block.version(), &ReplicaVersion::default());
-            // registry version 10 becomes effective.
-            assert_eq!(
-                PoolReader::new(&pool).registry_version(proposal.height()),
-                Some(RegistryVersion::from(10))
-            );
-        })
+                // only notarized but not finalize this CUP block.
+                pool.insert_validated(cup_proposal.clone());
+                pool.insert_validated(pool.make_next_beacon());
+                pool.notarize(&cup_proposal);
+
+                // 3. Make one more block, payload builder should not have been called.
+                let proposal = block_maker.on_state_change(&PoolReader::new(&pool));
+                assert!(proposal.is_some());
+                let proposal = proposal.unwrap();
+                let block = proposal.content.as_ref();
+                // blocks still uses default version, not the new version.
+                assert_eq!(block.version(), &ReplicaVersion::default());
+                // registry version 10 becomes effective.
+                assert_eq!(
+                    PoolReader::new(&pool).registry_version(proposal.height()),
+                    Some(RegistryVersion::from(10))
+                );
+            },
+        )
     }
 
     #[test]
     fn test_stable_registry_version() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dkg_interval_length = 3;
-            let node_ids = [node_test_id(0)];
-            let record = SubnetRecordBuilder::from(&node_ids)
-                .with_dkg_interval_length(dkg_interval_length)
-                .build();
-            let subnet_id = subnet_test_id(0);
-            let Dependencies {
-                registry,
-                crypto,
-                pool,
-                time_source,
-                replica_config,
-                state_manager,
-                registry_data_provider,
-                dkg_pool,
-                idkg_pool,
-                ..
-            } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record.clone())]);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let dkg_interval_length = 3;
+                let node_ids = [node_test_id(0)];
+                let record = SubnetRecordBuilder::from(&node_ids)
+                    .with_dkg_interval_length(dkg_interval_length)
+                    .build();
+                let subnet_id = subnet_test_id(0);
+                let Dependencies {
+                    registry,
+                    crypto,
+                    pool,
+                    time_source,
+                    replica_config,
+                    state_manager,
+                    registry_data_provider,
+                    dkg_pool,
+                    idkg_pool,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_id,
+                    vec![(1, record.clone())],
+                );
 
-            let mut payload_builder = MockPayloadBuilder::new();
-            payload_builder
-                .expect_get_payload()
-                .return_const(BatchPayload::default());
-            let membership = Arc::new(Membership::new(
-                pool.get_cache(),
-                registry.clone(),
-                replica_config.subnet_id,
-            ));
+                let mut payload_builder = MockPayloadBuilder::new();
+                payload_builder
+                    .expect_get_payload()
+                    .return_const(BatchPayload::default());
+                let membership = Arc::new(Membership::new(
+                    pool.get_cache(),
+                    registry.clone(),
+                    replica_config.subnet_id,
+                ));
 
-            let mut block_maker = BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config,
-                Arc::clone(&registry) as Arc<dyn RegistryClient>,
-                membership,
-                crypto,
-                Arc::new(payload_builder),
-                dkg_pool,
-                idkg_pool,
-                state_manager,
-                Duration::from_millis(0),
-                MetricsRegistry::new(),
-                no_op_logger(),
-            );
+                let mut block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                    membership,
+                    crypto,
+                    Arc::new(payload_builder),
+                    dkg_pool,
+                    idkg_pool,
+                    state_manager,
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
 
-            let delay = Duration::from_millis(1000);
+                let delay = Duration::from_millis(1000);
 
-            // We add a new version every `delay` ms.
-            std::thread::sleep(delay);
-            add_subnet_record(&registry_data_provider, 2, subnet_id, record.clone());
-            registry.update_to_latest_version();
-            std::thread::sleep(delay);
-            add_subnet_record(&registry_data_provider, 3, subnet_id, record.clone());
-            registry.update_to_latest_version();
-            std::thread::sleep(delay);
-            add_subnet_record(&registry_data_provider, 4, subnet_id, record);
-            registry.update_to_latest_version();
+                // We add a new version every `delay` ms.
+                std::thread::sleep(delay);
+                add_subnet_record(&registry_data_provider, 2, subnet_id, record.clone());
+                registry.update_to_latest_version();
+                std::thread::sleep(delay);
+                add_subnet_record(&registry_data_provider, 3, subnet_id, record.clone());
+                registry.update_to_latest_version();
+                std::thread::sleep(delay);
+                add_subnet_record(&registry_data_provider, 4, subnet_id, record);
+                registry.update_to_latest_version();
 
-            // Make sure the latest version is the highest we added.
-            assert_eq!(registry.get_latest_version(), RegistryVersion::from(4));
+                // Make sure the latest version is the highest we added.
+                assert_eq!(registry.get_latest_version(), RegistryVersion::from(4));
 
-            // Now we just request versions at every interval of the previously added
-            // version. To avoid hitting the boundaries, we use a little offset.
-            let offset = delay / 10 * 3;
-            let mut parent = pool.get_cache().finalized_block();
-            block_maker.stable_registry_version_age = offset;
-            assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
-                RegistryVersion::from(3)
-            );
-            block_maker.stable_registry_version_age = offset + delay;
-            assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
-                RegistryVersion::from(2)
-            );
-            block_maker.stable_registry_version_age = offset + delay * 2;
-            assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
-                RegistryVersion::from(1)
-            );
-            // Now let's test if parent's version is used
-            parent.context.registry_version = RegistryVersion::from(2);
-            assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
-                RegistryVersion::from(2)
-            );
-        })
+                // Now we just request versions at every interval of the previously added
+                // version. To avoid hitting the boundaries, we use a little offset.
+                let offset = delay / 10 * 3;
+                let mut parent = pool.get_cache().finalized_block();
+                block_maker.stable_registry_version_age = offset;
+                assert_eq!(
+                    block_maker.get_stable_registry_version(&parent).unwrap(),
+                    RegistryVersion::from(3)
+                );
+                block_maker.stable_registry_version_age = offset + delay;
+                assert_eq!(
+                    block_maker.get_stable_registry_version(&parent).unwrap(),
+                    RegistryVersion::from(2)
+                );
+                block_maker.stable_registry_version_age = offset + delay * 2;
+                assert_eq!(
+                    block_maker.get_stable_registry_version(&parent).unwrap(),
+                    RegistryVersion::from(1)
+                );
+                // Now let's test if parent's version is used
+                parent.context.registry_version = RegistryVersion::from(2);
+                assert_eq!(
+                    block_maker.get_stable_registry_version(&parent).unwrap(),
+                    RegistryVersion::from(2)
+                );
+            },
+        )
     }
 }

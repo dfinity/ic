@@ -110,7 +110,7 @@ mod tests {
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
+    use ic_test_utilities_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -166,24 +166,26 @@ mod tests {
         expected_status: Option<Status>,
     ) {
         with_test_replica_logger(|logger| {
-            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-                let (pool, registry_client, subnet_id) = set_up(
-                    pool_config,
-                    certified_height,
-                    replica_version,
-                    halt_at_cup_height,
-                );
+            ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+                |pool_config| {
+                    let (pool, registry_client, subnet_id) = set_up(
+                        pool_config,
+                        certified_height,
+                        replica_version,
+                        halt_at_cup_height,
+                    );
 
-                let status = get_status(
-                    current_height,
-                    registry_client.as_ref(),
-                    subnet_id,
-                    &PoolReader::new(&pool),
-                    &logger,
-                );
+                    let status = get_status(
+                        current_height,
+                        registry_client.as_ref(),
+                        subnet_id,
+                        &PoolReader::new(&pool),
+                        &logger,
+                    );
 
-                assert_eq!(status, expected_status);
-            })
+                    assert_eq!(status, expected_status);
+                },
+            )
         })
     }
 

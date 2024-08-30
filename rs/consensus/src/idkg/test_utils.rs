@@ -24,8 +24,8 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     ThresholdArguments,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
+use ic_test_utilities_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};

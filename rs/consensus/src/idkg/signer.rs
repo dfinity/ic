@@ -907,64 +907,67 @@ mod tests {
     }
 
     fn test_signature_shares_purging(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer, state_manager) =
-                    create_signer_dependencies_and_state_manager(pool_config, logger);
-                let transcript_loader = TestIDkgTranscriptLoader::default();
-                let height_0 = Height::from(0);
-                let height_30 = Height::from(30);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer, state_manager) =
+                        create_signer_dependencies_and_state_manager(pool_config, logger);
+                    let transcript_loader = TestIDkgTranscriptLoader::default();
+                    let height_0 = Height::from(0);
+                    let height_30 = Height::from(30);
 
-                let expected_state_snapshot = Arc::new(RwLock::new(FakeCertifiedStateSnapshot {
-                    height: height_0,
-                    state: Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
-                }));
-                let expected_state_snapshot_clone = expected_state_snapshot.clone();
-                state_manager
-                    .get_mut()
-                    .expect_get_certified_state_snapshot()
-                    .returning(move || {
-                        Some(Box::new(
-                            expected_state_snapshot_clone.read().unwrap().clone(),
-                        ))
-                    });
+                    let expected_state_snapshot =
+                        Arc::new(RwLock::new(FakeCertifiedStateSnapshot {
+                            height: height_0,
+                            state: Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                        }));
+                    let expected_state_snapshot_clone = expected_state_snapshot.clone();
+                    state_manager
+                        .get_mut()
+                        .expect_get_certified_state_snapshot()
+                        .returning(move || {
+                            Some(Box::new(
+                                expected_state_snapshot_clone.read().unwrap().clone(),
+                            ))
+                        });
 
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), height_0);
-                let id_1 = create_request_id(&mut uid_generator, height_0);
-                let id_2 = create_request_id(&mut uid_generator, height_30);
+                    let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), height_0);
+                    let id_1 = create_request_id(&mut uid_generator, height_0);
+                    let id_2 = create_request_id(&mut uid_generator, height_30);
 
-                let share1 = create_signature_share(&key_id, NODE_1, id_1.clone());
-                let msg_id1 = share1.message_id();
-                let share2 = create_signature_share(&key_id, NODE_2, id_2.clone());
-                let msg_id2 = share2.message_id();
-                let change_set = vec![
-                    IDkgChangeAction::AddToValidated(share1),
-                    IDkgChangeAction::AddToValidated(share2),
-                ];
-                idkg_pool.apply_changes(change_set);
+                    let share1 = create_signature_share(&key_id, NODE_1, id_1.clone());
+                    let msg_id1 = share1.message_id();
+                    let share2 = create_signature_share(&key_id, NODE_2, id_2.clone());
+                    let msg_id2 = share2.message_id();
+                    let change_set = vec![
+                        IDkgChangeAction::AddToValidated(share1),
+                        IDkgChangeAction::AddToValidated(share2),
+                    ];
+                    idkg_pool.apply_changes(change_set);
 
-                // Certified height doesn't increase, so share1 shouldn't be purged
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), height_0);
-                assert!(change_set.is_empty());
+                    // Certified height doesn't increase, so share1 shouldn't be purged
+                    let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*signer.prev_certified_height.borrow(), height_0);
+                    assert!(change_set.is_empty());
 
-                // Certified height increases, so share1 is purged
-                let new_height = expected_state_snapshot.write().unwrap().inc_height_by(29);
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), new_height);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id1));
-                idkg_pool.apply_changes(change_set);
+                    // Certified height increases, so share1 is purged
+                    let new_height = expected_state_snapshot.write().unwrap().inc_height_by(29);
+                    let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*signer.prev_certified_height.borrow(), new_height);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id1));
+                    idkg_pool.apply_changes(change_set);
 
-                // Certified height increases above share2, so it is purged
-                let new_height = expected_state_snapshot.write().unwrap().inc_height_by(1);
-                let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*signer.prev_certified_height.borrow(), new_height);
-                assert_eq!(height_30, new_height);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id2));
-            })
-        })
+                    // Certified height increases above share2, so it is purged
+                    let new_height = expected_state_snapshot.write().unwrap().inc_height_by(1);
+                    let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*signer.prev_certified_height.borrow(), new_height);
+                    assert_eq!(height_30, new_height);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id2));
+                })
+            },
+        )
     }
 
     // Tests that signature shares are sent for new requests, and requests already
@@ -1016,65 +1019,69 @@ mod tests {
         );
 
         // Test using CryptoReturningOK
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                idkg_pool.apply_changes(
-                    shares
-                        .iter()
-                        .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
-                        .collect(),
-                );
+                    idkg_pool.apply_changes(
+                        shares
+                            .iter()
+                            .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
+                            .collect(),
+                    );
 
-                // Since request 1 is already in progress, we should issue
-                // shares only for transcripts 4, 5
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
-                assert_eq!(change_set.len(), 2);
-                assert!(is_signature_share_added_to_validated(
-                    &change_set,
-                    &id_4,
-                    block_reader.tip_height()
-                ));
-                assert!(is_signature_share_added_to_validated(
-                    &change_set,
-                    &id_5,
-                    block_reader.tip_height()
-                ));
-            })
-        });
+                    // Since request 1 is already in progress, we should issue
+                    // shares only for transcripts 4, 5
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
+                    assert_eq!(change_set.len(), 2);
+                    assert!(is_signature_share_added_to_validated(
+                        &change_set,
+                        &id_4,
+                        block_reader.tip_height()
+                    ));
+                    assert!(is_signature_share_added_to_validated(
+                        &change_set,
+                        &id_5,
+                        block_reader.tip_height()
+                    ));
+                })
+            },
+        );
 
         // Test using crypto without keys
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(crypto_without_keys()),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto_without_keys()),
+                    );
 
-                idkg_pool.apply_changes(
-                    shares
-                        .iter()
-                        .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
-                        .collect(),
-                );
+                    idkg_pool.apply_changes(
+                        shares
+                            .iter()
+                            .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
+                            .collect(),
+                    );
 
-                // Crypto should return an error and no shares should be created.
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
-                assert!(change_set.is_empty());
-            })
-        });
+                    // Crypto should return an error and no shares should be created.
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
+                    assert!(change_set.is_empty());
+                })
+            },
+        );
     }
 
     // Tests that no signature shares for incomplete contexts are created
@@ -1149,26 +1156,28 @@ mod tests {
         );
 
         // Test using CryptoReturningOK
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // We should issue shares only for completed request 3
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
+                    // We should issue shares only for completed request 3
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
 
-                assert_eq!(change_set.len(), 1);
-                assert!(is_signature_share_added_to_validated(
-                    &change_set,
-                    &id_3,
-                    block_reader.tip_height()
-                ));
-            })
-        });
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_signature_share_added_to_validated(
+                        &change_set,
+                        &id_3,
+                        block_reader.tip_height()
+                    ));
+                })
+            },
+        );
     }
 
     #[test]
@@ -1180,59 +1189,62 @@ mod tests {
     }
 
     fn test_send_signature_shares_when_failure(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let height = Height::from(100);
-                let (id_1, id_2, id_3) = (
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                );
-                // Set up the signature requests
-                // The block requests signatures 1, 2, 3
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![
-                        (id_1, create_sig_inputs(1, &key_id)),
-                        (id_2, create_sig_inputs(2, &key_id)),
-                        (id_3, create_sig_inputs(3, &key_id)),
-                    ],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let height = Height::from(100);
+                    let (id_1, id_2, id_3) = (
+                        create_request_id(&mut uid_generator, height),
+                        create_request_id(&mut uid_generator, height),
+                        create_request_id(&mut uid_generator, height),
+                    );
+                    // Set up the signature requests
+                    // The block requests signatures 1, 2, 3
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![
+                            (id_1, create_sig_inputs(1, &key_id)),
+                            (id_2, create_sig_inputs(2, &key_id)),
+                            (id_3, create_sig_inputs(3, &key_id)),
+                        ],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                let transcript_loader =
-                    TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Failure);
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
+                    let transcript_loader =
+                        TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Failure);
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
 
-                // No shares should be created when transcripts fail to load
-                assert!(change_set.is_empty());
+                    // No shares should be created when transcripts fail to load
+                    assert!(change_set.is_empty());
 
-                let transcript_loader =
-                    TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Success);
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
+                    let transcript_loader =
+                        TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Success);
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
 
-                // Shares should be created when transcripts succeed to load
-                assert_eq!(change_set.len(), 3);
-            })
-        })
+                    // Shares should be created when transcripts succeed to load
+                    assert_eq!(change_set.len(), 3);
+                })
+            },
+        )
     }
 
     // Tests that complaints are generated and added to the pool if loading transcript
@@ -1246,62 +1258,65 @@ mod tests {
     }
 
     fn test_send_signature_shares_with_complaints(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let height = Height::from(100);
-                let (id_1, id_2, id_3) = (
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let height = Height::from(100);
+                    let (id_1, id_2, id_3) = (
+                        create_request_id(&mut uid_generator, height),
+                        create_request_id(&mut uid_generator, height),
+                        create_request_id(&mut uid_generator, height),
+                    );
 
-                // Set up the signature requests
-                // The block requests signatures 1, 2, 3
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![
-                        (id_1, create_sig_inputs(1, &key_id)),
-                        (id_2, create_sig_inputs(2, &key_id)),
-                        (id_3, create_sig_inputs(3, &key_id)),
-                    ],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+                    // Set up the signature requests
+                    // The block requests signatures 1, 2, 3
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![
+                            (id_1, create_sig_inputs(1, &key_id)),
+                            (id_2, create_sig_inputs(2, &key_id)),
+                            (id_3, create_sig_inputs(3, &key_id)),
+                        ],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                let transcript_loader =
-                    TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
+                    let transcript_loader =
+                        TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
 
-                let change_set = signer.send_signature_shares(
-                    &idkg_pool,
-                    &transcript_loader,
-                    &block_reader,
-                    &state,
-                );
-                let requested_signatures_count = block_reader.requested_signatures().count();
-                let expected_complaints_count = match key_id {
-                    MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
-                    MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
-                };
-                let complaints = transcript_loader.returned_complaints();
-                assert_eq!(change_set.len(), complaints.len());
-                assert_eq!(change_set.len(), expected_complaints_count);
-                for complaint in complaints {
-                    assert!(is_complaint_added_to_validated(
-                        &change_set,
-                        &complaint.content.idkg_complaint.transcript_id,
-                        &NODE_1,
-                        &NODE_1,
-                    ));
-                }
-            })
-        })
+                    let change_set = signer.send_signature_shares(
+                        &idkg_pool,
+                        &transcript_loader,
+                        &block_reader,
+                        &state,
+                    );
+                    let requested_signatures_count = block_reader.requested_signatures().count();
+                    let expected_complaints_count = match key_id {
+                        MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
+                        MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
+                    };
+                    let complaints = transcript_loader.returned_complaints();
+                    assert_eq!(change_set.len(), complaints.len());
+                    assert_eq!(change_set.len(), expected_complaints_count);
+                    for complaint in complaints {
+                        assert!(is_complaint_added_to_validated(
+                            &change_set,
+                            &complaint.content.idkg_complaint.transcript_id,
+                            &NODE_1,
+                            &NODE_1,
+                        ));
+                    }
+                })
+            },
+        )
     }
 
     #[test]
@@ -1314,82 +1329,86 @@ mod tests {
 
     fn test_crypto_verify_sig_share(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    &mut rng,
-                );
-                let key_transcript = generate_key_transcript(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    algorithm_for_key_id(&key_id),
-                    &mut rng,
-                );
-                let derivation_path = ExtendedDerivationPath {
-                    caller: user_test_id(1).get(),
-                    derivation_path: vec![],
-                };
-                let (receivers, inputs) = match key_id {
-                    MasterPublicKeyId::Ecdsa(_) => {
-                        let inputs = generate_tecdsa_protocol_inputs(
-                            &env,
-                            &dealers,
-                            &receivers,
-                            &key_transcript,
-                            &[0; 32],
-                            Randomness::from([0; 32]),
-                            &derivation_path,
-                            algorithm_for_key_id(&key_id),
-                            &mut rng,
-                        );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+                    let (dealers, receivers) = env.choose_dealers_and_receivers(
+                        &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                        &mut rng,
+                    );
+                    let key_transcript = generate_key_transcript(
+                        &env,
+                        &dealers,
+                        &receivers,
+                        algorithm_for_key_id(&key_id),
+                        &mut rng,
+                    );
+                    let derivation_path = ExtendedDerivationPath {
+                        caller: user_test_id(1).get(),
+                        derivation_path: vec![],
+                    };
+                    let (receivers, inputs) = match key_id {
+                        MasterPublicKeyId::Ecdsa(_) => {
+                            let inputs = generate_tecdsa_protocol_inputs(
+                                &env,
+                                &dealers,
+                                &receivers,
+                                &key_transcript,
+                                &[0; 32],
+                                Randomness::from([0; 32]),
+                                &derivation_path,
+                                algorithm_for_key_id(&key_id),
+                                &mut rng,
+                            );
 
-                        (
-                            inputs.receivers().clone(),
-                            ThresholdSigInputs::Ecdsa(inputs),
-                        )
-                    }
-                    MasterPublicKeyId::Schnorr(_) => {
-                        let inputs = generate_tschnorr_protocol_inputs(
-                            &env,
-                            &dealers,
-                            &receivers,
-                            &key_transcript,
-                            &[0; 32],
-                            Randomness::from([0; 32]),
-                            &derivation_path,
-                            algorithm_for_key_id(&key_id),
-                            &mut rng,
-                        );
-                        (
-                            inputs.receivers().clone(),
-                            ThresholdSigInputs::Schnorr(inputs),
-                        )
-                    }
-                };
-                let crypto = env
-                    .nodes
-                    .filter_by_receivers(&receivers)
-                    .next()
-                    .unwrap()
-                    .crypto();
-                let (_, signer) =
-                    create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id = create_request_id(&mut uid_generator, Height::from(5));
-                let message = create_signature_share(&key_id, NODE_2, id);
-                let share = match message {
-                    IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
-                    IDkgMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
-                    _ => panic!("Unexpected message type"),
-                };
-                let result = signer.crypto_verify_sig_share(&inputs, share, &(IDkgStatsNoOp {}));
-                // assert that the mock signature share does not pass real crypto check
-                assert!(result.is_err());
-            })
-        })
+                            (
+                                inputs.receivers().clone(),
+                                ThresholdSigInputs::Ecdsa(inputs),
+                            )
+                        }
+                        MasterPublicKeyId::Schnorr(_) => {
+                            let inputs = generate_tschnorr_protocol_inputs(
+                                &env,
+                                &dealers,
+                                &receivers,
+                                &key_transcript,
+                                &[0; 32],
+                                Randomness::from([0; 32]),
+                                &derivation_path,
+                                algorithm_for_key_id(&key_id),
+                                &mut rng,
+                            );
+                            (
+                                inputs.receivers().clone(),
+                                ThresholdSigInputs::Schnorr(inputs),
+                            )
+                        }
+                    };
+                    let crypto = env
+                        .nodes
+                        .filter_by_receivers(&receivers)
+                        .next()
+                        .unwrap()
+                        .crypto();
+                    let (_, signer) =
+                        create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let id = create_request_id(&mut uid_generator, Height::from(5));
+                    let message = create_signature_share(&key_id, NODE_2, id);
+                    let share = match message {
+                        IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
+                        IDkgMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
+                        _ => panic!("Unexpected message type"),
+                    };
+                    let result =
+                        signer.crypto_verify_sig_share(&inputs, share, &(IDkgStatsNoOp {}));
+                    // assert that the mock signature share does not pass real crypto check
+                    assert!(result.is_err());
+                })
+            },
+        )
     }
 
     // Tests that received dealings are accepted/processed for eligible signature
@@ -1465,37 +1484,41 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_moved_to_validated(&change_set, &msg_id_2));
-                assert!(is_moved_to_validated(&change_set, &msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
 
         // Simulate failure when resolving transcripts
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().with_fail_to_resolve();
-                // There are no transcripts in the block reader, shares created for transcripts
-                // that cannot be resolved should be handled invalid.
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let block_reader = block_reader.clone().with_fail_to_resolve();
+                    // There are no transcripts in the block reader, shares created for transcripts
+                    // that cannot be resolved should be handled invalid.
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                    assert!(is_handle_invalid(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
     }
 
     // Tests that signature shares for the wrong scheme are not validated
@@ -1557,18 +1580,20 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 2);
-                assert!(is_moved_to_validated(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-            })
-        });
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 2);
+                    assert!(is_moved_to_validated(&change_set, &msg_id_1));
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                })
+            },
+        );
     }
 
     // Tests that signature shares for incomplete contexts are not validated
@@ -1657,18 +1682,20 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 2);
-                assert!(is_moved_to_validated(&change_set, &msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 2);
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
     }
 
     // Tests that duplicate shares from a signer for the same request
@@ -1682,46 +1709,49 @@ mod tests {
     }
 
     fn test_duplicate_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let height = Height::from(100);
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_2 = create_request_id(&mut uid_generator, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let height = Height::from(100);
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let id_2 = create_request_id(&mut uid_generator, Height::from(100));
 
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![(id_2.clone(), create_sig_inputs(2, &key_id))],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![(id_2.clone(), create_sig_inputs(2, &key_id))],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Set up the IDKG pool
-                // Validated pool has: {signature share 2, signer = NODE_2}
-                let share = create_signature_share(&key_id, NODE_2, id_2.clone());
-                let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // Validated pool has: {signature share 2, signer = NODE_2}
+                    let share = create_signature_share(&key_id, NODE_2, id_2.clone());
+                    let change_set = vec![IDkgChangeAction::AddToValidated(share)];
+                    idkg_pool.apply_changes(change_set);
 
-                // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
-                let message = create_signature_share(&key_id, NODE_2, id_2.clone());
-                let msg_id_2 = message.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
+                    let message = create_signature_share(&key_id, NODE_2, id_2.clone());
+                    let msg_id_2 = message.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-            })
-        })
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests that duplicate shares from a signer for the same request
@@ -1735,62 +1765,68 @@ mod tests {
     }
 
     fn test_duplicate_signature_shares_in_batch(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let height = Height::from(100);
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_1 = create_request_id(&mut uid_generator, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let height = Height::from(100);
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let id_1 = create_request_id(&mut uid_generator, Height::from(100));
 
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![(id_1.clone(), create_sig_inputs(2, &key_id))],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![(id_1.clone(), create_sig_inputs(2, &key_id))],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Unvalidated pool has: {signature share 1, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 0);
-                let msg_id_1 = message.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {signature share 1, signer = NODE_2}
+                    let message =
+                        create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 0);
+                    let msg_id_1 = message.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Unvalidated pool has: {signature share 2, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 1);
-                let msg_id_2 = message.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {signature share 2, signer = NODE_2}
+                    let message =
+                        create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 1);
+                    let msg_id_2 = message.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Unvalidated pool has: {signature share 2, signer = NODE_3}
-                let message = create_signature_share_with_nonce(&key_id, NODE_3, id_1.clone(), 2);
-                let msg_id_3 = message.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {signature share 2, signer = NODE_3}
+                    let message =
+                        create_signature_share_with_nonce(&key_id, NODE_3, id_1.clone(), 2);
+                    let msg_id_3 = message.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let change_set =
-                    signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                assert_eq!(change_set.len(), 3);
-                // One is considered duplicate
-                assert!(is_handle_invalid(&change_set, &msg_id_1));
-                // One is considered validated
-                assert!(is_moved_to_validated(&change_set, &msg_id_2));
-                assert!(is_moved_to_validated(&change_set, &msg_id_3));
-            })
-        })
+                    let change_set =
+                        signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
+                    assert_eq!(change_set.len(), 3);
+                    // One is considered duplicate
+                    assert!(is_handle_invalid(&change_set, &msg_id_1));
+                    // One is considered validated
+                    assert!(is_moved_to_validated(&change_set, &msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                })
+            },
+        )
     }
 
     // Tests purging of signature shares from unvalidated pool
@@ -1803,64 +1839,67 @@ mod tests {
     }
 
     fn test_purge_unvalidated_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let height = Height::from(100);
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let (id_1, id_2, id_3) = (
-                    create_request_id(&mut uid_generator, Height::from(10)),
-                    create_request_id(&mut uid_generator, Height::from(20)),
-                    create_request_id(&mut uid_generator, Height::from(200)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let height = Height::from(100);
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let (id_1, id_2, id_3) = (
+                        create_request_id(&mut uid_generator, Height::from(10)),
+                        create_request_id(&mut uid_generator, Height::from(20)),
+                        create_request_id(&mut uid_generator, Height::from(200)),
+                    );
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1, 3
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![
-                        (id_1.clone(), create_sig_inputs(1, &key_id)),
-                        (id_3.clone(), create_sig_inputs(3, &key_id)),
-                    ],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1, 3
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![
+                            (id_1.clone(), create_sig_inputs(1, &key_id)),
+                            (id_3.clone(), create_sig_inputs(3, &key_id)),
+                        ],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Share 1: height <= current_height, in_progress (not purged)
-                let message = create_signature_share(&key_id, NODE_2, id_1);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Share 1: height <= current_height, in_progress (not purged)
+                    let message = create_signature_share(&key_id, NODE_2, id_1);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Share 2: height <= current_height, !in_progress (purged)
-                let message = create_signature_share(&key_id, NODE_2, id_2);
-                let msg_id_2 = message.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Share 2: height <= current_height, !in_progress (purged)
+                    let message = create_signature_share(&key_id, NODE_2, id_2);
+                    let msg_id_2 = message.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Share 3: height > current_height (not purged)
-                let message = create_signature_share(&key_id, NODE_2, id_3);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message,
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Share 3: height > current_height (not purged)
+                    let message = create_signature_share(&key_id, NODE_2, id_3);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message,
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let change_set = signer.purge_artifacts(&idkg_pool, &state);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-            })
-        })
+                    let change_set = signer.purge_artifacts(&idkg_pool, &state);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests purging of signature shares from validated pool
@@ -1873,123 +1912,163 @@ mod tests {
     }
 
     fn test_purge_validated_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let height = Height::from(100);
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let (id_1, id_2, id_3) = (
-                    create_request_id(&mut uid_generator, Height::from(10)),
-                    create_request_id(&mut uid_generator, Height::from(20)),
-                    create_request_id(&mut uid_generator, Height::from(200)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let height = Height::from(100);
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let (id_1, id_2, id_3) = (
+                        create_request_id(&mut uid_generator, Height::from(10)),
+                        create_request_id(&mut uid_generator, Height::from(20)),
+                        create_request_id(&mut uid_generator, Height::from(200)),
+                    );
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1, 3
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    height,
-                    vec![
-                        (id_1.clone(), create_sig_inputs(1, &key_id)),
-                        (id_3.clone(), create_sig_inputs(3, &key_id)),
-                    ],
-                );
-                let state = fake_state_with_signature_requests(
-                    height,
-                    block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_signature_request_context_from_id(key_id.clone(), request_id)
-                    }),
-                );
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1, 3
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        height,
+                        vec![
+                            (id_1.clone(), create_sig_inputs(1, &key_id)),
+                            (id_3.clone(), create_sig_inputs(3, &key_id)),
+                        ],
+                    );
+                    let state = fake_state_with_signature_requests(
+                        height,
+                        block_reader.requested_signatures().map(|(request_id, _)| {
+                            fake_signature_request_context_from_id(key_id.clone(), request_id)
+                        }),
+                    );
 
-                let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
+                    let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Share 1: height <= current_height, in_progress (not purged)
-                let share = create_signature_share(&key_id, NODE_2, id_1);
-                let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                    // Share 1: height <= current_height, in_progress (not purged)
+                    let share = create_signature_share(&key_id, NODE_2, id_1);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(share)];
+                    idkg_pool.apply_changes(change_set);
 
-                // Share 2: height <= current_height, !in_progress (purged)
-                let share = create_signature_share(&key_id, NODE_2, id_2);
-                let msg_id_2 = share.message_id();
-                let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                    // Share 2: height <= current_height, !in_progress (purged)
+                    let share = create_signature_share(&key_id, NODE_2, id_2);
+                    let msg_id_2 = share.message_id();
+                    let change_set = vec![IDkgChangeAction::AddToValidated(share)];
+                    idkg_pool.apply_changes(change_set);
 
-                // Share 3: height > current_height (not purged)
-                let share = create_signature_share(&key_id, NODE_2, id_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                    // Share 3: height > current_height (not purged)
+                    let share = create_signature_share(&key_id, NODE_2, id_3);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(share)];
+                    idkg_pool.apply_changes(change_set);
 
-                let change_set = signer.purge_artifacts(&idkg_pool, &state);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id_2));
-            })
-        })
+                    let change_set = signer.purge_artifacts(&idkg_pool, &state);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests aggregating ecdsa signature shares into a complete signature
     #[test]
     fn test_ecdsa_get_completed_signature() {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let req_id = create_request_id(&mut uid_generator, Height::from(10));
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    &mut rng,
-                );
-                let key_transcript = generate_key_transcript(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
-                    &mut rng,
-                );
-                let derivation_path = ExtendedDerivationPath {
-                    caller: canister_test_id(1).get(),
-                    derivation_path: vec![],
-                };
-                let pre_sig_id = req_id.pre_signature_id;
-                let message_hash = [0; 32];
-                let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    args: ThresholdArguments::Ecdsa(EcdsaArguments {
-                        key_id: fake_ecdsa_key_id(),
-                        message_hash,
-                    }),
-                    pseudo_random_id: req_id.pseudo_random_id,
-                    derivation_path: vec![],
-                    batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
-                    nonce: Some([2; 32]),
-                };
-                let sig_inputs = generate_tecdsa_protocol_inputs(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    &key_transcript,
-                    &message_hash,
-                    Randomness::from(context.nonce.unwrap()),
-                    &derivation_path,
-                    AlgorithmId::ThresholdEcdsaSecp256k1,
-                    &mut rng,
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, _) =
+                        create_signer_dependencies(pool_config, logger.clone());
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let req_id = create_request_id(&mut uid_generator, Height::from(10));
+                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                    let (dealers, receivers) = env.choose_dealers_and_receivers(
+                        &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                        &mut rng,
+                    );
+                    let key_transcript = generate_key_transcript(
+                        &env,
+                        &dealers,
+                        &receivers,
+                        AlgorithmId::ThresholdEcdsaSecp256k1,
+                        &mut rng,
+                    );
+                    let derivation_path = ExtendedDerivationPath {
+                        caller: canister_test_id(1).get(),
+                        derivation_path: vec![],
+                    };
+                    let pre_sig_id = req_id.pre_signature_id;
+                    let message_hash = [0; 32];
+                    let context = SignWithThresholdContext {
+                        request: RequestBuilder::new().sender(canister_test_id(1)).build(),
+                        args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                            key_id: fake_ecdsa_key_id(),
+                            message_hash,
+                        }),
+                        pseudo_random_id: req_id.pseudo_random_id,
+                        derivation_path: vec![],
+                        batch_time: UNIX_EPOCH,
+                        matched_pre_signature: Some((pre_sig_id, req_id.height)),
+                        nonce: Some([2; 32]),
+                    };
+                    let sig_inputs = generate_tecdsa_protocol_inputs(
+                        &env,
+                        &dealers,
+                        &receivers,
+                        &key_transcript,
+                        &message_hash,
+                        Randomness::from(context.nonce.unwrap()),
+                        &derivation_path,
+                        AlgorithmId::ThresholdEcdsaSecp256k1,
+                        &mut rng,
+                    );
 
-                // Set up the transcript creation request
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    Height::from(100),
-                    vec![(req_id.clone(), (&sig_inputs).into())],
-                );
+                    // Set up the transcript creation request
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        Height::from(100),
+                        vec![(req_id.clone(), (&sig_inputs).into())],
+                    );
 
-                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .next()
-                    .unwrap()
-                    .crypto();
+                    let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
+                    let crypto: Arc<dyn ConsensusCrypto> = env
+                        .nodes
+                        .filter_by_receivers(&sig_inputs)
+                        .next()
+                        .unwrap()
+                        .crypto();
 
-                {
+                    {
+                        let sig_builder = ThresholdSignatureBuilderImpl::new(
+                            &block_reader,
+                            crypto.deref(),
+                            &idkg_pool,
+                            &metrics,
+                            logger.clone(),
+                        );
+
+                        // There are no signature shares yet, no signature can be completed
+                        let result = sig_builder.get_completed_signature(&context);
+                        assert_matches!(result, None);
+                    }
+
+                    // Generate signature shares and add to validated
+                    let change_set = env
+                        .nodes
+                        .filter_by_receivers(&sig_inputs)
+                        .map(|receiver| {
+                            receiver.load_tecdsa_sig_transcripts(&sig_inputs);
+                            let share =
+                                ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
+                                    .expect("failed to create sig share");
+                            EcdsaSigShare {
+                                signer_id: receiver.id(),
+                                request_id: req_id.clone(),
+                                share,
+                            }
+                        })
+                        .map(|share| {
+                            IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share))
+                        })
+                        .collect::<Vec<_>>();
+                    idkg_pool.apply_changes(change_set);
+
                     let sig_builder = ThresholdSignatureBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
@@ -1998,65 +2077,34 @@ mod tests {
                         logger.clone(),
                     );
 
-                    // There are no signature shares yet, no signature can be completed
+                    // Signature completion should succeed now.
+                    let r1 = sig_builder.get_completed_signature(&context);
+                    // Compare to combined signature returned by crypto environment
+                    let r2 =
+                        CombinedSignature::Ecdsa(run_tecdsa_protocol(&env, &sig_inputs, &mut rng));
+                    assert_matches!(r1, Some(ref s) if s == &r2);
+
+                    // If the context's nonce hasn't been set yet, no signature should be completed
+                    let mut context_without_nonce = context.clone();
+                    context_without_nonce.nonce = None;
+                    let res = sig_builder.get_completed_signature(&context_without_nonce);
+                    assert_eq!(None, res);
+
+                    // If resolving the transcript refs fails, no signature should be completed
+                    let block_reader = block_reader.clone().with_fail_to_resolve();
+                    let sig_builder = ThresholdSignatureBuilderImpl::new(
+                        &block_reader,
+                        crypto.deref(),
+                        &idkg_pool,
+                        &metrics,
+                        logger,
+                    );
+
                     let result = sig_builder.get_completed_signature(&context);
                     assert_matches!(result, None);
-                }
-
-                // Generate signature shares and add to validated
-                let change_set = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .map(|receiver| {
-                        receiver.load_tecdsa_sig_transcripts(&sig_inputs);
-                        let share = ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
-                        EcdsaSigShare {
-                            signer_id: receiver.id(),
-                            request_id: req_id.clone(),
-                            share,
-                        }
-                    })
-                    .map(|share| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share))
-                    })
-                    .collect::<Vec<_>>();
-                idkg_pool.apply_changes(change_set);
-
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-
-                // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(&context);
-                // Compare to combined signature returned by crypto environment
-                let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(&env, &sig_inputs, &mut rng));
-                assert_matches!(r1, Some(ref s) if s == &r2);
-
-                // If the context's nonce hasn't been set yet, no signature should be completed
-                let mut context_without_nonce = context.clone();
-                context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(&context_without_nonce);
-                assert_eq!(None, res);
-
-                // If resolving the transcript refs fails, no signature should be completed
-                let block_reader = block_reader.clone().with_fail_to_resolve();
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger,
-                );
-
-                let result = sig_builder.get_completed_signature(&context);
-                assert_matches!(result, None);
-            });
-        })
+                });
+            },
+        )
     }
 
     // Tests aggregating schnorr signature shares into a complete signature
@@ -2070,63 +2118,100 @@ mod tests {
 
     fn test_schnorr_get_completed_signature(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let req_id = create_request_id(&mut uid_generator, Height::from(10));
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    &mut rng,
-                );
-                let key_transcript =
-                    generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
-                let derivation_path = ExtendedDerivationPath {
-                    caller: canister_test_id(1).get(),
-                    derivation_path: vec![],
-                };
-                let pre_sig_id = req_id.pre_signature_id;
-                let message = vec![0; 32];
-                let context = SignWithThresholdContext {
-                    request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    args: ThresholdArguments::Schnorr(SchnorrArguments {
-                        key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
-                        message: Arc::new(message.clone()),
-                    }),
-                    pseudo_random_id: req_id.pseudo_random_id,
-                    derivation_path: vec![],
-                    batch_time: UNIX_EPOCH,
-                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
-                    nonce: Some([2; 32]),
-                };
-                let sig_inputs = generate_tschnorr_protocol_inputs(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    &key_transcript,
-                    &message,
-                    Randomness::from(context.nonce.unwrap()),
-                    &derivation_path,
-                    algorithm,
-                    &mut rng,
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, _) =
+                        create_signer_dependencies(pool_config, logger.clone());
+                    let mut uid_generator =
+                        IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                    let req_id = create_request_id(&mut uid_generator, Height::from(10));
+                    let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+                    let (dealers, receivers) = env.choose_dealers_and_receivers(
+                        &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                        &mut rng,
+                    );
+                    let key_transcript =
+                        generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
+                    let derivation_path = ExtendedDerivationPath {
+                        caller: canister_test_id(1).get(),
+                        derivation_path: vec![],
+                    };
+                    let pre_sig_id = req_id.pre_signature_id;
+                    let message = vec![0; 32];
+                    let context = SignWithThresholdContext {
+                        request: RequestBuilder::new().sender(canister_test_id(1)).build(),
+                        args: ThresholdArguments::Schnorr(SchnorrArguments {
+                            key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
+                            message: Arc::new(message.clone()),
+                        }),
+                        pseudo_random_id: req_id.pseudo_random_id,
+                        derivation_path: vec![],
+                        batch_time: UNIX_EPOCH,
+                        matched_pre_signature: Some((pre_sig_id, req_id.height)),
+                        nonce: Some([2; 32]),
+                    };
+                    let sig_inputs = generate_tschnorr_protocol_inputs(
+                        &env,
+                        &dealers,
+                        &receivers,
+                        &key_transcript,
+                        &message,
+                        Randomness::from(context.nonce.unwrap()),
+                        &derivation_path,
+                        algorithm,
+                        &mut rng,
+                    );
 
-                // Set up the transcript creation request
-                let block_reader = TestIDkgBlockReader::for_signer_test(
-                    Height::from(100),
-                    vec![(req_id.clone(), (&sig_inputs).into())],
-                );
+                    // Set up the transcript creation request
+                    let block_reader = TestIDkgBlockReader::for_signer_test(
+                        Height::from(100),
+                        vec![(req_id.clone(), (&sig_inputs).into())],
+                    );
 
-                let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-                let crypto: Arc<dyn ConsensusCrypto> = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .next()
-                    .unwrap()
-                    .crypto();
+                    let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
+                    let crypto: Arc<dyn ConsensusCrypto> = env
+                        .nodes
+                        .filter_by_receivers(&sig_inputs)
+                        .next()
+                        .unwrap()
+                        .crypto();
 
-                {
+                    {
+                        let sig_builder = ThresholdSignatureBuilderImpl::new(
+                            &block_reader,
+                            crypto.deref(),
+                            &idkg_pool,
+                            &metrics,
+                            logger.clone(),
+                        );
+
+                        // There are no signature shares yet, no signature can be completed
+                        let result = sig_builder.get_completed_signature(&context);
+                        assert_matches!(result, None);
+                    }
+
+                    // Generate signature shares and add to validated
+                    let change_set = env
+                        .nodes
+                        .filter_by_receivers(&sig_inputs)
+                        .map(|receiver| {
+                            receiver.load_tschnorr_sig_transcripts(&sig_inputs);
+                            let share =
+                                ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
+                                    .expect("failed to create sig share");
+                            SchnorrSigShare {
+                                signer_id: receiver.id(),
+                                request_id: req_id.clone(),
+                                share,
+                            }
+                        })
+                        .map(|share| {
+                            IDkgChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share))
+                        })
+                        .collect::<Vec<_>>();
+                    idkg_pool.apply_changes(change_set);
+
                     let sig_builder = ThresholdSignatureBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
@@ -2135,65 +2220,36 @@ mod tests {
                         logger.clone(),
                     );
 
-                    // There are no signature shares yet, no signature can be completed
+                    // Signature completion should succeed now.
+                    let r1 = sig_builder.get_completed_signature(&context);
+                    // Compare to combined signature returned by crypto environment
+                    let r2 = CombinedSignature::Schnorr(run_tschnorr_protocol(
+                        &env,
+                        &sig_inputs,
+                        &mut rng,
+                    ));
+                    assert_matches!(r1, Some(ref s) if s == &r2);
+
+                    // If the context's nonce hasn't been set yet, no signature should be completed
+                    let mut context_without_nonce = context.clone();
+                    context_without_nonce.nonce = None;
+                    let res = sig_builder.get_completed_signature(&context_without_nonce);
+                    assert_eq!(None, res);
+
+                    // If resolving the transcript refs fails, no signature should be completed
+                    let block_reader = block_reader.clone().with_fail_to_resolve();
+                    let sig_builder = ThresholdSignatureBuilderImpl::new(
+                        &block_reader,
+                        crypto.deref(),
+                        &idkg_pool,
+                        &metrics,
+                        logger,
+                    );
+
                     let result = sig_builder.get_completed_signature(&context);
                     assert_matches!(result, None);
-                }
-
-                // Generate signature shares and add to validated
-                let change_set = env
-                    .nodes
-                    .filter_by_receivers(&sig_inputs)
-                    .map(|receiver| {
-                        receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
-                        SchnorrSigShare {
-                            signer_id: receiver.id(),
-                            request_id: req_id.clone(),
-                            share,
-                        }
-                    })
-                    .map(|share| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share))
-                    })
-                    .collect::<Vec<_>>();
-                idkg_pool.apply_changes(change_set);
-
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-
-                // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(&context);
-                // Compare to combined signature returned by crypto environment
-                let r2 =
-                    CombinedSignature::Schnorr(run_tschnorr_protocol(&env, &sig_inputs, &mut rng));
-                assert_matches!(r1, Some(ref s) if s == &r2);
-
-                // If the context's nonce hasn't been set yet, no signature should be completed
-                let mut context_without_nonce = context.clone();
-                context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(&context_without_nonce);
-                assert_eq!(None, res);
-
-                // If resolving the transcript refs fails, no signature should be completed
-                let block_reader = block_reader.clone().with_fail_to_resolve();
-                let sig_builder = ThresholdSignatureBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger,
-                );
-
-                let result = sig_builder.get_completed_signature(&context);
-                assert_matches!(result, None);
-            });
-        })
+                });
+            },
+        )
     }
 }

@@ -467,8 +467,8 @@ mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
     use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
-    use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -495,142 +495,146 @@ mod test {
 
     #[test]
     fn test_consensus_cache() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let time_source = FastForwardTimeSource::new();
-            let subnet_id = subnet_test_id(1);
-            let committee = vec![node_test_id(0)];
-            let dkg_interval_length = 3;
-            let subnet_records = vec![(
-                1,
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(dkg_interval_length)
-                    .build(),
-            )];
-            let registry = setup_registry(subnet_id, subnet_records);
-            let state_manager = FakeStateManager::new();
-            let state_manager = Arc::new(state_manager);
-            let mut pool = TestConsensusPool::new(
-                node_test_id(0),
-                subnet_id,
-                pool_config,
-                time_source,
-                registry,
-                Arc::new(CryptoReturningOk::default()),
-                state_manager,
-                None,
-            );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let time_source = FastForwardTimeSource::new();
+                let subnet_id = subnet_test_id(1);
+                let committee = vec![node_test_id(0)];
+                let dkg_interval_length = 3;
+                let subnet_records = vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )];
+                let registry = setup_registry(subnet_id, subnet_records);
+                let state_manager = FakeStateManager::new();
+                let state_manager = Arc::new(state_manager);
+                let mut pool = TestConsensusPool::new(
+                    node_test_id(0),
+                    subnet_id,
+                    pool_config,
+                    time_source,
+                    registry,
+                    Arc::new(CryptoReturningOk::default()),
+                    state_manager,
+                    None,
+                );
 
-            // 1. Cache is properly initialized
-            let consensus_cache = ConsensusCacheImpl::new(&pool);
-            assert_eq!(consensus_cache.finalized_block().height(), Height::from(0));
-            // No consensus time when there is only genesis block
-            assert_eq!(consensus_cache.consensus_time(), None);
-            check_finalized_chain(&consensus_cache, &[Height::from(0)]);
+                // 1. Cache is properly initialized
+                let consensus_cache = ConsensusCacheImpl::new(&pool);
+                assert_eq!(consensus_cache.finalized_block().height(), Height::from(0));
+                // No consensus time when there is only genesis block
+                assert_eq!(consensus_cache.consensus_time(), None);
+                check_finalized_chain(&consensus_cache, &[Height::from(0)]);
 
-            assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
-            let mut block = pool.make_next_block();
-            let time = UNIX_EPOCH + Duration::from_secs(10);
-            block.content.as_mut().context.time = time;
-            // recompute the hash to make sure it's still correct
-            block.update_content();
-            pool.insert_validated(block.clone());
-            pool.notarize(&block);
-            let finalization = Finalization::fake(FinalizationContent::new(
-                block.height(),
-                block.content.get_hash().clone(),
-            ));
+                assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
+                let mut block = pool.make_next_block();
+                let time = UNIX_EPOCH + Duration::from_secs(10);
+                block.content.as_mut().context.time = time;
+                // recompute the hash to make sure it's still correct
+                block.update_content();
+                pool.insert_validated(block.clone());
+                pool.notarize(&block);
+                let finalization = Finalization::fake(FinalizationContent::new(
+                    block.height(),
+                    block.content.get_hash().clone(),
+                ));
 
-            // 2. Cache can be updated by finalization
-            let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                ValidatedConsensusArtifact {
-                    msg: finalization.clone().into_message(),
-                    timestamp: time,
-                },
-            )]);
-            assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
-            pool.insert_validated(finalization);
-            consensus_cache.update(&pool, updates);
-            assert_eq!(consensus_cache.finalized_block().height(), Height::from(3));
-            assert_eq!(consensus_cache.consensus_time(), Some(time));
-            pool.insert_validated(pool.make_next_beacon());
-            pool.insert_validated(pool.make_next_tape());
-            check_finalized_chain(
-                &consensus_cache,
-                &[
-                    Height::from(0),
-                    Height::from(1),
-                    Height::from(2),
-                    Height::from(3),
-                ],
-            );
+                // 2. Cache can be updated by finalization
+                let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
+                    ValidatedConsensusArtifact {
+                        msg: finalization.clone().into_message(),
+                        timestamp: time,
+                    },
+                )]);
+                assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
+                pool.insert_validated(finalization);
+                consensus_cache.update(&pool, updates);
+                assert_eq!(consensus_cache.finalized_block().height(), Height::from(3));
+                assert_eq!(consensus_cache.consensus_time(), Some(time));
+                pool.insert_validated(pool.make_next_beacon());
+                pool.insert_validated(pool.make_next_tape());
+                check_finalized_chain(
+                    &consensus_cache,
+                    &[
+                        Height::from(0),
+                        Height::from(1),
+                        Height::from(2),
+                        Height::from(3),
+                    ],
+                );
 
-            // 3. Cache can be updated by CatchUpPackage
-            assert_eq!(
-                pool.prepare_round().dont_add_catch_up_package().advance(),
-                Height::from(4)
-            );
-            let catch_up_package = pool.make_catch_up_package(Height::from(4));
-            let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                ValidatedConsensusArtifact {
-                    msg: catch_up_package.clone().into_message(),
-                    timestamp: time,
-                },
-            )]);
-            assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
-            pool.insert_validated(catch_up_package.clone());
-            consensus_cache.update(&pool, updates);
-            assert_eq!(consensus_cache.catch_up_package(), catch_up_package);
-            assert_eq!(consensus_cache.finalized_block().height(), Height::from(4));
-            check_finalized_chain(&consensus_cache, &[Height::from(4)]);
-        })
+                // 3. Cache can be updated by CatchUpPackage
+                assert_eq!(
+                    pool.prepare_round().dont_add_catch_up_package().advance(),
+                    Height::from(4)
+                );
+                let catch_up_package = pool.make_catch_up_package(Height::from(4));
+                let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
+                    ValidatedConsensusArtifact {
+                        msg: catch_up_package.clone().into_message(),
+                        timestamp: time,
+                    },
+                )]);
+                assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
+                pool.insert_validated(catch_up_package.clone());
+                consensus_cache.update(&pool, updates);
+                assert_eq!(consensus_cache.catch_up_package(), catch_up_package);
+                assert_eq!(consensus_cache.finalized_block().height(), Height::from(4));
+                check_finalized_chain(&consensus_cache, &[Height::from(4)]);
+            },
+        )
     }
 
     /// Tests that `is_replica_behind` (trait method of [`ConsensusPoolCache`]) works as expected
     #[test]
     fn test_is_replica_behind() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_records = vec![(
-                1,
-                SubnetRecordBuilder::from(&[node_test_id(0)])
-                    .with_dkg_interval_length(3)
-                    .build(),
-            )];
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_records = vec![(
+                    1,
+                    SubnetRecordBuilder::from(&[node_test_id(0)])
+                        .with_dkg_interval_length(3)
+                        .build(),
+                )];
 
-            let mut pool = TestConsensusPool::new(
-                node_test_id(0),
-                subnet_test_id(1),
-                pool_config,
-                FastForwardTimeSource::new(),
-                setup_registry(subnet_test_id(1), subnet_records),
-                Arc::new(CryptoReturningOk::default()),
-                Arc::new(FakeStateManager::new()),
-                None,
-            );
+                let mut pool = TestConsensusPool::new(
+                    node_test_id(0),
+                    subnet_test_id(1),
+                    pool_config,
+                    FastForwardTimeSource::new(),
+                    setup_registry(subnet_test_id(1), subnet_records),
+                    Arc::new(CryptoReturningOk::default()),
+                    Arc::new(FakeStateManager::new()),
+                    None,
+                );
 
-            let consensus_cache = ConsensusCacheImpl::new(&pool);
+                let consensus_cache = ConsensusCacheImpl::new(&pool);
 
-            // Initially the replica is not behind
-            assert!(!consensus_cache.is_replica_behind(Height::new(0)));
+                // Initially the replica is not behind
+                assert!(!consensus_cache.is_replica_behind(Height::new(0)));
 
-            // Advance and set the certified height to one below where the replica would be considered behind
-            pool.advance_round_normal_operation_n(HEIGHT_CONSIDERED_BEHIND.get() - 1);
-            Round::new(&mut pool)
-                .with_certified_height(HEIGHT_CONSIDERED_BEHIND)
-                .advance();
-            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+                // Advance and set the certified height to one below where the replica would be considered behind
+                pool.advance_round_normal_operation_n(HEIGHT_CONSIDERED_BEHIND.get() - 1);
+                Round::new(&mut pool)
+                    .with_certified_height(HEIGHT_CONSIDERED_BEHIND)
+                    .advance();
+                consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
 
-            // Check that the replica is still not considered behind
-            assert!(!consensus_cache.is_replica_behind(Height::new(0)));
+                // Check that the replica is still not considered behind
+                assert!(!consensus_cache.is_replica_behind(Height::new(0)));
 
-            // Advance one more round
-            Round::new(&mut pool)
-                .with_certified_height(HEIGHT_CONSIDERED_BEHIND + Height::new(1))
-                .advance();
-            consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
+                // Advance one more round
+                Round::new(&mut pool)
+                    .with_certified_height(HEIGHT_CONSIDERED_BEHIND + Height::new(1))
+                    .advance();
+                consensus_cache.update(&pool, vec![CacheUpdateAction::Finalization]);
 
-            // At this height, the replica should be considered behind
-            assert!(consensus_cache.is_replica_behind(Height::new(0)))
-        })
+                // At this height, the replica should be considered behind
+                assert!(consensus_cache.is_replica_behind(Height::new(0)))
+            },
+        )
     }
 
     #[test]

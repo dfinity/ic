@@ -1912,8 +1912,8 @@ pub mod test {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -2037,236 +2037,262 @@ pub mod test {
 
     #[test]
     fn test_validate_catch_up_package_shares() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            // The state manager is mocked and the `StateHash` is completely arbitrary. It
-            // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(state_hash.clone()));
+                // The state manager is mocked and the `StateHash` is completely arbitrary. It
+                // must just be the same as in the `CatchUpPackageShare`.
+                let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(state_hash.clone()));
 
-            // Manually construct a cup share
-            let make_next_cup_share = |pool: &TestConsensusPool| -> CatchUpPackageShare {
-                let random_beacon = pool.make_next_beacon();
-                let random_beacon_hash =
-                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon);
-                let block = Block::from(pool.make_next_block());
-                let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
+                // Manually construct a cup share
+                let make_next_cup_share = |pool: &TestConsensusPool| -> CatchUpPackageShare {
+                    let random_beacon = pool.make_next_beacon();
+                    let random_beacon_hash =
+                        HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon);
+                    let block = Block::from(pool.make_next_block());
+                    let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
 
-                Signed {
-                    content: CatchUpShareContent::from(&CatchUpContent::new(
-                        block_hash,
-                        random_beacon_hash,
-                        state_hash.clone(),
-                        None,
-                    )),
-                    signature: ThresholdSignatureShare::fake(node_test_id(0)),
-                }
-            };
+                    Signed {
+                        content: CatchUpShareContent::from(&CatchUpContent::new(
+                            block_hash,
+                            random_beacon_hash,
+                            state_hash.clone(),
+                            None,
+                        )),
+                        signature: ThresholdSignatureShare::fake(node_test_id(0)),
+                    }
+                };
 
-            // Skip to two heights before Summary height
-            pool.advance_round_normal_operation_no_cup_n(8);
+                // Skip to two heights before Summary height
+                pool.advance_round_normal_operation_no_cup_n(8);
 
-            let cup_share_data_height = make_next_cup_share(&pool);
-            pool.advance_round_normal_operation_no_cup_n(1);
-            let cup_share_summary_height = make_next_cup_share(&pool);
+                let cup_share_data_height = make_next_cup_share(&pool);
+                pool.advance_round_normal_operation_no_cup_n(1);
+                let cup_share_summary_height = make_next_cup_share(&pool);
 
-            // Advance by two rounds so we have a finalized block at the heights
-            // This is necessary for the validate function to succeed
-            pool.advance_round_normal_operation_no_cup_n(1);
-            pool.insert_unvalidated(cup_share_data_height.clone());
-            pool.insert_unvalidated(cup_share_summary_height.clone());
-            let mut cup_from_old_replica_version = cup_share_summary_height.clone();
-            cup_from_old_replica_version.content.version =
-                ReplicaVersion::try_from("old_version").unwrap();
-            pool.insert_unvalidated(cup_from_old_replica_version.clone());
-            let mut cup_with_registry_version = cup_share_summary_height.clone();
-            cup_with_registry_version
-                .content
-                .oldest_registry_version_in_use_by_replicated_state =
-                Some(RegistryVersion::from(1));
-            pool.insert_unvalidated(cup_with_registry_version.clone());
+                // Advance by two rounds so we have a finalized block at the heights
+                // This is necessary for the validate function to succeed
+                pool.advance_round_normal_operation_no_cup_n(1);
+                pool.insert_unvalidated(cup_share_data_height.clone());
+                pool.insert_unvalidated(cup_share_summary_height.clone());
+                let mut cup_from_old_replica_version = cup_share_summary_height.clone();
+                cup_from_old_replica_version.content.version =
+                    ReplicaVersion::try_from("old_version").unwrap();
+                pool.insert_unvalidated(cup_from_old_replica_version.clone());
+                let mut cup_with_registry_version = cup_share_summary_height.clone();
+                cup_with_registry_version
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state =
+                    Some(RegistryVersion::from(1));
+                pool.insert_unvalidated(cup_with_registry_version.clone());
 
-            let pool_reader = PoolReader::new(&pool);
-            let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+                let pool_reader = PoolReader::new(&pool);
+                let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
-            // Check that the change set contains exactly the one `CatchUpPackageShare` we
-            // expect it to.
-            assert_eq!(change_set.len(), 4);
-            assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
-            );
-            assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_share_summary_height
-            );
-            assert_matches!(&change_set[2], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_from_old_replica_version
-            );
-            assert_matches!(&change_set[3], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_with_registry_version && m.contains("MismatchedOldestRegistryVersion")
-            );
-        })
+                // Check that the change set contains exactly the one `CatchUpPackageShare` we
+                // expect it to.
+                assert_eq!(change_set.len(), 4);
+                assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                    if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
+                );
+                assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
+                    if s == &cup_share_summary_height
+                );
+                assert_matches!(&change_set[2], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::CatchUpPackageShare(s))
+                    if s == &cup_from_old_replica_version
+                );
+                assert_matches!(&change_set[3], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                    if s == &cup_with_registry_version && m.contains("MismatchedOldestRegistryVersion")
+                );
+            },
+        )
     }
 
     #[test]
     fn test_validate_catch_up_package_shares_with_registry_version() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                mut pool,
-                ..
-            } = setup_dependencies_with_raw_state_manager(
-                pool_config,
-                &(0..4).map(node_test_id).collect::<Vec<_>>(),
-            );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    mut pool,
+                    ..
+                } = setup_dependencies_with_raw_state_manager(
+                    pool_config,
+                    &(0..4).map(node_test_id).collect::<Vec<_>>(),
+                );
 
-            // The state manager is mocked and the `StateHash` is completely arbitrary. It
-            // must just be the same as in the `CatchUpPackageShare`.
-            let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(state_hash.clone()));
+                // The state manager is mocked and the `StateHash` is completely arbitrary. It
+                // must just be the same as in the `CatchUpPackageShare`.
+                let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_master_public_key_id();
-            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id2 = PreSigId(2);
-            let pre_sig_id3 = PreSigId(3);
+                let key_id = fake_ecdsa_master_public_key_id();
+                // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+                let pre_sig_id1 = PreSigId(1);
+                let pre_sig_id2 = PreSigId(2);
+                let pre_sig_id3 = PreSigId(3);
 
-            let contexts = vec![
-                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
-            ];
+                let contexts = vec![
+                    fake_signature_request_context_with_pre_sig(
+                        1,
+                        key_id.clone(),
+                        Some(pre_sig_id1),
+                    ),
+                    fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                    fake_signature_request_context_with_pre_sig(
+                        3,
+                        key_id.clone(),
+                        Some(pre_sig_id3),
+                    ),
+                ];
 
-            state_manager
-                .get_mut()
-                .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
-                    Height::from(0),
-                    contexts.clone(),
-                )
-                .get_labeled_state()));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_at()
+                    .return_const(Ok(fake_state_with_signature_requests(
+                        Height::from(0),
+                        contexts.clone(),
+                    )
+                    .get_labeled_state()));
 
-            // Manually construct a cup share
-            let make_next_cup_share = |proposal: BlockProposal,
-                                       beacon: RandomBeacon,
-                                       oldest_registry_version: Option<RegistryVersion>|
-             -> CatchUpPackageShare {
-                let random_beacon_hash =
-                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
-                let block = Block::from(proposal);
-                let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
+                // Manually construct a cup share
+                let make_next_cup_share = |proposal: BlockProposal,
+                                           beacon: RandomBeacon,
+                                           oldest_registry_version: Option<RegistryVersion>|
+                 -> CatchUpPackageShare {
+                    let random_beacon_hash =
+                        HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon);
+                    let block = Block::from(proposal);
+                    let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
 
-                Signed {
-                    content: CatchUpShareContent::from(&CatchUpContent::new(
-                        block_hash,
-                        random_beacon_hash,
-                        state_hash.clone(),
-                        oldest_registry_version,
-                    )),
-                    signature: ThresholdSignatureShare::fake(node_test_id(0)),
-                }
-            };
+                    Signed {
+                        content: CatchUpShareContent::from(&CatchUpContent::new(
+                            block_hash,
+                            random_beacon_hash,
+                            state_hash.clone(),
+                            oldest_registry_version,
+                        )),
+                        signature: ThresholdSignatureShare::fake(node_test_id(0)),
+                    }
+                };
 
-            // Skip to Summary height
-            pool.advance_round_normal_operation_no_cup_n(9);
+                // Skip to Summary height
+                pool.advance_round_normal_operation_no_cup_n(9);
 
-            let mut proposal = pool.make_next_block();
-            let block = proposal.content.as_mut();
-            block.context.certified_height = block.height();
+                let mut proposal = pool.make_next_block();
+                let block = proposal.content.as_mut();
+                block.context.certified_height = block.height();
 
-            let mut idkg = empty_idkg_payload(subnet_test_id(0));
-            // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
+                let mut idkg = empty_idkg_payload(subnet_test_id(0));
+                // Add the three quadruples using registry version 3, 1 and 2 in order
+                add_available_quadruple_to_payload(
+                    &mut idkg,
+                    pre_sig_id1,
+                    RegistryVersion::from(3),
+                );
+                add_available_quadruple_to_payload(
+                    &mut idkg,
+                    pre_sig_id2,
+                    RegistryVersion::from(1),
+                );
+                add_available_quadruple_to_payload(
+                    &mut idkg,
+                    pre_sig_id3,
+                    RegistryVersion::from(2),
+                );
 
-            let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
-            );
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                let dkg = block.payload.as_ref().as_summary().dkg.clone();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg,
+                        idkg: Some(idkg),
+                    }),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
-            let beacon = pool.make_next_beacon();
-            pool.advance_round_with_block(&proposal);
+                let beacon = pool.make_next_beacon();
+                pool.advance_round_with_block(&proposal);
 
-            let cup_share_no_registry_version =
-                make_next_cup_share(proposal.clone(), beacon.clone(), None);
-            pool.insert_unvalidated(cup_share_no_registry_version.clone());
+                let cup_share_no_registry_version =
+                    make_next_cup_share(proposal.clone(), beacon.clone(), None);
+                pool.insert_unvalidated(cup_share_no_registry_version.clone());
 
-            let cup_share_wrong_registry_version = make_next_cup_share(
-                proposal.clone(),
-                beacon.clone(),
-                Some(RegistryVersion::from(1)),
-            );
-            pool.insert_unvalidated(cup_share_wrong_registry_version.clone());
+                let cup_share_wrong_registry_version = make_next_cup_share(
+                    proposal.clone(),
+                    beacon.clone(),
+                    Some(RegistryVersion::from(1)),
+                );
+                pool.insert_unvalidated(cup_share_wrong_registry_version.clone());
 
-            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
-            // by the replicated state should be the registry version of quadruple 3, which is 2.
-            let cup_share_valid =
-                make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
-            pool.insert_unvalidated(cup_share_valid.clone());
+                // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
+                // by the replicated state should be the registry version of quadruple 3, which is 2.
+                let cup_share_valid =
+                    make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
+                pool.insert_unvalidated(cup_share_valid.clone());
 
-            let pool_reader = PoolReader::new(&pool);
-            let change_set = validator.validate_catch_up_package_shares(&pool_reader);
+                let pool_reader = PoolReader::new(&pool);
+                let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
-            // Check that the change set contains exactly the one `CatchUpPackageShare` we
-            // expect it to.
-            assert_eq!(change_set.len(), 3);
-            assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_no_registry_version && m.contains("MismatchedOldestRegistryVersion")
-            );
-            assert_matches!(&change_set[1], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_wrong_registry_version && m.contains("MismatchedOldestRegistryVersion")
-            );
-            assert_matches!(&change_set[2], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_share_valid
-            );
-        })
+                // Check that the change set contains exactly the one `CatchUpPackageShare` we
+                // expect it to.
+                assert_eq!(change_set.len(), 3);
+                assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                    if s == &cup_share_no_registry_version && m.contains("MismatchedOldestRegistryVersion")
+                );
+                assert_matches!(&change_set[1], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                    if s == &cup_share_wrong_registry_version && m.contains("MismatchedOldestRegistryVersion")
+                );
+                assert_matches!(&change_set[2], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
+                    if s == &cup_share_valid
+                );
+            },
+        )
     }
 
     /// Test that Finalizations are not moved from `unvalidated` to `validated`
     /// unless a Notarization exists in `validated` for the associated block
     #[test]
     fn test_finalization_requires_notarization() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
-            // Insert a Finalization for `block` in the unvalidated pool
-            let share = FinalizationShare::fake(block.as_ref(), block.signature.signer);
-            pool.insert_unvalidated(Finalization::fake(share.content));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                // Insert a Finalization for `block` in the unvalidated pool
+                let share = FinalizationShare::fake(block.as_ref(), block.signature.signer);
+                pool.insert_unvalidated(Finalization::fake(share.content));
 
-            // With no existing Notarization for `block`, the Finalization in the
-            // unvalidated pool should not be added to validated
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty());
+                // With no existing Notarization for `block`, the Finalization in the
+                // unvalidated pool should not be added to validated
+                assert!(validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty());
 
-            // Add a Notarization for `block` and assert it causes the Finalization
-            // to be added to validated
-            pool.notarize(&block);
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)).len(), 1);
-        })
+                // Add a Notarization for `block` and assert it causes the Finalization
+                // to be added to validated
+                pool.notarize(&block);
+                assert_eq!(validator.on_state_change(&PoolReader::new(&pool)).len(), 1);
+            },
+        )
     }
 
     #[test]
@@ -2315,493 +2341,508 @@ pub mod test {
 
     #[test]
     fn test_random_beacon_validation() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
-            pool.advance_round_normal_operation();
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+                pool.advance_round_normal_operation();
 
-            // Put a random tape share in the unvalidated pool
-            let pool_reader = PoolReader::new(&pool);
-            let beacon_1 = pool_reader.get_random_beacon(Height::from(1)).unwrap();
-            let beacon_2 = RandomBeacon::from_parent(&beacon_1);
-            let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
-            pool.insert_unvalidated(share_3.clone());
-            let mut share_with_old_version = share_3.clone();
-            share_with_old_version.content = RandomBeaconContent {
-                version: ReplicaVersion::try_from("old_version").unwrap(),
-                height: share_3.content.height,
-                parent: share_3.content.parent.clone(),
-            };
-            pool.insert_unvalidated(share_with_old_version.clone());
+                // Put a random tape share in the unvalidated pool
+                let pool_reader = PoolReader::new(&pool);
+                let beacon_1 = pool_reader.get_random_beacon(Height::from(1)).unwrap();
+                let beacon_2 = RandomBeacon::from_parent(&beacon_1);
+                let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
+                pool.insert_unvalidated(share_3.clone());
+                let mut share_with_old_version = share_3.clone();
+                share_with_old_version.content = RandomBeaconContent {
+                    version: ReplicaVersion::try_from("old_version").unwrap(),
+                    height: share_3.content.height,
+                    parent: share_3.content.parent.clone(),
+                };
+                pool.insert_unvalidated(share_with_old_version.clone());
 
-            // share_3 cannot validate due to missing parent
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 0);
+                // share_3 cannot validate due to missing parent
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 0);
 
-            // beacon_2 validates
-            pool.insert_unvalidated(beacon_2.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
-            assert_eq!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
-            );
-            pool.apply_changes(changeset);
+                // beacon_2 validates
+                pool.insert_unvalidated(beacon_2.clone());
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
+                assert_eq!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
+                );
+                pool.apply_changes(changeset);
 
-            // share_3 now validates
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 2);
-            assert_eq!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomBeaconShare(share_3))
-            );
-            assert_eq!(
-                changeset[1],
-                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomBeaconShare(
-                    share_with_old_version
-                ))
-            )
-        })
+                // share_3 now validates
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 2);
+                assert_eq!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomBeaconShare(share_3))
+                );
+                assert_eq!(
+                    changeset[1],
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomBeaconShare(
+                        share_with_old_version
+                    ))
+                )
+            },
+        )
     }
 
     #[test]
     fn test_random_tape_validation() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                message_routing,
-                mut pool,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    message_routing,
+                    mut pool,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            let mut round = pool.prepare_round().dont_finalize().dont_add_random_tape();
-            round.advance();
-            pool.prepare_round()
-                .dont_add_catch_up_package()
-                .dont_add_random_tape()
-                .advance();
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
-            let expected_batch_height = Arc::new(RwLock::new(Height::from(1)));
-            let expected_batch_height_clone = expected_batch_height.clone();
-            message_routing
-                .get_mut()
-                .expect_expected_batch_height()
-                .returning(move || *expected_batch_height_clone.read().unwrap());
+                let mut round = pool.prepare_round().dont_finalize().dont_add_random_tape();
+                round.advance();
+                pool.prepare_round()
+                    .dont_add_catch_up_package()
+                    .dont_add_random_tape()
+                    .advance();
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                let expected_batch_height = Arc::new(RwLock::new(Height::from(1)));
+                let expected_batch_height_clone = expected_batch_height.clone();
+                message_routing
+                    .get_mut()
+                    .expect_expected_batch_height()
+                    .returning(move || *expected_batch_height_clone.read().unwrap());
 
-            // Put a random tape share in the unvalidated pool
-            let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
-            pool.insert_unvalidated(share_1.clone());
+                // Put a random tape share in the unvalidated pool
+                let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
+                pool.insert_unvalidated(share_1.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
-            assert_eq!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(share_1.clone()))
-            );
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
+                assert_eq!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(
+                        share_1.clone()
+                    ))
+                );
 
-            // Put another random tape share in the unvalidated pool
-            let share_2 = RandomTapeShare::fake(Height::from(2), replica_config.node_id);
-            pool.insert_unvalidated(share_2.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 2);
-            assert!(changeset.iter().all(|action| matches!(
-                action,
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(_))
-            )));
+                // Put another random tape share in the unvalidated pool
+                let share_2 = RandomTapeShare::fake(Height::from(2), replica_config.node_id);
+                pool.insert_unvalidated(share_2.clone());
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 2);
+                assert!(changeset.iter().all(|action| matches!(
+                    action,
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(_))
+                )));
 
-            // Insert a random tape of height 1 in validated pool, check if only share_2 is
-            // validated
-            let tape_1 = RandomTape::fake(RandomTapeContent::new(Height::from(1)));
-            pool.insert_validated(tape_1);
+                // Insert a random tape of height 1 in validated pool, check if only share_2 is
+                // validated
+                let tape_1 = RandomTape::fake(RandomTapeContent::new(Height::from(1)));
+                pool.insert_validated(tape_1);
 
-            let mut old_replica_version_share = share_2.clone();
-            old_replica_version_share.content.version =
-                ReplicaVersion::try_from("old_version").unwrap();
-            pool.insert_unvalidated(old_replica_version_share.clone());
+                let mut old_replica_version_share = share_2.clone();
+                old_replica_version_share.content.version =
+                    ReplicaVersion::try_from("old_version").unwrap();
+                pool.insert_unvalidated(old_replica_version_share.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 3);
-            assert_eq!(
-                changeset[1],
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(share_2))
-            );
-            assert_eq!(
-                changeset[0],
-                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(share_1))
-            );
-            assert_eq!(
-                changeset[2],
-                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(
-                    old_replica_version_share
-                ))
-            );
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 3);
+                assert_eq!(
+                    changeset[1],
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(share_2))
+                );
+                assert_eq!(
+                    changeset[0],
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(share_1))
+                );
+                assert_eq!(
+                    changeset[2],
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(
+                        old_replica_version_share
+                    ))
+                );
 
-            // Accept changes
-            pool.apply_changes(changeset);
+                // Accept changes
+                pool.apply_changes(changeset);
 
-            // Insert random tape at height 4, check if it is ignored
-            let content = RandomTapeContent::new(Height::from(4));
-            let signature = ThresholdSignature::fake();
-            let tape_4 = RandomTape { content, signature };
-            pool.insert_unvalidated(tape_4.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 0);
+                // Insert random tape at height 4, check if it is ignored
+                let content = RandomTapeContent::new(Height::from(4));
+                let signature = ThresholdSignature::fake();
+                let tape_4 = RandomTape { content, signature };
+                pool.insert_unvalidated(tape_4.clone());
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 0);
 
-            // Make finalized block at height 4, check if tape_4 is now accepted
-            pool.prepare_round()
-                .dont_add_catch_up_package()
-                .dont_add_random_tape()
-                .advance();
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
-            assert_eq!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::RandomTape(tape_4))
-            );
+                // Make finalized block at height 4, check if tape_4 is now accepted
+                pool.prepare_round()
+                    .dont_add_catch_up_package()
+                    .dont_add_random_tape()
+                    .advance();
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
+                assert_eq!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::RandomTape(tape_4))
+                );
 
-            // Accept changes
-            pool.apply_changes(changeset);
+                // Accept changes
+                pool.apply_changes(changeset);
 
-            // Set expected batch height to height 4, check if tape_3 is ignored
-            let content = RandomTapeContent::new(Height::from(3));
-            let signature = ThresholdSignature::fake();
-            let tape_3 = RandomTape { content, signature };
-            pool.insert_unvalidated(tape_3);
-            *expected_batch_height.write().unwrap() = Height::from(4);
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 0);
-        })
+                // Set expected batch height to height 4, check if tape_3 is ignored
+                let content = RandomTapeContent::new(Height::from(3));
+                let signature = ThresholdSignature::fake();
+                let tape_3 = RandomTape { content, signature };
+                pool.insert_unvalidated(tape_3);
+                *expected_batch_height.write().unwrap() = Height::from(4);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 0);
+            },
+        )
     }
 
     #[test]
     fn test_block_validation() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let prior_height = Height::from(5);
-            let certified_height = Height::from(1);
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                data_provider,
-                registry_client,
-                mut pool,
-                time_source,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &committee);
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .withf(move |_, _, _, payloads| {
-                    // Assert that payloads are from blocks between:
-                    // `certified_height` and the current height (`prior_height`)
-                    payloads.len() as u64 == (prior_height - certified_height).get()
-                })
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let prior_height = Height::from(5);
+                let certified_height = Height::from(1);
+                let committee: Vec<_> = (0..4).map(node_test_id).collect();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    data_provider,
+                    registry_client,
+                    mut pool,
+                    time_source,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &committee);
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .withf(move |_, _, _, payloads| {
+                        // Assert that payloads are from blocks between:
+                        // `certified_height` and the current height (`prior_height`)
+                        payloads.len() as u64 == (prior_height - certified_height).get()
+                    })
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
 
-            add_subnet_record(
-                &data_provider,
-                11,
-                replica_config.subnet_id,
-                SubnetRecordBuilder::from(&[]).build(),
-            );
-            registry_client.update_to_latest_version();
-
-            // Create a block chain with some length that will not be finalized
-            pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
-            let block_chain = pool.insert_block_chain(prior_height);
-
-            // Create and insert the block whose validation we will be testing
-            let parent: &Block = block_chain.last().unwrap().as_ref();
-            let rank = Rank(1);
-            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
-
-            test_block.context.registry_version = RegistryVersion::from(11);
-            test_block.context.certified_height = Height::from(1);
-            let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
-            pool.insert_unvalidated(block_proposal.clone());
-
-            // Finalize some blocks to ensure that:
-            // certified_height + 1 != finalized_height
-            // We can then correctly assert that the payloads we pass to
-            // `payload_builder.validate_payload()` are from blocks after
-            // certified_height, and not finalized_height
-            pool.finalize(&block_chain[0]);
-            pool.finalize(&block_chain[1]);
-            pool.finalize(&block_chain[2]);
-
-            // Ensure that the validator initially does not validate anything, as it is not
-            // time for rank 1 yet
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty(),);
-
-            // Time between blocks increases by at least initial_notary_delay + 1ns
-            let monotonic_block_increment = registry_client
-                .get_notarization_delay_settings(
+                add_subnet_record(
+                    &data_provider,
+                    11,
                     replica_config.subnet_id,
-                    test_block.context.registry_version,
-                )
-                .unwrap()
-                .expect("subnet record should be available")
-                .initial_notary_delay
-                + Duration::from_nanos(1);
+                    SubnetRecordBuilder::from(&[]).build(),
+                );
+                registry_client.update_to_latest_version();
 
-            // After sufficiently advancing the time, ensure that the validator validates
-            // the block
-            let delay = monotonic_block_increment
-                + get_block_maker_delay(
-                    &no_op_logger(),
-                    registry_client.as_ref(),
-                    replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
-                    rank,
-                )
-                .unwrap();
+                // Create a block chain with some length that will not be finalized
+                pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
+                let block_chain = pool.insert_block_chain(prior_height);
 
-            time_source.set_time(parent.context.time + delay).unwrap();
-            let valid_results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_block_valid(&valid_results, &block_proposal);
-        });
+                // Create and insert the block whose validation we will be testing
+                let parent: &Block = block_chain.last().unwrap().as_ref();
+                let rank = Rank(1);
+                let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
+
+                let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+
+                test_block.context.registry_version = RegistryVersion::from(11);
+                test_block.context.certified_height = Height::from(1);
+                let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
+                pool.insert_unvalidated(block_proposal.clone());
+
+                // Finalize some blocks to ensure that:
+                // certified_height + 1 != finalized_height
+                // We can then correctly assert that the payloads we pass to
+                // `payload_builder.validate_payload()` are from blocks after
+                // certified_height, and not finalized_height
+                pool.finalize(&block_chain[0]);
+                pool.finalize(&block_chain[1]);
+                pool.finalize(&block_chain[2]);
+
+                // Ensure that the validator initially does not validate anything, as it is not
+                // time for rank 1 yet
+                assert!(validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty(),);
+
+                // Time between blocks increases by at least initial_notary_delay + 1ns
+                let monotonic_block_increment = registry_client
+                    .get_notarization_delay_settings(
+                        replica_config.subnet_id,
+                        test_block.context.registry_version,
+                    )
+                    .unwrap()
+                    .expect("subnet record should be available")
+                    .initial_notary_delay
+                    + Duration::from_nanos(1);
+
+                // After sufficiently advancing the time, ensure that the validator validates
+                // the block
+                let delay = monotonic_block_increment
+                    + get_block_maker_delay(
+                        &no_op_logger(),
+                        registry_client.as_ref(),
+                        replica_config.subnet_id,
+                        PoolReader::new(&pool)
+                            .registry_version(test_block.height())
+                            .unwrap(),
+                        rank,
+                    )
+                    .unwrap();
+
+                time_source.set_time(parent.context.time + delay).unwrap();
+                let valid_results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_block_valid(&valid_results, &block_proposal);
+            },
+        );
     }
 
     #[test]
     fn test_block_validation_with_old_replica_version() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let prior_height = Height::from(5);
-            let certified_height = Height::from(1);
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                data_provider,
-                registry_client,
-                mut pool,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &committee);
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .withf(move |_, _, _, payloads| {
-                    // Assert that payloads are from blocks between:
-                    // `certified_height` and the current height (`prior_height`)
-                    payloads.len() as u64 == (prior_height - certified_height).get()
-                })
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let prior_height = Height::from(5);
+                let certified_height = Height::from(1);
+                let committee: Vec<_> = (0..4).map(node_test_id).collect();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    data_provider,
+                    registry_client,
+                    mut pool,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &committee);
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .withf(move |_, _, _, payloads| {
+                        // Assert that payloads are from blocks between:
+                        // `certified_height` and the current height (`prior_height`)
+                        payloads.len() as u64 == (prior_height - certified_height).get()
+                    })
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
 
-            add_subnet_record(
-                &data_provider,
-                11,
-                replica_config.subnet_id,
-                SubnetRecordBuilder::from(&[]).build(),
-            );
-            registry_client.update_to_latest_version();
+                add_subnet_record(
+                    &data_provider,
+                    11,
+                    replica_config.subnet_id,
+                    SubnetRecordBuilder::from(&[]).build(),
+                );
+                registry_client.update_to_latest_version();
 
-            // Create a block chain with some length that will not be finalized
-            pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
-            let block_chain = pool.insert_block_chain(prior_height);
+                // Create a block chain with some length that will not be finalized
+                pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
+                let block_chain = pool.insert_block_chain(prior_height);
 
-            // Create and insert the block whose validation we will be testing
-            let parent: &Block = block_chain.last().unwrap().as_ref();
-            let rank = Rank(1);
-            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+                // Create and insert the block whose validation we will be testing
+                let parent: &Block = block_chain.last().unwrap().as_ref();
+                let rank = Rank(1);
+                let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
+                let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
 
-            test_block.context.registry_version = RegistryVersion::from(11);
-            test_block.context.certified_height = Height::from(1);
-            test_block.version = ReplicaVersion::try_from("old_version").unwrap();
+                test_block.context.registry_version = RegistryVersion::from(11);
+                test_block.context.certified_height = Height::from(1);
+                test_block.version = ReplicaVersion::try_from("old_version").unwrap();
 
-            let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
-            pool.insert_unvalidated(block_proposal.clone());
+                let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
+                pool.insert_unvalidated(block_proposal.clone());
 
-            // Finalize some blocks to ensure that:
-            // certified_height + 1 != finalized_height
-            // We can then correctly assert that the payloads we pass to
-            // `payload_builder.validate_payload()` are from blocks after
-            // certified_height, and not finalized_height
-            pool.finalize(&block_chain[0]);
-            pool.finalize(&block_chain[1]);
-            pool.finalize(&block_chain[2]);
+                // Finalize some blocks to ensure that:
+                // certified_height + 1 != finalized_height
+                // We can then correctly assert that the payloads we pass to
+                // `payload_builder.validate_payload()` are from blocks after
+                // certified_height, and not finalized_height
+                pool.finalize(&block_chain[0]);
+                pool.finalize(&block_chain[1]);
+                pool.finalize(&block_chain[2]);
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(results.len(), 1);
-            assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
-                if b == &block_proposal
-            );
-        })
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(results.len(), 1);
+                assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
+                    if b == &block_proposal
+                );
+            },
+        )
     }
 
     #[test]
     // Construct a proposal block with a non-notarized parent and make sure we're
     // not validating this block until the parent gets notarized.
     fn test_block_validation_without_notarized_parent() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let certified_height = Height::from(1);
-            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                data_provider,
-                registry_client,
-                mut pool,
-                time_source,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &committee);
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
-            state_manager
-                .get_mut()
-                .expect_get_state_at()
-                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                    Height::new(0),
-                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
-                )));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let certified_height = Height::from(1);
+                let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    data_provider,
+                    registry_client,
+                    mut pool,
+                    time_source,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &committee);
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
+                state_manager
+                    .get_mut()
+                    .expect_get_state_at()
+                    .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                        Height::new(0),
+                        Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                    )));
 
-            add_subnet_record(
-                &data_provider,
-                11,
-                replica_config.subnet_id,
-                SubnetRecordBuilder::from(&[]).build(),
-            );
+                add_subnet_record(
+                    &data_provider,
+                    11,
+                    replica_config.subnet_id,
+                    SubnetRecordBuilder::from(&[]).build(),
+                );
 
-            registry_client.update_to_latest_version();
+                registry_client.update_to_latest_version();
 
-            pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
+                pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
 
-            let mut test_block = pool.make_next_block();
-            test_block.signature.signer =
-                pool.get_block_maker_by_rank(test_block.height(), Rank(0));
-            test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
-            test_block.content.as_mut().context.certified_height = Height::from(1);
-            test_block.content.as_mut().rank = Rank(0);
-            test_block.update_content();
-            pool.insert_unvalidated(test_block.clone());
-            // Forward time correctly
-            time_source
-                .set_time(test_block.content.as_mut().context.time)
-                .unwrap();
-            let valid_results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_block_valid(&valid_results, &test_block);
-            pool.apply_changes(valid_results);
+                let mut test_block = pool.make_next_block();
+                test_block.signature.signer =
+                    pool.get_block_maker_by_rank(test_block.height(), Rank(0));
+                test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
+                test_block.content.as_mut().context.certified_height = Height::from(1);
+                test_block.content.as_mut().rank = Rank(0);
+                test_block.update_content();
+                pool.insert_unvalidated(test_block.clone());
+                // Forward time correctly
+                time_source
+                    .set_time(test_block.content.as_mut().context.time)
+                    .unwrap();
+                let valid_results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_block_valid(&valid_results, &test_block);
+                pool.apply_changes(valid_results);
 
-            let rank = Rank(0);
-            let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
-            next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), rank);
-            next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
-            next_block.content.as_mut().context.certified_height = Height::from(1);
-            next_block.content.as_mut().rank = rank;
-            next_block.update_content();
-            pool.insert_unvalidated(next_block.clone());
-            // Forward time correctly
-            time_source
-                .set_time(next_block.content.as_mut().context.time)
-                .unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(results.is_empty());
-            pool.notarize(&test_block);
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_block_valid(&results, &next_block);
-        });
+                let rank = Rank(0);
+                let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
+                next_block.signature.signer =
+                    pool.get_block_maker_by_rank(next_block.height(), rank);
+                next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
+                next_block.content.as_mut().context.certified_height = Height::from(1);
+                next_block.content.as_mut().rank = rank;
+                next_block.update_content();
+                pool.insert_unvalidated(next_block.clone());
+                // Forward time correctly
+                time_source
+                    .set_time(next_block.content.as_mut().context.time)
+                    .unwrap();
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert!(results.is_empty());
+                pool.notarize(&test_block);
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_block_valid(&results, &next_block);
+            },
+        );
     }
 
     #[test]
     fn test_block_validation_with_registry_versions() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let certified_height = Height::from(1);
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                data_provider,
-                registry_client,
-                mut pool,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(certified_height);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let certified_height = Height::from(1);
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    data_provider,
+                    registry_client,
+                    mut pool,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(certified_height);
 
-            add_subnet_record(
-                &data_provider,
-                11,
-                replica_config.subnet_id,
-                SubnetRecordBuilder::from(&[]).build(),
-            );
+                add_subnet_record(
+                    &data_provider,
+                    11,
+                    replica_config.subnet_id,
+                    SubnetRecordBuilder::from(&[]).build(),
+                );
 
-            add_subnet_record(
-                &data_provider,
-                12,
-                replica_config.subnet_id,
-                SubnetRecordBuilder::from(&[]).build(),
-            );
+                add_subnet_record(
+                    &data_provider,
+                    12,
+                    replica_config.subnet_id,
+                    SubnetRecordBuilder::from(&[]).build(),
+                );
 
-            registry_client.update_to_latest_version();
+                registry_client.update_to_latest_version();
 
-            let mut parent_block = make_next_block(&pool);
-            parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
-            parent_block.content.as_mut().context.certified_height = Height::from(1);
-            parent_block.update_content();
-            pool.advance_round_with_block(&parent_block);
+                let mut parent_block = make_next_block(&pool);
+                parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
+                parent_block.content.as_mut().context.certified_height = Height::from(1);
+                parent_block.update_content();
+                pool.advance_round_with_block(&parent_block);
 
-            // Construct a block with a higher registry version but lower certified height
-            // (which will be considered invalid)
-            let mut test_block = make_next_block(&pool);
-            test_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
-            test_block.content.as_mut().context.certified_height = Height::from(0);
-            test_block.update_content();
+                // Construct a block with a higher registry version but lower certified height
+                // (which will be considered invalid)
+                let mut test_block = make_next_block(&pool);
+                test_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
+                test_block.content.as_mut().context.certified_height = Height::from(0);
+                test_block.update_content();
 
-            pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_block_invalid(&results, &test_block);
-            pool.apply_changes(results);
+                pool.insert_unvalidated(test_block.clone());
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_block_invalid(&results, &test_block);
+                pool.apply_changes(results);
 
-            // Construct a block with a registry version that is higher than any we
-            // currently recognize. This should yield an empty change set
-            let mut test_block = make_next_block(&pool);
-            test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
-            test_block.update_content();
-            pool.insert_unvalidated(test_block);
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
-        })
+                // Construct a block with a registry version that is higher than any we
+                // currently recognize. This should yield an empty change set
+                let mut test_block = make_next_block(&pool);
+                test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
+                test_block.update_content();
+                pool.insert_unvalidated(test_block);
+                assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+            },
+        )
     }
 
     fn make_next_block(pool: &TestConsensusPool) -> BlockProposal {
@@ -2815,281 +2856,298 @@ pub mod test {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_certified_height_change() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                mut pool,
-                time_source,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    mut pool,
+                    time_source,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .times(1)
-                .return_const(Height::from(0)); // return 0 when called first time
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .times(1)
-                .return_const(Height::from(1)); // return 1 when called second time
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .times(1)
+                    .return_const(Height::from(0)); // return 0 when called first time
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .times(1)
+                    .return_const(Height::from(1)); // return 1 when called second time
 
-            // Construct a finalized chain of blocks
-            let prior_height = Height::from(5);
-            pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
-            let block_chain = pool.insert_block_chain(prior_height);
-            pool.finalize(&block_chain[3]);
-            pool.notarize(&block_chain[4]);
+                // Construct a finalized chain of blocks
+                let prior_height = Height::from(5);
+                pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
+                let block_chain = pool.insert_block_chain(prior_height);
+                pool.finalize(&block_chain[3]);
+                pool.notarize(&block_chain[4]);
 
-            // Construct a block with certified height 1 (which can't yet be verified
-            // because state_manager will return certified height 0 the first time,
-            // indicating that the replicated state at height 1 is not certified
-            // yet).
-            let mut test_block = make_next_block(&pool);
-            test_block.content.as_mut().context.certified_height = Height::from(1);
-            test_block.update_content();
-            pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(results, ChangeSet::new());
+                // Construct a block with certified height 1 (which can't yet be verified
+                // because state_manager will return certified height 0 the first time,
+                // indicating that the replicated state at height 1 is not certified
+                // yet).
+                let mut test_block = make_next_block(&pool);
+                test_block.content.as_mut().context.certified_height = Height::from(1);
+                test_block.update_content();
+                pool.insert_unvalidated(test_block.clone());
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(results, ChangeSet::new());
 
-            // Try validate again, it should succeed, because certified_height has caught up
-            // Make sure to set the correct time for validation
-            time_source
-                .set_time(test_block.content.as_mut().context.time)
-                .unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            match results.first() {
-                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
-                    assert_eq!(proposal, &test_block);
+                // Try validate again, it should succeed, because certified_height has caught up
+                // Make sure to set the correct time for validation
+                time_source
+                    .set_time(test_block.content.as_mut().context.time)
+                    .unwrap();
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                match results.first() {
+                    Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(
+                        proposal,
+                    ))) => {
+                        assert_eq!(proposal, &test_block);
+                    }
+                    other => panic!("unexpected action: {other:?}"),
                 }
-                other => panic!("unexpected action: {other:?}"),
-            }
-        })
+            },
+        )
     }
 
     #[test]
     fn test_block_context_time() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                mut pool,
-                time_source,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    mut pool,
+                    time_source,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::from(0));
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
 
-            // Construct a finalized chain of blocks
-            let prior_height = Height::from(5);
-            pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
-            let block_chain = pool.insert_block_chain(prior_height);
-            pool.finalize(&block_chain[3]);
-            pool.notarize(&block_chain[4]);
+                // Construct a finalized chain of blocks
+                let prior_height = Height::from(5);
+                pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
+                let block_chain = pool.insert_block_chain(prior_height);
+                pool.finalize(&block_chain[3]);
+                pool.notarize(&block_chain[4]);
 
-            // We construct a block with a time greater than the current consensus time.
-            // It should not be validated yet.
-            let mut test_block = make_next_block(&pool);
-            let block_time = test_block.content.as_mut().context.time;
-            test_block.update_content();
-            pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(results, ChangeSet::new());
+                // We construct a block with a time greater than the current consensus time.
+                // It should not be validated yet.
+                let mut test_block = make_next_block(&pool);
+                let block_time = test_block.content.as_mut().context.time;
+                test_block.update_content();
+                pool.insert_unvalidated(test_block.clone());
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(results, ChangeSet::new());
 
-            // when we advance the time, it should be validated
-            time_source.set_time(block_time).unwrap();
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            match results.first() {
-                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
-                    assert_eq!(proposal, &test_block);
+                // when we advance the time, it should be validated
+                time_source.set_time(block_time).unwrap();
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                match results.first() {
+                    Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(
+                        proposal,
+                    ))) => {
+                        assert_eq!(proposal, &test_block);
+                    }
+                    _ => panic!(),
                 }
-                _ => panic!(),
-            }
 
-            // after we finalize a block with time `block_time`, the validator should reject
-            // a child block with a smaller time
-            pool.apply_changes(results);
-            pool.notarize(&test_block);
-            pool.finalize(&test_block);
-            pool.insert_validated(pool.make_next_beacon());
+                // after we finalize a block with time `block_time`, the validator should reject
+                // a child block with a smaller time
+                pool.apply_changes(results);
+                pool.notarize(&test_block);
+                pool.finalize(&test_block);
+                pool.insert_validated(pool.make_next_beacon());
 
-            let mut test_block = make_next_block(&pool);
-            test_block.content.as_mut().context.time =
-                block_time.checked_sub(Duration::from_nanos(1)).unwrap();
-            test_block.update_content();
-            pool.insert_unvalidated(test_block.clone());
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            match results.first() {
-                Some(ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(proposal), _)) => {
-                    assert_eq!(proposal, &test_block);
+                let mut test_block = make_next_block(&pool);
+                test_block.content.as_mut().context.time =
+                    block_time.checked_sub(Duration::from_nanos(1)).unwrap();
+                test_block.update_content();
+                pool.insert_unvalidated(test_block.clone());
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                match results.first() {
+                    Some(ChangeAction::HandleInvalid(
+                        ConsensusMessage::BlockProposal(proposal),
+                        _,
+                    )) => {
+                        assert_eq!(proposal, &test_block);
+                    }
+                    _ => panic!(),
                 }
-                _ => panic!(),
-            }
-        })
+            },
+        )
     }
 
     #[test]
     fn test_notarization_requires_at_least_threshold_signatures() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
 
-            let share = NotarizationShare::fake(block.as_ref(), block.signature.signer);
-            let mut notarization = Notarization::fake(share.content);
-            notarization.signature.signers = vec![];
+                let share = NotarizationShare::fake(block.as_ref(), block.signature.signer);
+                let mut notarization = Notarization::fake(share.content);
+                notarization.signature.signers = vec![];
 
-            pool.insert_unvalidated(notarization.clone());
+                pool.insert_unvalidated(notarization.clone());
 
-            // The notarization should be marked invalid
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_changeset_matches_pattern!(
-                changeset,
-                ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
-            );
-            pool.remove_unvalidated(notarization.clone());
+                // The notarization should be marked invalid
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_changeset_matches_pattern!(
+                    changeset,
+                    ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
+                );
+                pool.remove_unvalidated(notarization.clone());
 
-            // create a fake notarization that has one signer repeated, which should be
-            // marked as invalid
-            notarization.signature.signers =
-                vec![node_test_id(1), node_test_id(1), node_test_id(1)];
-            pool.insert_unvalidated(notarization.clone());
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_changeset_matches_pattern!(
-                changeset,
-                ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
-            );
+                // create a fake notarization that has one signer repeated, which should be
+                // marked as invalid
+                notarization.signature.signers =
+                    vec![node_test_id(1), node_test_id(1), node_test_id(1)];
+                pool.insert_unvalidated(notarization.clone());
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_changeset_matches_pattern!(
+                    changeset,
+                    ChangeAction::HandleInvalid(ConsensusMessage::Notarization(_), _)
+                );
 
-            pool.remove_unvalidated(notarization.clone());
+                pool.remove_unvalidated(notarization.clone());
 
-            notarization.signature.signers =
-                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
-            pool.insert_unvalidated(notarization);
+                notarization.signature.signers =
+                    vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+                pool.insert_unvalidated(notarization);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_changeset_matches_pattern!(
-                changeset,
-                ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
-            );
-        })
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_changeset_matches_pattern!(
+                    changeset,
+                    ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
+                );
+            },
+        )
     }
 
     #[test]
     fn test_notarization_deduped_by_content() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                // Setup validator dependencies.
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
 
-            // Insert two Notarizations for `block` in the unvalidated pool.
-            let share = NotarizationShare::fake(block.as_ref(), block.signature.signer);
-            let mut notarization_0 = Notarization::fake(share.content);
-            notarization_0.signature.signers =
-                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
-            let notarization_1 = Signed {
-                content: notarization_0.content.clone(),
-                signature: MultiSignature {
-                    signers: vec![node_test_id(1), node_test_id(2), node_test_id(0)],
-                    signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-                },
-            };
-            assert!(notarization_0 != notarization_1);
-            pool.insert_unvalidated(notarization_0);
-            pool.insert_unvalidated(notarization_1);
+                // Insert two Notarizations for `block` in the unvalidated pool.
+                let share = NotarizationShare::fake(block.as_ref(), block.signature.signer);
+                let mut notarization_0 = Notarization::fake(share.content);
+                notarization_0.signature.signers =
+                    vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+                let notarization_1 = Signed {
+                    content: notarization_0.content.clone(),
+                    signature: MultiSignature {
+                        signers: vec![node_test_id(1), node_test_id(2), node_test_id(0)],
+                        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
+                    },
+                };
+                assert!(notarization_0 != notarization_1);
+                pool.insert_unvalidated(notarization_0);
+                pool.insert_unvalidated(notarization_1);
 
-            // Only one notarization is emitted in the ChangeSet.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
-            assert_matches!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
-            );
-            pool.apply_changes(changeset);
+                // Only one notarization is emitted in the ChangeSet.
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
+                assert_matches!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
+                );
+                pool.apply_changes(changeset);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
-            assert_matches!(
-                changeset[0],
-                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
-            );
-            pool.apply_changes(changeset);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
+                assert_matches!(
+                    changeset[0],
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
+                );
+                pool.apply_changes(changeset);
 
-            // Finally, changeset should be empty.
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty());
-        })
+                // Finally, changeset should be empty.
+                assert!(validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty());
+            },
+        )
     }
 
     #[test]
     fn test_finalization_deduped_by_content() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                // Setup validator dependencies.
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
-            pool.notarize(&block);
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                pool.notarize(&block);
 
-            // Insert two Finalization for `block` in the unvalidated pool.
-            let share = FinalizationShare::fake(block.as_ref(), block.signature.signer);
-            let mut finalization_0 = Finalization::fake(share.content);
-            finalization_0.signature.signers =
-                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
-            let finalization_1 = Signed {
-                content: finalization_0.content.clone(),
-                signature: MultiSignature {
-                    signers: vec![node_test_id(1), node_test_id(2), node_test_id(0)],
-                    signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-                },
-            };
-            assert!(finalization_0 != finalization_1);
-            pool.insert_unvalidated(finalization_0);
-            pool.insert_unvalidated(finalization_1);
+                // Insert two Finalization for `block` in the unvalidated pool.
+                let share = FinalizationShare::fake(block.as_ref(), block.signature.signer);
+                let mut finalization_0 = Finalization::fake(share.content);
+                finalization_0.signature.signers =
+                    vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+                let finalization_1 = Signed {
+                    content: finalization_0.content.clone(),
+                    signature: MultiSignature {
+                        signers: vec![node_test_id(1), node_test_id(2), node_test_id(0)],
+                        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
+                    },
+                };
+                assert!(finalization_0 != finalization_1);
+                pool.insert_unvalidated(finalization_0);
+                pool.insert_unvalidated(finalization_1);
 
-            // Only one finalization is emitted in the ChangeSet.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[0],
-                ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
-            );
-            assert_eq!(changeset.len(), 1);
-            pool.apply_changes(changeset);
+                // Only one finalization is emitted in the ChangeSet.
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[0],
+                    ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
+                );
+                assert_eq!(changeset.len(), 1);
+                pool.apply_changes(changeset);
 
-            // Next run does not consider the extra Finalization.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 0);
-        })
+                // Next run does not consider the extra Finalization.
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 0);
+            },
+        )
     }
 
     #[test]
@@ -3135,286 +3193,296 @@ pub mod test {
         held_back_duration: Duration,
         expected_to_validate: bool,
     ) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                mut pool,
-                time_source,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                // Setup validator dependencies.
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    mut pool,
+                    time_source,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            pool.advance_round_normal_operation_n(9);
-            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
-            pool.prepare_round().dont_add_catch_up_package().advance();
+                pool.advance_round_normal_operation_n(9);
+                // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+                pool.prepare_round().dont_add_catch_up_package().advance();
 
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            let catch_up_package = pool.make_catch_up_package(finalization.height());
-            pool.insert_unvalidated(catch_up_package.clone());
+                let finalization = pool.validated().finalization().get_highest().unwrap();
+                let catch_up_package = pool.make_catch_up_package(finalization.height());
+                pool.insert_unvalidated(catch_up_package.clone());
 
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
-            state_manager
-                .get_mut()
-                .expect_latest_state_height()
-                .return_const(state_height);
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                state_manager
+                    .get_mut()
+                    .expect_latest_state_height()
+                    .return_const(state_height);
 
-            time_source.advance_time(held_back_duration);
+                time_source.advance_time(held_back_duration);
 
-            let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
-            if expected_to_validate {
-                assert_eq!(changeset.len(), 1);
-                assert_eq!(
-                    changeset.pop(),
-                    Some(ChangeAction::MoveToValidated(
-                        ConsensusMessage::CatchUpPackage(catch_up_package)
-                    ))
-                );
-            } else {
-                assert_eq!(changeset.len(), 0);
-            }
-        })
+                let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
+                if expected_to_validate {
+                    assert_eq!(changeset.len(), 1);
+                    assert_eq!(
+                        changeset.pop(),
+                        Some(ChangeAction::MoveToValidated(
+                            ConsensusMessage::CatchUpPackage(catch_up_package)
+                        ))
+                    );
+                } else {
+                    assert_eq!(changeset.len(), 0);
+                }
+            },
+        )
     }
 
     #[test]
     fn test_should_not_validate_catch_up_package_when_wrong_version() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            // Setup validator dependencies.
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                // Setup validator dependencies.
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            pool.advance_round_normal_operation_n(9);
-            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
-            pool.prepare_round().dont_add_catch_up_package().advance();
+                pool.advance_round_normal_operation_n(9);
+                // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+                pool.prepare_round().dont_add_catch_up_package().advance();
 
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            let mut catch_up_package = pool.make_catch_up_package(finalization.height());
-            catch_up_package.content.version = ReplicaVersion::try_from("old_version").unwrap();
-            pool.insert_unvalidated(catch_up_package.clone());
+                let finalization = pool.validated().finalization().get_highest().unwrap();
+                let mut catch_up_package = pool.make_catch_up_package(finalization.height());
+                catch_up_package.content.version = ReplicaVersion::try_from("old_version").unwrap();
+                pool.insert_unvalidated(catch_up_package.clone());
 
-            state_manager
-                .get_mut()
-                .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
-            state_manager
-                .get_mut()
-                .expect_latest_state_height()
-                .return_const(Height::new(1));
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                state_manager
+                    .get_mut()
+                    .expect_latest_state_height()
+                    .return_const(Height::new(1));
 
-            let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
+                let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(changeset.len(), 1);
 
-            assert_eq!(
-                changeset.pop(),
-                Some(ChangeAction::RemoveFromUnvalidated(
-                    ConsensusMessage::CatchUpPackage(catch_up_package)
-                ))
-            );
-        })
+                assert_eq!(
+                    changeset.pop(),
+                    Some(ChangeAction::RemoveFromUnvalidated(
+                        ConsensusMessage::CatchUpPackage(catch_up_package)
+                    ))
+                );
+            },
+        )
     }
 
     #[test]
     fn test_out_of_sync_validation() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                registry_client,
-                mut pool,
-                time_source,
-                replica_config,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    registry_client,
+                    mut pool,
+                    time_source,
+                    replica_config,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::from(0));
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
 
-            // Insert a chain of blocks, and for each round set the time_source during
-            // insertion equal to the block proposal's timestamp.
-            let mut current = pool.make_next_block();
-            let mut current_beacon = pool.make_next_beacon();
-            for _ in 0..5 {
-                // Set local time to the block proposal timestamp
-                time_source
-                    .set_time(current.content.get_value().context.time)
-                    .unwrap();
-                pool.insert_validated(current.clone());
-                pool.insert_validated(current_beacon.clone());
-                pool.notarize(&current);
-                pool.finalize(&current);
-                current = pool.make_next_block_from_parent(current.as_ref(), Rank(0));
-                current_beacon = RandomBeacon::from_parent(&current_beacon);
-            }
+                // Insert a chain of blocks, and for each round set the time_source during
+                // insertion equal to the block proposal's timestamp.
+                let mut current = pool.make_next_block();
+                let mut current_beacon = pool.make_next_beacon();
+                for _ in 0..5 {
+                    // Set local time to the block proposal timestamp
+                    time_source
+                        .set_time(current.content.get_value().context.time)
+                        .unwrap();
+                    pool.insert_validated(current.clone());
+                    pool.insert_validated(current_beacon.clone());
+                    pool.notarize(&current);
+                    pool.finalize(&current);
+                    current = pool.make_next_block_from_parent(current.as_ref(), Rank(0));
+                    current_beacon = RandomBeacon::from_parent(&current_beacon);
+                }
 
-            // The current time is the time at which we inserted, notarized and finalized
-            // the current tip of the chain (i.e. the parent of test_block).
-            let parent_time = time_source.get_relative_time();
-            let mut test_block = make_next_block(&pool);
-            let rank = Rank(1);
-            let delay = get_block_maker_delay(
-                &no_op_logger(),
-                registry_client.as_ref(),
-                replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
-                rank,
-            )
-            .unwrap();
-            test_block.content.as_mut().rank = rank;
-            test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
-            test_block.update_content();
-            let proposal_time = test_block.content.get_value().context.time;
-            pool.insert_unvalidated(test_block.clone());
+                // The current time is the time at which we inserted, notarized and finalized
+                // the current tip of the chain (i.e. the parent of test_block).
+                let parent_time = time_source.get_relative_time();
+                let mut test_block = make_next_block(&pool);
+                let rank = Rank(1);
+                let delay = get_block_maker_delay(
+                    &no_op_logger(),
+                    registry_client.as_ref(),
+                    replica_config.subnet_id,
+                    PoolReader::new(&pool)
+                        .registry_version(test_block.height())
+                        .unwrap(),
+                    rank,
+                )
+                .unwrap();
+                test_block.content.as_mut().rank = rank;
+                test_block.content.as_mut().context.time += delay;
+                test_block.signature.signer =
+                    pool.get_block_maker_by_rank(test_block.height(), rank);
+                test_block.update_content();
+                let proposal_time = test_block.content.get_value().context.time;
+                pool.insert_unvalidated(test_block.clone());
 
-            // Sanity check: monotonic increment
-            assert!(proposal_time > parent_time);
+                // Sanity check: monotonic increment
+                assert!(proposal_time > parent_time);
 
-            // Our local time has not changed. We can't validate.
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(results.is_empty());
+                // Our local time has not changed. We can't validate.
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert!(results.is_empty());
 
-            // Now, assume our node goes out of sync. The clock stalls. We can only
-            // advance the monotonic time.
-            // According to the rules of out-of-sync validation, we need to advance
-            // the time by x, so that `parent + x >= proposal`. Then the proposal is
-            // allowed to be validated.
-            let diff = proposal_time.saturating_duration_since(parent_time);
-            time_source.advance_only_monotonic(diff);
+                // Now, assume our node goes out of sync. The clock stalls. We can only
+                // advance the monotonic time.
+                // According to the rules of out-of-sync validation, we need to advance
+                // the time by x, so that `parent + x >= proposal`. Then the proposal is
+                // allowed to be validated.
+                let diff = proposal_time.saturating_duration_since(parent_time);
+                time_source.advance_only_monotonic(diff);
 
-            // Sanity check: our local time is still unchanged.
-            assert_eq!(parent_time, time_source.get_relative_time());
+                // Sanity check: our local time is still unchanged.
+                assert_eq!(parent_time, time_source.get_relative_time());
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(
-                results.first(),
-                Some(&ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(test_block.clone())
-                )),
-            );
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(
+                    results.first(),
+                    Some(&ChangeAction::MoveToValidated(
+                        ConsensusMessage::BlockProposal(test_block.clone())
+                    )),
+                );
 
-            pool.apply_changes(results);
-            pool.notarize(&test_block);
-            pool.finalize(&test_block);
-            pool.insert_validated(pool.make_next_beacon());
+                pool.apply_changes(results);
+                pool.notarize(&test_block);
+                pool.finalize(&test_block);
+                pool.insert_validated(pool.make_next_beacon());
 
-            // Continue stalling the clock, and validate a rank > 0 block.
-            let mut test_block = make_next_block(&pool);
-            let rank = Rank(1);
-            let delay = get_block_maker_delay(
-                &no_op_logger(),
-                registry_client.as_ref(),
-                replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
-                rank,
-            )
-            .unwrap();
-            test_block.content.as_mut().rank = rank;
-            test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
-            test_block.update_content();
-            let proposal_time = test_block.content.get_value().context.time;
-            pool.insert_unvalidated(test_block.clone());
+                // Continue stalling the clock, and validate a rank > 0 block.
+                let mut test_block = make_next_block(&pool);
+                let rank = Rank(1);
+                let delay = get_block_maker_delay(
+                    &no_op_logger(),
+                    registry_client.as_ref(),
+                    replica_config.subnet_id,
+                    PoolReader::new(&pool)
+                        .registry_version(test_block.height())
+                        .unwrap(),
+                    rank,
+                )
+                .unwrap();
+                test_block.content.as_mut().rank = rank;
+                test_block.content.as_mut().context.time += delay;
+                test_block.signature.signer =
+                    pool.get_block_maker_by_rank(test_block.height(), rank);
+                test_block.update_content();
+                let proposal_time = test_block.content.get_value().context.time;
+                pool.insert_unvalidated(test_block.clone());
 
-            let diff = proposal_time.saturating_duration_since(parent_time);
-            time_source.advance_only_monotonic(diff);
+                let diff = proposal_time.saturating_duration_since(parent_time);
+                time_source.advance_only_monotonic(diff);
 
-            // Sanity check: our local time is still unchanged.
-            assert_eq!(parent_time, time_source.get_relative_time());
+                // Sanity check: our local time is still unchanged.
+                assert_eq!(parent_time, time_source.get_relative_time());
 
-            let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(
-                results.first(),
-                Some(&ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(test_block)
-                )),
-            );
-        })
+                let results = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(
+                    results.first(),
+                    Some(&ChangeAction::MoveToValidated(
+                        ConsensusMessage::BlockProposal(test_block)
+                    )),
+                );
+            },
+        )
     }
 
     #[test]
     fn test_block_validated_through_notarization() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                payload_builder,
-                state_manager,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
-            pool.advance_round_normal_operation();
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    payload_builder,
+                    state_manager,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
+                pool.advance_round_normal_operation();
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| {
-                    Err(ValidationError::ValidationFailed(
-                        PayloadValidationFailure::XNetPayloadValidationFailed(
-                            XNetPayloadValidationFailure::StateNotCommittedYet(Height::from(0)),
-                        ),
-                    ))
-                });
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::from(0));
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| {
+                        Err(ValidationError::ValidationFailed(
+                            PayloadValidationFailure::XNetPayloadValidationFailed(
+                                XNetPayloadValidationFailure::StateNotCommittedYet(Height::from(0)),
+                            ),
+                        ))
+                    });
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
 
-            // First ensure that we require the parent block
-            pool.insert_validated(pool.make_next_beacon());
-            let parent_block = pool.make_next_block();
-            let rank = Rank(0);
-            let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
-            block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
+                // First ensure that we require the parent block
+                pool.insert_validated(pool.make_next_beacon());
+                let parent_block = pool.make_next_block();
+                let rank = Rank(0);
+                let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
+                block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
 
-            block.update_content();
-            let content = NotarizationContent::new(
-                block.height(),
-                ic_types::crypto::crypto_hash(block.as_ref()),
-            );
-            let mut notarization = Notarization::fake(content);
-            notarization.signature.signers =
-                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
-            pool.insert_unvalidated(notarization.clone());
-            pool.insert_unvalidated(block.clone());
+                block.update_content();
+                let content = NotarizationContent::new(
+                    block.height(),
+                    ic_types::crypto::crypto_hash(block.as_ref()),
+                );
+                let mut notarization = Notarization::fake(content);
+                notarization.signature.signers =
+                    vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+                pool.insert_unvalidated(notarization.clone());
+                pool.insert_unvalidated(block.clone());
 
-            // This should be empty because the parent block is not yet validated
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
-            pool.insert_validated(parent_block.clone());
+                // This should be empty because the parent block is not yet validated
+                assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+                pool.insert_validated(parent_block.clone());
 
-            // This should still be empty because the parent is not notarized
-            assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
-            pool.notarize(&parent_block);
+                // This should still be empty because the parent is not notarized
+                assert_eq!(validator.on_state_change(&PoolReader::new(&pool)), vec![]);
+                pool.notarize(&parent_block);
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
 
-            assert_eq!(
-                changeset,
-                vec![
-                    ChangeAction::MoveToValidated(notarization.into_message()),
-                    ChangeAction::MoveToValidated(block.into_message())
-                ]
-            );
-            pool.apply_changes(changeset);
-        })
+                assert_eq!(
+                    changeset,
+                    vec![
+                        ChangeAction::MoveToValidated(notarization.into_message()),
+                        ChangeAction::MoveToValidated(block.into_message())
+                    ]
+                );
+                pool.apply_changes(changeset);
+            },
+        )
     }
 
     /// Returns a consensus pool and validator, along with a valid equivocation proof.
@@ -3488,261 +3556,282 @@ pub mod test {
 
     #[test]
     fn test_equivocation_invalid_for_identical_hashes() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Invalidate proof with identical hashes
-            proof.hash2 = proof.hash1.clone();
-            pool.insert_unvalidated(proof.clone());
-            assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::EquivocationProof(_),
-                    reason
-                )] if reason.contains("both block hashes in the equivocation proof are identical")
-            );
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+                // Invalidate proof with identical hashes
+                proof.hash2 = proof.hash1.clone();
+                pool.insert_unvalidated(proof.clone());
+                assert_matches!(
+                    &validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::EquivocationProof(_),
+                        reason
+                    )] if reason.contains("both block hashes in the equivocation proof are identical")
+                );
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_invalid_for_wrong_subnet_id() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Invalidate proof with incorrect subnet ID
-            proof.subnet_id = subnet_test_id(1337);
-            pool.insert_unvalidated(proof.clone());
-            assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::EquivocationProof(_),
-                    reason
-                )] if reason.contains("equivocation proof has different subnet id")
-            );
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+                // Invalidate proof with incorrect subnet ID
+                proof.subnet_id = subnet_test_id(1337);
+                pool.insert_unvalidated(proof.clone());
+                assert_matches!(
+                    &validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::EquivocationProof(_),
+                        reason
+                    )] if reason.contains("equivocation proof has different subnet id")
+                );
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_invalid_for_signer_not_in_subnet() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Don't validate if signer is not part of subnet
-            proof.signer = node_test_id(10);
-            pool.insert_unvalidated(proof.clone());
-            assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::EquivocationProof(_),
-                    reason
-                )] if reason.contains("NodeNotFound")
-            );
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+                // Don't validate if signer is not part of subnet
+                proof.signer = node_test_id(10);
+                pool.insert_unvalidated(proof.clone());
+                assert_matches!(
+                    &validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::EquivocationProof(_),
+                        reason
+                    )] if reason.contains("NodeNotFound")
+                );
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_invalid_for_signer_not_blockmaker() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Some test id that's different from the block maker, but still part of the subnet
-            let non_blockmaker_node = node_test_id(3);
-            assert!(non_blockmaker_node != proof.signer);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+                // Some test id that's different from the block maker, but still part of the subnet
+                let non_blockmaker_node = node_test_id(3);
+                assert!(non_blockmaker_node != proof.signer);
 
-            proof.signer = non_blockmaker_node;
-            pool.insert_unvalidated(proof.clone());
-            assert_matches!(
-                &validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::EquivocationProof(_),
-                    reason
-                )] if reason.contains("NotABlockmaker")
-            );
-        });
+                proof.signer = non_blockmaker_node;
+                pool.insert_unvalidated(proof.clone());
+                assert_matches!(
+                    &validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::EquivocationProof(_),
+                        reason
+                    )] if reason.contains("NotABlockmaker")
+                );
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_validates() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
-            // Validate a well-formed equivocation proof, with the correct subnet ID
-            pool.insert_unvalidated(proof.clone());
-            assert_matches!(
-                validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::MoveToValidated(
-                    ConsensusMessage::EquivocationProof(_)
-                )]
-            );
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
+                // Validate a well-formed equivocation proof, with the correct subnet ID
+                pool.insert_unvalidated(proof.clone());
+                assert_matches!(
+                    validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::MoveToValidated(
+                        ConsensusMessage::EquivocationProof(_)
+                    )]
+                );
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_ignored_if_below_finalized_height() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
-            pool.notarize(&block);
-            pool.finalize(&block);
-            assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                pool.notarize(&block);
+                pool.finalize(&block);
+                assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
+            },
+        );
     }
 
     #[test]
     fn test_equivocation_validate_only_one_per_height_and_signer() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Insert two different proofs for the same height and signer
-            pool.insert_unvalidated(proof.clone());
-            let mut hash = proof.hash1.clone().get();
-            hash.0[0] = !hash.0[0];
-            proof.hash2 = CryptoHashOf::new(hash);
-            pool.insert_unvalidated(proof.clone());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+                // Insert two different proofs for the same height and signer
+                pool.insert_unvalidated(proof.clone());
+                let mut hash = proof.hash1.clone().get();
+                hash.0[0] = !hash.0[0];
+                proof.hash2 = CryptoHashOf::new(hash);
+                pool.insert_unvalidated(proof.clone());
 
-            // We should validate only a single equivocation proof, the other
-            // one is expected to be removed from the unvalidated pool.
-            let change_set = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                change_set[..],
-                [
-                    ChangeAction::MoveToValidated(ConsensusMessage::EquivocationProof(_)),
-                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::EquivocationProof(_))
-                ]
-            );
-        });
+                // We should validate only a single equivocation proof, the other
+                // one is expected to be removed from the unvalidated pool.
+                let change_set = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    change_set[..],
+                    [
+                        ChangeAction::MoveToValidated(ConsensusMessage::EquivocationProof(_)),
+                        ChangeAction::RemoveFromUnvalidated(ConsensusMessage::EquivocationProof(_))
+                    ]
+                );
+            },
+        );
     }
 
     /// The validation logic may have a fast path for validating blocks for
     /// which there exists a valid notarization.
     #[test]
     fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            pool.advance_round_normal_operation_n(9);
+                pool.advance_round_normal_operation_n(9);
 
-            let mut block = pool.make_next_block();
+                let mut block = pool.make_next_block();
 
-            // Insert notarization into unvalidated pool, not the block
-            let mut notarization = Notarization::fake(NotarizationContent::new(
-                block.height(),
-                block.content.get_hash().clone(),
-            ));
-            notarization.signature.signers =
-                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
-            pool.insert_unvalidated(notarization);
+                // Insert notarization into unvalidated pool, not the block
+                let mut notarization = Notarization::fake(NotarizationContent::new(
+                    block.height(),
+                    block.content.get_hash().clone(),
+                ));
+                notarization.signature.signers =
+                    vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+                pool.insert_unvalidated(notarization);
 
-            // Insert tampered block into unvalidated pool
-            assert_ne!(block.signature.signer, node_test_id(100));
-            block.signature.signer = node_test_id(3);
-            pool.insert_unvalidated(block);
+                // Insert tampered block into unvalidated pool
+                assert_ne!(block.signature.signer, node_test_id(100));
+                block.signature.signer = node_test_id(3);
+                pool.insert_unvalidated(block);
 
-            // Incorrect block proposals should not get validated
-            assert_matches!(
-                validator.on_state_change(&PoolReader::new(&pool))[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::BlockProposal(_),
-                    _
-                )]
-            );
-        });
+                // Incorrect block proposals should not get validated
+                assert_matches!(
+                    validator.on_state_change(&PoolReader::new(&pool))[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::BlockProposal(_),
+                        _
+                    )]
+                );
+            },
+        );
     }
 
     #[test]
     fn test_create_equivocation_proof() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                state_manager,
-                time_source,
-                payload_builder,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    state_manager,
+                    time_source,
+                    payload_builder,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::from(0));
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
 
-            // Ensure that we don't create an equivocation proof if we have
-            // two identical blocks (one validated, one unvalidated)
-            let block = pool.make_next_block();
-            pool.insert_validated(block.clone());
-            pool.insert_unvalidated(block.clone());
-            time_source
-                .set_time(block.content.as_ref().context.time)
-                .ok();
+                // Ensure that we don't create an equivocation proof if we have
+                // two identical blocks (one validated, one unvalidated)
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                pool.insert_unvalidated(block.clone());
+                time_source
+                    .set_time(block.content.as_ref().context.time)
+                    .ok();
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(_)
-                )]
-            );
-            pool.apply_changes(changeset);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::MoveToValidated(
+                        ConsensusMessage::BlockProposal(_)
+                    )]
+                );
+                pool.apply_changes(changeset);
 
-            let mut second_block = block.clone();
-            second_block.content.as_mut().context.time += Duration::from_nanos(1);
-            second_block.update_content();
-            assert_ne!(block.content.get_hash(), second_block.content.get_hash());
-            pool.insert_unvalidated(second_block.clone());
+                let mut second_block = block.clone();
+                second_block.content.as_mut().context.time += Duration::from_nanos(1);
+                second_block.update_content();
+                assert_ne!(block.content.get_hash(), second_block.content.get_hash());
+                pool.insert_unvalidated(second_block.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::AddToValidated(ValidatedArtifact {
-                    msg: ConsensusMessage::EquivocationProof(ref e),
-                    timestamp: _,
-                })] if &e.hash1 == second_block.content.get_hash() && &e.hash2 == block.content.get_hash()
-            );
-            pool.apply_changes(changeset);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::AddToValidated(ValidatedArtifact {
+                        msg: ConsensusMessage::EquivocationProof(ref e),
+                        timestamp: _,
+                    })] if &e.hash1 == second_block.content.get_hash() && &e.hash2 == block.content.get_hash()
+                );
+                pool.apply_changes(changeset);
 
-            // Make sure we create exactly one equivocation proof for a
-            // combination of height and rank.
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(&changeset, &[]);
-        });
+                // Make sure we create exactly one equivocation proof for a
+                // combination of height and rank.
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_eq!(&changeset, &[]);
+            },
+        );
     }
 
     /// A proposal with a rank that doesn't match the signer must fail
     /// verification, and not be able to create an equivocation proof.
     #[test]
     fn test_cannot_disqualify_with_incorrect_rank() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            let block = pool.make_next_block();
-            let mut block_with_malicious_signer = block.clone();
-            block_with_malicious_signer.content.as_mut().context.time += Duration::from_nanos(1);
-            block_with_malicious_signer.update_content();
-            block_with_malicious_signer.signature.signer =
-                pool.get_block_maker_by_rank(block.height(), Rank(1));
+                let block = pool.make_next_block();
+                let mut block_with_malicious_signer = block.clone();
+                block_with_malicious_signer.content.as_mut().context.time +=
+                    Duration::from_nanos(1);
+                block_with_malicious_signer.update_content();
+                block_with_malicious_signer.signature.signer =
+                    pool.get_block_maker_by_rank(block.height(), Rank(1));
 
-            pool.insert_validated(block.clone());
-            pool.insert_unvalidated(block_with_malicious_signer.clone());
+                pool.insert_validated(block.clone());
+                pool.insert_unvalidated(block_with_malicious_signer.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::HandleInvalid(
-                    ConsensusMessage::BlockProposal(_),
-                    _
-                )]
-            );
-        });
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::HandleInvalid(
+                        ConsensusMessage::BlockProposal(_),
+                        _
+                    )]
+                );
+            },
+        );
     }
 
     /// A node might see two different, legitimate proposals of another node,
@@ -3750,124 +3839,128 @@ pub mod test {
     /// In this case, we should not create an equivocation proof.
     #[test]
     fn test_cannot_disqualify_with_proposal_from_different_version() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let dkg_interval = 9;
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                replica_config,
-                ..
-            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
-                pool_config,
-                subnet_test_id(0),
-                vec![
-                    (
-                        1,
-                        SubnetRecordBuilder::from(&subnet_members)
-                            .with_dkg_interval_length(9)
-                            .build(),
-                    ),
-                    (
-                        10,
-                        SubnetRecordBuilder::from(&subnet_members)
-                            .with_dkg_interval_length(9)
-                            .with_replica_version("new_version")
-                            .build(),
-                    ),
-                ],
-            ));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+                let dkg_interval = 9;
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    replica_config,
+                    ..
+                } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![
+                        (
+                            1,
+                            SubnetRecordBuilder::from(&subnet_members)
+                                .with_dkg_interval_length(9)
+                                .build(),
+                        ),
+                        (
+                            10,
+                            SubnetRecordBuilder::from(&subnet_members)
+                                .with_dkg_interval_length(9)
+                                .with_replica_version("new_version")
+                                .build(),
+                        ),
+                    ],
+                ));
 
-            // Move to the end of the DKG interval where we switch versions
-            pool.advance_round_normal_operation_n(dkg_interval + 1);
-            assert!(pool.get_cache().finalized_block().payload.is_summary());
+                // Move to the end of the DKG interval where we switch versions
+                pool.advance_round_normal_operation_n(dkg_interval + 1);
+                assert!(pool.get_cache().finalized_block().payload.is_summary());
 
-            // An empty block created before the update
-            let block = pool.make_next_block();
-            assert!(block.signature.signer != replica_config.node_id);
-            pool.insert_validated(block.clone());
+                // An empty block created before the update
+                let block = pool.make_next_block();
+                assert!(block.signature.signer != replica_config.node_id);
+                pool.insert_validated(block.clone());
 
-            // A post-upgrade block
-            let mut block_with_new_version = block;
-            block_with_new_version.content.as_mut().version =
-                ReplicaVersion::try_from("new_version").unwrap();
-            block_with_new_version.update_content();
+                // A post-upgrade block
+                let mut block_with_new_version = block;
+                block_with_new_version.content.as_mut().version =
+                    ReplicaVersion::try_from("new_version").unwrap();
+                block_with_new_version.update_content();
 
-            // Block proposals with replica version mismatches are simply removed
-            // No equivocation proof is generated.
-            pool.insert_unvalidated(block_with_new_version);
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::RemoveFromUnvalidated(
-                    ConsensusMessage::BlockProposal(_)
-                )]
-            );
-        });
+                // Block proposals with replica version mismatches are simply removed
+                // No equivocation proof is generated.
+                pool.insert_unvalidated(block_with_new_version);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::RemoveFromUnvalidated(
+                        ConsensusMessage::BlockProposal(_)
+                    )]
+                );
+            },
+        );
     }
 
     #[test]
     fn test_ignore_disqualified_ranks() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let subnet_members = (0..7).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorAndDependencies {
-                validator,
-                mut pool,
-                time_source,
-                payload_builder,
-                state_manager,
-                ..
-            } = setup_dependencies(pool_config, &subnet_members);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let subnet_members = (0..7).map(node_test_id).collect::<Vec<_>>();
+                let ValidatorAndDependencies {
+                    validator,
+                    mut pool,
+                    time_source,
+                    payload_builder,
+                    state_manager,
+                    ..
+                } = setup_dependencies(pool_config, &subnet_members);
 
-            payload_builder
-                .get_mut()
-                .expect_validate_payload()
-                .returning(|_, _, _, _| Ok(()));
-            state_manager
-                .get_mut()
-                .expect_latest_certified_height()
-                .return_const(Height::from(0));
+                payload_builder
+                    .get_mut()
+                    .expect_validate_payload()
+                    .returning(|_, _, _, _| Ok(()));
+                state_manager
+                    .get_mut()
+                    .expect_latest_certified_height()
+                    .return_const(Height::from(0));
 
-            let block = pool.make_next_block_with_rank(Rank(1));
-            let mut second_block = block.clone();
-            second_block.content.as_mut().context.time += Duration::from_nanos(1);
-            second_block.update_content();
-            let mut third_block = block.clone();
-            third_block.content.as_mut().context.time += Duration::from_nanos(2);
-            third_block.update_content();
-            time_source
-                .set_time(third_block.content.as_ref().context.time)
-                .ok();
+                let block = pool.make_next_block_with_rank(Rank(1));
+                let mut second_block = block.clone();
+                second_block.content.as_mut().context.time += Duration::from_nanos(1);
+                second_block.update_content();
+                let mut third_block = block.clone();
+                third_block.content.as_mut().context.time += Duration::from_nanos(2);
+                third_block.update_content();
+                time_source
+                    .set_time(third_block.content.as_ref().context.time)
+                    .ok();
 
-            pool.insert_validated(block.clone());
-            pool.insert_unvalidated(second_block.clone());
-            pool.insert_unvalidated(third_block.clone());
+                pool.insert_validated(block.clone());
+                pool.insert_unvalidated(second_block.clone());
+                pool.insert_unvalidated(third_block.clone());
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::AddToValidated(ValidatedArtifact {
-                    msg: ConsensusMessage::EquivocationProof(_),
-                    timestamp: _,
-                })]
-            );
-            pool.apply_changes(changeset);
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::AddToValidated(ValidatedArtifact {
+                        msg: ConsensusMessage::EquivocationProof(_),
+                        timestamp: _,
+                    })]
+                );
+                pool.apply_changes(changeset);
 
-            // Now that rank 1 is disqualified, we should be able to validate
-            // a rank 2 block.
-            let block = pool.make_next_block_with_rank(Rank(2));
-            pool.insert_unvalidated(block.clone());
-            time_source
-                .set_time(block.content.as_ref().context.time)
-                .ok();
+                // Now that rank 1 is disqualified, we should be able to validate
+                // a rank 2 block.
+                let block = pool.make_next_block_with_rank(Rank(2));
+                pool.insert_unvalidated(block.clone());
+                time_source
+                    .set_time(block.content.as_ref().context.time)
+                    .ok();
 
-            let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(ref proposal)
-                )] if proposal.rank() == block.rank()
-            );
-        });
+                let changeset = validator.on_state_change(&PoolReader::new(&pool));
+                assert_matches!(
+                    changeset[..],
+                    [ChangeAction::MoveToValidated(
+                        ConsensusMessage::BlockProposal(ref proposal)
+                    )] if proposal.rank() == block.rank()
+                );
+            },
+        );
     }
 }

@@ -191,37 +191,43 @@ mod tests {
 
         // Simple check: advance pool without purging, until we have too many
         // finalized blocks.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = (0..40).map(node_test_id).collect::<Vec<_>>();
-            let record = SubnetRecordBuilder::from(&committee)
-                .with_dkg_interval_length(499)
-                .build();
-            let Dependencies {
-                mut pool,
-                registry,
-                replica_config,
-                ..
-            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let committee = (0..40).map(node_test_id).collect::<Vec<_>>();
+                let record = SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(499)
+                    .build();
+                let Dependencies {
+                    mut pool,
+                    registry,
+                    replica_config,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    subnet_test_id(0),
+                    vec![(1, record)],
+                );
 
-            // Still within bounds.
-            pool.advance_round_normal_operation_n(max_counts.finalization as u64);
-            assert_eq!(
-                validated_pool_within_bounds(
+                // Still within bounds.
+                pool.advance_round_normal_operation_n(max_counts.finalization as u64);
+                assert_eq!(
+                    validated_pool_within_bounds(
+                        &PoolReader::new(&pool),
+                        registry.as_ref(),
+                        &replica_config,
+                    ),
+                    None
+                );
+
+                // One too many finalizations should trigger excess event.
+                pool.advance_round_normal_operation();
+                assert!(validated_pool_within_bounds(
                     &PoolReader::new(&pool),
                     registry.as_ref(),
                     &replica_config,
-                ),
-                None
-            );
-
-            // One too many finalizations should trigger excess event.
-            pool.advance_round_normal_operation();
-            assert!(validated_pool_within_bounds(
-                &PoolReader::new(&pool),
-                registry.as_ref(),
-                &replica_config,
-            )
-            .is_some());
-        });
+                )
+                .is_some());
+            },
+        );
     }
 }

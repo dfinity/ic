@@ -1434,95 +1434,101 @@ mod tests {
     }
 
     fn test_send_dealings(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3, id_4, id_5) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
-                    create_transcript_id(4),
-                    create_transcript_id(5),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3, id_4, id_5) = (
+                        create_transcript_id(1),
+                        create_transcript_id(2),
+                        create_transcript_id(3),
+                        create_transcript_id(4),
+                        create_transcript_id(5),
+                    );
 
-                // Set up the IDKG pool. Pool has dealings for transcripts 1, 2, 3.
-                // Only dealing for transcript 1 is issued by us.
-                let dealing_1 = create_dealing(id_1, NODE_1);
-                let dealing_2 = create_dealing(id_2, NODE_2);
-                let dealing_3 = create_dealing(id_3, NODE_3);
-                let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
-                ];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool. Pool has dealings for transcripts 1, 2, 3.
+                    // Only dealing for transcript 1 is issued by us.
+                    let dealing_1 = create_dealing(id_1, NODE_1);
+                    let dealing_2 = create_dealing(id_2, NODE_2);
+                    let dealing_3 = create_dealing(id_3, NODE_3);
+                    let change_set = vec![
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
+                    ];
+                    idkg_pool.apply_changes(change_set);
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1, 4, 5
-                let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_2]);
-                let t2 = create_transcript_param(&key_id, id_4, &[NODE_1], &[NODE_3]);
-                let t3 = create_transcript_param(&key_id, id_5, &[NODE_1], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
-                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1, 4, 5
+                    let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_2]);
+                    let t2 = create_transcript_param(&key_id, id_4, &[NODE_1], &[NODE_3]);
+                    let t3 = create_transcript_param(&key_id, id_5, &[NODE_1], &[NODE_4]);
+                    let block_reader = TestIDkgBlockReader::for_pre_signer_test(
+                        Height::from(100),
+                        vec![t1, t2, t3],
+                    );
+                    let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
-                // Since transcript 1 is already in progress, we should issue
-                // dealings only for transcripts 4, 5
-                let change_set =
-                    pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
-                assert_eq!(change_set.len(), 2);
-                assert!(is_dealing_added_to_validated(&change_set, &id_4,));
-                assert!(is_dealing_added_to_validated(&change_set, &id_5,));
-            })
-        })
+                    // Since transcript 1 is already in progress, we should issue
+                    // dealings only for transcripts 4, 5
+                    let change_set =
+                        pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
+                    assert_eq!(change_set.len(), 2);
+                    assert!(is_dealing_added_to_validated(&change_set, &id_4,));
+                    assert!(is_dealing_added_to_validated(&change_set, &id_5,));
+                })
+            },
+        )
     }
 
     // Tests that dealings are purged once the finalized height increases
     #[test]
     fn test_ecdsa_dealings_purging() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer, mut consensus_pool) =
-                    create_pre_signer_dependencies_and_pool(pool_config, logger);
-                let transcript_loader = TestIDkgTranscriptLoader::default();
-                let transcript_height = Height::from(30);
-                let id_1 = create_transcript_id_with_height(1, Height::from(0));
-                let id_2 = create_transcript_id_with_height(2, transcript_height);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer, mut consensus_pool) =
+                        create_pre_signer_dependencies_and_pool(pool_config, logger);
+                    let transcript_loader = TestIDkgTranscriptLoader::default();
+                    let transcript_height = Height::from(30);
+                    let id_1 = create_transcript_id_with_height(1, Height::from(0));
+                    let id_2 = create_transcript_id_with_height(2, transcript_height);
 
-                let dealing1 = create_dealing(id_1, NODE_2);
-                let msg_id1 = dealing1.message_id();
-                let dealing2 = create_dealing(id_2, NODE_2);
-                let msg_id2 = dealing2.message_id();
-                let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing2)),
-                ];
-                idkg_pool.apply_changes(change_set);
+                    let dealing1 = create_dealing(id_1, NODE_2);
+                    let msg_id1 = dealing1.message_id();
+                    let dealing2 = create_dealing(id_2, NODE_2);
+                    let msg_id2 = dealing2.message_id();
+                    let change_set = vec![
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing1)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing2)),
+                    ];
+                    idkg_pool.apply_changes(change_set);
 
-                // Finalized height doesn't increase, so dealing1 shouldn't be purged
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), Height::from(0));
-                assert!(change_set.is_empty());
+                    // Finalized height doesn't increase, so dealing1 shouldn't be purged
+                    let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*pre_signer.prev_finalized_height.borrow(), Height::from(0));
+                    assert!(change_set.is_empty());
 
-                // Finalized height increases, so dealing1 is purged
-                let new_height = consensus_pool.advance_round_normal_operation_n(29);
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id1));
+                    // Finalized height increases, so dealing1 is purged
+                    let new_height = consensus_pool.advance_round_normal_operation_n(29);
+                    let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id1));
 
-                idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply_changes(change_set);
 
-                // Finalized height increases above dealing2, so it is purged
-                let new_height = consensus_pool.advance_round_normal_operation();
-                let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
-                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
-                assert_eq!(transcript_height, new_height);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id2));
-            })
-        })
+                    // Finalized height increases above dealing2, so it is purged
+                    let new_height = consensus_pool.advance_round_normal_operation();
+                    let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
+                    assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                    assert_eq!(transcript_height, new_height);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id2));
+                })
+            },
+        )
     }
 
     // Tests that dealing is not issued if the node isn't in the list of dealers
@@ -1536,53 +1542,63 @@ mod tests {
     }
 
     fn test_non_dealers_dont_send_dealings(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2) = (create_transcript_id(1), create_transcript_id(2));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2) = (create_transcript_id(1), create_transcript_id(2));
 
-                // transcript 1 has NODE_1 as a dealer
-                let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_1]);
+                    // transcript 1 has NODE_1 as a dealer
+                    let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_1]);
 
-                // Transcript 2 doesn't have NODE_1 as a dealer
-                let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_2]);
+                    // Transcript 2 doesn't have NODE_1 as a dealer
+                    let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_2]);
 
-                // Transcript 2 should not result in a dealing
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
-                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
+                    // Transcript 2 should not result in a dealing
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2]);
+                    let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
-                let change_set =
-                    pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_dealing_added_to_validated(&change_set, &id_1,));
-            })
-        })
+                    let change_set =
+                        pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_dealing_added_to_validated(&change_set, &id_1,));
+                })
+            },
+        )
     }
 
     // Tests that dealing is not issued if the crypto component returns an error
     #[test]
     fn test_ecdsa_crypto_error_results_in_no_dealing() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let crypto = crypto_without_keys();
-                let (idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id_1 = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let crypto = crypto_without_keys();
+                    let (idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto),
+                    );
+                    let id_1 = create_transcript_id(1);
 
-                // transcript 1 has NODE_1 as a dealer
-                let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_1]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1.clone()])
-                        .with_target_subnet_xnet_transcripts(vec![t1.transcript_params_ref]);
-                let transcript_loader: TestIDkgTranscriptLoader = Default::default();
+                    // transcript 1 has NODE_1 as a dealer
+                    let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_1]);
+                    let block_reader = TestIDkgBlockReader::for_pre_signer_test(
+                        Height::from(100),
+                        vec![t1.clone()],
+                    )
+                    .with_target_subnet_xnet_transcripts(vec![t1.transcript_params_ref]);
+                    let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
-                let change_set =
-                    pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
-                assert!(change_set.is_empty());
-            })
-        })
+                    let change_set =
+                        pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
+                    assert!(change_set.is_empty());
+                })
+            },
+        )
     }
 
     // Tests that complaints are generated and added to the pool if loading transcript
@@ -1596,71 +1612,81 @@ mod tests {
     }
 
     fn test_send_dealings_with_complaints(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3) = (
+                        create_transcript_id(1),
+                        create_transcript_id(2),
+                        create_transcript_id(3),
+                    );
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1, 2, 3
-                let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_2]);
-                let t2 = create_transcript_param(&key_id, id_2, &[NODE_1], &[NODE_3]);
-                let t3 = create_transcript_param(&key_id, id_3, &[NODE_1], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t1, t2, t3]);
-                let transcript_loader =
-                    TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1, 2, 3
+                    let t1 = create_transcript_param(&key_id, id_1, &[NODE_1], &[NODE_2]);
+                    let t2 = create_transcript_param(&key_id, id_2, &[NODE_1], &[NODE_3]);
+                    let t3 = create_transcript_param(&key_id, id_3, &[NODE_1], &[NODE_4]);
+                    let block_reader = TestIDkgBlockReader::for_pre_signer_test(
+                        Height::from(100),
+                        vec![t1, t2, t3],
+                    );
+                    let transcript_loader =
+                        TestIDkgTranscriptLoader::new(TestTranscriptLoadStatus::Complaints);
 
-                let change_set =
-                    pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
-                let complaints = transcript_loader.returned_complaints();
-                assert_eq!(change_set.len(), complaints.len());
-                assert_eq!(change_set.len(), 3);
-                for complaint in complaints {
-                    assert!(is_complaint_added_to_validated(
-                        &change_set,
-                        &complaint.content.idkg_complaint.transcript_id,
-                        &NODE_1,
-                        &NODE_1,
-                    ));
-                }
-            })
-        })
+                    let change_set =
+                        pre_signer.send_dealings(&idkg_pool, &transcript_loader, &block_reader);
+                    let complaints = transcript_loader.returned_complaints();
+                    assert_eq!(change_set.len(), complaints.len());
+                    assert_eq!(change_set.len(), 3);
+                    for complaint in complaints {
+                        assert!(is_complaint_added_to_validated(
+                            &change_set,
+                            &complaint.content.idkg_complaint.transcript_id,
+                            &NODE_1,
+                            &NODE_1,
+                        ));
+                    }
+                })
+            },
+        )
     }
 
     #[test]
     fn test_crypto_verify_dealing() {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let subnet_nodes: BTreeSet<_> = env.nodes.ids();
-                let crypto = first_crypto(&env);
-                let (_, pre_signer) =
-                    create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = create_transcript_id_with_height(4, Height::from(5));
-                let params = IDkgTranscriptParams::new(
-                    id,
-                    subnet_nodes.clone(),
-                    subnet_nodes,
-                    env.newest_registry_version,
-                    ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
-                    IDkgTranscriptOperation::Random,
-                )
-                .unwrap();
-                let dealing = create_dealing(id, NODE_2);
-                let changeset: Vec<_> = pre_signer
-                    .crypto_verify_dealing(dealing.message_id(), &params, dealing.clone())
-                    .into_iter()
-                    .collect();
-                // assert that the mock dealing does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &dealing.message_id()));
-            })
-        })
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+                    let subnet_nodes: BTreeSet<_> = env.nodes.ids();
+                    let crypto = first_crypto(&env);
+                    let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto),
+                    );
+                    let id = create_transcript_id_with_height(4, Height::from(5));
+                    let params = IDkgTranscriptParams::new(
+                        id,
+                        subnet_nodes.clone(),
+                        subnet_nodes,
+                        env.newest_registry_version,
+                        ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+                        IDkgTranscriptOperation::Random,
+                    )
+                    .unwrap();
+                    let dealing = create_dealing(id, NODE_2);
+                    let changeset: Vec<_> = pre_signer
+                        .crypto_verify_dealing(dealing.message_id(), &params, dealing.clone())
+                        .into_iter()
+                        .collect();
+                    // assert that the mock dealing does not pass real crypto check
+                    assert!(is_handle_invalid(&changeset, &dealing.message_id()));
+                })
+            },
+        )
     }
 
     // Tests that received dealings are accepted/processed for eligible transcript
@@ -1716,120 +1742,131 @@ mod tests {
         );
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_moved_to_validated(&change_set, msg_id_2));
-                assert!(is_moved_to_validated(&change_set, msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-            })
-        });
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_moved_to_validated(&change_set, msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                })
+            },
+        );
 
         // Validate dealings using `CryptoReturningOk`. Requested dealings should be moved to validated.
         // Dealings for requested target subnet xnet transcripts (even for future heights) should also be validated.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let block_reader = block_reader
-                    .clone()
-                    .with_target_subnet_xnet_transcripts(vec![
-                        t3.transcript_params_ref.clone(),
-                        t6.transcript_params_ref.clone(),
-                    ]);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let block_reader =
+                        block_reader
+                            .clone()
+                            .with_target_subnet_xnet_transcripts(vec![
+                                t3.transcript_params_ref.clone(),
+                                t6.transcript_params_ref.clone(),
+                            ]);
 
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 4);
-                assert!(is_moved_to_validated(&change_set, msg_id_2));
-                assert!(is_moved_to_validated(&change_set, msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-                assert!(is_moved_to_validated(&change_set, msg_id_6));
-            })
-        });
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 4);
+                    assert!(is_moved_to_validated(&change_set, msg_id_2));
+                    assert!(is_moved_to_validated(&change_set, msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                    assert!(is_moved_to_validated(&change_set, msg_id_6));
+                })
+            },
+        );
 
         // Validate dealings using an empty transcript resolver. Dealings should fail to be resolved and thus
         // be handled invalid.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().with_fail_to_resolve();
+                    let block_reader = block_reader.clone().with_fail_to_resolve();
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, msg_id_2));
-                assert!(is_handle_invalid(&change_set, msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-            })
-        });
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_handle_invalid(&change_set, msg_id_2));
+                    assert!(is_handle_invalid(&change_set, msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                })
+            },
+        );
 
         // Validate dealings using a crypto component without keys. Crypto validation should return a
         // permanent error, thus the requested dealings should be handled as invalid.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(crypto_without_keys()),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto_without_keys()),
+                    );
 
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, msg_id_2));
-                assert!(is_handle_invalid(&change_set, msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-            })
-        });
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_handle_invalid(&change_set, msg_id_2));
+                    assert!(is_handle_invalid(&change_set, msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                })
+            },
+        );
 
         // Validate dealings for a transcript with a registry version that isn't available locally (yet).
         // Crypto validation should return a transient error, thus the requested dealings should be deferred.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(crypto_without_keys()),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto_without_keys()),
+                    );
 
-                let v_1 = RegistryVersion::from(1);
-                let t2 = create_transcript_param_with_registry_version(
-                    &key_id,
-                    id_2,
-                    &[NODE_2],
-                    &[NODE_1],
-                    v_1,
-                );
-                let t3 = create_transcript_param_with_registry_version(
-                    &key_id,
-                    id_3,
-                    &[NODE_2],
-                    &[NODE_1],
-                    v_1,
-                );
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3]);
+                    let v_1 = RegistryVersion::from(1);
+                    let t2 = create_transcript_param_with_registry_version(
+                        &key_id,
+                        id_2,
+                        &[NODE_2],
+                        &[NODE_1],
+                        v_1,
+                    );
+                    let t3 = create_transcript_param_with_registry_version(
+                        &key_id,
+                        id_3,
+                        &[NODE_2],
+                        &[NODE_1],
+                        v_1,
+                    );
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2, t3]);
 
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
-            })
-        });
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
+                })
+            },
+        );
     }
 
     // Tests that duplicate dealings from a dealer for the same transcript
@@ -1843,38 +1880,40 @@ mod tests {
     }
 
     fn test_duplicate_dealing(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id_2 = create_transcript_id_with_height(2, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
-                // Set up the IDKG pool
-                // Validated pool has: {transcript 2, dealer = NODE_2}
-                let dealing = create_dealing(id_2, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // Validated pool has: {transcript 2, dealer = NODE_2}
+                    let dealing = create_dealing(id_2, NODE_2);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
-                let dealing = create_dealing(id_2, NODE_2);
-                let msg_id_2 = dealing.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
+                    let dealing = create_dealing(id_2, NODE_2);
+                    let msg_id_2 = dealing.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    let t2 = create_transcript_param(&key_id, id_2, &[NODE_2], &[NODE_1]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-            })
-        })
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests that duplicate dealings from a dealer for the same transcript
@@ -1888,60 +1927,62 @@ mod tests {
     }
 
     fn test_duplicate_dealing_in_batch(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id_2 = create_transcript_id_with_height(2, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
-                // Set up the IDKG pool
-                // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, internal_dealing_raw = vec[1]}
-                let mut dealing = create_dealing(id_2, NODE_2);
-                dealing.content.internal_dealing_raw = vec![1];
-                let msg_id_2_a = dealing.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Set up the IDKG pool
+                    // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, internal_dealing_raw = vec[1]}
+                    let mut dealing = create_dealing(id_2, NODE_2);
+                    dealing.content.internal_dealing_raw = vec![1];
+                    let msg_id_2_a = dealing.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, , internal_dealing_raw = vec[2]}
-                let mut dealing = create_dealing(id_2, NODE_2);
-                dealing.content.internal_dealing_raw = vec![2];
-                let msg_id_2_b = dealing.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, , internal_dealing_raw = vec[2]}
+                    let mut dealing = create_dealing(id_2, NODE_2);
+                    dealing.content.internal_dealing_raw = vec![2];
+                    let msg_id_2_b = dealing.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Unvalidated pool has: {transcript 2, dealer = NODE_3, height = 100, , internal_dealing_raw = vec[3]}
-                let mut dealing = create_dealing(id_2, NODE_3);
-                dealing.content.internal_dealing_raw = vec![3];
-                let msg_id_3 = dealing.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {transcript 2, dealer = NODE_3, height = 100, , internal_dealing_raw = vec[3]}
+                    let mut dealing = create_dealing(id_2, NODE_3);
+                    dealing.content.internal_dealing_raw = vec![3];
+                    let msg_id_3 = dealing.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let t2 = create_transcript_param(&key_id, id_2, &[NODE_2, NODE_3], &[NODE_1]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    let t2 = create_transcript_param(&key_id, id_2, &[NODE_2, NODE_3], &[NODE_1]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
-                // One of msg_id_2_a or msg_id_2_b should be accepted, the other one dropped
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                if is_moved_to_validated(&change_set, &msg_id_2_a) {
-                    assert!(is_handle_invalid(&change_set, &msg_id_2_b));
-                } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
-                    assert!(is_handle_invalid(&change_set, &msg_id_2_a));
-                } else {
-                    panic!("Neither dealing was accepted");
-                }
-                assert!(is_moved_to_validated(&change_set, &msg_id_3));
-            })
-        })
+                    // One of msg_id_2_a or msg_id_2_b should be accepted, the other one dropped
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    if is_moved_to_validated(&change_set, &msg_id_2_a) {
+                        assert!(is_handle_invalid(&change_set, &msg_id_2_b));
+                    } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
+                        assert!(is_handle_invalid(&change_set, &msg_id_2_a));
+                    } else {
+                        panic!("Neither dealing was accepted");
+                    }
+                    assert!(is_moved_to_validated(&change_set, &msg_id_3));
+                })
+            },
+        )
     }
 
     // Tests that dealings from a dealer that is not in the dealer list for the
@@ -1955,31 +1996,33 @@ mod tests {
     }
 
     fn test_unexpected_dealing(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id_2 = create_transcript_id_with_height(2, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
-                // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
-                let dealing = create_dealing(id_2, NODE_2);
-                let msg_id_2 = dealing.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
+                    let dealing = create_dealing(id_2, NODE_2);
+                    let msg_id_2 = dealing.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // NODE_2 is not in the dealer list
-                let t2 = create_transcript_param(&key_id, id_2, &[NODE_3], &[NODE_1]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
+                    // NODE_2 is not in the dealer list
+                    let t2 = create_transcript_param(&key_id, id_2, &[NODE_3], &[NODE_1]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
-                let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-            })
-        })
+                    let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests that support shares are sent to eligible dealings
@@ -1992,37 +2035,39 @@ mod tests {
     }
 
     fn test_send_support(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id(1);
 
-                // We haven't sent support yet, and we are in the receiver list
-                let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
+                    // We haven't sent support yet, and we are in the receiver list
+                    let dealing = create_dealing(id, NODE_2);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_dealing_support_added_to_validated(
-                    &change_set,
-                    &id,
-                    &NODE_2,
-                ));
-                idkg_pool.apply_changes(change_set);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_dealing_support_added_to_validated(
+                        &change_set,
+                        &id,
+                        &NODE_2,
+                    ));
+                    idkg_pool.apply_changes(change_set);
 
-                // Since we already issued support for the dealing, it should not produce any
-                // more support.
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert!(change_set.is_empty());
-            })
-        })
+                    // Since we already issued support for the dealing, it should not produce any
+                    // more support.
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert!(change_set.is_empty());
+                })
+            },
+        )
     }
 
     // Tests that sending support shares is deferred if crypto returns transient error.
@@ -2036,41 +2081,45 @@ mod tests {
 
     fn test_defer_sending_dealing_support(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(crypto_without_keys()),
-                );
-                let id = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto_without_keys()),
+                    );
+                    let id = create_transcript_id(1);
 
-                // We haven't sent support yet, and we are in the receiver list
-                let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
-                // create a transcript with unknown future registry version
-                let rv = RegistryVersion::from(1);
-                let t = create_transcript_param_with_registry_version(
-                    &key_id,
-                    id,
-                    &[NODE_2],
-                    &[NODE_1],
-                    rv,
-                );
+                    // We haven't sent support yet, and we are in the receiver list
+                    let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    // create a transcript with unknown future registry version
+                    let rv = RegistryVersion::from(1);
+                    let t = create_transcript_param_with_registry_version(
+                        &key_id,
+                        id,
+                        &[NODE_2],
+                        &[NODE_1],
+                        rv,
+                    );
 
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t.clone()])
-                        // Xnet transcripts should raise a warning but should not stop this node from supporting it.
-                        .with_source_subnet_xnet_transcripts(vec![t.transcript_params_ref]);
+                    let block_reader = TestIDkgBlockReader::for_pre_signer_test(
+                        Height::from(100),
+                        vec![t.clone()],
+                    )
+                    // Xnet transcripts should raise a warning but should not stop this node from supporting it.
+                    .with_source_subnet_xnet_transcripts(vec![t.transcript_params_ref]);
 
-                // Sending support should be deferred until registry version exists locally
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert!(change_set.is_empty());
-            })
-        })
+                    // Sending support should be deferred until registry version exists locally
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert!(change_set.is_empty());
+                })
+            },
+        )
     }
 
     // Tests that invalid dealings are handled invalid when creating new dealing support.
@@ -2084,33 +2133,35 @@ mod tests {
 
     fn test_dont_send_support_for_invalid(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(crypto_without_keys()),
-                );
-                let id = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto_without_keys()),
+                    );
+                    let id = create_transcript_id(1);
 
-                // We haven't sent support yet, and we are in the receiver list
-                let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing.clone(),
-                ))];
-                idkg_pool.apply_changes(change_set);
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
+                    // We haven't sent support yet, and we are in the receiver list
+                    let dealing = create_dealing_with_payload(&key_id, id, NODE_2, &mut rng);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing.clone(),
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
 
-                // Since there are no keys in the crypto component, dealing verification should fail permanently and
-                // the dealing is considered invalid.
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &dealing.message_id()))
-            })
-        })
+                    // Since there are no keys in the crypto component, dealing verification should fail permanently and
+                    // the dealing is considered invalid.
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &dealing.message_id()))
+                })
+            },
+        )
     }
 
     // Tests that support shares are not sent by nodes not in the receiver list for
@@ -2124,86 +2175,95 @@ mod tests {
     }
 
     fn test_non_receivers_dont_send_support(key_id: MasterPublicKeyId) {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id(1);
 
-                // We are not in the receiver list for the transcript
-                let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
+                    // We are not in the receiver list for the transcript
+                    let dealing = create_dealing(id, NODE_2);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
 
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert!(change_set.is_empty());
-            })
-        })
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert!(change_set.is_empty());
+                })
+            },
+        )
     }
 
     // Tests that support shares are not sent for transcripts we are not building
     #[test]
     fn test_ecdsa_no_support_for_missing_transcript_params() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id(1);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id(1);
 
-                let dealing = create_dealing(id, NODE_2);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    let dealing = create_dealing(id, NODE_2);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![]);
-                let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
-                assert!(change_set.is_empty());
-            })
-        })
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![]);
+                    let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
+                    assert!(change_set.is_empty());
+                })
+            },
+        )
     }
 
     #[test]
     fn test_crypto_verify_dealing_support() {
         let mut rng = reproducible_rng();
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let subnet_nodes: BTreeSet<_> = env.nodes.ids();
-                let crypto = first_crypto(&env);
-                let (_, pre_signer) =
-                    create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = create_transcript_id_with_height(4, Height::from(5));
-                let params = IDkgTranscriptParams::new(
-                    id,
-                    subnet_nodes.clone(),
-                    subnet_nodes,
-                    env.newest_registry_version,
-                    ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
-                    IDkgTranscriptOperation::Random,
-                )
-                .unwrap();
-                let (dealing, support) = create_support(id, NODE_2, NODE_3);
-                let changeset: Vec<_> = pre_signer
-                    .crypto_verify_dealing_support(
-                        support.message_id(),
-                        &params,
-                        &dealing,
-                        support.clone(),
-                        &(IDkgStatsNoOp {}),
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+                    let subnet_nodes: BTreeSet<_> = env.nodes.ids();
+                    let crypto = first_crypto(&env);
+                    let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                        pool_config,
+                        logger,
+                        Some(crypto),
+                    );
+                    let id = create_transcript_id_with_height(4, Height::from(5));
+                    let params = IDkgTranscriptParams::new(
+                        id,
+                        subnet_nodes.clone(),
+                        subnet_nodes,
+                        env.newest_registry_version,
+                        ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+                        IDkgTranscriptOperation::Random,
                     )
-                    .into_iter()
-                    .collect();
-                // assert that the mock dealing support does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &support.message_id()));
-            })
-        })
+                    .unwrap();
+                    let (dealing, support) = create_support(id, NODE_2, NODE_3);
+                    let changeset: Vec<_> = pre_signer
+                        .crypto_verify_dealing_support(
+                            support.message_id(),
+                            &params,
+                            &dealing,
+                            support.clone(),
+                            &(IDkgStatsNoOp {}),
+                        )
+                        .into_iter()
+                        .collect();
+                    // assert that the mock dealing support does not pass real crypto check
+                    assert!(is_handle_invalid(&changeset, &support.message_id()));
+                })
+            },
+        )
     }
 
     // Tests that received support shares are accepted/processed for eligible
@@ -2281,460 +2341,484 @@ mod tests {
         });
 
         // Using CryptoReturningOK one of the shares with id_2 should be accepted, the other handled invalid
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the IDKG pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing.clone(),
-                ))];
-                idkg_pool.apply_changes(change_set);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    // Set up the IDKG pool
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing.clone(),
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(
-                    is_moved_to_validated(&change_set, &msg_id_2)
-                        || is_moved_to_validated(&change_set, &msg_id_2_dupl)
-                );
-                assert!(
-                    is_handle_invalid(&change_set, &msg_id_2)
-                        || is_handle_invalid(&change_set, &msg_id_2_dupl)
-                );
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(
+                        is_moved_to_validated(&change_set, &msg_id_2)
+                            || is_moved_to_validated(&change_set, &msg_id_2_dupl)
+                    );
+                    assert!(
+                        is_handle_invalid(&change_set, &msg_id_2)
+                            || is_handle_invalid(&change_set, &msg_id_2_dupl)
+                    );
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
 
         // Simulate failure of resolving refs by clearing transcripts of the block reader,
         // dealings for requested (but unresolvable) transcripts should be handled invalid.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the IDKG pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing.clone(),
-                ))];
-                idkg_pool.apply_changes(change_set);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    // Set up the IDKG pool
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing.clone(),
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().with_fail_to_resolve();
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 4);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let block_reader = block_reader.clone().with_fail_to_resolve();
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 4);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                    assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                    assert!(is_handle_invalid(&change_set, &msg_id_3));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
 
         // Mark t2 as a source_subnet_xnet_transcript, its dealings should no longer be accepted.
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the IDKG pool
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing.clone(),
-                ))];
-                idkg_pool.apply_changes(change_set);
-                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+                    // Set up the IDKG pool
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing.clone(),
+                    ))];
+                    idkg_pool.apply_changes(change_set);
+                    artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let block_reader = block_reader
-                    .clone()
-                    .with_source_subnet_xnet_transcripts(vec![t2.transcript_params_ref])
-                    .with_target_subnet_xnet_transcripts(vec![t3.transcript_params_ref]);
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
-            })
-        });
+                    let block_reader = block_reader
+                        .clone()
+                        .with_source_subnet_xnet_transcripts(vec![t2.transcript_params_ref])
+                        .with_target_subnet_xnet_transcripts(vec![t3.transcript_params_ref]);
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 3);
+                    assert!(is_handle_invalid(&change_set, &msg_id_2));
+                    assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+                })
+            },
+        );
     }
 
     // Tests that duplicate support from a node for the same dealing
     // are dropped.
     #[test]
     fn test_ecdsa_duplicate_support_from_node() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id_with_height(1, Height::from(100));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id_with_height(1, Height::from(100));
 
-                // Set up the IDKG pool
-                // Validated pool has: support {transcript 2, dealer = NODE_2, signer = NODE_3}
-                let (dealing, support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // Validated pool has: support {transcript 2, dealer = NODE_2, signer = NODE_3}
+                    let (dealing, support) = create_support(id, NODE_2, NODE_3);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                let change_set = vec![IDkgChangeAction::AddToValidated(
-                    IDkgMessage::DealingSupport(support.clone()),
-                )];
-                idkg_pool.apply_changes(change_set);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(
+                        IDkgMessage::DealingSupport(support.clone()),
+                    )];
+                    idkg_pool.apply_changes(change_set);
 
-                // Unvalidated pool has: duplicate of the same support share
-                let msg_id = support.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: duplicate of the same support share
+                    let msg_id = support.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
 
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
-            })
-        })
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id));
+                })
+            },
+        )
     }
 
     // Tests that support from a node that is not in the receiver list for the
     // transcript are dropped.
     #[test]
     fn test_ecdsa_unexpected_support_from_node() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id_with_height(1, Height::from(10));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Unvalidated pool has: support {transcript 2, dealer = NODE_2, signer =
-                // NODE_3}
-                let (_, support) = create_support(id, NODE_2, NODE_3);
-                let msg_id = support.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Unvalidated pool has: support {transcript 2, dealer = NODE_2, signer =
+                    // NODE_3}
+                    let (_, support) = create_support(id, NODE_2, NODE_3);
+                    let msg_id = support.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // NODE_3 is not in the receiver list
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
-            })
-        })
+                    // NODE_3 is not in the receiver list
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_4]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id));
+                })
+            },
+        )
     }
 
     // Tests that support with a meta data mismatch is dropped.
     #[test]
     fn test_ecdsa_dealing_support_meta_data_mismatch() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id_with_height(1, Height::from(10));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the IDKG pool
-                // A dealing for a transcript that is requested by finalized block,
-                // and we already have the dealing(share accepted)
-                let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // A dealing for a transcript that is requested by finalized block,
+                    // and we already have the dealing(share accepted)
+                    let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                support.dealer_id = NODE_3;
-                let msg_id = support.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    support.dealer_id = NODE_3;
+                    let msg_id = support.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
-            })
-        })
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_handle_invalid(&change_set, &msg_id));
+                })
+            },
+        )
     }
 
     // Tests that support with a dealing hash mismatch is dropped.
     #[test]
     fn test_ecdsa_dealing_support_missing_hash_meta_data_mismatch() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id_with_height(1, Height::from(10));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the IDKG pool
-                // A dealing for a transcript that is requested by finalized block,
-                // and we already have the dealing(share accepted)
-                let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // A dealing for a transcript that is requested by finalized block,
+                    // and we already have the dealing(share accepted)
+                    let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
-                let msg_id = support.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                    let msg_id = support.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
-            })
-        })
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+                })
+            },
+        )
     }
 
     // Tests that support with a missing dealing hash and invalid dealer is dropped.
     #[test]
     fn test_ecdsa_dealing_support_missing_hash_invalid_dealer() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let id = create_transcript_id_with_height(1, Height::from(10));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the IDKG pool
-                // A dealing for a transcript that is requested by finalized block,
-                // and we already have the dealing(share accepted)
-                let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
-                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
-                    dealing,
-                ))];
-                idkg_pool.apply_changes(change_set);
+                    // Set up the IDKG pool
+                    // A dealing for a transcript that is requested by finalized block,
+                    // and we already have the dealing(share accepted)
+                    let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
+                    let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                        dealing,
+                    ))];
+                    idkg_pool.apply_changes(change_set);
 
-                support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
-                support.dealer_id = NODE_4;
-                let msg_id = support.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support),
-                    peer_id: NODE_3,
-                    timestamp: UNIX_EPOCH,
-                });
+                    support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
+                    support.dealer_id = NODE_4;
+                    let msg_id = support.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support),
+                        peer_id: NODE_3,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Set up the transcript creation request
-                // The block requests transcripts 1
-                let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
-            })
-        })
+                    // Set up the transcript creation request
+                    // The block requests transcripts 1
+                    let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id));
+                })
+            },
+        )
     }
 
     // Tests purging of dealings from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_dealings() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id_with_height(1, Height::from(20)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(200)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3) = (
+                        create_transcript_id_with_height(1, Height::from(20)),
+                        create_transcript_id_with_height(2, Height::from(20)),
+                        create_transcript_id_with_height(3, Height::from(200)),
+                    );
 
-                // Dealing 1: height <= current_height, in_progress (not purged)
-                let dealing_1 = create_dealing(id_1, NODE_2);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing_1),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Dealing 1: height <= current_height, in_progress (not purged)
+                    let dealing_1 = create_dealing(id_1, NODE_2);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing_1),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Dealing 2: height <= current_height, !in_progress (purged)
-                let dealing_2 = create_dealing(id_2, NODE_2);
-                let msg_id_2 = dealing_2.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing_2),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Dealing 2: height <= current_height, !in_progress (purged)
+                    let dealing_2 = create_dealing(id_2, NODE_2);
+                    let msg_id_2 = dealing_2.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing_2),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Dealing 3: height > current_height (not purged)
-                let dealing_3 = create_dealing(id_3, NODE_2);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::Dealing(dealing_3),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Dealing 3: height > current_height (not purged)
+                    let dealing_3 = create_dealing(id_3, NODE_2);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::Dealing(dealing_3),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-            })
-        })
+                    let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests purging of dealings from validated pool
     #[test]
     fn test_ecdsa_purge_validated_dealings() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3, id_4) = (
-                    create_transcript_id_with_height(1, Height::from(20)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(200)),
-                    create_transcript_id_with_height(4, Height::from(20)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3, id_4) = (
+                        create_transcript_id_with_height(1, Height::from(20)),
+                        create_transcript_id_with_height(2, Height::from(20)),
+                        create_transcript_id_with_height(3, Height::from(200)),
+                        create_transcript_id_with_height(4, Height::from(20)),
+                    );
 
-                // Dealing 1: height <= current_height, in_progress (not purged)
-                let dealing_1 = create_dealing(id_1, NODE_2);
+                    // Dealing 1: height <= current_height, in_progress (not purged)
+                    let dealing_1 = create_dealing(id_1, NODE_2);
 
-                // Dealing 2: height <= current_height, !in_progress (purged)
-                let dealing_2 = create_dealing(id_2, NODE_2);
-                let msg_id_2 = dealing_2.message_id();
+                    // Dealing 2: height <= current_height, !in_progress (purged)
+                    let dealing_2 = create_dealing(id_2, NODE_2);
+                    let msg_id_2 = dealing_2.message_id();
 
-                // Dealing 3: height > current_height (not purged)
-                let dealing_3 = create_dealing(id_3, NODE_2);
+                    // Dealing 3: height > current_height (not purged)
+                    let dealing_3 = create_dealing(id_3, NODE_2);
 
-                // Dealing 4: height <= current_height, !in_progress, is target subnet xnet transcript (not purged)
-                let dealing_4 = create_dealing(id_4, NODE_2);
+                    // Dealing 4: height <= current_height, !in_progress, is target subnet xnet transcript (not purged)
+                    let dealing_4 = create_dealing(id_4, NODE_2);
 
-                let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_4)),
-                ];
-                idkg_pool.apply_changes(change_set);
+                    let change_set = vec![
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_1)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_4)),
+                    ];
+                    idkg_pool.apply_changes(change_set);
 
-                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
-                let t4 = create_transcript_param(&key_id, id_4, &[NODE_2], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t])
-                        .with_target_subnet_xnet_transcripts(vec![t4.transcript_params_ref]);
-                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id_2));
-            })
-        })
+                    let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                    let t4 = create_transcript_param(&key_id, id_4, &[NODE_2], &[NODE_4]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t])
+                            .with_target_subnet_xnet_transcripts(vec![t4.transcript_params_ref]);
+                    let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests purging of dealing support from unvalidated pool
     #[test]
     fn test_ecdsa_purge_unvalidated_dealing_support() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id_with_height(1, Height::from(20)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(200)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3) = (
+                        create_transcript_id_with_height(1, Height::from(20)),
+                        create_transcript_id_with_height(2, Height::from(20)),
+                        create_transcript_id_with_height(3, Height::from(200)),
+                    );
 
-                // Support 1: height <= current_height, in_progress (not purged)
-                let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support_1),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Support 1: height <= current_height, in_progress (not purged)
+                    let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support_1),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Dealing 2: height <= current_height, !in_progress (purged)
-                let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
-                let msg_id_2 = support_2.message_id();
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support_2),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Dealing 2: height <= current_height, !in_progress (purged)
+                    let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
+                    let msg_id_2 = support_2.message_id();
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support_2),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                // Dealing 3: height > current_height (not purged)
-                let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
-                idkg_pool.insert(UnvalidatedArtifact {
-                    message: IDkgMessage::DealingSupport(support_3),
-                    peer_id: NODE_2,
-                    timestamp: UNIX_EPOCH,
-                });
+                    // Dealing 3: height > current_height (not purged)
+                    let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: IDkgMessage::DealingSupport(support_3),
+                        peer_id: NODE_2,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-            })
-        })
+                    let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests purging of dealing support from validated pool
     #[test]
     fn test_ecdsa_purge_validated_dealing_support() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
-                let (mut idkg_pool, pre_signer) =
-                    create_pre_signer_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id_with_height(1, Height::from(20)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(200)),
-                );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let key_id = fake_ecdsa_master_public_key_id();
+                    let (mut idkg_pool, pre_signer) =
+                        create_pre_signer_dependencies(pool_config, logger);
+                    let (id_1, id_2, id_3) = (
+                        create_transcript_id_with_height(1, Height::from(20)),
+                        create_transcript_id_with_height(2, Height::from(20)),
+                        create_transcript_id_with_height(3, Height::from(200)),
+                    );
 
-                // Support 1: height <= current_height, in_progress (not purged)
-                let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
+                    // Support 1: height <= current_height, in_progress (not purged)
+                    let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
 
-                // Dealing 2: height <= current_height, !in_progress (purged)
-                let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
-                let msg_id_2 = support_2.message_id();
+                    // Dealing 2: height <= current_height, !in_progress (purged)
+                    let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
+                    let msg_id_2 = support_2.message_id();
 
-                // Dealing 3: height > current_height (not purged)
-                let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
+                    // Dealing 3: height > current_height (not purged)
+                    let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
 
-                let change_set = vec![
-                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_1)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_2)),
-                    IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_3)),
-                ];
-                idkg_pool.apply_changes(change_set);
+                    let change_set = vec![
+                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_1)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_2)),
+                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_3)),
+                    ];
+                    idkg_pool.apply_changes(change_set);
 
-                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
-                let block_reader =
-                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
-                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 1);
-                assert!(is_removed_from_validated(&change_set, &msg_id_2));
-            })
-        })
+                    let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                    let block_reader =
+                        TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                    let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                    assert_eq!(change_set.len(), 1);
+                    assert!(is_removed_from_validated(&change_set, &msg_id_2));
+                })
+            },
+        )
     }
 
     // Tests transcript builder failures and success
@@ -2767,12 +2851,61 @@ mod tests {
         let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
         let crypto = first_crypto(&env);
 
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let (mut idkg_pool, _) =
-                    create_pre_signer_dependencies(pool_config, logger.clone());
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                with_test_replica_logger(|logger| {
+                    let (mut idkg_pool, _) =
+                        create_pre_signer_dependencies(pool_config, logger.clone());
 
-                {
+                    {
+                        let b = IDkgTranscriptBuilderImpl::new(
+                            &block_reader,
+                            crypto.deref(),
+                            &idkg_pool,
+                            &metrics,
+                            logger.clone(),
+                        );
+
+                        // tid is requested, but there are no dealings for it, the transcript cannot
+                        // be completed
+                        let result = b.get_completed_transcript(tid);
+                        assert_matches!(result, None);
+                    }
+
+                    // add dealings
+                    let change_set = dealings
+                        .values()
+                        .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
+                        .collect();
+                    idkg_pool.apply_changes(change_set);
+
+                    {
+                        let b = IDkgTranscriptBuilderImpl::new(
+                            &block_reader,
+                            crypto.deref(),
+                            &idkg_pool,
+                            &metrics,
+                            logger.clone(),
+                        );
+
+                        // cannot aggregate empty shares
+                        let result = b.crypto_aggregate_dealing_support(&params, &[]);
+                        assert_matches!(result, None);
+
+                        // there are no support shares, no transcript should be completed
+                        let result = b.get_completed_transcript(tid);
+                        assert_matches!(result, None);
+                    }
+
+                    // add support
+                    let change_set = supports
+                        .iter()
+                        .map(|s| {
+                            IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
+                        })
+                        .collect();
+                    idkg_pool.apply_changes(change_set);
+
                     let b = IDkgTranscriptBuilderImpl::new(
                         &block_reader,
                         crypto.deref(),
@@ -2780,94 +2913,47 @@ mod tests {
                         &metrics,
                         logger.clone(),
                     );
-
-                    // tid is requested, but there are no dealings for it, the transcript cannot
-                    // be completed
+                    // the transcript should be completed now
                     let result = b.get_completed_transcript(tid);
-                    assert_matches!(result, None);
-                }
+                    assert_matches!(result, Some(t) if t.transcript_id == tid);
 
-                // add dealings
-                let change_set = dealings
-                    .values()
-                    .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
-                    .collect();
-                idkg_pool.apply_changes(change_set);
+                    // returned dealings should be equal to the ones we inserted
+                    let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
+                    let dealings2 = b
+                        .get_validated_dealings(tid)
+                        .into_iter()
+                        .collect::<HashSet<_>>();
+                    assert_eq!(dealings1, dealings2);
 
-                {
+                    {
+                        let block_reader =
+                            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
+                        let b = IDkgTranscriptBuilderImpl::new(
+                            &block_reader,
+                            crypto.deref(),
+                            &idkg_pool,
+                            &metrics,
+                            logger.clone(),
+                        );
+                        // the transcript is no longer requested, it should not be returned
+                        let result = b.get_completed_transcript(tid);
+                        assert_matches!(result, None);
+                    }
+
+                    let crypto = crypto_without_keys();
                     let b = IDkgTranscriptBuilderImpl::new(
                         &block_reader,
-                        crypto.deref(),
+                        crypto.as_ref(),
                         &idkg_pool,
                         &metrics,
-                        logger.clone(),
+                        logger,
                     );
-
-                    // cannot aggregate empty shares
-                    let result = b.crypto_aggregate_dealing_support(&params, &[]);
-                    assert_matches!(result, None);
-
-                    // there are no support shares, no transcript should be completed
+                    // transcript completion should fail on crypto failures
                     let result = b.get_completed_transcript(tid);
                     assert_matches!(result, None);
-                }
-
-                // add support
-                let change_set = supports
-                    .iter()
-                    .map(|s| {
-                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
-                    })
-                    .collect();
-                idkg_pool.apply_changes(change_set);
-
-                let b = IDkgTranscriptBuilderImpl::new(
-                    &block_reader,
-                    crypto.deref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger.clone(),
-                );
-                // the transcript should be completed now
-                let result = b.get_completed_transcript(tid);
-                assert_matches!(result, Some(t) if t.transcript_id == tid);
-
-                // returned dealings should be equal to the ones we inserted
-                let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
-                let dealings2 = b
-                    .get_validated_dealings(tid)
-                    .into_iter()
-                    .collect::<HashSet<_>>();
-                assert_eq!(dealings1, dealings2);
-
-                {
-                    let block_reader =
-                        TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
-                    let b = IDkgTranscriptBuilderImpl::new(
-                        &block_reader,
-                        crypto.deref(),
-                        &idkg_pool,
-                        &metrics,
-                        logger.clone(),
-                    );
-                    // the transcript is no longer requested, it should not be returned
-                    let result = b.get_completed_transcript(tid);
-                    assert_matches!(result, None);
-                }
-
-                let crypto = crypto_without_keys();
-                let b = IDkgTranscriptBuilderImpl::new(
-                    &block_reader,
-                    crypto.as_ref(),
-                    &idkg_pool,
-                    &metrics,
-                    logger,
-                );
-                // transcript completion should fail on crypto failures
-                let result = b.get_completed_transcript(tid);
-                assert_matches!(result, None);
-            })
-        });
+                })
+            },
+        );
     }
 
     fn first_crypto(env: &CanisterThresholdSigTestEnvironment) -> Arc<dyn ConsensusCrypto> {

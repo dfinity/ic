@@ -507,383 +507,400 @@ mod tests {
 
     #[test]
     fn test_certification_pool_insert_and_remove() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share1 = fake_share(1, 0);
-            let id1 = msg_to_id(&share1);
-            let share2 = fake_share(2, 1);
-            let id2 = msg_to_id(&share2);
-            pool.insert(to_unvalidated(share1));
-            pool.insert(to_unvalidated(share2));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share1 = fake_share(1, 0);
+                let id1 = msg_to_id(&share1);
+                let share2 = fake_share(2, 1);
+                let id2 = msg_to_id(&share2);
+                pool.insert(to_unvalidated(share1));
+                pool.insert(to_unvalidated(share2));
 
-            let cert1 = fake_cert(1);
-            let id3 = msg_to_id(&cert1);
-            pool.insert(to_unvalidated(cert1.clone()));
-            let mut cert2 = cert1;
-            if let CertificationMessage::Certification(x) = &mut cert2 {
-                x.signed.signature.signer = NiDkgId {
-                    start_block_height: Height::from(10),
-                    dealer_subnet: subnet_test_id(0),
-                    dkg_tag: NiDkgTag::HighThreshold,
-                    target_subnet: NiDkgTargetSubnet::Local,
-                };
-            }
-            let id4 = msg_to_id(&cert2);
-            pool.insert(to_unvalidated(cert2));
+                let cert1 = fake_cert(1);
+                let id3 = msg_to_id(&cert1);
+                pool.insert(to_unvalidated(cert1.clone()));
+                let mut cert2 = cert1;
+                if let CertificationMessage::Certification(x) = &mut cert2 {
+                    x.signed.signature.signer = NiDkgId {
+                        start_block_height: Height::from(10),
+                        dealer_subnet: subnet_test_id(0),
+                        dkg_tag: NiDkgTag::HighThreshold,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    };
+                }
+                let id4 = msg_to_id(&cert2);
+                pool.insert(to_unvalidated(cert2));
 
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(1)).count(),
-                1
-            );
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(2)).count(),
-                1
-            );
-            assert_eq!(
-                pool.unvalidated_certifications_at_height(Height::from(1))
-                    .count(),
-                2
-            );
-            assert_eq!(
-                pool.all_heights_with_artifacts(),
-                vec![Height::from(1), Height::from(2)]
-            );
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(1)).count(),
+                    1
+                );
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(2)).count(),
+                    1
+                );
+                assert_eq!(
+                    pool.unvalidated_certifications_at_height(Height::from(1))
+                        .count(),
+                    2
+                );
+                assert_eq!(
+                    pool.all_heights_with_artifacts(),
+                    vec![Height::from(1), Height::from(2)]
+                );
 
-            for id in [id1, id2, id3, id4] {
-                assert!(pool.unvalidated.contains_key(&id.hash));
-                pool.remove(&id);
-                assert!(!pool.unvalidated.contains_key(&id.hash));
-            }
-        })
+                for id in [id1, id2, id3, id4] {
+                    assert!(pool.unvalidated.contains_key(&id.hash));
+                    pool.remove(&id);
+                    assert!(!pool.unvalidated.contains_key(&id.hash));
+                }
+            },
+        )
     }
 
     #[test]
     fn test_certification_pool_add_to_validated() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(7, 0);
-            let cert_msg = fake_cert(8);
-            let result = pool.apply_changes(vec![
-                ChangeAction::AddToValidated(share_msg.clone()),
-                ChangeAction::AddToValidated(cert_msg.clone()),
-            ]);
-            assert_eq!(result.mutations.len(), 2);
-            assert!(!result
-                .mutations
-                .iter()
-                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
-            assert!(result.poll_immediately);
-            assert_eq!(
-                pool.certification_at_height(Height::from(8)),
-                Some(msg_to_cert(cert_msg))
-            );
-            assert_eq!(
-                pool.validated_shares().collect::<Vec<CertificationShare>>(),
-                vec![msg_to_share(share_msg)]
-            );
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(7, 0);
+                let cert_msg = fake_cert(8);
+                let result = pool.apply_changes(vec![
+                    ChangeAction::AddToValidated(share_msg.clone()),
+                    ChangeAction::AddToValidated(cert_msg.clone()),
+                ]);
+                assert_eq!(result.mutations.len(), 2);
+                assert!(!result
+                    .mutations
+                    .iter()
+                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+                assert!(result.poll_immediately);
+                assert_eq!(
+                    pool.certification_at_height(Height::from(8)),
+                    Some(msg_to_cert(cert_msg))
+                );
+                assert_eq!(
+                    pool.validated_shares().collect::<Vec<CertificationShare>>(),
+                    vec![msg_to_share(share_msg)]
+                );
+            },
+        );
     }
 
     #[test]
     fn test_certification_pool_move_to_validated() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(10, 10);
-            let cert_msg = fake_cert(20);
-            pool.insert(to_unvalidated(share_msg.clone()));
-            pool.insert(to_unvalidated(cert_msg.clone()));
-            let result = pool.apply_changes(vec![
-                ChangeAction::MoveToValidated(share_msg.clone()),
-                ChangeAction::MoveToValidated(cert_msg.clone()),
-            ]);
-            let expected = cert_msg.id();
-            assert!(
-                matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
-            );
-            assert_eq!(result.mutations.len(), 1);
-            assert!(result.poll_immediately);
-            assert_eq!(
-                pool.shares_at_height(Height::from(10))
-                    .collect::<Vec<CertificationShare>>(),
-                vec![msg_to_share(share_msg)]
-            );
-            assert_eq!(
-                pool.certification_at_height(Height::from(20)),
-                Some(msg_to_cert(cert_msg))
-            );
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(10)).count(),
-                0
-            );
-            assert_eq!(
-                pool.unvalidated_certifications_at_height(Height::from(20))
-                    .count(),
-                0
-            );
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
-            assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
-        });
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(10, 10);
+                let cert_msg = fake_cert(20);
+                pool.insert(to_unvalidated(share_msg.clone()));
+                pool.insert(to_unvalidated(cert_msg.clone()));
+                let result = pool.apply_changes(vec![
+                    ChangeAction::MoveToValidated(share_msg.clone()),
+                    ChangeAction::MoveToValidated(cert_msg.clone()),
+                ]);
+                let expected = cert_msg.id();
+                assert!(
+                    matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
+                );
+                assert_eq!(result.mutations.len(), 1);
+                assert!(result.poll_immediately);
+                assert_eq!(
+                    pool.shares_at_height(Height::from(10))
+                        .collect::<Vec<CertificationShare>>(),
+                    vec![msg_to_share(share_msg)]
+                );
+                assert_eq!(
+                    pool.certification_at_height(Height::from(20)),
+                    Some(msg_to_cert(cert_msg))
+                );
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                    0
+                );
+                assert_eq!(
+                    pool.unvalidated_certifications_at_height(Height::from(20))
+                        .count(),
+                    0
+                );
+                // INVARIANT: The sizes the unvalidated pool and the height index must be equal
+                assert_eq!(
+                    pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
+                    pool.unvalidated.values().len()
+                )
+            },
+        );
     }
 
     #[test]
     fn test_certification_pool_remove_all() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(10, 10);
-            let cert_msg = fake_cert(10);
-            pool.insert(to_unvalidated(share_msg.clone()));
-            pool.insert(to_unvalidated(cert_msg.clone()));
-            pool.apply_changes(vec![
-                ChangeAction::MoveToValidated(share_msg),
-                ChangeAction::MoveToValidated(cert_msg),
-            ]);
-            let share_msg = fake_share(10, 30);
-            let cert_msg = fake_cert(10);
-            pool.insert(to_unvalidated(share_msg.clone()));
-            pool.insert(to_unvalidated(cert_msg.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(10, 10);
+                let cert_msg = fake_cert(10);
+                pool.insert(to_unvalidated(share_msg.clone()));
+                pool.insert(to_unvalidated(cert_msg.clone()));
+                pool.apply_changes(vec![
+                    ChangeAction::MoveToValidated(share_msg),
+                    ChangeAction::MoveToValidated(cert_msg),
+                ]);
+                let share_msg = fake_share(10, 30);
+                let cert_msg = fake_cert(10);
+                pool.insert(to_unvalidated(share_msg.clone()));
+                pool.insert(to_unvalidated(cert_msg.clone()));
 
-            assert_eq!(pool.all_heights_with_artifacts().len(), 1);
-            assert_eq!(pool.shares_at_height(Height::from(10)).count(), 1);
-            assert!(pool.certification_at_height(Height::from(10)).is_some());
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(10)).count(),
-                1
-            );
-            assert_eq!(
-                pool.unvalidated_certifications_at_height(Height::from(10))
-                    .count(),
-                1
-            );
+                assert_eq!(pool.all_heights_with_artifacts().len(), 1);
+                assert_eq!(pool.shares_at_height(Height::from(10)).count(), 1);
+                assert!(pool.certification_at_height(Height::from(10)).is_some());
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                    1
+                );
+                assert_eq!(
+                    pool.unvalidated_certifications_at_height(Height::from(10))
+                        .count(),
+                    1
+                );
 
-            let result = pool.apply_changes(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
-            let mut back_off_factor = 1;
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(
-                    50 * (1 << back_off_factor),
-                ));
-                if pool.all_heights_with_artifacts().is_empty() {
-                    break;
+                let result =
+                    pool.apply_changes(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
+                let mut back_off_factor = 1;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        50 * (1 << back_off_factor),
+                    ));
+                    if pool.all_heights_with_artifacts().is_empty() {
+                        break;
+                    }
+                    back_off_factor += 1;
+                    if back_off_factor > 6 {
+                        panic!("Purging couldn't finish in more than 6 seconds.")
+                    }
                 }
-                back_off_factor += 1;
-                if back_off_factor > 6 {
-                    panic!("Purging couldn't finish in more than 6 seconds.")
-                }
-            }
-            assert!(!result
-                .mutations
-                .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
-            assert_eq!(result.mutations.len(), 2);
-            assert!(result.poll_immediately);
-            assert_eq!(pool.all_heights_with_artifacts().len(), 0);
-            assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
-            assert!(pool.certification_at_height(Height::from(10)).is_none());
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(10)).count(),
-                0
-            );
-            assert_eq!(
-                pool.unvalidated_certifications_at_height(Height::from(10))
-                    .count(),
-                0
-            );
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
-            assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
-        });
+                assert!(!result
+                    .mutations
+                    .iter()
+                    .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                assert_eq!(result.mutations.len(), 2);
+                assert!(result.poll_immediately);
+                assert_eq!(pool.all_heights_with_artifacts().len(), 0);
+                assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
+                assert!(pool.certification_at_height(Height::from(10)).is_none());
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                    0
+                );
+                assert_eq!(
+                    pool.unvalidated_certifications_at_height(Height::from(10))
+                        .count(),
+                    0
+                );
+                // INVARIANT: The sizes the unvalidated pool and the height index must be equal
+                assert_eq!(
+                    pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
+                    pool.unvalidated.values().len()
+                )
+            },
+        );
     }
 
     #[test]
     fn test_certification_pool_handle_invalid() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(10, 10);
-            pool.insert(to_unvalidated(share_msg.clone()));
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(10, 10);
+                pool.insert(to_unvalidated(share_msg.clone()));
 
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(10)).count(),
-                1
-            );
-            let result = pool.apply_changes(vec![ChangeAction::HandleInvalid(
-                share_msg,
-                "Testing the removal of invalid artifacts".to_string(),
-            )]);
-            assert!(result.mutations.is_empty());
-            assert!(result.poll_immediately);
-            assert_eq!(
-                pool.unvalidated_shares_at_height(Height::from(10)).count(),
-                0
-            );
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                    1
+                );
+                let result = pool.apply_changes(vec![ChangeAction::HandleInvalid(
+                    share_msg,
+                    "Testing the removal of invalid artifacts".to_string(),
+                )]);
+                assert!(result.mutations.is_empty());
+                assert!(result.poll_immediately);
+                assert_eq!(
+                    pool.unvalidated_shares_at_height(Height::from(10)).count(),
+                    0
+                );
 
-            let result = pool.apply_changes(vec![]);
-            assert!(!result.poll_immediately);
-            // INVARIANT: The sizes the unvalidated pool and the height index must be equal
-            assert_eq!(
-                pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
-                pool.unvalidated.values().len()
-            )
-        });
+                let result = pool.apply_changes(vec![]);
+                assert!(!result.poll_immediately);
+                // INVARIANT: The sizes the unvalidated pool and the height index must be equal
+                assert_eq!(
+                    pool.unvalidated_share_index.size() + pool.unvalidated_cert_index.size(),
+                    pool.unvalidated.values().len()
+                )
+            },
+        );
     }
 
     #[test]
     fn test_certification_pool_contains_unvalidated() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(7, 0);
-            let cert_msg = fake_cert(8);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(7, 0);
+                let cert_msg = fake_cert(8);
 
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&share_msg).hash));
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
+                assert!(!pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&share_msg).hash));
+                assert!(!pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&cert_msg).hash));
 
-            pool.insert(to_unvalidated(share_msg.clone()));
+                pool.insert(to_unvalidated(share_msg.clone()));
 
-            assert!(pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&share_msg).hash));
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
-        });
+                assert!(pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&share_msg).hash));
+                assert!(!pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&cert_msg).hash));
+            },
+        );
     }
 
     #[test]
     fn test_certification_pool_contains() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let mut pool = CertificationPoolImpl::new(
-                node_test_id(0),
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
-            let share_msg = fake_share(7, 0);
-            let cert_msg = fake_cert(8);
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let mut pool = CertificationPoolImpl::new(
+                    node_test_id(0),
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
+                let share_msg = fake_share(7, 0);
+                let cert_msg = fake_cert(8);
 
-            assert!(pool
-                .persistent_pool
-                .get(&CertificationMessageId::from(&share_msg))
-                .is_none());
-            assert!(pool
-                .persistent_pool
-                .get(&CertificationMessageId::from(&cert_msg))
-                .is_none());
-
-            let result = pool.apply_changes(vec![
-                ChangeAction::AddToValidated(share_msg.clone()),
-                ChangeAction::AddToValidated(cert_msg.clone()),
-            ]);
-            assert_eq!(result.mutations.len(), 2);
-            assert!(!result
-                .mutations
-                .iter()
-                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
-            assert!(result.poll_immediately);
-            assert_eq!(
-                pool.certification_at_height(Height::from(8)),
-                Some(msg_to_cert(cert_msg.clone()))
-            );
-            assert_eq!(
-                share_msg,
-                pool.persistent_pool
+                assert!(pool
+                    .persistent_pool
                     .get(&CertificationMessageId::from(&share_msg))
-                    .unwrap()
-            );
-            assert_eq!(
-                cert_msg,
-                pool.persistent_pool
+                    .is_none());
+                assert!(pool
+                    .persistent_pool
                     .get(&CertificationMessageId::from(&cert_msg))
-                    .unwrap()
-            );
-        });
+                    .is_none());
+
+                let result = pool.apply_changes(vec![
+                    ChangeAction::AddToValidated(share_msg.clone()),
+                    ChangeAction::AddToValidated(cert_msg.clone()),
+                ]);
+                assert_eq!(result.mutations.len(), 2);
+                assert!(!result
+                    .mutations
+                    .iter()
+                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+                assert!(result.poll_immediately);
+                assert_eq!(
+                    pool.certification_at_height(Height::from(8)),
+                    Some(msg_to_cert(cert_msg.clone()))
+                );
+                assert_eq!(
+                    share_msg,
+                    pool.persistent_pool
+                        .get(&CertificationMessageId::from(&share_msg))
+                        .unwrap()
+                );
+                assert_eq!(
+                    cert_msg,
+                    pool.persistent_pool
+                        .get(&CertificationMessageId::from(&cert_msg))
+                        .unwrap()
+                );
+            },
+        );
     }
 
     #[test]
     fn test_get_all_validated() {
-        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node = node_test_id(3);
-            let mut pool = CertificationPoolImpl::new(
-                node,
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-            );
+        ic_test_utilities_artifact_pool::artifact_pool_config::with_test_pool_config(
+            |pool_config| {
+                let node = node_test_id(3);
+                let mut pool = CertificationPoolImpl::new(
+                    node,
+                    pool_config,
+                    no_op_logger(),
+                    MetricsRegistry::new(),
+                );
 
-            let height_offset = 5_000_000_000;
+                let height_offset = 5_000_000_000;
 
-            // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
-            let mut messages = Vec::new();
-            for h in 1..=20 {
-                for i in 1..=5 {
-                    messages.push(ChangeAction::AddToValidated(fake_share(
-                        height_offset + h,
-                        i,
-                    )));
+                // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
+                let mut messages = Vec::new();
+                for h in 1..=20 {
+                    for i in 1..=5 {
+                        messages.push(ChangeAction::AddToValidated(fake_share(
+                            height_offset + h,
+                            i,
+                        )));
+                    }
+                    if h % 2 == 0 {
+                        messages.push(ChangeAction::AddToValidated(fake_cert(height_offset + h)));
+                    }
                 }
-                if h % 2 == 0 {
-                    messages.push(ChangeAction::AddToValidated(fake_cert(height_offset + h)));
-                }
-            }
 
-            pool.apply_changes(messages);
+                pool.apply_changes(messages);
 
-            let get_signer = |m: &CertificationMessage| match m {
-                CertificationMessage::CertificationShare(x) => x.signed.signature.signer,
-                _ => panic!("No signer for aggregate artifacts"),
-            };
+                let get_signer = |m: &CertificationMessage| match m {
+                    CertificationMessage::CertificationShare(x) => x.signed.signature.signer,
+                    _ => panic!("No signer for aggregate artifacts"),
+                };
 
-            let mut heights = HashSet::new();
-            pool.get_all_validated().for_each(|m| {
-                if m.height().get() % 2 == 0 {
-                    assert!(!m.is_share());
-                }
-                if m.height().get() % 2 != 0 {
-                    assert!(m.is_share());
-                }
-                if m.is_share() {
-                    assert_eq!(get_signer(&m), node);
-                }
-                assert!(heights.insert(m.height()));
-            });
-            assert_eq!(heights.len(), 20);
-            assert_eq!(pool.get_all_validated().count(), 20);
-        });
+                let mut heights = HashSet::new();
+                pool.get_all_validated().for_each(|m| {
+                    if m.height().get() % 2 == 0 {
+                        assert!(!m.is_share());
+                    }
+                    if m.height().get() % 2 != 0 {
+                        assert!(m.is_share());
+                    }
+                    if m.is_share() {
+                        assert_eq!(get_signer(&m), node);
+                    }
+                    assert!(heights.insert(m.height()));
+                });
+                assert_eq!(heights.len(), 20);
+                assert_eq!(pool.get_all_validated().count(), 20);
+            },
+        );
     }
 }
