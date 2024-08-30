@@ -71,11 +71,11 @@ impl Block {
     }
 
     /// Define variables and functions used in the `code` snippet.
-    pub fn define_variables_and_functions(mut self, code: &str) -> Self {
+    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: bool) -> Self {
         for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
-                    self.declare_variable(name, ty);
+                    self.declare_variable(name, ty, wasm64_enabled);
                 }
             }
         }
@@ -95,13 +95,20 @@ impl Block {
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
-    pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: bool) -> &mut Self {
+        let memory_var_address = if wasm64_enabled {
+            // The address should be somewhere beyond 4 GiB.
+            // This is 5 GB.
+            "5368709120"
+        } else {
+            "16"
+        };
         let init_val = match name {
             "x" => "1000000007",
             "y" => "1337",
             "z" => "2147483647",
             "zero" => "0",
-            "address" => "16",
+            "address" => memory_var_address,
             "one" => "1",
             _ => panic!("Error getting initial value for variable {name}"),
         };
@@ -146,7 +153,12 @@ pub struct Func {
 
 impl Func {
     /// Transform the function into a test module WAT representation.
-    pub fn into_test_module_wat(self) -> String {
+    pub fn into_test_module_wat(self, wasm64_enabled: bool) -> String {
+        let memory = if wasm64_enabled {
+            "(memory $mem i64 131072)"
+        } else {
+            "(memory $mem 1)"
+        };
         wrap_lines(
             "(module",
             [
@@ -154,7 +166,7 @@ impl Func {
                 vec![
                     "(table $table 10 funcref)".into(),
                     "(elem func 0)".into(),
-                    "(memory $mem 1)".into(),
+                    memory.into(),
                 ],
                 self.lines,
             ]

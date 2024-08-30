@@ -9,7 +9,7 @@ use execution_environment_bench::{
     wat_builder::{dst_type, src_type},
 };
 
-pub fn benchmarks() -> Vec<Benchmark> {
+pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
 
@@ -18,8 +18,17 @@ pub fn benchmarks() -> Vec<Benchmark> {
 
     // The bench is an empty loop: `nop`
     // All we need to capture in this benchmark is the call and loop overhead.
-    benchmarks.extend(benchmark_with_loop_confirmation("overhead", "(nop)"));
+    benchmarks.extend(benchmark_with_loop_confirmation(
+        "overhead",
+        "(nop)",
+        wasm64_enabled,
+    ));
 
+    let address = if wasm64_enabled {
+        "address_i64"
+    } else {
+        "address_i32"
+    };
     ////////////////////////////////////////////////////////////////////
     // Numeric Instructions
     // See: https://www.w3.org/TR/wasm-core-2/#numeric-instructions
@@ -30,21 +39,21 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("const/{op}");
         let code = &format!("(global.set $x_{ty} ({op} 7))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&["f32.const"]) {
         let ty = dst_type(op);
         let name = format!("const/{op}");
         let code = &format!("(global.set $x_{ty} ({op} 7))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["f64.const"]) {
         let ty = dst_type(op);
         let name = format!("const/{op}");
         let code = &format!("(global.set $x_{ty} ({op} 7))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Integer Unary Operators (iunop): `$x_{type} = ({op} $x_{type})`
@@ -60,7 +69,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("iunop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Floating-Point Unary Operators (funop): `$x_{type} = ({op} $x_{type})`
@@ -69,14 +78,14 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("funop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.3 Gops/s
     for op in first_or_all(&["f64.abs", "f64.neg"]) {
         let ty = dst_type(op);
         let name = format!("funop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.07 Gops/s
     for op in first_or_all(&[
@@ -92,14 +101,14 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("funop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.05 Gops/s
     for op in first_or_all(&["f32.sqrt", "f64.sqrt"]) {
         let ty = dst_type(op);
         let name = format!("funop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Integer Binary Operators (ibinop): `$x_{type} = ({op} $x_{type} $y_{type})`
@@ -131,7 +140,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("ibinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.1 Gops/s
     for op in first_or_all(&[
@@ -147,7 +156,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("ibinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Floating-Point Binary Operators (fbinop): `$x_{type} = ({op} $x_{type} $y_{type})`
@@ -158,35 +167,35 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("fbinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.06 Gops/s
     for op in first_or_all(&["f32.div", "f64.div"]) {
         let ty = dst_type(op);
         let name = format!("fbinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.04 Gops/s
     for op in first_or_all(&["f32.min", "f32.max", "f64.min", "f64.max"]) {
         let ty = dst_type(op);
         let name = format!("fbinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["f32.copysign"]) {
         let ty = dst_type(op);
         let name = format!("fbinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.0 Gops/s
     for op in first_or_all(&["f64.copysign"]) {
         let ty = dst_type(op);
         let name = format!("fbinop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Integer Test Operators (itestop): `$x_i32 = ({op} $x_{type})`
@@ -195,7 +204,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("itestop/{op}");
         let code = &format!("(global.set $x_i32 ({op} (local.get $x_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Integer Relational Operators (irelop): `$x_i32 = ({op} $x_{type} $y_{type})`
@@ -208,7 +217,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("irelop/{op}");
         let code = &format!("(global.set $x_i32 ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Floating-Point Relational Operators (frelop): `$x_i32 = ({op} $x_{type} $y_{type})`
@@ -217,7 +226,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("frelop/{op}");
         let code = &format!("(global.set $x_i32 ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&[
@@ -226,7 +235,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let ty = dst_type(op);
         let name = format!("frelop/{op}");
         let code = &format!("(global.set $x_i32 ({op} (local.get $x_{ty}) (local.get $y_{ty})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Numeric Conversions (cvtop): `$x_{type} = ({op} $x_{src_type})`
@@ -253,7 +262,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let src_type = src_type(op);
         let name = format!("cvtop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{src_type})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&[
@@ -266,7 +275,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let src_type = src_type(op);
         let name = format!("cvtop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{src_type})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.1 Gops/s
     for op in first_or_all(&[
@@ -285,7 +294,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let src_type = src_type(op);
         let name = format!("cvtop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{src_type})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.06 Gops/s
     for op in first_or_all(&[
@@ -298,7 +307,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let src_type = src_type(op);
         let name = format!("cvtop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{src_type})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~0.2 Gops/s
     for op in first_or_all(&[
@@ -311,7 +320,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let src_type = src_type(op);
         let name = format!("cvtop/{op}");
         let code = &format!("(global.set $x_{ty} ({op} (local.get $x_{src_type})))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     ////////////////////////////////////////////////////////////////////
@@ -322,11 +331,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     benchmarks.extend(benchmark_with_confirmation(
         "refop/ref.func",
         "(drop (ref.func 0))",
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~0.02 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "refop/ref.is_null-ref.func",
         "(global.set $x_i32 (ref.is_null (ref.func 0)))",
+        wasm64_enabled,
     ));
 
     ////////////////////////////////////////////////////////////////////
@@ -338,7 +349,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["local.get", "global.get"]) {
         let name = format!("varop/{op}");
         let code = &format!("(global.set $x_i32 ({op} $x_i32))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Set Variable Instructions: `({op} x_i32 $x_i32)`
@@ -355,7 +366,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["global.set"]) {
         let name = format!("varop/{op}");
         let code = &format!("({op} $x_i32 (local.get $x_i32))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Tee Variable Instructions: `$x_i32 = ({op} x_i32 $x_i32)`
@@ -363,7 +374,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["local.tee"]) {
         let name = format!("varop/{op}");
         let code = &format!("(global.set $x_i32 ({op} $x_i32 (local.get $x_i32)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     ////////////////////////////////////////////////////////////////////
@@ -374,11 +385,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     benchmarks.extend(benchmark_with_confirmation(
         "tabop/table.get",
         "(drop (table.get $table (local.get $zero_i32)))",
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~2.8 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "tabop/table.size",
         "(global.set $x_i32 (table.size))",
+        wasm64_enabled,
     ));
 
     ////////////////////////////////////////////////////////////////////
@@ -390,20 +403,20 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i32.load", "i64.load", "f32.load", "f64.load"]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_i32)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        let code = &format!("(global.set $x_{ty} ({op} (local.get ${address})))");
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
-    // Store: `({op} $address_i32 $x_{type})`
+    // Store: `({op} $address_i64 $x_{type})`
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&["i32.store", "i64.store", "f32.store", "f64.store"]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("({op} (local.get $address_i32) (local.get $x_{ty}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        let code = &format!("({op} (local.get ${address}) (local.get $x_{ty}))");
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
-    // Extending Load: `$x_{type} = ({op} $address_i32))`
+    // Extending Load: `$x_{type} = ({op} $address_i64))`
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&[
         "i32.load8_s",
@@ -419,11 +432,11 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_i32)))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        let code = &format!("(global.set $x_{ty} ({op} (local.get ${address})))");
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
-    // Wrapping Store: `({op} $address_i32 $x_{type})`
+    // Wrapping Store: `({op} $address_i64 $x_{type})`
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&[
         "i32.store8",
@@ -434,30 +447,50 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("({op} (local.get $address_i32) (local.get $x_{ty}))");
-        benchmarks.extend(benchmark_with_confirmation(&name, code));
+        let code = &format!("({op} (local.get ${address}) (local.get $x_{ty}))");
+        benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
     // Memory Instructions: Bulk Memory Operations
     // The throughput for the following benchmarks is ~0.2 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.size",
-        "(global.set $x_i32 (memory.size))",
+        if wasm64_enabled {
+            "(global.set $x_i64 (memory.size))"
+        } else {
+            "(global.set $x_i32 (memory.size))"
+        },
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~0.006 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.grow",
-        "(global.set $x_i32 (memory.grow (local.get $zero_i32)))",
+        if wasm64_enabled {
+            "(global.set $x_i64 (memory.grow (local.get $zero_i64)))"
+        } else {
+            "(global.set $x_i32 (memory.grow (local.get $zero_i32)))"
+        },
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~0.03 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.fill",
-        "(memory.fill (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
+        if wasm64_enabled {
+            "(memory.fill (local.get $zero_i64) (local.get $zero_i32) (local.get $zero_i64))"
+        } else {
+            "(memory.fill (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))"
+        },
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~0.02 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.copy",
-        "(memory.copy (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
+        if wasm64_enabled {
+            "(memory.copy (local.get $zero_i64) (local.get $zero_i64) (local.get $zero_i64))"
+        } else {
+            "(memory.copy (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))"
+        },
+        wasm64_enabled,
     ));
 
     ////////////////////////////////////////////////////////////////////
@@ -468,16 +501,19 @@ pub fn benchmarks() -> Vec<Benchmark> {
     benchmarks.extend(benchmark_with_confirmation(
         "ctrlop/select",
         "(global.set $x_i32 (select (global.get $zero_i32) (global.get $x_i32) (global.get $y_i32)))",
+        wasm64_enabled
     ));
     // The throughput for the following benchmarks is ~0.2 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "ctrlop/call",
         "(global.set $x_i32 (call $empty))",
+        wasm64_enabled,
     ));
     // The throughput for the following benchmarks is ~0.1 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "ctrlop/call_indirect",
         "(global.set $x_i32 (call_indirect (type $result_i32) (i32.const 7)))",
+        wasm64_enabled,
     ));
 
     benchmarks

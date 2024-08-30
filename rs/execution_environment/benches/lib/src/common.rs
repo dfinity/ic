@@ -242,8 +242,13 @@ fn check_sandbox_defined() -> bool {
 
 /// Run all benchmark in the list.
 /// List of benchmarks: benchmark id (name), WAT, expected number of instructions.
-pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
-where
+pub fn run_benchmarks<G, R>(
+    c: &mut Criterion,
+    group: G,
+    benchmarks: &[Benchmark],
+    routine: R,
+    wasm64_enabled: bool,
+) where
     G: AsRef<str>,
     R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
@@ -260,11 +265,15 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
+    let mut embedders_config = EmbeddersConfig::default();
+    embedders_config.metering_type = MeteringType::New;
+    if wasm64_enabled {
+        embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
+        // Set up larger heap, of 8GB.
+        embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+    }
     let config = Config {
-        embedders_config: EmbeddersConfig {
-            metering_type: MeteringType::New,
-            ..EmbeddersConfig::default()
-        },
+        embedders_config,
         ..Default::default()
     };
 

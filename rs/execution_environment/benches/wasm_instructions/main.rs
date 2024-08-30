@@ -22,11 +22,13 @@ mod basic;
 mod helper;
 mod simd;
 
+const WASM64_ENABLED: bool = true;
+
 pub fn wasm_instructions_bench(c: &mut Criterion) {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
-    benchmarks.extend(basic::benchmarks());
-    benchmarks.extend(simd::benchmarks());
+    benchmarks.extend(basic::benchmarks(WASM64_ENABLED));
+    //benchmarks.extend(simd::benchmarks(WASM64_ENABLED));
 
     ////////////////////////////////////////////////////////////////////
     // Benchmark function.
@@ -81,6 +83,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
             }
         },
+        WASM64_ENABLED,
     );
 }
 
