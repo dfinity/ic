@@ -251,7 +251,7 @@ function verify_deployment_path() {
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
         echo -e "\033[1;31mGen2 hardware should be deployed using the Gen2 Node Deployment method.\033[0m"
-        echo -e "\033[1;31m\nIf you already completed your *Node Provider onboarding* using the legacy proceedure (with an HSM), \033[0m"
+        echo -e "\033[1;31m\nIf you already completed your *Node Provider onboarding* using the legacy procedure (with an HSM), \033[0m"
         echo -e "\033[1;31myou may continue your HSM node deployment (just wait 5 minutes for the installation to resume).\033[0m"
         echo -e "\n\n\n"
         echo "Pausing for 5 minutes before continuing installation..."
