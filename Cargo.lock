@@ -5464,6 +5464,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
  "ic-protobuf",
