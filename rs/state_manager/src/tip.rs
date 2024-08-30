@@ -100,7 +100,7 @@ pub(crate) enum TipRequest {
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-        pagemaptypes_with_num_pages: Vec<(PageMapType, usize)>,
+        pagemaptypes: Vec<PageMapType>,
         is_initializing_tip: bool,
     },
     /// Run one round of tip defragmentation.
@@ -342,7 +342,7 @@ pub(crate) fn spawn_tip_thread(
                         }
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
-                            pagemaptypes_with_num_pages,
+                            pagemaptypes,
                             is_initializing_tip,
                         } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
@@ -374,7 +374,7 @@ pub(crate) fn spawn_tip_thread(
                             match lsmt_config.lsmt_status {
                                 FlagStatus::Enabled => merge(
                                     &mut tip_handler,
-                                    &pagemaptypes_with_num_pages,
+                                    &pagemaptypes,
                                     height,
                                     &mut thread_pool,
                                     &log,
@@ -385,7 +385,7 @@ pub(crate) fn spawn_tip_thread(
                                     if is_initializing_tip
                                         && merge_to_base(
                                             &mut tip_handler,
-                                            &pagemaptypes_with_num_pages,
+                                            &pagemaptypes,
                                             height,
                                             &mut thread_pool,
                                             &log,
@@ -586,7 +586,7 @@ struct StorageInfo {
 
 fn merge_candidates_and_storage_info(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
@@ -597,7 +597,7 @@ fn merge_candidates_and_storage_info(
         disk_size: 0,
         mem_size: 0,
     };
-    for (page_map_type, _num_pages) in pagemaptypes_with_num_pages {
+    for page_map_type in pagemaptypes {
         let pm_layout = page_map_type.layout(layout)?;
         storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
         let num_pages = PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
@@ -668,7 +668,7 @@ fn merge_candidates_and_storage_info(
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
@@ -679,16 +679,11 @@ fn merge(
     //   1) Shard forms a pyramid (hence overhead < 2.0)
     //   and
     //   2) number of files is <= MAX_NUMBER_OF_FILES
-    let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
-        tip_handler,
-        pagemaptypes_with_num_pages,
-        height,
-        lsmt_config,
-        metrics,
-    )
-    .unwrap_or_else(|err| {
-        fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
-    });
+    let (mut merge_candidates, storage_info) =
+        merge_candidates_and_storage_info(tip_handler, pagemaptypes, height, lsmt_config, metrics)
+            .unwrap_or_else(|err| {
+                fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
+            });
 
     // Max 2.5 overhead
     let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
@@ -751,7 +746,7 @@ fn merge(
         log,
         "Merging {} PageMaps out of {}; mem_size: {}; disk_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
         scheduled_merges.len(),
-        pagemaptypes_with_num_pages.len(),
+        pagemaptypes.len(),
         storage_info.mem_size,
         storage_info.disk_size,
         max_storage,
@@ -791,7 +786,7 @@ fn merge(
 /// Return true if any merge was done.
 fn merge_to_base(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
@@ -800,23 +795,20 @@ fn merge_to_base(
     let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
         fatal!(log, "Failed to get layout for {}: {}", height, err);
     });
-    let rewritten = parallel_map(
-        thread_pool,
-        pagemaptypes_with_num_pages.iter(),
-        |(page_map_type, num_pages)| {
-            let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
-                fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+    let rewritten = parallel_map(thread_pool, pagemaptypes.iter(), |page_map_type| {
+        let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
+            fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+        });
+        let num_pages = PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
+        let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
+            .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
+        if let Some(m) = merge_candidate.as_ref() {
+            m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+                fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
             });
-            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, *num_pages as u64)
-                .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
-            if let Some(m) = merge_candidate.as_ref() {
-                m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
-                });
-            }
-            merge_candidate.is_some()
-        },
-    );
+        }
+        merge_candidate.is_some()
+    });
 
     return rewritten.iter().any(|b| *b);
 }

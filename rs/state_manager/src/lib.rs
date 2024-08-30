@@ -900,21 +900,11 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
             is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
-}
-
-fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    let mut result = Vec::new();
-    for entry in PageMapType::list_all_including_snapshots(state) {
-        if let Some(page_map) = entry.get(state) {
-            result.push((entry, page_map.num_host_pages()));
-        }
-    }
-    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -1102,24 +1092,6 @@ impl PageMapType {
 
         result
     }
-
-    //    fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    //        let mut result = vec![];
-    //        for (id, canister) in &state.canister_states {
-    //            result.push(Self::WasmChunkStore(id.to_owned()));
-    //            //            if canister.execution_state.is_some() {
-    //            //                result.push(Self::WasmMemory(id.to_owned()));
-    //            //                result.push(Self::StableMemory(id.to_owned()));
-    //            //            }
-    //        }
-    //        //        for (id, _snapshot) in state.canister_snapshots.iter() {
-    //        //            result.push(Self::SnapshotWasmMemory(id.to_owned()));
-    //        //            result.push(Self::SnapshotStableMemory(id.to_owned()));
-    //        //            result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
-    //        //        }
-    //
-    //        result
-    //    }
 
     /// The layout of the files on disk for this PageMap.
     fn layout<Access>(
@@ -2591,7 +2563,7 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
                     is_initializing_tip: false,
                 }]
             } else {

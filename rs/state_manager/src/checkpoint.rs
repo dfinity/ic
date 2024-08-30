@@ -1,5 +1,5 @@
 use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -103,7 +103,7 @@ pub(crate) fn make_checkpoint(
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 })
                 .unwrap();
