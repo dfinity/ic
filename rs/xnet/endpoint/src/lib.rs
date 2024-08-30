@@ -3,7 +3,7 @@ mod config_tests;
 #[cfg(test)]
 mod tests;
 
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Body, Request, Response, StatusCode, Uri};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
@@ -20,10 +20,9 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
-use threadpool::ThreadPool;
 use tokio::{
     runtime,
-    sync::{oneshot, Notify, Semaphore},
+    sync::{Notify, Semaphore},
 };
 use url::Url;
 
@@ -182,11 +181,10 @@ impl XNetEndpoint {
 
                                 tokio::task::spawn_blocking(move || {
                                     let permit = _permit;
-                                    handle_http_request(
-                                        request,
+                                    route_request(
+                                        request.uri().clone(),
                                         certified_stream_store.as_ref(),
                                         &metrics,
-                                        &handler_log,
                                     )
                                 })
                                 .await
@@ -258,35 +256,16 @@ impl XNetEndpoint {
     }
 }
 
-/// Handles an incoming HTTP request by parsing the URL, handing over to
-/// `route_request()` and replying with the produced response.
-fn handle_http_request(
-    request: Request<Body>,
-    certified_stream_store: &dyn CertifiedStreamStore,
-    metrics: &XNetEndpointMetrics,
-    log: &ReplicaLogger,
-) -> Response<Body> {
-    route_request(
-        request
-            .uri()
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or(""),
-        certified_stream_store,
-        metrics,
-    )
-}
-
 /// Routes an `XNetEndpoint` request to the appropriate handler; or produces an
 /// HTTP 404 Not Found response if the URL doesn't match any handler.
 fn route_request(
-    url: &str,
+    url: Uri,
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
     let since = Instant::now();
     let mut resource = RESOURCE_ERROR;
-    let response = match url {
+    let response = match url.path() {
         API_URL_STREAMS => {
             resource = RESOURCE_STREAMS;
             handle_streams(certified_stream_store, metrics)

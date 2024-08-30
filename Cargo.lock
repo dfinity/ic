@@ -13087,7 +13087,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "threadpool",
  "tokio",
  "url",
 ]
