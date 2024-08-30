@@ -1,0 +1,10 @@
+[package]
+name = "ic_nervous_system_common_validation"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ic_nervous_system_common_validation"
+path = "src/lib.rs"
+
+[dependencies]

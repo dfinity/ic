@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
-use ic_nns_governance::{
-    governance::validate_user_submitted_proposal_fields,
+use ic_nns_governance_api::{
     pb::v1::{proposal::Action, CreateServiceNervousSystem, Proposal},
+    proposal_validation::validate_user_submitted_proposal_fields,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{
@@ -16,7 +16,7 @@ use std::{
 // related types in this module, put these aliases in their own module to avoid
 // getting mixed up.
 mod nns_governance_pb {
-    pub use ic_nns_governance::pb::v1::create_service_nervous_system::{
+    pub use ic_nns_governance_api::pb::v1::create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
             developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
@@ -368,7 +368,8 @@ impl SnsConfigurationFile {
             )),
         };
 
-        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
+        validate_user_submitted_proposal_fields(&(proposal.clone().into()))
+            .map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
