@@ -1,3 +1,3 @@
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-exports_files(["deploy.py"])
+exports_files(["deploy.py", "benchmark_runner.sh", "benchmark_driver.sh"])

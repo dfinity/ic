@@ -107,6 +107,18 @@ class Args:
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
 
+    # Run benchmarks if True
+    benchmark: bool = flag(default=False)
+
+    # Path to the benchmark_driver script.
+    benchmark_driver_script: Optional[str] = "./benchmark_driver.sh"
+
+    # Path to the benchmark_runner script.
+    benchmark_runner_script: Optional[str] = "./benchmark_runner.sh"
+
+    # Paths to any benchmark tool scripts.
+    benchmark_tools: Optional[List[str]] = None
+
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
             ".tar.zst"
@@ -440,6 +452,47 @@ def boot_images(bmc_infos: List[BMCInfo],
         return True
 
 
+def benchmark_node(bmc_info: BMCInfo, benchmark_driver_script: str, benchmark_runner_script: str, benchmark_tools: List[str], file_share_ssh_key: Optional[str] = None):
+    log.info(f"Benchmarking machine.")
+
+    ip_address = bmc_info.guestos_ipv6_address
+
+    benchmark_tools = " ".join(benchmark_tools) if benchmark_tools is not None else ""
+
+    # Throw away the result, for now
+    invoke.run(f"{benchmark_driver_script} {benchmark_runner_script} {file_share_ssh_key} {ip_address} {benchmark_tools}", warn=True)
+    return OperationResult(bmc_info, success=True)
+
+
+def benchmark_nodes(bmc_infos: List[BMCInfo],
+                parallelism: int,
+                benchmark_driver_script: str,
+                benchmark_runner_script: str,
+                benchmark_tools: List[str],
+                file_share_ssh_key: Optional[str] = None):
+    results: List[OperationResult] = []
+
+    arg_tuples = ((bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key) \
+                  for bmc_info in bmc_infos)
+
+    with Pool(parallelism) as p:
+        results = p.starmap(benchmark_node, arg_tuples)
+
+    log.info("Benchmark summary:")
+    benchmark_failure = False
+    for res in results:
+        log.info(res)
+        if not res.success:
+            benchmark_failure = True
+
+    if benchmark_failure:
+        log.error("One or more node benchmarks failed")
+        return False
+    else:
+        log.info("All benchmarks completed successfully.")
+        return True
+
+
 def create_file_share_endpoint(file_share_url: str,
                                file_share_username: Optional[str]) -> str:
     return file_share_url \
@@ -558,6 +611,22 @@ def main():
                              args.inject_image_ipv4_gateway,
                              args.inject_image_ipv4_prefix_length,
                              args.inject_image_domain)
+
+    # Benchmark these nodes, rather than deploy them.
+    if args.benchmark:
+        success = benchmark_nodes(
+            bmc_infos=bmc_infos,
+            parallelism=args.parallel,
+            benchmark_driver_script=args.benchmark_driver_script,
+            benchmark_runner_script=args.benchmark_runner_script,
+            benchmark_tools=args.benchmark_tools,
+            file_share_ssh_key=args.file_share_ssh_key,
+        )
+
+        if not success:
+            sys.exit(1)
+
+        sys.exit(0)
 
     if args.upload_img or args.inject_image_ipv6_prefix:
         file_share_endpoint = create_file_share_endpoint(args.file_share_url, args.file_share_username)
