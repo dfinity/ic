@@ -136,7 +136,7 @@ pub fn main() -> anyhow::Result<()> {
                         // Run workload tests
                         // Maps to `rs/tests/consensus/consensus_performance.rs` small
                         Box::new(Workload {
-                            message_size: 4_000,
+                            message_size: 1_000,
                             rps: 500.0,
                         }),
                         // Run xnet tests
@@ -158,7 +158,7 @@ pub fn main() -> anyhow::Result<()> {
                         // Run workload tests again
                         // Maps to `rs/tests/consensus/consensus_performance.rs` small
                         Box::new(Workload {
-                            message_size: 4_000,
+                            message_size: 1_000,
                             rps: 500.0,
                         }),
                         // Run xnet tests
