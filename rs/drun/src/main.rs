@@ -55,7 +55,7 @@ async fn drun_main() -> Result<(), String> {
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_heap_delta = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_instructions = FlagStatus::Disabled;
-        hypervisor_config.canister_snapshots = FlagStatus::Enabled;
+        default_config.hypervisor.canister_snapshots = FlagStatus::Enabled;
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);
             std::process::exit(1);
