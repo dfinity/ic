@@ -128,22 +128,9 @@ impl XNetEndpoint {
 
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
 
-        // The bounded channel for queuing requests between the HTTP server and the
-        // background worker.
-        //
-        // We use a background worker because building streams is CPU and memory
-        // bound and can take a few dozens of milliseconds, which is too long to execute
-        // on the event handling thread.
-        //
-        // We do not use [tokio::runtime::Handle::spawn_blocking] because it's designed
-        // for I/O bound tasks and can spawn extra threads when needed, which is
-        // not the best strategy for CPU-bound tasks.
-        //
-        // We use a crossbeam channel instead of [tokio::sync::mpsc] because we want the
-        // receiver to be blocking, and [tokio::sync::mpsc::Receiver::blocking_recv] is
-        // only available in tokio ≥ 0.3.
-        let (request_sender, request_receiver) =
-            crossbeam_channel::bounded(XNET_ENDPOINT_NUM_WORKER_THREADS);
+        // Spawn a request handler. We pass the certified stream store, which is
+        // currently realized by the state manager.
+        let handler_log = log.clone();
 
         let make_service = make_service_fn({
             #[derive(Clone)]
@@ -198,18 +185,17 @@ impl XNetEndpoint {
                                     }
                                 };
 
-                                tokio::task::spawn_blocking({
+                                tokio::task::spawn_blocking(move || {
                                     let permit = _permit;
                                     handle_http_request(
                                         request,
                                         certified_stream_store.as_ref(),
-                                        &base_url,
                                         &metrics,
                                         &handler_log,
                                     )
                                 })
                                 .await
-                                .unwrap()
+                                .map_err(|_| panic!(""))
                             }
                         }
                     }))
@@ -259,11 +245,6 @@ impl XNetEndpoint {
             }
         });
 
-        // Spawn a request handler. We pass the certified stream store, which is
-        // currently realized by the state manager.
-        let handler_log = log.clone();
-        let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
-
         Self {
             server_address: address,
             shutdown_notify,
@@ -287,36 +268,30 @@ impl XNetEndpoint {
 fn handle_http_request(
     request: Request<Body>,
     certified_stream_store: &dyn CertifiedStreamStore,
-    base_url: &Url,
     metrics: &XNetEndpointMetrics,
     log: &ReplicaLogger,
 ) -> Response<Body> {
-    match base_url.join(
+    route_request(
         request
             .uri()
             .path_and_query()
             .map(|pq| pq.as_str())
             .unwrap_or(""),
-    ) {
-        Ok(url) => route_request(url, certified_stream_store, metrics),
-        Err(e) => {
-            let msg = format!("Invalid URL {}: {}", request.uri(), e);
-            warn!(log, "{}", msg);
-            bad_request(msg)
-        }
-    }
+        certified_stream_store,
+        metrics,
+    )
 }
 
 /// Routes an `XNetEndpoint` request to the appropriate handler; or produces an
 /// HTTP 404 Not Found response if the URL doesn't match any handler.
 fn route_request(
-    url: Url,
+    url: &str,
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
     let since = Instant::now();
     let mut resource = RESOURCE_ERROR;
-    let response = match url.path() {
+    let response = match url {
         API_URL_STREAMS => {
             resource = RESOURCE_STREAMS;
             handle_streams(certified_stream_store, metrics)
