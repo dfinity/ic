@@ -238,7 +238,8 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     select! {
                         _ = tokio::time::timeout(
                             ADVERT_BROADCAST_TIMEOUT,
-                            transport_c.push(&peer_id, request)) => {}
+                            // TODO: NET-1748
+                            transport_c.rpc(&peer_id, request)) => {}
                         () = cancellation_c.cancelled() => {}
                     }
                 });

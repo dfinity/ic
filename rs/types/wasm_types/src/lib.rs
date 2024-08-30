@@ -3,7 +3,7 @@
 mod errors;
 
 pub use errors::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
     WasmValidationError,
 };
 use ic_types::CountBytes;

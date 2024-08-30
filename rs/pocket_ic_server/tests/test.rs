@@ -3,8 +3,14 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_interfaces_registry::{
+    RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
+};
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_transport::pb::v1::{
+    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+};
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
@@ -12,6 +18,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
+use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
 use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
@@ -21,7 +28,7 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
 pub const LOCALHOST: &str = "127.0.0.1";
@@ -38,17 +45,11 @@ fn start_server_helper(
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
-    let ready_file_path = if let Some(parent_pid) = parent_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid))
-    } else {
-        NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
-    };
     let mut cmd = Command::new(PathBuf::from(bin_path));
     if let Some(parent_pid) = parent_pid {
         cmd.arg("--pid").arg(parent_pid.to_string());
     } else {
         cmd.arg("--port-file").arg(port_file_path.clone());
-        cmd.arg("--ready-file").arg(ready_file_path.clone());
     }
     if let Some(ttl) = ttl {
         cmd.arg("--ttl").arg(ttl.to_string());
@@ -60,20 +61,17 @@ fn start_server_helper(
         cmd.stderr(std::process::Stdio::piped());
     }
     let out = cmd.spawn().expect("Failed to start PocketIC binary");
-    let start = Instant::now();
     let url = loop {
-        match ready_file_path.try_exists() {
-            Ok(true) => {
-                let port_string = std::fs::read_to_string(port_file_path)
-                    .expect("Failed to read port from port file");
-                let port: u16 = port_string.parse().expect("Failed to parse port to number");
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if port_string.contains("\n") {
+                let port: u16 = port_string
+                    .trim_end()
+                    .parse()
+                    .expect("Failed to parse port to number");
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
-            _ => std::thread::sleep(Duration::from_millis(20)),
         }
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
-        }
+        std::thread::sleep(Duration::from_millis(20));
     };
     (url, out)
 }
@@ -204,34 +202,8 @@ fn test_blob_store_wrong_encoding() {
 
 #[test]
 fn test_port_file() {
-    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    let port_file_path = std::env::temp_dir().join("pocket_ic.port");
-    Command::new(PathBuf::from(bin_path))
-        .arg("--port-file")
-        .arg(
-            port_file_path
-                .clone()
-                .into_os_string()
-                .into_string()
-                .unwrap(),
-        )
-        .spawn()
-        .expect("Failed to start PocketIC binary");
-    let start = Instant::now();
-    loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
-            if !port_string.is_empty() {
-                port_string
-                    .parse::<u16>()
-                    .expect("Failed to parse port to number");
-                break;
-            }
-        }
-        std::thread::sleep(Duration::from_millis(20));
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
-        }
-    }
+    // tests the port file by setting the parent PID to None in start_server_helper
+    start_server_helper(None, None, false, false);
 }
 
 async fn test_gateway(server_url: Url, https: bool) {
@@ -647,7 +619,7 @@ fn canister_state_dir() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
-    // Create a PocketIC instance with NNS and app subets.
+    // Create a PocketIC instance with NNS and app subnets.
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
         .with_nns_subnet()
@@ -1131,4 +1103,72 @@ fn test_invalid_gateway_backend() {
             assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
         }
     };
+}
+
+fn record_to_mutation(r: RegistryVersionedRecord<Vec<u8>>) -> RegistryMutation {
+    let mut m = RegistryMutation::default();
+
+    let t = if r.value.is_none() {
+        Type::Delete
+    } else {
+        Type::Insert
+    };
+    m.set_mutation_type(t);
+    m.key = r.key.as_bytes().to_vec();
+    m.value = r.value.unwrap_or_default();
+
+    m
+}
+
+#[test]
+fn registry_canister() {
+    // Create a temporary state directory persisted throughout the test.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    // Create a PocketIC instance with NNS, II and two app subnets.
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_nns_subnet()
+        .with_ii_subnet()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Encode the local registry into a registry canister initial payload.
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
+    let updates = registry_data_provider
+        .get_updates_since(ZERO_REGISTRY_VERSION)
+        .unwrap();
+    let mutations = updates
+        .into_iter()
+        .map(record_to_mutation)
+        .collect::<Vec<RegistryMutation>>();
+    let mutate_request = RegistryAtomicMutateRequest {
+        mutations,
+        ..Default::default()
+    };
+    let registry_init_payload = RegistryCanisterInitPayload {
+        mutations: vec![mutate_request],
+    };
+
+    // Create the registry canister.
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+    let actual_registry_canister_id = pic
+        .create_canister_with_id(None, None, registry_canister_id)
+        .unwrap();
+    assert_eq!(registry_canister_id, actual_registry_canister_id);
+
+    // Install the registry canister.
+    let registry_path = std::env::var_os("REGISTRY_WASM")
+        .expect("Missing REGISTRY_WASM (path to REGISTRY wasm) in env.");
+    let registry_canister_wasm =
+        std::fs::read(registry_path).expect("Could not read REGISTRY wasm file.");
+    pic.install_canister(
+        registry_canister_id,
+        registry_canister_wasm,
+        Encode!(&registry_init_payload).unwrap(),
+        None,
+    );
 }
