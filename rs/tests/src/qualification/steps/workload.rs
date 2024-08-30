@@ -20,6 +20,7 @@ impl Step for Workload {
             rt,
             false,
         )
+        .map(|_| ())
     }
 
     fn max_retries(&self) -> usize {

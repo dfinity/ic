@@ -45,9 +45,11 @@
 //
 // Happy testing!
 
+use ic_consensus_system_test_utils::performance::persist_metrics;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::read_dependency_from_env_to_string;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -61,7 +63,12 @@ use ic_system_test_driver::util::get_app_subnet_and_node;
 use ic_types::Height;
 
 use anyhow::Result;
+use slog::info;
 use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
+
+const MAX_RUNTIME_THREADS: usize = 64;
+const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 const NODES_COUNT: usize = 13;
 const DKG_INTERVAL: u64 = 999;
@@ -112,12 +119,51 @@ fn setup(env: TestEnv) {
     app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
+fn test(env: TestEnv, message_size: usize, rps: f64) {
+    let logger = env.logger();
+
+    // create the runtime that lives until this variable is dropped.
+    info!(
+        env.logger(),
+        "Set tokio runtime: worker_threads={}, blocking_threads={}",
+        MAX_RUNTIME_THREADS,
+        MAX_RUNTIME_BLOCKING_THREADS
+    );
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(MAX_RUNTIME_THREADS)
+        .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let test_metrics = ic_consensus_system_test_utils::performance::test_with_rt_handle(
+        env,
+        message_size,
+        rps,
+        rt.handle().clone(),
+        true,
+    )
+    .unwrap();
+    if cfg!(feature = "upload_perf_systest_results") {
+        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+            .expect("tip-of-branch IC version");
+
+        rt.block_on(persist_metrics(
+            branch_version,
+            test_metrics,
+            message_size,
+            rps,
+            &logger,
+        ));
+    }
+}
+
 fn test_small_messages(env: TestEnv) {
-    ic_consensus_system_test_utils::performance::test(env, 4_000, 500.0)
+    test(env, 4_000, 500.0)
 }
 
 fn test_large_messages(env: TestEnv) {
-    ic_consensus_system_test_utils::performance::test(env, 950_000, 4.0)
+    test(env, 950_000, 4.0)
 }
 
 fn main() -> Result<()> {

@@ -97,7 +97,7 @@ impl Step for UpdateSubnetType {
                     env.logger(),
                     self.version.clone(),
                     handle,
-                ));
+                ))?;
             }
         } else {
             let versions = get_unassigned_nodes_version(env.topology_snapshot());

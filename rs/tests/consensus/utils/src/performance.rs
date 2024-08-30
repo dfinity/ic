@@ -5,7 +5,7 @@ use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -16,7 +16,7 @@ use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsF
 use futures::future::join_all;
 use slog::{error, info, Logger};
 use std::time::{Duration, Instant};
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::Handle;
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const MAX_RETRIES: u32 = 10;
@@ -24,37 +24,18 @@ const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
-const MAX_RUNTIME_THREADS: usize = 64;
-const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
 const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
 const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_sum";
 
-pub fn test(env: TestEnv, message_size: usize, rps: f64) {
-    // create the runtime that lives until this variable is dropped.
-    info!(
-        env.logger(),
-        "Set tokio runtime: worker_threads={}, blocking_threads={}",
-        MAX_RUNTIME_THREADS,
-        MAX_RUNTIME_BLOCKING_THREADS
-    );
-    let rt: Runtime = Builder::new_multi_thread()
-        .worker_threads(MAX_RUNTIME_THREADS)
-        .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
-        .enable_all()
-        .build()
-        .unwrap();
-
-    test_with_rt_handle(env, message_size, rps, rt.handle().clone(), true).unwrap();
-}
 pub fn test_with_rt_handle(
     env: TestEnv,
     message_size: usize,
     rps: f64,
     rt: Handle,
     report: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<TestMetrics> {
     let log = env.logger();
 
     let canister_count: usize = 4;
@@ -175,24 +156,11 @@ pub fn test_with_rt_handle(
         ));
     }
 
-    if cfg!(feature = "upload_perf_systest_results") && report {
-        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-            .expect("tip-of-branch IC version");
-
-        rt.block_on(persist_metrics(
-            branch_version,
-            test_metrics,
-            message_size,
-            rps,
-            &log,
-        ));
-    }
-
-    Ok(())
+    Ok(test_metrics)
 }
 
 #[derive(Copy, Clone)]
-struct TestMetrics {
+pub struct TestMetrics {
     success_rate: f64,
     blocks_per_second: f64,
     throughput_bytes_per_second: f64,
@@ -283,7 +251,7 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     }
 }
 
-async fn persist_metrics(
+pub async fn persist_metrics(
     ic_version: String,
     metrics: TestMetrics,
     message_size: usize,
