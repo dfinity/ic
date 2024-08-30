@@ -24,7 +24,7 @@ use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
-    pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
+    pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 #[cfg(feature = "test")]
@@ -385,6 +385,7 @@ fn canister_post_upgrade() {
         restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
+    let restored_state = migrate_neurons_fund_audit_info(restored_state);
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -393,6 +394,17 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+}
+
+fn migrate_neurons_fund_audit_info(state: InternalGovernanceProto) -> InternalGovernanceProto {
+    InternalGovernanceProto {
+        proposals: state
+            .proposals
+            .into_iter()
+            .map(|(id, proposal_data)| (id, proposal_data.migrate()))
+            .collect(),
+        ..state
+    }
 }
 
 #[cfg(feature = "test")]

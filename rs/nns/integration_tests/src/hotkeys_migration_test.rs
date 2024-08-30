@@ -149,18 +149,17 @@ fn test_hotkey_principal_migration() {
 
     // Assert that all collected neuron portions have been migrated correctly.
     for neuron_portion in neuron_portions {
-        #[rustfmt::skip]
+        #[rustfmt::skip] // Work around rustfmt bug - https://github.com/rust-lang/rustfmt/issues/6300
         assert_matches!(
             neuron_portion,
             NeuronsFundNeuronPortion {
                 // The legacy field is still set.
-                hotkey_principal: Some(_hotkey_principal),
+                hotkey_principal: Some(hotkey_principal),
                 // The new field is not yet set.
-                // TODO[NNS1-3292]: Set this data via migration and uncomment this line.
-                // controller: Some(controller),
+                controller: Some(controller),
                 ..
-            } // TODO[NNS1-3292]: Uncomment
-              // if hotkey_principal == controller
+            }
+              if hotkey_principal == controller
         );
     }
 }
