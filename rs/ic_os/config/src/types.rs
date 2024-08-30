@@ -3,11 +3,13 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct SetuposConfig {
     hostos_config: HostOSConfig,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct HostOSConfig {
     vm_memory: u32,
@@ -16,6 +18,7 @@ pub struct HostOSConfig {
 }
 
 // todo: fix types and separate dev/prod
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct IcConfig {
     networking: Networking,
@@ -41,6 +44,7 @@ pub struct IcConfig {
     socks_proxy: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Networking {
     pub ipv6_prefix: Option<String>,
