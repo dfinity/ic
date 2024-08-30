@@ -212,7 +212,7 @@ fn test_canister_snapshots_decode() {
         stable_memory_size: NumWasmPages::new(10),
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
-        exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(3.141)],
+        exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
     };
 
     let pb_bits =
