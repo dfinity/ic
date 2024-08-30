@@ -48,16 +48,6 @@ function validate_arguments() {
     fi
 }
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
-
 try_write_metric() {
     local name=$1
     local value=$2
