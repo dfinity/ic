@@ -822,7 +822,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
 /// 50GiB only contains the last page, we would have only the shard number 7.
 pub struct ShardTag {}
 pub type Shard = AmountOf<ShardTag, u64>;
-pub type StorageResult<T> = Result<T, Box<dyn std::error::Error>>;
+pub type StorageResult<T> = Result<T, Box<dyn std::error::Error + Send>>;
 
 /// Provide information from `StateLayout` about paths of a specific `PageMap`.
 pub trait StorageLayout {
@@ -836,10 +836,10 @@ pub trait StorageLayout {
     fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>>;
 
     /// Get the height of an existing overlay path.
-    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>>;
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height>;
 
     /// Get the shard of an existing overlay path.
-    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>>;
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard>;
 }
 
 impl dyn StorageLayout + '_ {
@@ -847,10 +847,12 @@ impl dyn StorageLayout + '_ {
         let mut result = 0;
         for path in self.existing_files()? {
             result += std::fs::metadata(&path)
-                .map_err(|err: _| PersistenceError::FileSystemError {
-                    path: path.display().to_string(),
-                    context: format!("Failed get existing file length: {}", path.display()),
-                    internal_error: err.to_string(),
+                .map_err(|err: _| {
+                    Box::new(PersistenceError::FileSystemError {
+                        path: path.display().to_string(),
+                        context: format!("Failed get existing file length: {}", path.display()),
+                        internal_error: err.to_string(),
+                    }) as Box<dyn std::error::Error + Send>
                 })?
                 .len();
         }
@@ -1000,7 +1002,7 @@ impl MergeCandidate {
         num_pages: u64,
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
-    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+    ) -> StorageResult<Vec<MergeCandidate>> {
         if layout.base().exists() && num_pages > lsmt_config.shard_num_pages {
             Self::split_to_shards(layout, height, num_pages, lsmt_config)
         } else {
@@ -1012,7 +1014,7 @@ impl MergeCandidate {
     pub fn merge_to_base(
         layout: &dyn StorageLayout,
         num_pages: u64,
-    ) -> Result<Option<MergeCandidate>, Box<dyn std::error::Error>> {
+    ) -> StorageResult<Option<MergeCandidate>> {
         let existing_overlays = layout.existing_overlays()?;
         let base_path = layout.base();
         if existing_overlays.is_empty() {
@@ -1135,7 +1137,7 @@ impl MergeCandidate {
         height: Height,
         num_pages: u64,
         lsmt_config: &LsmtConfig,
-    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+    ) -> StorageResult<Vec<MergeCandidate>> {
         let dst_overlays: Vec<_> = (0..num_shards(num_pages, lsmt_config))
             .map(|shard| layout.overlay(height, Shard::new(shard)).to_path_buf())
             .collect();
@@ -1178,7 +1180,7 @@ impl MergeCandidate {
         num_pages: u64,
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
-    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+    ) -> StorageResult<Vec<MergeCandidate>> {
         let existing_base = layout.existing_base();
 
         let mut result = Vec::new();
@@ -1208,14 +1210,19 @@ impl MergeCandidate {
                 .iter()
                 .map(|path| {
                     Ok(std::fs::metadata(path)
-                        .map_err(|err: _| PersistenceError::FileSystemError {
-                            path: path.display().to_string(),
-                            context: format!("Failed get existing file length: {}", path.display()),
-                            internal_error: err.to_string(),
+                        .map_err(|err: _| {
+                            Box::new(PersistenceError::FileSystemError {
+                                path: path.display().to_string(),
+                                context: format!(
+                                    "Failed get existing file length: {}",
+                                    path.display()
+                                ),
+                                internal_error: err.to_string(),
+                            }) as Box<dyn std::error::Error + Send>
                         })?
                         .len())
                 })
-                .collect::<Result<_, PersistenceError>>()?;
+                .collect::<StorageResult<_>>()?;
             let existing_overlays = &existing_files[existing_base.iter().len()..];
 
             metrics

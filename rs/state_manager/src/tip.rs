@@ -584,33 +584,63 @@ struct StorageInfo {
     mem_size: u64,
 }
 
+impl StorageInfo {
+    fn add(&self, rhs: &StorageInfo) -> StorageInfo {
+        StorageInfo {
+            disk_size: self.disk_size + rhs.disk_size,
+            mem_size: self.mem_size + rhs.mem_size,
+        }
+    }
+}
+
 fn merge_candidates_and_storage_info(
     tip_handler: &mut TipHandler,
     pagemaptypes: &[PageMapType],
     height: Height,
+    thread_pool: &mut scoped_threadpool::Pool,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
-    let layout = &tip_handler.tip(height)?;
+    let layout = &tip_handler
+        .tip(height)
+        .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+    let merge_candidates_with_storage_info: Vec<StorageResult<(Vec<MergeCandidate>, StorageInfo)>> =
+        parallel_map(
+            thread_pool,
+            pagemaptypes.iter(),
+            |page_map_type| -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
+                let mut storage_info = StorageInfo {
+                    disk_size: 0,
+                    mem_size: 0,
+                };
+                let pm_layout = page_map_type
+                    .layout(layout)
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+                storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
+                let num_pages =
+                    PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
+                storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
+                Ok((
+                    MergeCandidate::new(
+                        &pm_layout,
+                        height,
+                        num_pages as u64,
+                        lsmt_config,
+                        &metrics.storage_metrics,
+                    )?,
+                    storage_info,
+                ))
+            },
+        );
     let mut merge_candidates = Vec::new();
     let mut storage_info = StorageInfo {
         disk_size: 0,
         mem_size: 0,
     };
-    for page_map_type in pagemaptypes {
-        let pm_layout = page_map_type.layout(layout)?;
-        storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
-        let num_pages = PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
-        storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
-        for m in MergeCandidate::new(
-            &pm_layout,
-            height,
-            num_pages as u64,
-            lsmt_config,
-            &metrics.storage_metrics,
-        )? {
-            merge_candidates.push(m)
-        }
+    for merge_candidate_with_storage_info in merge_candidates_with_storage_info.into_iter() {
+        let mut merge_candidate_with_storage_info = merge_candidate_with_storage_info?;
+        merge_candidates.append(&mut merge_candidate_with_storage_info.0);
+        storage_info = storage_info.add(&merge_candidate_with_storage_info.1);
     }
     Ok((merge_candidates, storage_info))
 }
@@ -679,11 +709,17 @@ fn merge(
     //   1) Shard forms a pyramid (hence overhead < 2.0)
     //   and
     //   2) number of files is <= MAX_NUMBER_OF_FILES
-    let (mut merge_candidates, storage_info) =
-        merge_candidates_and_storage_info(tip_handler, pagemaptypes, height, lsmt_config, metrics)
-            .unwrap_or_else(|err| {
-                fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
-            });
+    let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
+        tip_handler,
+        pagemaptypes,
+        height,
+        thread_pool,
+        lsmt_config,
+        metrics,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
+    });
 
     // Max 2.5 overhead
     let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
