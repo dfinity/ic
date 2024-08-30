@@ -145,6 +145,7 @@ impl XNetEndpoint {
 
             move |tls_conn: &TlsConnection| {
                 let ctx = ctx.clone();
+                let certified_stream_store = certified_stream_store.clone();
                 debug!(
                     ctx.log,
                     "Serving XNet streams to peer {:?}",
@@ -153,14 +154,14 @@ impl XNetEndpoint {
 
                 async move {
                     let ctx = ctx.clone();
+                    let certified_stream_store = certified_stream_store.clone();
                     ok(service_fn({
                         move |request: Request<Body>| {
                             let ctx = ctx.clone();
+                            let certified_stream_store = certified_stream_store.clone();
 
                             async move {
-                                let _ = &ctx;
-
-                                let _permit = match ctx.semaphore.try_acquire() {
+                                let _permit = match ctx.semaphore.try_acquire_owned() {
                                     Ok(permit) => permit,
                                     Err(err) => {
                                         ctx.metrics
@@ -177,9 +178,9 @@ impl XNetEndpoint {
                                             .unwrap());
                                     }
                                 };
-
+                                let metrics = ctx.metrics.clone();
                                 tokio::task::spawn_blocking(move || {
-                                    let permit = _permit;
+                                    let _permit = _permit;
                                     route_request(
                                         request.uri().clone(),
                                         certified_stream_store.as_ref(),
