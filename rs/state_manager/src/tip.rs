@@ -618,7 +618,8 @@ fn merge_candidates_and_storage_info(
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
                 storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
                 let num_pages =
-                    PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
+                    PageMap::load_num_storage_host_pages(&pm_layout as &dyn StorageLayout)
+                        .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
                 storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
                 Ok((
                     MergeCandidate::new(
@@ -835,7 +836,8 @@ fn merge_to_base(
         let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
             fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
         });
-        let num_pages = PageMap::read_num_host_pages(&pm_layout as &dyn StorageLayout).unwrap();
+        let num_pages = PageMap::load_num_storage_host_pages(&pm_layout as &dyn StorageLayout)
+            .unwrap_or_else(|err| fatal!(log, "Failed to get num storage host pages: {}", err));
         let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
             .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
         if let Some(m) = merge_candidate.as_ref() {
