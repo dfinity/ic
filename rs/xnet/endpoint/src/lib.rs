@@ -124,7 +124,6 @@ impl XNetEndpoint {
 
         // Spawn a request handler. We pass the certified stream store, which is
         // currently realized by the state manager.
-        let handler_log = log.clone();
 
         let make_service = make_service_fn({
             #[derive(Clone)]
