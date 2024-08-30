@@ -7932,6 +7932,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "serde_bytes",

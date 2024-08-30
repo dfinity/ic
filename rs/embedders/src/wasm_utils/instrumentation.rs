@@ -122,6 +122,8 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
+use rand::rngs::ThreadRng;
+use rand::Rng;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
@@ -1026,18 +1028,32 @@ pub(super) fn instrument(
             FlagStatus::Enabled => {
                 special_indices.count_clean_pages_fn = Some(new_num_funcs + 2);
             }
-            _ => ()
+            _ => (),
         };
     }
 
     // inject instructions counter decrementation
+    let mut rng = rand::thread_rng();
+    let mut i: usize = 0;
     for func_body in &mut module.code_sections {
-        inject_metering(
-            &mut func_body.instructions,
-            &special_indices,
-            metering_type,
-            main_memory_type,
-        );
+        if let CompositeType::Func(func_type) =
+            &module.types[module.functions[i] as usize].composite_type
+        {
+            let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
+            let next_local = func_type.params().len() as u32 + n_locals;
+            // We need one local variable for duplicating the global
+            func_body.locals.push((1, ValType::I32));
+
+            inject_metering(
+                &mut func_body.instructions,
+                &special_indices,
+                metering_type,
+                main_memory_type,
+                next_local,
+                &mut rng,
+            );
+        }
+        i += 1;
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -1194,7 +1210,6 @@ fn inject_afl_coverage(module: &mut Module<'_>, special_indices: &SpecialIndices
         module.imports.push(mrda_import);
         ic0_msg_reply_data_append_index = module.imports.len() - 1;
         new_func_index += 1;
-        
     }
 
     if ic0_msg_reply_index == usize::MAX {
@@ -1594,13 +1609,16 @@ fn inject_metering(
     export_data_module: &SpecialIndices,
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
+    afl_local_idx: u32,
+    rng: &mut ThreadRng,
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
         MeteringType::New => injections(code, mem_type),
     };
 
-    // figure out which points to inject?
+    // TODO figure out which points to inject?
+    // for now we inject at all static blocks
 
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1615,41 +1633,6 @@ fn inject_metering(
     let mut last_injection_position = 0;
 
     use Operator::*;
-    // rough idea
-
-    // let afl_inject_slice: Vec<Operator> = vec![
-    //     I32Const {
-    //         value : 0 as i32 // this can be generated at random  but needs to deterministic?
-    //     },
-    //     GlobalGet {
-    //         global_index: export_data_module.afl_instrument_prev_location
-    //     },
-    //     I32Xor,
-    //     GlobalGet {
-    //         global_index: export_data_module.afl_instrument_mem_ptr,
-    //     },
-    //     I32Add,
-    //     LocalTee {
-    //         local_index: 0,
-    //     },
-    //     LocalGet {
-    //         local_index: 0,
-
-    //     },
-    //     I32Load8U {
-
-    //     },
-    //     I32Const {
-    //         value: 1
-    //     },
-    //     I32Add,
-    //     I32Store8,
-    //     // lett shift
-    //     GlobalSet {
-    //         global_index: export_data_module.afl_instrument_prev_location
-    //     }
-    // ];
-
     for point in points {
         elems.extend_from_slice(&orig_elems[last_injection_position..point.position]);
         match point.cost_detail {
@@ -1680,6 +1663,52 @@ fn inject_metering(
                         End,
                     ]);
                 }
+
+                let curr_location: i32 = rng.gen_range(0..65536);
+                let afl_inject_slice: Vec<Operator> = vec![
+                    I32Const {
+                        value: curr_location,
+                    },
+                    GlobalGet {
+                        global_index: export_data_module.afl_instrument_prev_location,
+                    },
+                    I32Xor,
+                    GlobalGet {
+                        global_index: export_data_module.afl_instrument_mem_ptr,
+                    },
+                    I32Add,
+                    LocalTee {
+                        local_index: afl_local_idx,
+                    },
+                    LocalGet {
+                        local_index: afl_local_idx,
+                    },
+                    I32Load8U {
+                        memarg: wasmparser::MemArg {
+                            align: 0,
+                            max_align: 0,
+                            offset: 0,
+                            memory: 0,
+                        },
+                    },
+                    I32Const { value: 1 },
+                    I32Add,
+                    I32Store8 {
+                        memarg: wasmparser::MemArg {
+                            align: 0,
+                            max_align: 0,
+                            offset: 0,
+                            memory: 0,
+                        },
+                    },
+                    I32Const {
+                        value: curr_location >> 1,
+                    },
+                    GlobalSet {
+                        global_index: export_data_module.afl_instrument_prev_location,
+                    },
+                ];
+                elems.extend_from_slice(&afl_inject_slice);
             }
             InjectionPointCostDetail::DynamicCost { operand_on_stack } => {
                 match operand_on_stack {
