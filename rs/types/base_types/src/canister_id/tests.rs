@@ -35,7 +35,7 @@ fn test_try_from_principal_id() {
     }
 
     // Near miss: opaque, length 10, but penultimate is not 0x01 (?!).
-    match CanisterId::try_from_principal_id(PrincipalId::new_opaque(&[0,1,2,3,4,5,6,7,8][..])) {
+    match CanisterId::try_from_principal_id(PrincipalId::new_opaque(&[42; 9][..])) {
         Err(CanisterIdError::InvalidPrincipalId(description)) => {
             let description = description.to_lowercase();
             for key_word in ["byte", "8", "0x01"] {

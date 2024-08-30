@@ -121,7 +121,7 @@ pub fn registry_get_changes_since(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_full_neuron was rejected by the NNS governance canister: {:#?}",
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
                 reject
             )
         }

@@ -23,7 +23,7 @@ fn test_disallow_cannister_caller() {
     // Step 2: Call the code under test.
     let sender = PrincipalId::from_str(
         // NNS root canister ID.
-        "r7inp-6aaaa-aaaaa-aaabq-cai"
+        "r7inp-6aaaa-aaaaa-aaabq-cai",
     )
     .unwrap();
     assert_eq!(sender.class(), Ok(PrincipalIdClass::Opaque));
