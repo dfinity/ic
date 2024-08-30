@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{get_dependency_path, HasTopologySnapshot, NnsCustomizations},
 };
 use serde::Deserialize;
-use slog::info;
+use slog::{info, Logger};
 use url::Url;
 
 pub mod defs;
@@ -59,7 +59,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 ),
                 (
                     CUSTOM_DISK_IMG_SHA,
-                    fetch_shasum_for_img(v.to_string(), "disk"),
+                    fetch_shasum_for_img(v.to_string(), "disk", env.logger()),
                     DEV_DISK_IMG_TAR_ZST_SHA256,
                 ),
                 (
@@ -69,7 +69,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 ),
                 (
                     CUSTOM_UPDATE_IMG_SHA,
-                    fetch_shasum_for_img(v.to_string(), "update"),
+                    fetch_shasum_for_img(v.to_string(), "update", env.logger()),
                     DEV_UPDATE_IMG_TAR_ZST_SHA256,
                 ),
             ],
@@ -137,7 +137,7 @@ fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &
     }
 }
 
-fn fetch_shasum_for_img(version: String, image: &str) -> String {
+fn fetch_shasum_for_img(version: String, image: &str, logger: Logger) -> String {
     let url = format!(
         "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/{}-img/SHA256SUMS",
         version, image
@@ -151,7 +151,10 @@ fn fetch_shasum_for_img(version: String, image: &str) -> String {
         )
     }
 
-    String::from_utf8(
+    let img = format!("{}-img{}", image, TAR_EXTENSION);
+    info!(logger, "Finding sha256 for {}", img);
+
+    let sha = String::from_utf8(
         response
             .bytes()
             .expect("Failed to deserialize bytes")
@@ -159,17 +162,14 @@ fn fetch_shasum_for_img(version: String, image: &str) -> String {
     )
     .expect("Failed to convert to UTF8")
     .lines()
-    .find(|l| l.ends_with(TAR_EXTENSION))
-    .unwrap_or_else(|| {
-        panic!(
-            "Failed to find a hash ending with `{}` from: {}",
-            &url, TAR_EXTENSION
-        )
-    })
+    .find(|l| l.ends_with(&img))
+    .unwrap_or_else(|| panic!("Failed to find a hash ending with `{}` from: {}", img, &url))
     .split_whitespace()
     .next()
     .expect("The format of hash should contain whitespace")
-    .to_string()
+    .to_string();
+    info!(logger, "Found sha256 {}", sha);
+    sha
 }
 
 #[derive(Deserialize, Debug)]
