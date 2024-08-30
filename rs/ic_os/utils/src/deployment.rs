@@ -36,6 +36,7 @@ pub struct Resources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
 }
 
