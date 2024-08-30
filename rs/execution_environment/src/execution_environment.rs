@@ -243,7 +243,7 @@ pub fn log_dirty_pages(
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
@@ -309,7 +309,7 @@ struct PausedExecutionRegistry {
 }
 
 // The replies that can be returned for a `stop_canister` request.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum StopCanisterReply {
     // The stop request was completed successfully.
     Completed,
@@ -339,7 +339,7 @@ pub struct ExecutionEnvironment {
 
 /// This is a helper enum that indicates whether the current DTS execution of
 /// install_code is the first execution or not.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum DtsInstallCodeStatus {
     StartingFirstExecution,
     ResumingPausedOrAbortedExecution,
@@ -3586,7 +3586,7 @@ impl ExecutionEnvironment {
 /// for compilation costs even when they aren't counted against the round
 /// limits. Only public for testing.
 #[doc(hidden)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompilationCostHandling {
     CountReducedAmount,
     CountFullAmount,
