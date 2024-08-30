@@ -77,11 +77,6 @@ impl XNetEndpointMetrics {
 
 /// HTTPS endpoint for fetching XNet stream slices.
 ///
-/// Spawns a request handler thread, which holds a reference to the
-/// `StateManager`; and an async task that runs the HTTPS server and accepts
-/// incoming requests. The two are connected via a bounded `crossbeam::channel`,
-/// also used for signaling shutdown on drop.
-///
 /// Exposed APIs:
 /// * `/api/v1/streams`
 ///   - Produces a list of all `SubnetIds` with available streams.
