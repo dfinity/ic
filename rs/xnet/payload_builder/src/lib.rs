@@ -326,7 +326,6 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            runtime_handle.clone(),
             tls_handshake,
             proximity_map.clone(),
         ));
@@ -1540,7 +1539,6 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
@@ -1549,9 +1547,16 @@ impl XNetClientImpl {
         #[cfg(test)]
         let https = TlsConnector::new_for_tests(tls);
 
+        let crt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("XNet_Payload_Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
-            Client::builder(ExecuteOnRuntime(runtime_handle))
+            Client::builder(ExecuteOnRuntime(crt.handle().clone()))
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);
