@@ -1,20 +1,21 @@
+mod input_schedule;
 mod message_pool;
 mod queue;
 #[cfg(test)]
 mod tests;
 
+pub use self::input_schedule::CanisterQueuesLoopDetector;
+use self::input_schedule::InputSchedule;
 use self::message_pool::{Context, Kind, MessagePool};
 use self::queue::{CanisterQueue, CanisterQueueItem, IngressQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
-use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, NextInputQueue, StateError};
+use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
-use ic_protobuf::state::queues::v1::canister_queues::{
-    CanisterQueuePair, NextInputQueue as ProtoNextInputQueue,
-};
+use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
     CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -23,43 +24,12 @@ use ic_types::messages::{
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
+use strum::EnumCount;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
-
-/// Encapsulates information about `CanisterQueues`,
-/// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
-pub struct CanisterQueuesLoopDetector {
-    pub local_queue_skip_count: usize,
-    pub remote_queue_skip_count: usize,
-    pub ingress_queue_skip_count: usize,
-}
-
-impl CanisterQueuesLoopDetector {
-    /// Detects a loop in `CanisterQueues`.
-    pub fn detected_loop(&self, canister_queues: &CanisterQueues) -> bool {
-        let skipped_all_remote =
-            self.remote_queue_skip_count >= canister_queues.remote_subnet_input_schedule.len();
-
-        let skipped_all_local =
-            self.local_queue_skip_count >= canister_queues.local_subnet_input_schedule.len();
-
-        let skipped_all_ingress =
-            self.ingress_queue_skip_count >= canister_queues.ingress_queue.ingress_schedule_size();
-
-        // An empty queue is skipped implicitly by `peek_input()` and `pop_input()`.
-        // This means that no new messages can be consumed from an input source if
-        // - either it is empty,
-        // - or all its queues were explicitly skipped.
-        // Note that `skipped_all_remote`, `skipped_all_local`, and `skipped_all_ingress`
-        // are trivially true if the corresponding input source is empty because empty
-        // queues are removed from the source.
-        skipped_all_remote && skipped_all_local && skipped_all_ingress
-    }
-}
 
 /// Wrapper around the induction pool (ingress and input queues); a priority
 /// queue used for round-robin scheduling of senders when consuming input
@@ -164,39 +134,11 @@ pub struct CanisterQueues {
     /// maintained separately in the `MessagePool`.
     queue_stats: QueueStats,
 
-    /// FIFO queue of local subnet sender canister IDs ensuring round-robin
-    /// consumption of input messages. All local senders with non-empty queues
-    /// are scheduled.
-    ///
-    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
-    /// is local or not. This test is subject to race conditions (e.g. if the sender
-    /// has just been deleted), meaning that the separation into local and remote
-    /// senders is best effort.
-    local_subnet_input_schedule: VecDeque<CanisterId>,
-
-    /// FIFO queue of remote subnet sender canister IDs ensuring round-robin
-    /// consumption of input messages. All remote senders with non-empty queues
-    /// are scheduled.
-    ///
-    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
-    /// is local or not. This test is subject to race conditions (e.g. if the sender
-    /// has just been deleted), meaning that the separation into local and remote
-    /// senders is best effort.
-    remote_subnet_input_schedule: VecDeque<CanisterId>,
-
-    /// Set of all canisters enqueued in either `local_subnet_input_schedule` or
-    /// `remote_subnet_input_schedule`, to ensure that a canister is scheduled at
-    /// most once.
-    ///
-    /// We cannot rely on the input queue going from empty to non-empty as the only
-    /// condition for whether to enqueue a canister, because the contents of the
-    /// queue may have been dropped (due to expiration or load shedding) with the
-    /// canister already in one of the schedules.
-    input_schedule_canisters: BTreeSet<CanisterId>,
-
-    /// Round-robin across ingress and cross-net input queues for `pop_input()`.
-    #[validate_eq(Ignore)]
-    next_input_queue: NextInputQueue,
+    /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
+    /// and remote subnet senders; as well as within local subnet senders and remote
+    /// subnet senders.
+    #[validate_eq(CompareWithValidateEq)]
+    input_schedule: InputSchedule,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -469,14 +411,12 @@ impl CanisterQueues {
 
         // Add sender canister ID to the appropriate input schedule queue if it is not
         // already scheduled.
-        if input_queue.len() == 1 && self.input_schedule_canisters.insert(sender) {
-            match input_queue_type {
-                InputQueueType::LocalSubnet => self.local_subnet_input_schedule.push_back(sender),
-                InputQueueType::RemoteSubnet => self.remote_subnet_input_schedule.push_back(sender),
-            }
+        if input_queue.len() == 1 {
+            self.input_schedule.schedule(sender, input_queue_type);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
         Ok(())
     }
 
@@ -485,19 +425,14 @@ impl CanisterQueues {
     /// Note: We pop senders from the head of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
-    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
-        let input_schedule = match input_queue {
-            InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
-            InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
-        };
-
+    fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
         // It is possible for an input schedule to contain an empty or garbage collected
         // input queue if all messages in said queue have expired / were shed since it
         // was scheduled. Meaning that iteration may be required.
-        while let Some(sender) = input_schedule.pop_front() {
+        while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
                 // Queue pair was garbage collected.
-                assert!(self.input_schedule_canisters.remove(&sender));
+                self.input_schedule.pop(input_queue_type).unwrap();
                 continue;
             };
             let msg = pop_and_advance(input_queue, &mut self.pool);
@@ -505,18 +440,21 @@ impl CanisterQueues {
             // If the input queue is non-empty, re-enqueue the sender at the back of the
             // input schedule queue.
             if input_queue.len() != 0 {
-                input_schedule.push_back(sender);
+                self.input_schedule
+                    .reschedule(sender.clone(), input_queue_type);
             } else {
-                assert!(self.input_schedule_canisters.remove(&sender));
+                self.input_schedule.pop(input_queue_type).unwrap();
             }
 
             if let Some(msg) = msg {
                 debug_assert_eq!(Ok(()), self.test_invariants());
+                debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
                 return Some(msg.into());
             }
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
         None
     }
 
@@ -526,53 +464,52 @@ impl CanisterQueues {
     /// all messages in said queue have expired / were shed since it was scheduled.
     /// Requires a `&mut self` reference to be able advance to the first non-empty
     /// queue in the input schedule, to achieve amortized `O(1)` time complexity.
-    fn peek_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
-        let input_schedule = match input_queue {
-            InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
-            InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
-        };
-
-        while let Some(sender) = input_schedule.front() {
-            // The sender's input queue.
-            let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
-                // Queue pair was garbage collected.
-                assert!(self.input_schedule_canisters.remove(sender));
-                input_schedule.pop_front();
-                continue;
-            };
-
-            if let Some(item) = input_queue.peek() {
+    fn peek_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
+        while let Some(sender) = self.input_schedule.peek(input_queue_type) {
+            if let Some(item) = self
+                .canister_queues
+                .get(sender)
+                .and_then(|(input_queue, _)| input_queue.peek())
+            {
                 let msg = self
                     .pool
                     .get(item.id())
                     .expect("stale reference at the head of input queue");
                 debug_assert_eq!(Ok(()), self.test_invariants());
+                debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
                 return Some(msg.clone().into());
             }
 
-            // All messages in the queue had expired / were shed.
-            input_schedule.pop_front();
+            // Queue was garbage collected or is empty.
+            self.input_schedule.pop(input_queue_type).unwrap();
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
         None
     }
 
-    /// Skips the next canister input queue message.
-    fn skip_canister_input(&mut self, input_queue: InputQueueType) {
-        let input_schedule = match input_queue {
-            InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
-            InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
-        };
-        if let Some(sender) = input_schedule.pop_front() {
-            let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
-            if input_queue.len() != 0 {
-                input_schedule.push_back(sender);
+    /// Skips the next sender canister from the given schedule (local or remote).
+    fn skip_canister_input(&mut self, input_queue_type: InputQueueType) {
+        while let Some(sender) = self.input_schedule.peek(input_queue_type) {
+            // If the input queue is non-empty, re-enqueue the sender at the back of the
+            // input schedule queue.
+            if self
+                .canister_queues
+                .get(sender)
+                .map(|(input_queue, _)| input_queue.len() != 0)
+                .unwrap_or(false)
+            {
+                self.input_schedule
+                    .reschedule(sender.clone(), input_queue_type);
+                break;
             } else {
-                assert!(self.input_schedule_canisters.remove(&sender));
+                self.input_schedule.pop(input_queue_type);
             }
         }
+
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
     }
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
@@ -593,27 +530,19 @@ impl CanisterQueues {
     /// Requires a `&mut self` reference in order to be able to drop empty queues
     /// from the input schedule, in order to achieve amortized `O(1)` time complexity.
     pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
-        // Try all 3 inputs: Ingress, Local, and Remote subnets
-        for _ in 0..3 {
-            let next_input = match self.next_input_queue {
-                NextInputQueue::Ingress => self.peek_ingress().map(CanisterMessage::Ingress),
-                NextInputQueue::RemoteSubnet => {
-                    self.peek_canister_input(InputQueueType::RemoteSubnet)
-                }
-                NextInputQueue::LocalSubnet => {
-                    self.peek_canister_input(InputQueueType::LocalSubnet)
-                }
+        // Try all 3 input sources: ingress, local and remote subnets.
+        for _ in 0..InputSource::COUNT {
+            let input_source = match self.input_schedule.input_source() {
+                InputSource::Ingress => self.peek_ingress().map(CanisterMessage::Ingress),
+                InputSource::RemoteSubnet => self.peek_canister_input(InputQueueType::RemoteSubnet),
+                InputSource::LocalSubnet => self.peek_canister_input(InputQueueType::LocalSubnet),
             };
 
-            match next_input {
+            match input_source {
                 Some(msg) => return Some(msg),
-                // Try another input queue.
+                // Advamce to the next input source.
                 None => {
-                    self.next_input_queue = match self.next_input_queue {
-                        NextInputQueue::LocalSubnet => NextInputQueue::Ingress,
-                        NextInputQueue::Ingress => NextInputQueue::RemoteSubnet,
-                        NextInputQueue::RemoteSubnet => NextInputQueue::LocalSubnet,
-                    }
+                    self.input_schedule.next_input_source();
                 }
             }
         }
@@ -623,56 +552,38 @@ impl CanisterQueues {
 
     /// Skips the next ingress or inter-canister input message.
     pub(crate) fn skip_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
-        let current_input_queue = self.next_input_queue;
-        match current_input_queue {
-            NextInputQueue::Ingress => {
+        let input_source = self.input_schedule.next_input_source();
+        match input_source {
+            InputSource::Ingress => {
                 self.ingress_queue.skip_ingress_input();
                 loop_detector.ingress_queue_skip_count += 1;
-                self.next_input_queue = NextInputQueue::RemoteSubnet
             }
 
-            NextInputQueue::RemoteSubnet => {
+            InputSource::RemoteSubnet => {
                 self.skip_canister_input(InputQueueType::RemoteSubnet);
                 loop_detector.remote_queue_skip_count += 1;
-                self.next_input_queue = NextInputQueue::LocalSubnet;
             }
 
-            NextInputQueue::LocalSubnet => {
+            InputSource::LocalSubnet => {
                 self.skip_canister_input(InputQueueType::LocalSubnet);
                 loop_detector.local_queue_skip_count += 1;
-                self.next_input_queue = NextInputQueue::Ingress;
             }
         }
     }
 
-    /// Pops the next ingress or inter-canister input message (round-robin).
-    ///
-    /// We define three buckets of queues: messages from canisters on the same
-    /// subnet (local subnet), ingress, and messages from canisters on other
-    /// subnets (remote subnet).
-    ///
-    /// Each time this function is called, we round robin between these three
-    /// buckets. We also round robin between the queues in the local subnet and
-    /// remote subnet buckets when we pop messages from those buckets.
+    /// Pops the next ingress or inter-canister input message (round-robin) and
+    /// advances to the next input source.
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
-        // Try all 3 inputs: Ingress, Local, and Remote subnets
-        for _ in 0..3 {
-            let cur_input_queue = self.next_input_queue;
-            // Switch to the next input queue
-            self.next_input_queue = match self.next_input_queue {
-                NextInputQueue::LocalSubnet => NextInputQueue::Ingress,
-                NextInputQueue::Ingress => NextInputQueue::RemoteSubnet,
-                NextInputQueue::RemoteSubnet => NextInputQueue::LocalSubnet,
-            };
+        // Try all 3 input sources: ingress, local and remote subnets.
+        for _ in 0..InputSource::COUNT {
+            let input_source = self.input_schedule.next_input_source();
 
-            let next_input = match cur_input_queue {
-                NextInputQueue::Ingress => self.pop_ingress().map(CanisterMessage::Ingress),
+            let next_input = match input_source {
+                InputSource::Ingress => self.pop_ingress().map(CanisterMessage::Ingress),
 
-                NextInputQueue::RemoteSubnet => {
-                    self.pop_canister_input(InputQueueType::RemoteSubnet)
-                }
+                InputSource::RemoteSubnet => self.pop_canister_input(InputQueueType::RemoteSubnet),
 
-                NextInputQueue::LocalSubnet => self.pop_canister_input(InputQueueType::LocalSubnet),
+                InputSource::LocalSubnet => self.pop_canister_input(InputQueueType::LocalSubnet),
             };
 
             if next_input.is_some() {
@@ -959,13 +870,10 @@ impl CanisterQueues {
         // persist it explicitly).
         if self.canister_queues.is_empty() && self.ingress_queue.is_empty() {
             // The schedules and stats will already have default (zero) values, only `pool`
-            // and the input schedule related fields must be reset explicitly.
+            // and `input_schedule` must be reset explicitly.
             debug_assert!(self.pool.len() == 0);
             self.pool = MessagePool::default();
-            self.local_subnet_input_schedule = Default::default();
-            self.remote_subnet_input_schedule = Default::default();
-            self.input_schedule_canisters = Default::default();
-            self.next_input_queue = Default::default();
+            self.input_schedule = InputSchedule::default();
 
             // Trust but verify. Ensure that everything is actually set to default.
             debug_assert_eq!(CanisterQueues::default(), *self);
@@ -1009,12 +917,14 @@ impl CanisterQueues {
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> usize {
         let expired_messages = self.pool.expire_messages(current_time);
+
+        let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         for (id, msg) in expired_messages.iter() {
-            self.on_message_dropped(*id, msg, own_canister_id, local_canisters);
+            self.on_message_dropped(*id, msg, &input_queue_type_fn);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
-        debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
+        debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
         expired_messages.len()
     }
 
@@ -1030,10 +940,11 @@ impl CanisterQueues {
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> bool {
         if let Some((id, msg)) = self.pool.shed_largest_message() {
-            self.on_message_dropped(id, &msg, own_canister_id, local_canisters);
+            let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
+            self.on_message_dropped(id, &msg, &input_queue_type_fn);
 
             debug_assert_eq!(Ok(()), self.test_invariants());
-            debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
+            debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
             return true;
         }
 
@@ -1047,14 +958,13 @@ impl CanisterQueues {
     /// a reject response if the message was an outbound request. Updates the stats
     /// for the dropped message and (where applicable) the generated response.
     ///
-    /// `own_canister_id` and `local_canisters` are required to determine the
-    /// correct input queue schedule to update (when generating a reject response).
+    /// `input_queue_type_fn` is required to determine the appropriate sender
+    /// schedule to update when generating a reject response.
     fn on_message_dropped(
         &mut self,
         id: message_pool::Id,
         msg: &RequestOrResponse,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
     ) {
         use Context::*;
 
@@ -1093,22 +1003,17 @@ impl CanisterQueues {
             // Outbound request: produce a `SYS_TRANSIENT` timeout reject response.
             (Outbound, RequestOrResponse::Request(request)) => {
                 let response = generate_timeout_response(request);
-                let destination = &request.receiver;
-                let (input_queue, _) = self.canister_queues.get_mut(destination).unwrap();
 
                 // Update stats for the generated response.
                 self.queue_stats.on_push_response(&response, Inbound);
 
                 let id = self.pool.insert_inbound(response.into());
-                input_queue.push_response(id);
+                reverse_queue.push_response(id);
 
-                // If the input queue is not already in an input schedule, add it.
-                if input_queue.len() == 1 && self.input_schedule_canisters.insert(remote) {
-                    if &remote == own_canister_id || local_canisters.contains_key(&remote) {
-                        self.local_subnet_input_schedule.push_back(remote)
-                    } else {
-                        self.remote_subnet_input_schedule.push_back(remote)
-                    }
+                // If the input queue is not already in a sender schedule, add it.
+                if reverse_queue.len() == 1 {
+                    let input_queue_type = input_queue_type_fn(&remote);
+                    self.input_schedule.schedule(remote, input_queue_type);
                 }
             }
 
@@ -1120,10 +1025,10 @@ impl CanisterQueues {
         }
     }
 
-    /// Re-partitions `self.local_subnet_input_schedule` and
-    /// `self.remote_subnet_input_schedule` based on the set of all local canisters
-    /// plus `own_canister_id` (since Rust's ownership rules would prevent us from
-    /// mutating `self` if it was still under `local_canisters`).
+    /// Re-partitions the local sender schedule and remote sender schedule based on
+    /// the set of all local canisters plus `own_canister_id` (since Rust's
+    /// ownership rules would prevent us from mutating `self` if it was still under
+    /// `local_canisters`).
     ///
     /// For use after a subnet split or other kind of canister migration. While an
     /// input queue that finds itself in the wrong schedule would get removed from
@@ -1136,88 +1041,30 @@ impl CanisterQueues {
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) {
-        let local_schedule = std::mem::take(&mut self.local_subnet_input_schedule);
-        let remote_schedule = std::mem::take(&mut self.remote_subnet_input_schedule);
+        let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
+        self.input_schedule.split(&input_queue_type_fn);
 
-        for canister_id in local_schedule.into_iter().chain(remote_schedule) {
-            if &canister_id == own_canister_id || local_canisters.contains_key(&canister_id) {
-                self.local_subnet_input_schedule.push_back(canister_id);
-            } else {
-                self.remote_subnet_input_schedule.push_back(canister_id);
-            }
-        }
-
-        debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
+        debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
     }
 
-    /// Helper function to concisely validate `CanisterQueues`' input schedules
+    /// Helper function to concisely validate `CanisterQueues`' input schedule
     /// during deserialization; or in debug builds, by writing
-    /// `debug_assert_eq!(self.schedules_ok(own_canister_id, local_canisters).is_ok())`.
+    /// `debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn))`.
     ///
-    /// Checks that all canister IDs of input queues that contain at least one message
-    /// are found exactly once in either the input schedule for the local subnet or the
-    /// input schedule for remote subnets.
+    /// Checks that the canister IDs of all input queues that contain at least one
+    /// message are enqueued exactly once in the input schedule.
     ///
     /// Time complexity: `O(n * log(n))`.
     fn schedules_ok(
         &self,
-        own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        input_queue_type_fn: &dyn Fn(&CanisterId) -> InputQueueType,
     ) -> Result<(), String> {
-        let mut local_schedule: HashSet<_> = self.local_subnet_input_schedule.iter().collect();
-        let mut remote_schedule: HashSet<_> = self.remote_subnet_input_schedule.iter().collect();
-
-        if local_schedule.len() != self.local_subnet_input_schedule.len()
-            || remote_schedule.len() != self.remote_subnet_input_schedule.len()
-            || local_schedule.intersection(&remote_schedule).count() != 0
-        {
-            return Err(format!(
-                "Duplicate entries in local and/or remote input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}",
-                self.local_subnet_input_schedule, self.remote_subnet_input_schedule,
-            ));
-        }
-
-        if self.local_subnet_input_schedule.len() + self.remote_subnet_input_schedule.len()
-            != self.input_schedule_canisters.len()
-            || local_schedule
+        self.input_schedule.test_invariants(
+            self.canister_queues
                 .iter()
-                .chain(remote_schedule.iter())
-                .any(|canister_id| !self.input_schedule_canisters.contains(canister_id))
-        {
-            return Err(
-                format!("Inconsistent input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}\n  `input_schedule_canisters`: {:?}",
-                self.local_subnet_input_schedule, self.remote_subnet_input_schedule, self.input_schedule_canisters)
-            );
-        }
-
-        for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
-            if input_queue.len() == 0 {
-                continue;
-            }
-
-            if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
-                // Definitely a local canister.
-                if !local_schedule.remove(canister_id) {
-                    return Err(format!(
-                        "Local canister with non-empty input queue ({:?}) absent from `local_subnet_input_schedule`",
-                        canister_id
-                    ));
-                }
-            } else {
-                // Remote canister or deleted local canister. Check in both schedules.
-                if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
-                    return Err(format!(
-                        "Canister with non-empty input queue ({:?}) absent from input schedules",
-                        canister_id
-                    ));
-                }
-            }
-        }
-
-        // Note that a currently empty input queue may have been enqueued into an input
-        // schedule before all its messages expired or were shed.
-
-        Ok(())
+                .map(|(canister_id, (input_queue, _))| (canister_id, input_queue)),
+            &input_queue_type_fn,
+        )
     }
 
     /// Helper function for concisely validating invariants other than those of
@@ -1330,6 +1177,9 @@ fn generate_timeout_response(request: &Arc<Request>) -> Response {
 
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
+        let (next_input_source, local_sender_schedule, remote_sender_schedule) =
+            (&item.input_schedule).into();
+
         Self {
             ingress_queue: (&item.ingress_queue).into(),
             input_queues: Default::default(),
@@ -1348,17 +1198,9 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             } else {
                 None
             },
-            next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
-            local_subnet_input_schedule: item
-                .local_subnet_input_schedule
-                .iter()
-                .map(|canid| pb_types::CanisterId::from(*canid))
-                .collect(),
-            remote_subnet_input_schedule: item
-                .remote_subnet_input_schedule
-                .iter()
-                .map(|canid| pb_types::CanisterId::from(*canid))
-                .collect(),
+            next_input_source,
+            local_sender_schedule,
+            remote_sender_schedule,
             guaranteed_response_memory_reservations: item
                 .queue_stats
                 .guaranteed_response_memory_reservations
@@ -1468,42 +1310,24 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             0,
         );
 
-        let next_input_queue = NextInputQueue::from(
-            ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default(),
-        );
-
-        let mut local_subnet_input_schedule = VecDeque::new();
-        for canister_id in item.local_subnet_input_schedule.into_iter() {
-            local_subnet_input_schedule.push_back(canister_id.try_into()?);
-        }
-        let mut remote_subnet_input_schedule = VecDeque::new();
-        for canister_id in item.remote_subnet_input_schedule.into_iter() {
-            remote_subnet_input_schedule.push_back(canister_id.try_into()?);
-        }
-        let input_schedule_canisters = local_subnet_input_schedule
-            .iter()
-            .cloned()
-            .chain(remote_subnet_input_schedule.iter().cloned())
-            .collect();
+        let input_schedule = InputSchedule::try_from((
+            item.next_input_source,
+            item.local_sender_schedule,
+            item.remote_sender_schedule,
+        ))?;
 
         let queues = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
             queue_stats,
-            local_subnet_input_schedule,
-            remote_subnet_input_schedule,
-            input_schedule_canisters,
-            next_input_queue,
+            input_schedule,
         };
 
-        // Safe to call with invalid `own_canister_id` and empty `local_canisters`, as
-        // the validation logic allows for deleted local canisters.
-        if let Err(e) = queues.schedules_ok(
-            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-            &BTreeMap::new(),
-        ) {
-            metrics.observe_broken_soft_invariant(e.to_string());
+        // Safe to pretend that  all senders are remote, as the validation logic allows
+        // for deleted local canisters (which would be categorized as remote).
+        if let Err(msg) = queues.schedules_ok(&|_| InputQueueType::RemoteSubnet) {
+            metrics.observe_broken_soft_invariant(msg);
         }
         queues.test_invariants().map_err(ProxyDecodeError::Other)?;
 
@@ -1658,7 +1482,25 @@ pub fn memory_required_to_push_request(req: &Request) -> usize {
     req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
 }
 
+/// Returns a function that determines the input queue type (local or remote) of
+/// a given sender, based on a the set of all local canisters, plus
+/// `own_canister_id` (since Rust's ownership rules would prevent us from
+/// mutating a canister's queues if they were still under `local_canisters`).
+fn input_queue_type_fn<'a>(
+    own_canister_id: &'a CanisterId,
+    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
+) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
+    move |sender| {
+        if sender == own_canister_id || local_canisters.contains_key(sender) {
+            InputQueueType::LocalSubnet
+        } else {
+            InputQueueType::RemoteSubnet
+        }
+    }
+}
+
 pub mod testing {
+    use super::input_schedule::testing::InputScheduleTesting;
     use super::CanisterQueues;
     use crate::{InputQueueType, StateError};
     use ic_types::messages::{CanisterMessage, Request, RequestOrResponse};
@@ -1692,11 +1534,11 @@ pub mod testing {
         /// Publicly exposes `CanisterQueues::pop_input()`.
         fn pop_input(&mut self) -> Option<CanisterMessage>;
 
-        /// Publicly exposes the local subnet input_schedule.
-        fn get_local_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
+        /// Publicly exposes the local sender input_schedule.
+        fn local_sender_schedule(&self) -> &VecDeque<CanisterId>;
 
-        /// Publicly exposes the remote subnet input_schedule.
-        fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
+        /// Publicly exposes the remote sender input_schedule.
+        fn remote_sender_schedule(&self) -> &VecDeque<CanisterId>;
 
         /// Returns an iterator over the raw contents of the output queue to
         /// `canister_id`; or `None` if no such output queue exists.
@@ -1736,12 +1578,12 @@ pub mod testing {
             self.pop_input()
         }
 
-        fn get_local_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.local_subnet_input_schedule
+        fn local_sender_schedule(&self) -> &VecDeque<CanisterId> {
+            &self.input_schedule.local_sender_schedule()
         }
 
-        fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.remote_subnet_input_schedule
+        fn remote_sender_schedule(&self) -> &VecDeque<CanisterId> {
+            &self.input_schedule.remote_sender_schedule()
         }
 
         fn output_queue_iter_for_testing(
