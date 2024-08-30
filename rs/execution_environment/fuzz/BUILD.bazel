@@ -46,7 +46,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
         # Keep sorted.
-        "//rs/test_utilities/execution_environment",
+        "//rs/state_machine_tests",
         "//rs/types/types",
         "@crate_index//:libafl",
         "@crate_index//:libafl_bolts",

@@ -1,4 +1,4 @@
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use once_cell::sync::Lazy;
 use std::cell::RefCell;
@@ -32,7 +32,7 @@ use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 // TODO: This should be obtained from env
 const CORPUS_DIR: &str = "rs/execution_environment/fuzz/corpus";
 
-static mut TEST: Lazy<RefCell<(ExecutionTest, CanisterId)>> =
+static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
 
 // TODO: The right way to do this would be iclude_bytes! but would require a build.rs
@@ -45,14 +45,16 @@ fn read_canister_bytes() -> Vec<u8> {
     buffer
 }
 
-fn create_execution_test() -> (ExecutionTest, CanisterId) {
-    let mut test = ExecutionTestBuilder::new()
-        .with_deterministic_time_slicing_disabled()
-        .with_canister_sandboxing_disabled()
-        .build();
+fn create_execution_test() -> (StateMachine, CanisterId) {
+    let test = StateMachineBuilder::new().no_dts().build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(Cycles::new(5_000_000_000_000), read_canister_bytes())
+        .install_canister_with_cycles(
+            read_canister_bytes(),
+            vec![],
+            None,
+            Cycles::new(5_000_000_000_000),
+        )
         .unwrap();
     (test, canister_id)
 }
@@ -61,7 +63,7 @@ pub fn main() {
     let mut harness = |input: &BytesInput| {
         let canister_id = unsafe { TEST.borrow().1 };
         let test = unsafe { &mut TEST.borrow_mut().0 };
-        let result = test.non_replicated_query(canister_id, "decode", (*input).clone().into());
+        let result = test.execute_ingress(canister_id, "decode", (*input).clone().into());
         let cycles = match result {
             Ok(WasmResult::Reply(result)) => {
                 let mut cycles = [0u8; 8];
@@ -70,6 +72,18 @@ pub fn main() {
             }
             _ => 0,
         };
+
+        let result = test.execute_ingress(canister_id, "export_coverage", vec![]);
+        match result {
+            Ok(WasmResult::Reply(result)) => {
+                println!(
+                    "result {:#?}, cycles {:?}",
+                    result.iter().filter(|&i| *i > 0).count(),
+                    cycles
+                );
+            }
+            _ => (),
+        }
 
         let ratio = cycles / input.len() as u64;
         let previous_ratio = unsafe { MAP.borrow().previous_ratio };
