@@ -880,7 +880,12 @@ impl PageMap {
         )
     }
 
-    pub fn read_num_host_pages(layout: &dyn StorageLayout) -> Result<usize, PersistenceError> {
+    /// Get number of logical pages of the PageMap corresponding to the layout, i.e.
+    /// maximum page index in memory + 1.
+    /// Loads the Storage from disk and performs validation.
+    pub fn load_num_storage_host_pages(
+        layout: &dyn StorageLayout,
+    ) -> Result<usize, PersistenceError> {
         Ok(Storage::load(layout)?.num_logical_pages())
     }
 
