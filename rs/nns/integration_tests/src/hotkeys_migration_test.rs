@@ -154,7 +154,7 @@ fn test_hotkey_principal_migration() {
             neuron_portion,
             NeuronsFundNeuronPortion {
                 // The legacy field is still set.
-                hotkey_principal: Some(_hotkey_principal),
+                hotkey_principal: Some(hotkey_principal),
                 // The new field is not yet set.
                 controller: Some(controller),
                 ..
