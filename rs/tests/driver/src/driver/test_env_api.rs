@@ -488,7 +488,7 @@ impl TopologySnapshot {
                     .get_versioned_value(key, self.local_registry.get_latest_version())
                     .unwrap_or_else(|_| panic!("Failed to get entry for replica version {}", key));
                 (
-                    key.clone(),
+                    key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
                     r.as_ref()
                         .map(|v| {
                             ReplicaVersionRecord::decode(v.as_slice())

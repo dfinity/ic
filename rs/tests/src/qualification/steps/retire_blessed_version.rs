@@ -65,8 +65,9 @@ impl Step for RetireBlessedVersions {
                 })
                 .unwrap_or_else(|| {
                     panic!(
-                        "Blessed replica version with key {} not found in records",
-                        r
+                        "Blessed replica version with key {} not found in records: {}",
+                        r,
+                        replica_versions.iter().join(", ")
                     )
                 });
 
