@@ -52,5 +52,6 @@ rust_binary(
         "@crate_index//:libafl_bolts",
         "@crate_index//:once_cell",
         "@crate_index//:serde",
+        "@crate_index//:slog"
     ],
 )

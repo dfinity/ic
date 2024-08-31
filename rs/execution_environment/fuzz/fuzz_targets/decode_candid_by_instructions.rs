@@ -30,7 +30,7 @@ use libafl::{
 use libafl::monitors::SimpleMonitor;
 // use libafl::monitors::tui::{ui::TuiUI, TuiMonitor};
 use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list, HasLen};
-
+use slog::Level;
 mod decode_map;
 use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 
@@ -53,7 +53,10 @@ fn read_canister_bytes() -> Vec<u8> {
 }
 
 fn create_execution_test() -> (StateMachine, CanisterId) {
-    let test = StateMachineBuilder::new().no_dts().build();
+    let test = StateMachineBuilder::new()
+        .no_dts()
+        .with_log_level(Some(Level::Critical))
+        .build();
 
     let canister_id = test
         .install_canister_with_cycles(
@@ -123,10 +126,10 @@ pub fn main() {
         )
     };
 
-    let mut decoding_feedback = DecodingMapFeedback::new();
+    let decoding_feedback = DecodingMapFeedback::new();
     let hitcount_map_observer =
         HitcountsMapObserver::new(unsafe { StdMapObserver::new("coverage_map", COVERAGE_MAP) });
-    let mut afl_map_feedback = AflMapFeedback::new(&hitcount_map_observer);
+    let afl_map_feedback = AflMapFeedback::new(&hitcount_map_observer);
     let mut feedback = feedback_or!(decoding_feedback, afl_map_feedback);
     let mut objective = CrashFeedback::new();
 
@@ -147,6 +150,7 @@ pub fn main() {
     //     false,
     // );
     // let mon = TuiMonitor::new(ui);
+
     let mut mgr = SimpleEventManager::new(mon);
     let scheduler = QueueScheduler::new();
     let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
