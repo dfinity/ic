@@ -49,6 +49,8 @@ ALL_BINARIES = {
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     # needed by DRE for release qualification
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
+    # needed by DRE for release qualification
+    "from-config-binary": "//rs/tests/testing_verification/testnets:from_config_binary",
 }
 
 # test binaries or binaries using test utils
@@ -70,6 +72,7 @@ TESTONLY_BINARIES = [
     "sns-test-feature",
     "types-test",
     "replicated-state-test",
+    "from-config-binary",
 ]
 
 # We don't strip the more complex binaries

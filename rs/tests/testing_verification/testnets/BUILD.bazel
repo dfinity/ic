@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -71,6 +72,16 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+rust_binary(
+    name = "from_config_binary",
+    testonly = True,
+    srcs = ["from_config.rs"],
+    data = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES,
 )
 
 system_test_nns(
