@@ -165,6 +165,7 @@ mod neuron_store;
 pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
+mod proposal_data_neurons_fund_migration;
 pub mod proposals;
 mod reward;
 pub mod storage;
