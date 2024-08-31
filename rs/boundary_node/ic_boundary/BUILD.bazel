@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
     "@crate_index//:axum-extra",
-    "@crate_index//:axum-server",
     "@crate_index//:axum_0_6_1",
     "@crate_index//:bytes",
     "@crate_index//:candid",

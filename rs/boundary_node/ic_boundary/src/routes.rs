@@ -1,27 +1,28 @@
+#![allow(clippy::declare_interior_mutable_const)]
+
 use std::{
     fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    body::{Body, StreamBody},
-    extract::{MatchedPath, Path, State},
-    http::{Request, StatusCode},
+    body::Body,
+    extract::{MatchedPath, Path, Request, State},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     BoxError, Extension,
 };
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
-use http::{
-    header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
-    Method,
-};
+use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use ic_bn_lib::http::{body::buffer_body, headers::*, proxy, Client as HttpClient};
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
@@ -37,7 +38,6 @@ use url::Url;
 use crate::{
     cache::CacheStatus,
     core::{decoder_config, MAX_REQUEST_BODY_SIZE},
-    http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
     snapshot::{Node, RegistrySnapshot},
@@ -47,48 +47,6 @@ use crate::{
 const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 const METHOD_HTTP: &str = "http_request";
-
-// Clippy complains that these are interior-mutable.
-// We don't mutate them, so silence it.
-// https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
-#[allow(clippy::declare_interior_mutable_const)]
-const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
-#[allow(clippy::declare_interior_mutable_const)]
-const X_CONTENT_TYPE_OPTIONS_NO_SNIFF: HeaderValue = HeaderValue::from_static("nosniff");
-#[allow(clippy::declare_interior_mutable_const)]
-const X_FRAME_OPTIONS_DENY: HeaderValue = HeaderValue::from_static("DENY");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
-    HeaderName::from_static("x-ic-cache-bypass-reason");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
-#[allow(clippy::declare_interior_mutable_const)]
-pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
-#[allow(clippy::declare_interior_mutable_const)]
-pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
-    http::HeaderName::from_static("x-ic-country-code");
 
 const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
     ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
@@ -379,28 +337,11 @@ impl ProxyRouter {
 
 #[async_trait]
 impl Proxy for ProxyRouter {
-    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause> {
-        // Prepare the request
-        let (parts, body) = request.into_parts();
-
-        let mut request = reqwest::Request::new(Method::POST, url);
-        *request.headers_mut() = parts.headers;
-        *request.body_mut() = Some(body.into());
-
-        // Execute request
-        let response = self
-            .http_client
-            .execute(request)
+    async fn proxy(&self, request: Request, url: Url) -> Result<Response, ErrorCause> {
+        // TODO map errors
+        let response = proxy::proxy(url, request, &self.http_client)
             .await
-            .map_err(reqwest_error_infer)?;
-
-        // Convert Reqwest response into Axum one with body streaming
-        let status = response.status();
-        let headers = response.headers().clone();
-
-        let mut response = StreamBody::new(response.bytes_stream()).into_response();
-        *response.status_mut() = status;
-        *response.headers_mut() = headers;
+            .map_err(|e| ErrorCause::ReplicaErrorOther(e.to_string()))?;
 
         Ok(response)
     }
@@ -520,8 +461,8 @@ impl From<BoxError> for ApiError {
 pub async fn validate_canister_request(
     matched_path: MatchedPath,
     canister_id: Path<String>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
@@ -543,7 +484,7 @@ pub async fn validate_canister_request(
     let mut resp = next.run(request).await;
 
     resp.headers_mut().insert(
-        HEADER_IC_CANISTER_ID,
+        X_IC_CANISTER_ID,
         HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
     );
 
@@ -553,8 +494,8 @@ pub async fn validate_canister_request(
 pub async fn validate_subnet_request(
     matched_path: MatchedPath,
     subnet_id: Path<String>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
         PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
@@ -578,11 +519,8 @@ pub async fn validate_subnet_request(
     Ok(resp)
 }
 
-pub async fn validate_request(
-    request: Request<Body>,
-    next: Next<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
+pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoResponse, ApiError> {
+    if let Some(id_header) = request.headers().get(X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
             .map(|id| UUID_REGEX.is_match(id))
@@ -591,7 +529,7 @@ pub async fn validate_request(
         if !is_valid_id {
             #[allow(clippy::borrow_interior_mutable_const)]
             return Err(ErrorCause::MalformedRequest(format!(
-                "value of '{HEADER_X_REQUEST_ID}' header is not in UUID format"
+                "value of '{X_REQUEST_ID}' header is not in UUID format"
             ))
             .into());
         }
@@ -604,12 +542,14 @@ pub async fn validate_request(
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     Extension(request_type): Extension<RequestType>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
+    let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
+        .await
+        .context("unable to read client body")?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
@@ -674,8 +614,8 @@ pub async fn preprocess_request(
 // Middleware: looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let subnet = if let Some(canister_id) = request.extensions().get::<CanisterId>() {
         lk.lookup_subnet_by_canister_id(canister_id)?
@@ -698,7 +638,7 @@ pub async fn lookup_subnet(
 }
 
 // Middleware: postprocess the response
-pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
+pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
     let error_cause = response
@@ -721,7 +661,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     }
 
     response.headers_mut().insert(
-        HEADER_IC_ERROR_CAUSE,
+        X_IC_ERROR_CAUSE,
         HeaderValue::from_maybe_shared(Bytes::from(error_cause)).unwrap(),
     );
 
@@ -729,13 +669,13 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     let cache_status = response.extensions().get::<CacheStatus>().cloned();
     if let Some(v) = cache_status {
         response.headers_mut().insert(
-            HEADER_IC_CACHE,
+            X_IC_CACHE_STATUS,
             HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
         );
 
         if let CacheStatus::Bypass(v) = v {
             response.headers_mut().insert(
-                HEADER_IC_CACHE_BYPASS_REASON,
+                X_IC_CACHE_BYPASS_REASON,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             );
         }
@@ -743,7 +683,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
 
     if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
         response.headers_mut().insert(
-            HEADER_IC_SUBNET_ID,
+            X_IC_SUBNET_ID,
             HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
     }
@@ -752,39 +692,39 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = node {
         // Principals and subnet type are always ASCII printable, so unwrap is safe
         response.headers_mut().insert(
-            HEADER_IC_NODE_ID,
+            X_IC_NODE_ID,
             HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
 
         response.headers_mut().insert(
-            HEADER_IC_SUBNET_TYPE,
+            X_IC_SUBNET_TYPE,
             HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
         );
     }
 
     if let Some(ctx) = response.extensions().get::<Arc<RequestContext>>().cloned() {
         response.headers_mut().insert(
-            HEADER_IC_REQUEST_TYPE,
+            X_IC_REQUEST_TYPE,
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
         ctx.canister_id.and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_CANISTER_ID_CBOR,
+                X_IC_CANISTER_ID_CBOR,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             )
         });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_SENDER,
+                X_IC_SENDER,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             )
         });
 
         ctx.method_name.as_ref().and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_METHOD_NAME,
+                X_IC_METHOD_NAME,
                 HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
             )
         });
@@ -793,7 +733,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     let retry_result = response.extensions().get::<RetryResult>().cloned();
     if let Some(v) = retry_result {
         response.headers_mut().insert(
-            HEADER_IC_RETRIES,
+            X_IC_RETRIES,
             HeaderValue::from_maybe_shared(Bytes::from(v.retries.to_string())).unwrap(),
         );
     }

@@ -20,6 +20,7 @@ use axum::{
 use axum_extra::middleware::option_layer;
 use candid::DecoderConfig;
 use futures::TryFutureExt;
+use ic_bn_lib::http;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
@@ -28,8 +29,8 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use little_loadshedder::{LoadShedError, LoadShedLayer};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 use tracing::{debug, error, warn};
@@ -42,7 +43,6 @@ use crate::{
     dns::DnsResolver,
     firewall::{FirewallGenerator, SystemdReloader},
     geoip,
-    http::{HttpClient, ReqwestClient},
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
@@ -56,20 +56,13 @@ use crate::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
     },
-    socket::{TcpConnectInfo, TcpServerExt},
     tls_verify::TlsVerifier,
 };
 
-#[cfg(not(feature = "tls"))]
-use {crate::socket::UnixServerExt, std::os::unix::fs::PermissionsExt};
-
 #[cfg(feature = "tls")]
 use {
-    crate::{
-        socket::listen_tcp_backlog,
-        tls::{acme_challenge, prepare_tls, redirect_to_https},
-    },
-    axum_server::{AddrIncomingConfig, Server},
+    crate::{cli, http::redirect_to_https},
+    rustls::server::ResolvesServerCert,
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -124,7 +117,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = Arc::new(DnsResolver::new(Arc::clone(&registry_snapshot)));
+    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
     // TLS verifier
     let tls_verifier = Arc::new(TlsVerifier::new(
@@ -132,14 +125,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.listen.skip_replica_tls_verification,
     ));
 
-    // TLS Configuration
-    let mut rustls_config = rustls::ClientConfig::builder()
-        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .context("unable to build Rustls config")?
-        .with_custom_certificate_verifier(tls_verifier)
-        .with_no_client_auth();
+    let mut tls_config_client =
+        rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+            .dangerous() // Nothing really dangerous here
+            .with_custom_certificate_verifier(tls_verifier)
+            .with_no_client_auth();
 
     // Enable ALPN to negotiate HTTP version
     let mut alpn = vec![];
@@ -147,12 +137,24 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         alpn.push(b"h2".to_vec());
     }
     alpn.push(b"http/1.1".to_vec());
-    rustls_config.alpn_protocols = alpn;
+    tls_config_client.alpn_protocols = alpn;
 
     // Set larger session resumption cache to accomodate all replicas (256 by default)
-    rustls_config.resumption = rustls::client::Resumption::in_memory_sessions(4096);
+    tls_config_client.resumption = rustls::client::Resumption::in_memory_sessions(4096);
 
-    let http_client = ReqwestClient::new(&cli, rustls_config, dns_resolver)?;
+    let http_client_opts = http::client::Options {
+        timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
+        timeout_read: Duration::from_secs(15),
+        timeout: Duration::from_millis(cli.listen.http_timeout),
+        tcp_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
+        http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive_timeout)),
+        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive),
+        user_agent: SERVICE_NAME.into(),
+        tls_config: tls_config_client,
+    };
+
+    let http_client = http::client::new(http_client_opts, dns_resolver)?;
+    let http_client = http::client::ReqwestClient::new(http_client);
     let http_client = WithMetrics(
         http_client,
         MetricParams::new_with_opts(
@@ -163,11 +165,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         ),
     );
     let http_client = Arc::new(http_client);
-
-    #[cfg(feature = "tls")]
-    let (configuration_runner, tls_acceptor, token_owner) = prepare_tls(&cli, &metrics_registry)
-        .await
-        .context("unable to prepare TLS")?;
 
     // Caching
     let cache = cli.cache.cache_size_bytes.map(|x| {
@@ -195,7 +192,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ));
 
     // Server / API
-    let routers_https = setup_router(
+    let router_https = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
         http_client.clone(),
@@ -207,73 +204,54 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     #[cfg(feature = "tls")]
-    let routers_http = Router::new()
-        .route(
-            "/.well-known/acme-challenge/:token",
-            get(acme_challenge).with_state(token_owner),
-        )
-        .fallback(redirect_to_https);
+    let router_http = Router::new().fallback(redirect_to_https);
 
     // Use HTTPS routers for HTTP if TLS is disabled
     #[cfg(not(feature = "tls"))]
-    let routers_http = routers_https;
+    let router_http = router_https;
+
+    let server_opts = http::server::Options {
+        backlog: cli.listen.backlog,
+        http1_header_read_timeout: Duration::from_secs(15),
+        http2_max_streams: 200,
+        http2_keepalive_interval: Duration::from_secs(cli.listen.http_keepalive),
+        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
+        grace_period: Duration::from_secs(60),
+        max_requests_per_conn: Some(1000),
+    };
 
     // HTTP
-    let srvs_http = cli.listen.http_port.map(|x| {
-        hyper::Server::bind_tcp(
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x),
-            cli.listen.backlog,
-        )
-        .expect("cannot bind to the TCP socket")
-        .serve(
-            routers_http
-                .clone()
-                .into_make_service_with_connect_info::<TcpConnectInfo>(),
+    let server_http = cli.listen.http_port.map(|x| {
+        http::Server::new(
+            http::server::Addr::Tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x)),
+            router_http.clone(),
+            server_opts,
+            &metrics_registry,
+            None,
         )
     });
 
     // HTTP Unix Socket
     #[cfg(not(feature = "tls"))]
-    let srvs_http_unix = cli.listen.http_unix_socket.as_ref().map(|x| {
-        // Remove the socket file if it's there
-        if x.exists() {
-            std::fs::remove_file(x).expect("unable to remove socket");
-        }
-
-        let srv = hyper::Server::bind_unix(x, cli.listen.backlog)
-            .expect("cannot bind to the Unix socket")
-            .serve(routers_http.clone().into_make_service());
-
-        std::fs::set_permissions(x, std::fs::Permissions::from_mode(0o666))
-            .expect("unable to set permissions on socket");
-
-        srv
+    let server_http_unix = cli.listen.http_unix_socket.as_ref().map(|x| {
+        http::Server::new(
+            http::server::Addr::Unix(x.clone()),
+            router_http,
+            server_opts,
+            &metrics_registry,
+            None,
+        )
     });
 
     #[cfg(not(feature = "tls"))]
-    if srvs_http.is_none() && srvs_http_unix.is_none() {
+    if server_http.is_none() && server_http_unix.is_none() {
         panic!("at least one of --http-port or --http-unix-socket must be specified");
     }
 
     // HTTPS
     #[cfg(feature = "tls")]
-    let srvs_https = Server::from_tcp(listen_tcp_backlog(
-        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), cli.listen.https_port),
-        cli.listen.backlog,
-    )?)
-    .addr_incoming_config({
-        let mut cfg = AddrIncomingConfig::default();
-        cfg.tcp_keepalive(Some(Duration::from_secs(cli.listen.http_keepalive)));
-        cfg.tcp_keepalive_retries(Some(2));
-        cfg.tcp_nodelay(true);
-        cfg
-    })
-    .acceptor(tls_acceptor.clone())
-    .serve(
-        routers_https
-            .clone()
-            .into_make_service_with_connect_info::<SocketAddr>(),
-    );
+    let server_https = setup_https(router_https, server_opts.clone(), &cli, &metrics_registry)
+        .context("unable to setup HTTPS")?;
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -290,6 +268,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_state(metrics::MetricsHandlerArgs {
             cache: metrics_cache.clone(),
         });
+
+    let metrics_server = http::Server::new(
+        http::server::Addr::Tcp(cli.monitoring.metrics_addr),
+        metrics_router,
+        server_opts,
+        &metrics_registry,
+        None,
+    );
 
     let metrics_runner = WithThrottle(
         WithMetrics(
@@ -332,20 +318,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let generic_limiter_runner = WithThrottle(generic_limiter, ThrottleParams::new(10 * SECOND));
 
     // Runners
-    let mut runners: Vec<Box<dyn Run>> = vec![
-        #[cfg(feature = "tls")]
-        Box::new(configuration_runner),
-        Box::new(metrics_runner),
-        Box::new(generic_limiter_runner),
-    ];
+    let mut runners: Vec<Box<dyn Run>> =
+        vec![Box::new(metrics_runner), Box::new(generic_limiter_runner)];
     runners.append(&mut registry_runners);
 
-    TokioScope::scope_and_block(|s| {
-        s.spawn(
-            hyper::Server::bind(&cli.monitoring.metrics_addr)
-                .serve(metrics_router.into_make_service())
-                .map_err(|err| anyhow!("server failed: {:?}", err)),
-        );
+    TokioScope::scope_and_block(move |s| {
+        s.spawn(async move {
+            metrics_server
+                .serve(CancellationToken::new())
+                .map_err(|e| anyhow!("unable to serve metrics: {e:#}"))
+                .await
+        });
 
         if let Some(v) = registry_replicator {
             s.spawn(async move {
@@ -360,17 +343,30 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Servers
-        if let Some(v) = srvs_http {
-            s.spawn(v.map_err(|err| anyhow!("failed to start http server: {:?}", err)));
+        if let Some(v) = server_http {
+            s.spawn(async move {
+                v.serve(CancellationToken::new())
+                    .map_err(|e| anyhow!("unable to serve http/tcp: {e:#}"))
+                    .await
+            });
         }
 
         #[cfg(not(feature = "tls"))]
-        if let Some(v) = srvs_http_unix {
-            s.spawn(v.map_err(|err| anyhow!("failed to start http unix socket server: {:?}", err)));
+        if let Some(v) = server_http_unix {
+            s.spawn(async move {
+                v.serve(CancellationToken::new())
+                    .map_err(|e| anyhow!("unable to serve http/unix: {e:#}"))
+                    .await
+            });
         }
 
         #[cfg(feature = "tls")]
-        s.spawn(srvs_https.map_err(|err| anyhow!("failed to start https server: {:?}", err)));
+        s.spawn(async move {
+            server_https
+                .serve(CancellationToken::new())
+                .map_err(|e| anyhow!("unable to serve https: {e:#}"))
+                .await
+        });
 
         // Runners
         runners.into_iter().for_each(|mut r| {
@@ -403,7 +399,7 @@ fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client: Arc<dyn HttpClient>,
+    http_client: Arc<dyn http::Client>,
     metrics_registry: &Registry,
 ) -> Result<RegistrySetupResult, Error> {
     // Registry Client
@@ -514,10 +510,95 @@ fn setup_registry(
     ))
 }
 
+#[cfg(feature = "tls")]
+fn setup_tls_resolver(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+    use ic_bn_lib::tls;
+    use rustls::server::ResolvesServerCertUsingSni;
+    use tokio_util::sync::CancellationToken;
+
+    let resolver = if let Some(v) = &cli.acme_credentials_path {
+        let opts = tls::acme::AcmeOptions::new(
+            vec![cli.hostname.clone()],
+            v.clone(),
+            Duration::from_secs(86400 * 14),
+            false,
+            true,
+            "mailto:boundary-nodes@dfinity.org".into(),
+        );
+
+        tls::acme::alpn::new(opts, CancellationToken::new())
+    } else {
+        let cert = cli
+            .tls_cert_path
+            .clone()
+            .ok_or(anyhow!("tls cert not specified"))?;
+        let key = cli
+            .tls_pkey_path
+            .clone()
+            .ok_or(anyhow!("tls key not specified"))?;
+
+        let cert = std::fs::read(cert).context("unable to read tls cert")?;
+        let key = std::fs::read(key).context("unable to read tls key")?;
+
+        let ckey =
+            tls::pem_convert_to_rustls(&key, &cert).context("unable to parse cert and/or key")?;
+
+        let mut resolver = ResolvesServerCertUsingSni::new();
+        resolver
+            .add(&cli.hostname, ckey)
+            .context("unable to add hostname/cert to resolver")?;
+
+        Arc::new(resolver)
+    };
+
+    Ok(resolver)
+}
+
+#[cfg(feature = "tls")]
+fn setup_https(
+    router: Router,
+    opts: http::server::Options,
+    cli: &Cli,
+    registry: &Registry,
+) -> Result<http::Server, Error> {
+    use ic_bn_lib::tls;
+
+    let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+
+    // TODO add CLI
+    let session_storage = Arc::new(tls::sessions::Storage::new(
+        256 * 1024 * 1024,
+        Duration::from_secs(18 * 3600),
+    ));
+
+    let rustls_config = tls::prepare_server_config(
+        resolver,
+        session_storage,
+        &vec![http::ALPN_ACME.to_vec()],
+        // TODO add CLI
+        Duration::from_secs(9 * 3600),
+        &[&rustls::version::TLS13],
+        &registry,
+    );
+
+    let server_https = http::Server::new(
+        http::server::Addr::Tcp(SocketAddr::new(
+            Ipv6Addr::UNSPECIFIED.into(),
+            cli.listen.https_port,
+        )),
+        router,
+        opts,
+        &registry,
+        Some(rustls_config),
+    );
+
+    Ok(server_https)
+}
+
 pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn HttpClient>,
+    http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::Limiter>>,
     cli: &Cli,

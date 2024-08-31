@@ -198,12 +198,12 @@ pub struct TlsConfig {
     /// The path to the ingress TLS cert.
     /// If ACME client is used (see above) - the file needs to be writeable.
     #[clap(long, default_value = "cert.pem")]
-    pub tls_cert_path: PathBuf,
+    pub tls_cert_path: Option<PathBuf>,
 
     /// The path to the ingress TLS private-key.
     /// If ACME client is used (see above) - the file needs to be writeable.
     #[clap(long, default_value = "pkey.pem")]
-    pub tls_pkey_path: PathBuf,
+    pub tls_pkey_path: Option<PathBuf>,
 }
 
 #[derive(Args)]
