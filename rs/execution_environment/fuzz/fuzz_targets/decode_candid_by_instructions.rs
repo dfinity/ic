@@ -5,11 +5,12 @@ use std::cell::RefCell;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 use std::ptr::addr_of;
 use std::time::Duration;
 
 use libafl::{
-    corpus::InMemoryCorpus,
+    corpus::{InMemoryCorpus, OnDiskCorpus},
     events::SimpleEventManager,
     executors::{inprocess::InProcessExecutor, ExitKind},
     feedback_or,
@@ -27,19 +28,17 @@ use libafl::{
     state::StdState,
 };
 
-use libafl::monitors::SimpleMonitor;
-// use libafl::monitors::tui::{ui::TuiUI, TuiMonitor};
+// use libafl::monitors::SimpleMonitor;
+use libafl::monitors::tui::{ui::TuiUI, TuiMonitor};
 use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list, HasLen};
 use slog::Level;
 mod decode_map;
 use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 
 // TODO: This should be obtained from env
-const CORPUS_DIR: &str = "rs/execution_environment/fuzz/corpus";
-
+const EXECUTION_DIR: &str = "/home/vsekar/ic/rs/execution_environment/fuzz";
 static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
-
 static mut COVERAGE_MAP: &'static mut [u8] = &mut [0; 65536];
 
 // TODO: The right way to do this would be iclude_bytes! but would require a build.rs
@@ -87,7 +86,7 @@ pub fn main() {
                 }
                 0
             }
-            _ => return ExitKind::Ok, // We continue
+            _ => return ExitKind::Ok, // continue
         };
 
         test.advance_time(Duration::from_secs(1));
@@ -111,8 +110,8 @@ pub fn main() {
             decoding_map.increased = false;
         }
 
-        // The success condition for the fuzzer is cycles consumed to input length ratio
-        // is too high. Once we reach this condition, the fuzzer creates a crash.
+        // The success condition for the fuzzer is cycles consumed to input length ratio is
+        // over a certain threshold. Once we reach this condition, the fuzzer creates a crash.
         if ratio > 10_000_000 {
             return ExitKind::Crash;
         }
@@ -135,21 +134,21 @@ pub fn main() {
 
     let mut state = StdState::new(
         StdRand::with_seed(current_nanos()),
-        InMemoryCorpus::new(), // corpus
-        InMemoryCorpus::new(), // crash corpus
+        OnDiskCorpus::new(PathBuf::from(format!("{}/input", EXECUTION_DIR))).unwrap(),
+        OnDiskCorpus::new(PathBuf::from(format!("{}/crashes", EXECUTION_DIR))).unwrap(),
         &mut feedback,
         &mut objective,
     )
     .unwrap();
 
-    let mon = SimpleMonitor::new(|s| println!("{s}"));
+    // let mon = SimpleMonitor::new(|s| println!("{s}"));
 
-    // let ui = TuiUI::with_version(
-    //     String::from("Decode Candid by Instruction / Input Ratio"),
-    //     String::from("0.0.1"),
-    //     false,
-    // );
-    // let mon = TuiMonitor::new(ui);
+    let ui = TuiUI::with_version(
+        String::from("Decode Candid by Instruction / Input Ratio"),
+        String::from("0.0.1"),
+        false,
+    );
+    let mon = TuiMonitor::new(ui);
 
     let mut mgr = SimpleEventManager::new(mon);
     let scheduler = QueueScheduler::new();
@@ -164,7 +163,7 @@ pub fn main() {
     )
     .expect("Failed to create the Executor");
 
-    let paths = fs::read_dir(CORPUS_DIR).unwrap();
+    let paths = fs::read_dir(PathBuf::from(format!("{}/corpus", EXECUTION_DIR))).unwrap();
     for path in paths {
         let mut f = File::open(path.unwrap().path()).unwrap();
         let mut buffer = Vec::new();
