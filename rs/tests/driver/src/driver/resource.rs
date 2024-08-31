@@ -216,6 +216,7 @@ pub fn get_resource_request_for_nested_nodes(
     let empty_image_name = "empty.img.tar.zst";
     let tmp_dir = tempfile::tempdir().unwrap();
     let empty_image = build_empty_image(tmp_dir.path(), empty_image_name)?;
+    // TODO: if k8s, upload differently
     let image_id = farm.upload_file(group_name, empty_image, empty_image_name)?;
 
     // Add a VM request for each node.

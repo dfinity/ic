@@ -200,6 +200,7 @@ impl InternetComputer {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        let log = env.logger();
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for subnet in self.subnets.iter_mut() {
@@ -222,6 +223,7 @@ impl InternetComputer {
                 .collect();
             node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
         }
+        slog::info!(&log, "configured nodes");
 
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
@@ -229,15 +231,27 @@ impl InternetComputer {
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
 
+        slog::info!(&log, "setting up k8s");
         if InfraProvider::read_attribute(env) == InfraProvider::K8s {
+            slog::info!(
+                &log,
+                "deploy image: {}",
+                res_request.primary_image.url.clone()
+            );
             let image_url = res_request.primary_image.url.clone();
-            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
+            let tnet = TNet::from_env(env).image_url(image_url.as_ref());
+            slog::info!(&log, "deploy image checkpoint");
             block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
+            slog::info!(&log, "deployed image checkpoint");
             tnet.write_attribute(env);
+            slog::info!(&log, "deployed image");
         }
 
+        slog::info!(&log, "allocating resources");
         let res_group = allocate_resources(&farm, &res_request, env)?;
+        slog::info!(&log, "propagating ips");
         self.propagate_ip_addrs(&res_group);
+        slog::info!(&log, "init ic");
         let init_ic = init_ic(
             self,
             env,
@@ -245,6 +259,7 @@ impl InternetComputer {
             self.use_specified_ids_allocation_range,
         )?;
 
+        slog::info!(&log, "registry init");
         // save initial registry snapshot for this pot
         let local_store_path = env
             .registry_local_store_path(&self.name)
@@ -263,7 +278,9 @@ impl InternetComputer {
         info!(env.logger(), "{topology_snapshot}");
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
+        slog::info!(&log, "start vms");
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        slog::info!(&log, "started vms");
         Ok(())
     }
 

@@ -180,11 +180,23 @@ pub fn setup(env: TestEnv) {
 }
 
 async fn setup_ic_testnet(env: TestEnv) -> Result<(), Error> {
-    InternetComputer::new()
-        .add_fast_single_node_subnet(SubnetType::System)
-        .add_fast_single_node_subnet(SubnetType::Application)
-        .setup_and_start(&env)
-        .context("failed to setup IC under test")?;
+    let log = env.logger();
+    slog::info!(&log, "setting up ic testnet");
+
+    task::spawn_blocking({
+        let env = env.clone();
+        move || {
+            InternetComputer::new()
+                .add_fast_single_node_subnet(SubnetType::System)
+                .add_fast_single_node_subnet(SubnetType::Application)
+                .setup_and_start(&env)
+                .context("failed to setup IC under test")
+        }
+    })
+    .await
+    .expect("failed to spawn task")?;
+
+    slog::info!(&log, "done setting up ic testnet");
 
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
@@ -201,6 +213,8 @@ async fn setup_ic_testnet(env: TestEnv) -> Result<(), Error> {
         .next()
         .context("failed to retrieve first NNS node")?;
 
+    slog::info!(&log, "installing canisters");
+    slog::info!(&log, "installing canisters");
     task::spawn_blocking(move || {
         NnsInstallationBuilder::new()
             .install(&nns_node, &env)
@@ -208,6 +222,7 @@ async fn setup_ic_testnet(env: TestEnv) -> Result<(), Error> {
     })
     .await
     .expect("failed to spawn task")?;
+    slog::info!(&log, "done installing canisters");
 
     Ok(())
 }
@@ -216,12 +231,19 @@ async fn setup_remote_docker_host(
     env: TestEnv,
     images: &[&str],
 ) -> Result<DeployedUniversalVm, Error> {
-    UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
-        .with_config_img(get_dependency_path(
-            "rs/tests/custom_domains_uvm_config_image.zst",
-        ))
-        .start(&env)
-        .context("failed to setup universal VM")?;
+    task::spawn_blocking({
+        let env = env.clone();
+        move || {
+            UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
+                .with_config_img(
+                    env.get_dependency_path("rs/tests/custom_domains_uvm_config_image.zst"),
+                )
+                .start(&env)
+                .context("failed to setup universal VM")
+        }
+    })
+    .await
+    .expect("failed to spawn task")?;
 
     let vm = env
         .get_deployed_universal_vm(REMOTE_DOCKER_HOST_VM_ID)

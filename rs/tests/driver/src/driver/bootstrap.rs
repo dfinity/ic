@@ -347,6 +347,7 @@ pub fn setup_and_start_nested_vms(
 ) -> anyhow::Result<()> {
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     for node in nodes {
+        // TODO: handle k8s
         let t_farm = farm.to_owned();
         let t_env = env.to_owned();
         let t_group_name = group_name.to_owned();

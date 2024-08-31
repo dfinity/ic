@@ -25,6 +25,7 @@ system_test(
         "no-cache",
         "no-sandbox",
         "system_test_nightly_nns",
+        "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

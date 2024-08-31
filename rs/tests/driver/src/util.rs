@@ -1192,17 +1192,19 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
     // Try to get the current tokio runtime, otherwise create a new one
     match THandle::try_current() {
         Ok(h) => {
+            println!("luka: entering existing runtime");
             let _ = h.enter();
             futures::executor::block_on(f)
         }
         Err(_) => {
+            println!("luka: new runtime");
             let rt = {
                 let cpus = num_cpus::get();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
+                // let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
-                    .max_blocking_threads(blocking_threads)
+                    // .max_blocking_threads(blocking_threads)
                     .enable_all()
                     .build()
             }

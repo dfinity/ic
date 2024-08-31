@@ -865,8 +865,10 @@ impl HasPublicApiUrl for BoundaryNodeSnapshot {
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
         if self.uses_dns() {
+            println!("creating agent with playnet");
             create_agent(self.get_public_url().as_ref()).await
         } else {
+            println!("creating agent with ipv6");
             create_agent_mapping(self.get_public_url().as_ref(), self.ipv6().into()).await
         }
     }

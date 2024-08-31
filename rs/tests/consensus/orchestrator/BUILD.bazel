@@ -249,6 +249,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -348,6 +349,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -366,6 +368,7 @@ system_test_nns(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -383,6 +386,9 @@ system_test_nns(
     name = "upgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps =
