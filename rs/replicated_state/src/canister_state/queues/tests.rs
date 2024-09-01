@@ -1112,10 +1112,7 @@ fn test_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.pop_input());
 
     assert!(queues.pool.len() == 0);
-    assert_eq!(
-        Ok(()),
-        queues.schedules_ok(&|_| InputQueueType::RemoteSubnet)
-    );
+    assert_eq!(Ok(()), queues.schedules_ok(&|_| RemoteSubnet));
 }
 
 #[test]
@@ -1515,15 +1512,13 @@ fn decode_invalid_input_schedule() {
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)).unwrap();
     // Even though the input schedules are not valid.
     assert_matches!(
-        decoded.schedules_ok(&&input_queue_type_from_local_canisters(vec![this])),
+        decoded.schedules_ok(&input_queue_type_from_local_canisters(vec![this])),
         Err(_)
     );
     assert_eq!(1, *metrics.0.borrow());
 
     // If we enqueue `this` into the local sender queue, the rest should be equal.
-    decoded
-        .input_schedule
-        .schedule(this, InputQueueType::LocalSubnet);
+    decoded.input_schedule.schedule(this, LocalSubnet);
     assert_eq!(queues, decoded);
 }
 
@@ -1638,7 +1633,7 @@ fn decode_backward_compatibility() {
         .insert(local_canister, (expected_iq1, expected_oq1));
     expected_queues
         .input_schedule
-        .schedule(local_canister, InputQueueType::LocalSubnet);
+        .schedule(local_canister, LocalSubnet);
 
     //
     // `remote_canister`'s queues.
@@ -2113,7 +2108,7 @@ fn test_garbage_collect() {
 
     // Push input response.
     queues.push_input(response.into(), LocalSubnet).unwrap();
-    // Before popping any input, `queue.next_input_source` has default value.
+    // Before popping any input, `next_input_source` has default value.
     assert_eq!(InputSource::default(), queues.input_schedule.input_source());
     // No-op.
     queues.garbage_collect();

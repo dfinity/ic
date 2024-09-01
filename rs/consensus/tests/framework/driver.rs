@@ -48,7 +48,7 @@ impl<'a> ConsensusDriver<'a> {
             metrics_registry,
         )));
         let consensus_priority =
-            PriorityFnState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
+            BouncerState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
             consensus_gossip,

@@ -52,6 +52,7 @@ use ic_nns_governance_api::{
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
+        proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
@@ -960,6 +961,10 @@ struct ProposeToChangeNnsCanisterCmd {
     /// canister.
     arg: Option<PathBuf>,
 
+    /// The sha256 of the arg binary file.
+    #[clap(long)]
+    arg_sha256: Option<String>,
+
     #[clap(long)]
     /// If set, it will update the canister's compute allocation to this value.
     /// See `ComputeAllocation` for the semantics of this field.
@@ -984,10 +989,7 @@ impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let module_arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let module_arg = read_arg(&self.arg, &self.arg_sha256);
         let stop_upgrade_start = !self.skip_stopping_before_installing;
         UpgradeRootProposal {
             wasm_module,
@@ -1018,10 +1020,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let arg = read_arg(&self.arg, &self.arg_sha256);
         ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
@@ -1046,7 +1045,11 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             )
             .await,
         );
-        let arg = self.arg.as_ref().map(|path| read_file_fully(path));
+        let arg = Some(
+            self.arg
+                .as_ref()
+                .map_or(vec![], |path| read_file_fully(path)),
+        );
         let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
         let install_mode = match self.mode {
             CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
@@ -5118,7 +5121,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&action, &cmd);
+    print_proposal(&Action::from(action.clone()), &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -5488,6 +5491,22 @@ async fn read_wasm_module(
         .expect("Wasm module's sha256 does not match provided sha256");
 
     read_file_fully(&wasm_file_path)
+}
+
+fn read_arg(arg_path: &Option<PathBuf>, arg_sha256: &Option<String>) -> Vec<u8> {
+    match (arg_path, arg_sha256) {
+        // No arguments, which is fine and we default to empty blob.
+        (None, None) => vec![],
+        (Some(arg_path), Some(arg_sha256)) => {
+            check_file_hash(arg_path, arg_sha256)
+                .expect("Upgrade arg's sha256 does not match provided sha256");
+            read_file_fully(arg_path)
+        }
+        (Some(_), None) => panic!("Must provide a sha256 checksum for the upgrade arg",),
+        (None, Some(_)) => {
+            panic!("--arg-sha256 provided without --arg-path");
+        }
+    }
 }
 
 async fn download_wasm_module(url: &Url) -> PathBuf {

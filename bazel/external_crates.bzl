@@ -647,7 +647,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-wasm": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.1",
                 features = [
                     "exe",
                 ],
@@ -733,7 +733,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.155",
             ),
             "libflate": crate.spec(
-                version = "^1.1.2",
+                version = "^2.0.0",
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
@@ -1302,7 +1302,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.39.2",
+                version = "^1.39.3",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
@@ -1439,7 +1439,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4",
             ),
             "walrus": crate.spec(
-                version = "^0.19.0",
+                version = "^0.21.1",
             ),
             "walkdir": crate.spec(
                 version = "^2.3.1",
@@ -1454,23 +1454,23 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.201.0",
+                version = "^0.212.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.201.0",
+                version = "^0.212.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.201.0",
+                version = "^0.212.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.2.50",
+                version = "^0.212.0",
             ),
             "wasmtime": crate.spec(
                 version = "^23.0.1",
@@ -1486,10 +1486,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^23.0.1",
             ),
             "wast": crate.spec(
-                version = "^53.0.0",
+                version = "^212.0.0",
             ),
             "wat": crate.spec(
-                version = "^1.0.57",
+                version = "=1.212.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

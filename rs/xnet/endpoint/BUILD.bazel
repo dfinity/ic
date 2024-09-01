@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/async_utils",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
@@ -12,7 +13,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/types/types",
-    "//rs/xnet/hyper",
     "@crate_index//:axum",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hyper",

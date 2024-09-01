@@ -177,7 +177,7 @@ tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = { workspace = true }
 walkdir = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
 ic-agent = { workspace = true }

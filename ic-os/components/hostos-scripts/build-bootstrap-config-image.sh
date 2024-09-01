@@ -75,8 +75,8 @@ options may be specified:
     keys for specific user accounts on the machine. The name of the
     key designates the name of the account (so, if there is a file
     "PATH/admin" then it is transferred to "~admin/.ssh/authorized_keys" on
-    the target). The presently recognized accounts are: backup, readonly,
-    admin and root (the latter one for testing purposes only!)
+    the target). The presently recognized accounts are: backup, readonly and
+    admin
 
   --node_operator_private_key path
     Should point to a file containing a Node Provider private key PEM.

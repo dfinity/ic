@@ -532,15 +532,15 @@ impl CanisterQueues {
     pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 input sources: ingress, local and remote subnets.
         for _ in 0..InputSource::COUNT {
-            let input_source = match self.input_schedule.input_source() {
+            let next_input = match self.input_schedule.input_source() {
                 InputSource::Ingress => self.peek_ingress().map(CanisterMessage::Ingress),
                 InputSource::RemoteSubnet => self.peek_canister_input(InputQueueType::RemoteSubnet),
                 InputSource::LocalSubnet => self.peek_canister_input(InputQueueType::LocalSubnet),
             };
 
-            match input_source {
+            match next_input {
                 Some(msg) => return Some(msg),
-                // Advamce to the next input source.
+                // Advance to the next input source.
                 None => {
                     self.input_schedule.next_input_source();
                 }
@@ -552,8 +552,7 @@ impl CanisterQueues {
 
     /// Skips the next ingress or inter-canister input message.
     pub(crate) fn skip_input(&mut self, loop_detector: &mut CanisterQueuesLoopDetector) {
-        let input_source = self.input_schedule.next_input_source();
-        match input_source {
+        match self.input_schedule.next_input_source() {
             InputSource::Ingress => {
                 self.ingress_queue.skip_ingress_input();
                 loop_detector.ingress_queue_skip_count += 1;

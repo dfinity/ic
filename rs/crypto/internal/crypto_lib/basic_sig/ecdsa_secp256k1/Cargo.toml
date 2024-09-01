@@ -16,7 +16,7 @@ ic-types = { path = "../../../../../types/types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
