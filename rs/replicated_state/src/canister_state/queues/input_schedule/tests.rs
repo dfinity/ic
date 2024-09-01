@@ -78,7 +78,7 @@ fn test_schedule_again_impl(input_queue_type: InputQueueType) {
             LocalSubnet => (expected, vec![]),
             RemoteSubnet => (vec![], expected),
         };
-        assert_schedule_eq(expected, &schedule);
+        assert_schedule_eq(expected, schedule);
     };
 
     let sender1 = CanisterId::from_u64(1);
