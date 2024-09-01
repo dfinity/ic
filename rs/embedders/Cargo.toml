@@ -23,7 +23,7 @@ ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = { workspace = true }
-libflate = "1.1.2"
+libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 prometheus = { workspace = true }
@@ -70,7 +70,7 @@ insta = "1.8.0"
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 slog = { workspace = true }
 wasmprinter = { workspace = true }
 wast = { workspace = true }

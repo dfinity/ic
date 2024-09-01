@@ -1156,6 +1156,10 @@ fn composite_query_syscalls_from_reply_reject_callback() {
             "call_cycles_add128",
         ),
         (
+            wasm().call_cycles_add128_up_to(0, 0).build(),
+            "call_cycles_add128_up_to",
+        ),
+        (
             wasm().msg_cycles_available128().build(),
             "cycles_available128",
         ),

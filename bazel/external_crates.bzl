@@ -142,7 +142,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "arbitrary": crate.spec(
-                version = "^1.3.0",
+                version = "^1.3.2",
             ),
             "arc-swap": crate.spec(
                 version = "^1",
@@ -163,7 +163,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.0.1",
             ),
             "assert_cmd": crate.spec(
-                version = "^2.0.12",
+                version = "^2.0.16",
             ),
             "assert_matches": crate.spec(
                 version = "^1.5.0",
@@ -723,13 +723,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "k8s-openapi": crate.spec(
-                version = "^0.20.0",
+                version = "^0.22.0",
                 features = [
-                    "v1_22",
+                    "v1_24",
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.87.2",
+                version = "^0.93.1",
                 features = [
                     "runtime",
                     "derive",
@@ -752,7 +752,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.155",
             ),
             "libflate": crate.spec(
-                version = "^2.0.0",
+                version = "^2.1.0",
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
@@ -976,13 +976,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "proptest": crate.spec(
-                version = "^1.0.0",
+                version = "^1.5.0",
             ),
             "prometheus-parse": crate.spec(
                 version = "^0.2.4",
             ),
             "proptest-derive": crate.spec(
-                version = "^0.3.0",
+                version = "^0.5.0",
             ),
             "prost": crate.spec(
                 version = "^0.12",
@@ -1124,7 +1124,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustls": crate.spec(
                 default_features = False,
                 version = "^0.23.12",
-                features = ["ring"],
+                features = [
+                    "ring",
+                    "std",
+                ],
             ),
             "rustls-native-certs": crate.spec(
                 version = "^0.7.0",
@@ -1457,17 +1460,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "vsock": crate.spec(
                 version = "^0.4",
             ),
-            "walrus": crate.spec(
-                version = "^0.21.1",
-            ),
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
             "warp": crate.spec(
-                version = "^0.3.6",
-                features = [
-                    "tls",
-                ],
+                version = "^0.3.7",
+                features = ["tls"],
             ),
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
@@ -1520,7 +1518,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.0",
             ),
             "wycheproof": crate.spec(
-                version = "^0.5",
+                version = "^0.6",
+                default_features = False,
+                features = [
+                    "ecdsa",
+                    "eddsa",
+                    "hkdf",
+                    "mac",
+                    "rsa_sig",
+                ],
             ),
             "wiremock": crate.spec(
                 version = "^0.5.19",

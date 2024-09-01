@@ -35,7 +35,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -465,19 +465,24 @@ impl PocketIc {
                 builder = builder.with_subnet_id(subnet_id);
             }
 
-            if subnet_kind == SubnetKind::II {
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "dfx_test_key1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "test_key_1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "key_1".to_string(),
-                }));
+            if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
+                for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+                    for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                        let key_id = SchnorrKeyId {
+                            algorithm,
+                            name: name.to_string(),
+                        };
+                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                    }
+                }
+
+                for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                    let key_id = EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: name.to_string(),
+                    };
+                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                }
             }
 
             let sm = builder.build_with_subnets(subnets.clone());
