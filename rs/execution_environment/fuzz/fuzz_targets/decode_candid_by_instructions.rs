@@ -36,7 +36,7 @@ mod decode_map;
 use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 
 // TODO: This should be obtained from env
-const EXECUTION_DIR: &str = "/home/vsekar/ic/rs/execution_environment/fuzz";
+const EXECUTION_DIR: &str = "/ic/rs/execution_environment/fuzz";
 static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
 static mut COVERAGE_MAP: &'static mut [u8] = &mut [0; 65536];
@@ -73,11 +73,11 @@ pub fn main() {
         let canister_id = unsafe { TEST.borrow().1 };
         let test = unsafe { &mut TEST.borrow_mut().0 };
         let result = test.execute_ingress(canister_id, "decode", (*input).clone().into());
-        let cycles = match result {
+        let instructions = match result {
             Ok(WasmResult::Reply(result)) => {
-                let mut cycles = [0u8; 8];
-                cycles.clone_from_slice(&result[0..8]);
-                u64::from_le_bytes(cycles)
+                let mut instructions = [0u8; 8];
+                instructions.clone_from_slice(&result[0..8]);
+                u64::from_le_bytes(instructions)
             }
             Ok(WasmResult::Reject(message)) => {
                 // Canister crashing is interesting
@@ -89,8 +89,9 @@ pub fn main() {
             _ => return ExitKind::Ok, // continue
         };
 
-        test.advance_time(Duration::from_secs(1));
-        test.tick();
+        // TODO: Is this needed?
+        // test.advance_time(Duration::from_secs(1));
+        // test.tick();
 
         let result = test.query(canister_id, "export_coverage", vec![]);
         match result {
@@ -100,7 +101,7 @@ pub fn main() {
             _ => (),
         }
 
-        let ratio = cycles / input.len() as u64;
+        let ratio = instructions / input.len() as u64;
         let previous_ratio = unsafe { MAP.borrow().previous_ratio };
         let mut decoding_map = unsafe { MAP.borrow_mut() };
         if ratio > previous_ratio {

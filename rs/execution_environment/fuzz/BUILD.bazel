@@ -52,6 +52,25 @@ rust_binary(
         "@crate_index//:libafl_bolts",
         "@crate_index//:once_cell",
         "@crate_index//:serde",
-        "@crate_index//:slog"
+        "@crate_index//:slog",
+    ],
+)
+
+rust_binary(
+    name = "decode_candid_by_instructions_test_input",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/decode_candid_by_instructions_test_input.rs",
+    ],
+    data = [":fuzz_canister"],
+    env = {
+        "FUZZ_CANISTER_WASM_PATH": "$(rootpath :fuzz_canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:slog",
     ],
 )
