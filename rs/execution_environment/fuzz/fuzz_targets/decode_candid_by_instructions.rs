@@ -10,7 +10,7 @@ use std::ptr::addr_of;
 use std::time::Duration;
 
 use libafl::{
-    corpus::{InMemoryCorpus, OnDiskCorpus},
+    corpus::inmemory_ondisk::InMemoryOnDiskCorpus,
     events::SimpleEventManager,
     executors::{inprocess::InProcessExecutor, ExitKind},
     feedback_or,
@@ -90,8 +90,8 @@ pub fn main() {
         };
 
         // TODO: Is this needed?
-        // test.advance_time(Duration::from_secs(1));
-        // test.tick();
+        test.advance_time(Duration::from_secs(1));
+        test.tick();
 
         let result = test.query(canister_id, "export_coverage", vec![]);
         match result {
@@ -135,8 +135,8 @@ pub fn main() {
 
     let mut state = StdState::new(
         StdRand::with_seed(current_nanos()),
-        OnDiskCorpus::new(PathBuf::from(format!("{}/input", EXECUTION_DIR))).unwrap(),
-        OnDiskCorpus::new(PathBuf::from(format!("{}/crashes", EXECUTION_DIR))).unwrap(),
+        InMemoryOnDiskCorpus::no_meta(PathBuf::from(format!("{}/input", EXECUTION_DIR))).unwrap(),
+        InMemoryOnDiskCorpus::no_meta(PathBuf::from(format!("{}/crashes", EXECUTION_DIR))).unwrap(),
         &mut feedback,
         &mut objective,
     )
