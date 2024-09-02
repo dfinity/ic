@@ -325,18 +325,11 @@ impl CanisterState {
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity and subnet available memory.
+    /// from `self` while respecting queue capacity and subnet's available
+    /// guaranteed response memory.
     ///
-    /// `max_canister_memory_size` is the replica's configured maximum canister
-    /// memory usage. The specific canister may have an explicit memory
-    /// allocation, which would override this maximum. Based on the canister's
-    /// specific memory limit we compute the canister's available memory and
-    /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
-    /// have all the data necessary to compute it itself).
-    ///
-    /// `subnet_available_memory` (the subnet's available guaranteed response
-    /// message memory) is updated to reflect the change in memory usage due to
-    /// inducting the messages.
+    /// `subnet_available_memory` is updated to reflect the change in memory usage
+    /// due to inducting any guaranteed response messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
@@ -398,6 +391,8 @@ impl CanisterState {
 
     /// Returns the amount memory used by or reserved for guaranteed response
     /// canister messages, in bytes.
+    // TODO(MR-551) Rename this to make it clear that it's only for guaranteed
+    // response messages.
     pub fn message_memory_usage(&self) -> NumBytes {
         self.system_state.guaranteed_response_message_memory_usage()
     }
@@ -437,11 +432,11 @@ impl CanisterState {
             + NumBytes::from(self.system_state.certified_data.len() as u64)
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
         self.system_state
-            .set_stream_responses_size_bytes(size_bytes);
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     /// Returns the current memory allocation of the canister.

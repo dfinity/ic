@@ -11,7 +11,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     messages::{CanisterMessage, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
     CanisterId, Cycles,
 };
 use std::sync::Arc;
@@ -221,7 +221,22 @@ fn induct_messages_to_self_respects_subnet_memory_limit() {
     induct_messages_to_self_memory_limit_test_impl(
         &mut subnet_available_memory,
         SubnetType::Application,
+        0,
         true,
+    );
+
+    assert_eq!(0, subnet_available_memory);
+}
+
+#[test]
+fn application_subnet_induct_messages_to_self_best_effort_ignores_subnet_memory_limit() {
+    let mut subnet_available_memory = 0;
+
+    induct_messages_to_self_memory_limit_test_impl(
+        &mut subnet_available_memory,
+        SubnetType::Application,
+        1,
+        false,
     );
 
     assert_eq!(0, subnet_available_memory);
@@ -235,6 +250,7 @@ fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
     induct_messages_to_self_memory_limit_test_impl(
         &mut subnet_available_memory,
         SubnetType::System,
+        0,
         false,
     );
     expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
@@ -245,11 +261,21 @@ fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
 fn induct_messages_to_self_memory_limit_test_impl(
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
+    deadline: u32,
     should_enforce_limit: bool,
 ) {
     // Request and response to self.
     let request = default_request_to_self();
     let response = default_response_to_self();
+
+    // A second request that might exceed the available memory (if guaranteed
+    // response; and on an application subnet).
+    let second_request: Arc<Request> = RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(CANISTER_ID)
+        .deadline(CoarseTime::from_secs_since_unix_epoch(deadline))
+        .build()
+        .into();
 
     // A system state with a slot reservation for an outgoing response.
     let mut fixture = SystemStateFixture {
@@ -272,8 +298,9 @@ fn induct_messages_to_self_memory_limit_test_impl(
     fixture.push_output_response(response.clone());
     // So there should be memory for this request.
     fixture.push_output_request(request.clone()).unwrap();
-    // But not for this one.
-    fixture.push_output_request(request.clone()).unwrap();
+    // But potentially not for this one (if guaranteed response; and on an
+    // application subnet).
+    fixture.push_output_request(second_request.clone()).unwrap();
 
     fixture
         .system_state
@@ -294,11 +321,14 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
         // Expect the second request to still be in the output queue.
         assert_eq!(
-            Some(RequestOrResponse::Request(request)),
+            Some(RequestOrResponse::Request(second_request)),
             fixture.pop_output(),
         );
     } else {
-        assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+        assert_eq!(
+            Some(CanisterMessage::Request(second_request)),
+            fixture.pop_input()
+        );
         assert_eq!(None, fixture.pop_input());
     }
 

@@ -1,6 +1,3 @@
-// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
-#![allow(dead_code)]
-
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -8,6 +5,8 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
@@ -148,6 +147,7 @@ pub(super) struct ResponsePlaceholder(Id);
 
 impl ResponsePlaceholder {
     /// Returns the message ID within.
+    #[allow(dead_code)]
     pub(super) fn id(&self) -> Id {
         self.0
     }
@@ -169,13 +169,20 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_message_stats()` (only called during deserialization) execute in
 /// at most `O(log(N))` time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub(super) struct MessagePool {
     /// Pool contents.
+    #[validate_eq(CompareWithValidateEq)]
     messages: BTreeMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
+    ///
+    /// Invariants:
+    ///  * Contains all outbound guaranteed requests:
+    ///    `outbound_guaranteed_request_deadlines.keys().collect() == messages.keys().filter(|id| (id.context(), id.class(), id.kind()) == (Context::Outbound, Class::GuaranteedResponse, Kind::Request)).collect()`
+    ///  * The deadline matches the one recorded in `deadline_queue`:
+    ///    `outbound_guaranteed_request_deadlines.iter().all(|(id, deadline)| deadline_queue.contains(&(deadline, id)))`
     outbound_guaranteed_request_deadlines: BTreeMap<Id, CoarseTime>,
 
     /// Running message stats for the pool.
@@ -310,6 +317,7 @@ impl MessagePool {
     }
 
     /// Prepares a placeholder for a potential late inbound best-effort response.
+    #[allow(dead_code)]
     pub(super) fn insert_inbound_timeout_response(&mut self) -> ResponsePlaceholder {
         ResponsePlaceholder(self.next_message_id(
             Kind::Response,
@@ -319,6 +327,7 @@ impl MessagePool {
     }
 
     /// Inserts a late inbound best-effort response into a response placeholder.
+    #[allow(dead_code)]
     pub(super) fn replace_inbound_timeout_response(
         &mut self,
         placeholder: ResponsePlaceholder,
@@ -489,6 +498,8 @@ impl MessagePool {
     /// Time complexity: `O(log(self.len()))`.
     pub(super) fn shed_largest_message(&mut self) -> Option<(Id, RequestOrResponse)> {
         if let Some((_, id)) = self.size_queue.pop_last() {
+            debug_assert_eq!(Class::BestEffort, id.class());
+
             let msg = self.take_impl(id).unwrap();
             self.remove_from_deadline_queue(id, &msg);
 
