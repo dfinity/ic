@@ -69,7 +69,6 @@ pub fn temp_crypto_component_with_tls_keys(
         .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
         .with_remote_vault()
         .build();
-
     let tls_certificate = temp_crypto
         .current_node_public_keys()
         .expect("Failed to retrieve node public keys")
