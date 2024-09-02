@@ -1,9 +1,9 @@
-use crate::pb::v1::{AccountState, Gtc};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_gtc::pb::v1::{AccountState, Gtc};
 use icp_ledger::Tokens;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::{collections::HashMap, time::SystemTime};
@@ -14,25 +14,24 @@ const GTC_NEURON_PRE_AGE_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
 const INVESTOR_TYPE_SR: &str = "sr";
 const INVESTOR_TYPE_ECT: &str = "ect";
 
-impl From<&Vec<Neuron>> for AccountState {
-    fn from(neurons: &Vec<Neuron>) -> AccountState {
-        let neuron_ids = neurons
-            .iter()
-            .map(|neuron| neuron.id.expect("GTC neuron missing ID"))
-            .collect();
+// impl From<&Vec<Neuron>> for AccountState can't be done in this crate, but we only need it here.
+fn account_state_from(neurons: &Vec<Neuron>) -> AccountState {
+    let neuron_ids = neurons
+        .iter()
+        .map(|neuron| neuron.id.expect("GTC neuron missing ID"))
+        .collect();
 
-        let e8s = neurons
-            .iter()
-            .map(|neuron| neuron.cached_neuron_stake_e8s)
-            .sum();
+    let e8s = neurons
+        .iter()
+        .map(|neuron| neuron.cached_neuron_stake_e8s)
+        .sum();
 
-        let icpts = Tokens::from_e8s(e8s).get_tokens() as u32;
+    let icpts = Tokens::from_e8s(e8s).get_tokens() as u32;
 
-        AccountState {
-            neuron_ids,
-            icpts,
-            ..Default::default()
-        }
+    AccountState {
+        neuron_ids,
+        icpts,
+        ..Default::default()
     }
 }
 
@@ -165,7 +164,7 @@ impl GenesisTokenCanisterInitPayloadBuilder {
         let accounts = self
             .gtc_neurons
             .iter()
-            .map(|(address, neurons)| (address.clone(), AccountState::from(neurons)))
+            .map(|(address, neurons)| (address.clone(), account_state_from(neurons)))
             .collect();
 
         Gtc {
