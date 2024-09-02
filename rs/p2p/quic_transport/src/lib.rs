@@ -243,7 +243,7 @@ impl From<MessagePriority> for i32 {
 }
 
 /// Holds socket addresses of all peers in a subnet.
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetTopology {
     subnet_nodes: HashMap<NodeId, SocketAddr>,
     earliest_registry_version: RegistryVersion,
