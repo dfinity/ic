@@ -7,8 +7,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::CanisterId;
-use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeSet, VecDeque};
 use std::convert::TryFrom;
 
@@ -49,13 +47,12 @@ mod tests;
 ///    may be ensured in either schedule (this is because we rely on
 ///    `ReplicatedState::canister_states` to decide whether a canister is local,
 ///    and this will mis-identify a recently deleted local sender as remote).
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct InputSchedule {
     /// The input source (local senders, ingress or remote senders) at the front
     /// of the schedule.
     ///
     /// Used to implement round-robin rotation over input sources.
-    #[validate_eq(Ignore)]
     next_input_source: InputSource,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
@@ -298,7 +295,7 @@ impl TryFrom<(i32, Vec<pb_types::CanisterId>, Vec<pb_types::CanisterId>)> for In
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,
