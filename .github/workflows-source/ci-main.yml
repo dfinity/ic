@@ -172,7 +172,6 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - <<: *before-script
       - <<: *docker-login
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
