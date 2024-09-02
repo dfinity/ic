@@ -85,11 +85,13 @@ impl Block {
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
         }
-        if code.contains("$result_i32") {
+        if code.contains("$result_i32") || code.contains("table.get") || code.contains("table.size")
+        {
             self.import("(type $result_i32 (func (result i32)))")
                 .import("(func $empty_indirect (type $result_i32) (i32.const 0))")
-                .import("(table 10 funcref)")
-                .import("(elem (i32.const 7) $empty_indirect)");
+                .import("(table $table 10 funcref)")
+                .import("(elem (i32.const 7) $empty_indirect)")
+                .import("(elem func 0)");
         }
         self
     }
@@ -161,16 +163,7 @@ impl Func {
         };
         wrap_lines(
             "(module",
-            [
-                self.imports,
-                vec![
-                    "(table $table 10 funcref)".into(),
-                    "(elem func 0)".into(),
-                    memory.into(),
-                ],
-                self.lines,
-            ]
-            .concat(),
+            [self.imports, vec![memory.into()], self.lines].concat(),
             ")",
         )
         .join("\n")

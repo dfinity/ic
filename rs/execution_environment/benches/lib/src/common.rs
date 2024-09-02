@@ -266,7 +266,6 @@ pub fn run_benchmarks<G, R>(
         subnet_configs.cycles_account_manager_config,
     ));
     let mut embedders_config = EmbeddersConfig::default();
-    embedders_config.metering_type = MeteringType::New;
     if wasm64_enabled {
         embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         // Set up larger heap, of 8GB.
