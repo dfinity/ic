@@ -116,7 +116,7 @@ rust_library(
 
 rust_test(
     name = "gtc_helper_tests",
-    srcs = glob(["src/gtc_helpers.rs"]),
+    srcs = ["src/gtc_helpers.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
