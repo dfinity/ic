@@ -85,8 +85,6 @@ jobs:
       - name: Run System Tests on K8s
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
