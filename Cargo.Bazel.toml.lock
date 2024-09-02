@@ -3269,8 +3269,6 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "time",
- "tla_instrumentation",
- "tla_instrumentation_proc_macros",
  "tokio",
  "tokio-io-timeout",
  "tokio-metrics",
@@ -11129,27 +11127,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "tla_instrumentation"
-version = "0.1.0"
-source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=9498c4a5bca5fc20b5ef7353d6b9f80136178195#9498c4a5bca5fc20b5ef7353d6b9f80136178195"
-dependencies = [
- "candid",
- "serde",
- "sha2 0.10.8",
- "tla_instrumentation_proc_macros",
-]
-
-[[package]]
-name = "tla_instrumentation_proc_macros"
-version = "0.1.0"
-source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=9498c4a5bca5fc20b5ef7353d6b9f80136178195#9498c4a5bca5fc20b5ef7353d6b9f80136178195"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "tls_codec"

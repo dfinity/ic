@@ -1317,16 +1317,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "time": crate.spec(
                 version = "^0.3.36",
             ),
-            "tla-instrumentation": crate.spec(
-                git = "https://github.com/oggy-dfin/tla-instrumentation.git",
-                rev = "9498c4a5bca5fc20b5ef7353d6b9f80136178195",
-                package = "tla_instrumentation",
-            ),
-            "tla-instrumentation-proc-macros": crate.spec(
-                git = "https://github.com/oggy-dfin/tla-instrumentation.git",
-                rev = "9498c4a5bca5fc20b5ef7353d6b9f80136178195",
-                package = "tla_instrumentation_proc_macros",
-            ),
             "tokio": crate.spec(
                 version = "^1.39.3",
                 features = ["full"],

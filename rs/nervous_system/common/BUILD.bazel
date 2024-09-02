@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
+    "//rs/tla_instrumentation",
     "//rs/types/base_types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
@@ -33,7 +34,6 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:tla_instrumentation",
 ]
 
 MACRO_DEPENDENCIES = [
