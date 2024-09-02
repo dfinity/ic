@@ -214,7 +214,7 @@ load(
 
 container_pull(
     name = "static-file-server",
-    digest = "sha256:2e91ce7ffb8519eeb882ba52d75c191ca6c921c16438447362128ef73ee2ea7e",
+    digest = "sha256:c387c31ffb55ac5b6b4654bc9924f73eb8fb5214ebb8552a7eeffc8849f0e7dd",
     registry = "docker.io",
     repository = "halverneus/static-file-server",
 )
