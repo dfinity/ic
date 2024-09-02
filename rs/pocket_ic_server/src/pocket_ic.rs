@@ -1060,7 +1060,7 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let content = match &mock_canister_http_response.response {
+    let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let grpc_channel =
                 pic.runtime
@@ -1119,11 +1119,28 @@ fn process_mock_canister_https_response(
             })
         }
     };
+    let content = response_to_content(&mock_canister_http_response.response);
+    let mut contents: Vec<_> =
+        if let Some(ref additional_responses) = &mock_canister_http_response.additional_responses {
+            additional_responses
+                .iter()
+                .map(response_to_content)
+                .collect()
+        } else {
+            vec![content.clone(); subnet.nodes.len() - 1]
+        };
+    contents.push(content);
+    if contents.len() != subnet.nodes.len() {
+        return OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((
+            contents.len(),
+            subnet.nodes.len(),
+        )));
+    }
     subnet.mock_canister_http_response(
         mock_canister_http_response.request_id,
         timeout,
         canister_id,
-        content,
+        contents,
     );
     OpOut::NoOutput
 }

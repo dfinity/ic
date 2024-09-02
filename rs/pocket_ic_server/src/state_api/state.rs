@@ -217,6 +217,7 @@ pub enum PocketIcError {
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
+    InvalidMockCanisterHttpResponses((usize, usize)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -283,6 +284,13 @@ impl std::fmt::Debug for OpOut {
                     f,
                     "InvalidCanisterHttpRequestId({},{:?})",
                     subnet_id, canister_http_request_id
+                )
+            }
+            OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((actual, expected))) => {
+                write!(
+                    f,
+                    "InvalidMockCanisterHttpResponses(actual={},expected={})",
+                    actual, expected
                 )
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
@@ -1110,6 +1118,7 @@ impl ApiState {
                 subnet_id,
                 request_id,
                 response,
+                additional_responses: None,
             };
             mock_canister_http_responses.push(mock_canister_http_response);
         }
