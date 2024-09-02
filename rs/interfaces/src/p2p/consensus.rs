@@ -148,7 +148,7 @@ pub trait BouncerFactory<Id, Pool>: Send + Sync {
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
 
     /// The period at which the bouncer should be refreshed.
-    /// Implementors fo the bouncer are well suited for determing the 
+    /// Implementors fo the bouncer are well suited for determing the
     /// refresh period.
     fn refresh_period(&self) -> Duration {
         // TODO: remove the default value and set it for each implementation.
