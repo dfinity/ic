@@ -240,7 +240,6 @@ impl CatchUpPackageProvider {
             .build();
 
         let client = Client::builder(TokioExecutor::new())
-            .http2_only(true)
             .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
             .build::<_, Full<Bytes>>(https);
