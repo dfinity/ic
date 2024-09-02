@@ -144,7 +144,7 @@ pub struct Metrics {
     pub bytes_received: u32,
 }
 
-/// Extracts some basic metrics for each receiver as a map; and overall.
+/// Extracts some basic metrics from the records.
 pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
     let mut metrics = Metrics::default();
 
