@@ -28,7 +28,7 @@ instances = sys.argv[1:]
 # peer_data = [b"10", b"20", b"50", b"100", b"200", b"500"]  # Add more alues as needed
 # outage
 # peer_data = [b"1",b"2",b"5",b"10",b"15",b"20",b"25",b"0",b"0",b"0",b"0",b"0",b"0",b"0"]
-peer_data = [b"1",b"5",b"8",b"10",b"12",b"15",b"0",b"0",b"0",b"0",b"0"]
+peer_data = [b"1",b"5",b"10",b"15",b"20",b"30",b"50",b"75",b"100",b"0"]
 
 def send_to_peers(data):
     for instance in instances:

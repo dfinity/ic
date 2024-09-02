@@ -195,6 +195,7 @@ async fn load_generator(
         UnvalidatedArtifactMutation<TestArtifact>,
     >,
     message_rate: usize,
+    message_size: usize,
     relaying: bool,
     metrics: Arc<Metrics>,
     mut rps_rx: watch::Receiver<usize>,
@@ -292,6 +293,9 @@ async fn load_generator(
                 id.extend_from_slice(&sent_artifacts.to_le_bytes());
                 id.extend_from_slice(&node_id.to_le_bytes());
                 id.extend_from_slice(&now.to_le_bytes());
+
+
+                id.resize(message_size, 0);
                 metrics.sent_artifacts.inc();
 
                 // purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
@@ -468,6 +472,7 @@ async fn main() {
         artifact_processor_tx,
         cb_rx,
         args.message_rate as usize,
+        args.message_size as usize,
         args.relaying,
         metrics.clone(),
         rps_rx,
