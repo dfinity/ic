@@ -145,7 +145,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     tls_config_client.alpn_protocols = alpn;
 
     // Set larger session resumption cache to accomodate all replicas (256 by default)
-    tls_config_client.resumption = rustls::client::Resumption::in_memory_sessions(4096);
+    tls_config_client.resumption = rustls::client::Resumption::in_memory_sessions(
+        4096 * cli.listen.http_client_count as usize,
+    );
 
     let http_client_opts = http::client::Options {
         timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
@@ -155,11 +157,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive_timeout)),
         http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive),
         user_agent: SERVICE_NAME.into(),
-        tls_config: tls_config_client,
+        tls_config: Some(tls_config_client),
+        dns_resolver: Some(dns_resolver),
     };
 
-    let http_client = http::client::new(http_client_opts, dns_resolver)?;
-    let http_client = http::client::ReqwestClient::new(http_client);
+    let http_client = http::client::ReqwestClientRoundRobin::new(
+        http_client_opts,
+        cli.listen.http_client_count as usize,
+    )?;
     let http_client = WithMetrics(
         http_client,
         MetricParams::new_with_opts(
@@ -258,8 +263,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // HTTPS
     #[cfg(feature = "tls")]
-    let server_https = setup_https(router_https, server_opts.clone(), &cli, &metrics_registry)
-        .context("unable to setup HTTPS")?;
+    let server_https = setup_https(
+        router_https,
+        server_opts.clone(),
+        &cli,
+        &metrics_registry,
+        http_metrics.clone(),
+    )
+    .context("unable to setup HTTPS")?;
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -281,7 +292,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         http::server::Addr::Tcp(cli.monitoring.metrics_addr),
         metrics_router,
         server_opts,
-        http_metrics.clone(),
+        http_metrics,
         None,
     );
 
@@ -568,6 +579,7 @@ fn setup_https(
     opts: http::server::Options,
     cli: &Cli,
     registry: &Registry,
+    metrics: http::server::Metrics,
 ) -> Result<http::Server, Error> {
     use ic_bn_lib::tls;
 
@@ -596,7 +608,7 @@ fn setup_https(
         )),
         router,
         opts,
-        &registry,
+        metrics,
         Some(rustls_config),
     );
 

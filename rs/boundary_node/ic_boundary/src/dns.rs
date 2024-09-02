@@ -12,6 +12,7 @@ const UNUSED_PORT: u16 = 0;
 #[error("{0}")]
 pub struct DnsError(String);
 
+#[derive(Clone, Debug)]
 pub struct DnsResolver {
     snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }

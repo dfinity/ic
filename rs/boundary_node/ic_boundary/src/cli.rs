@@ -142,8 +142,8 @@ pub struct ListenConfig {
     pub disable_http2_client: bool,
 
     /// Number of HTTP clients to create to spread the load over
-    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u8).range(1..))]
-    pub http_client_count: u8,
+    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
+    pub http_client_count: u16,
 }
 
 #[derive(Args)]

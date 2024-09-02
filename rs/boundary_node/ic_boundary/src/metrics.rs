@@ -223,7 +223,7 @@ impl Run for MetricsRunner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[derive(Clone, Debug)]
