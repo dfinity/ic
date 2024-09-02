@@ -28,8 +28,8 @@ assert_matches = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 num-bigint = { workspace = true }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
 wycheproof = "0.5"

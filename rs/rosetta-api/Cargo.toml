@@ -60,7 +60,7 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_bl
 ic-nns-governance = { path = "../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
-proptest = "1.0"
+proptest = { workspace = true }
 rand_chacha = { workspace = true }
 ic-icp-rosetta-runner = { path = "runner" }
 ic-icp-rosetta-client ={ path = "client" }
