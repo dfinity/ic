@@ -63,13 +63,13 @@ pub fn temp_crypto_component_with_tls_keys(
     registry: Arc<FakeRegistryClient>,
     node_id: NodeId,
 ) -> (TempCryptoComponent, TlsPublicKeyCert) {
-    let temp_crypto_builder = TempCryptoComponent::builder()
+    let temp_crypto = TempCryptoComponent::builder()
         .with_registry(registry)
         .with_node_id(node_id)
+        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
         .with_remote_vault()
-        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert());
+        .build();
 
-    let temp_crypto = temp_crypto_builder.build();
     let tls_certificate = temp_crypto
         .current_node_public_keys()
         .expect("Failed to retrieve node public keys")

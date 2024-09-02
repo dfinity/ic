@@ -810,7 +810,6 @@ mod tests {
         boundary_node_firewall_config
             .config_file
             .clone_from(&nftables_config_path);
-
         let mut firewall = set_up_firewall_dependencies(
             replica_firewall_config,
             boundary_node_firewall_config,
