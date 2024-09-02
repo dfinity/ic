@@ -2,7 +2,6 @@ use candid::CandidType;
 use ic_base_types::CanisterId;
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 /// A full config for generating random calls and replies. Ranges are stored as individual u32
@@ -25,10 +24,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             call_bytes_min: 0,
-            call_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 / 10,
+            call_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
             receivers: vec![],
             reply_bytes_min: 0,
-            reply_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 / 10,
+            reply_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
             instructions_count_min: 0,
             instructions_count_max: 0,
             downstream_call_weight: 0,
