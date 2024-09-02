@@ -4,6 +4,7 @@ use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
 };
+use std::time::Duration;
 
 #[derive(Debug, PartialEq)]
 pub struct ArtifactWithOpt<T> {
@@ -145,4 +146,12 @@ pub enum BouncerValue {
 pub trait BouncerFactory<Id, Pool>: Send + Sync {
     /// Returns a new bouncer function for the given pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
+
+    /// The period at which the bouncer should be refreshed.
+    /// Implementors fo the bouncer are well suited for determing the 
+    /// refresh period.
+    fn refresh_period(&self) -> Duration {
+        // TODO: remove the default value and set it for each implementation.
+        Duration::from_secs(3)
+    }
 }
