@@ -15,47 +15,50 @@ thread_local! {
     static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
 }
 
-/// Sets the canister state according to `f` by parsing `arg_data` of type `T`.
-fn set_state<T, F>(f: F) -> ()
+/// Replaces the canister state according to `f` by parsing `arg_data` of type `T`; returns the old
+/// state.
+fn replace_state<T, F>(f: F)
 where
     T: candid::CandidType + for<'a> serde::Deserialize<'a>,
-    F: FnOnce(T) -> (),
+    F: FnOnce(T) -> T,
 {
     let msg = match candid::Decode!(&api::arg_data()[..], T) {
-        Ok(item) => {
-            f(item);
-            "accepted"
-        }
-        Err(_) => "rejected",
+        Ok(item) => Ok(f(item)),
+        Err(_) => Err(()),
     };
 
-    let msg = candid::Encode!(&msg.to_string()).unwrap();
+    let msg = candid::Encode!(&msg).unwrap();
     api::reply(&msg[..]);
 }
 
 /// Sets the test config.
-#[export_name = "canister_update set_config"]
-fn set_config() {
-    set_state(|config: Config| CONFIG.set(config));
+#[export_name = "canister_update replace_config"]
+fn replace_config() {
+    replace_state(|config: Config| CONFIG.replace(config));
 }
 
 /// Sets the requests per round to be sent each heart beat.
-#[export_name = "canister_update set_calls_per_round"]
-fn set_calls_per_round() {
-    set_state(|calls_per_round: u32| CALLS_PER_ROUND.set(calls_per_round));
+#[export_name = "canister_update replace_calls_per_round"]
+fn replace_calls_per_round() {
+    replace_state(|calls_per_round: u32| CALLS_PER_ROUND.replace(calls_per_round));
 }
 
 /// Seeds `RNG`.
 #[export_name = "canister_update seed_rng"]
 fn seed_rng() {
-    set_state(|seed: u64| RNG.set(StdRng::seed_from_u64(seed)));
+    RNG.with_borrow_mut(|rng| {
+        let seed = candid::Decode!(&api::arg_data()[..], u64).unwrap();
+        *rng = StdRng::seed_from_u64(seed);
+    });
+    api::reply(&[]);
 }
 
-fn insert_sent_record(call_id: u32, record: Request) {
+fn insert_sent_record(call_id: u32, receiver: CanisterId, record: Request) {
     RECORDS.with_borrow_mut(|records| {
         records.insert(
             call_id,
             Record {
+                receiver,
                 sent: record,
                 received: None,
             },
@@ -95,7 +98,7 @@ where
 /// Determines whether a downstream call should be attempted or if a reply should be sent back.
 fn probe_make_call() -> bool {
     CONFIG.with_borrow(|config| {
-        let dist = rand::distributions::WeightedIndex::new([
+        let dist = rand::distributions::WeightedIndex::new(&[
             config.downstream_call_weight,
             config.reply_weight,
         ])
@@ -119,14 +122,14 @@ fn try_call() -> Result<(), ()> {
 
     let call_id = next_call_id();
     let on_reply = move || {
-        let reply = candid::Decode!(&api::arg_data()[..], Vec<u8>).unwrap();
+        let reply = api::arg_data();
         set_received_record(call_id, Response::Data(reply.len() as u32));
     };
     let on_reject = move || {
         set_received_record(call_id, Response::Rejected(api::reject_message()));
     };
 
-    let msg = candid::Encode!(&vec![0_u8; payload_bytes as usize]).unwrap();
+    let msg = vec![0_u8; payload_bytes as usize];
     match api::call_with_callbacks(
         api::CanisterId::try_from(receiver).unwrap(),
         "handle_call",
@@ -135,11 +138,11 @@ fn try_call() -> Result<(), ()> {
         on_reject,
     ) {
         0 => {
-            insert_sent_record(call_id, Request::Data(msg.len() as u32));
+            insert_sent_record(call_id, receiver, Request::Data(msg.len() as u32));
             Ok(())
         }
         error_code => {
-            insert_sent_record(call_id, Request::Rejected(error_code));
+            insert_sent_record(call_id, receiver, Request::Rejected(error_code));
             Err(())
         }
     }
@@ -155,7 +158,7 @@ fn reply() {
     let counts = api::performance_counter(0) + instructions_count as u64;
     while counts > api::performance_counter(0) {}
 
-    let msg = candid::Encode!(&vec![0_u8; payload_bytes as usize]).unwrap();
+    let msg = vec![0_u8; payload_bytes as usize];
     api::reply(&msg[..]);
 }
 
@@ -176,6 +179,8 @@ fn handle_call() {
 /// - calling fails synchronously.
 #[export_name = "canister_heartbeat"]
 fn heartbeat() {
+    //let calls_per_round = CALLS_PER_ROUND.get();
+    //for _ in 0..calls_per_round {
     for _ in 0..CALLS_PER_ROUND.get() {
         if let Err(()) = try_call() {
             return;

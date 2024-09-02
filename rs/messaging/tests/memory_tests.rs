@@ -1,326 +1,372 @@
+use candid::{Decode, Encode};
 use canister_test::Project;
-use ic_base_types::{CanisterId, SubnetId, NumBytes};
+use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
+};
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::{Cycles, NumInstructions};
+use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, Cycles};
 use proptest::prelude::*;
-use subnet_memory_test::{
-    Config as CanisterConfig, Record,
+use random_traffic_test::{
+    extract_metrics, Config as CanisterConfig, Metrics as CanisterMetrics, Record,
 };
-use std::ops::RangeInclusive;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const LOCAL_SUBNET_ID: SubnetId = SUBNET_0;
 const REMOTE_SUBNET_ID: SubnetId = SUBNET_1;
 
-const KB: u32 = 1024;
-const MB: u32 = KB * KB;
+const KB: u64 = 1024;
+const MB: u64 = KB * KB;
 
-/// Generates a local environment with `local_canisters_count` canisters installed;
-/// and a remote environment with `remote_canisters_count` canisters installed.
-fn new_fixture(
-    local_canisters_count: usize,
-    remote_canisters_count: usize,
-) -> (
-    Arc<StateMachine>,
-    Vec<CanisterId>,
-    Arc<StateMachine>,
-    Vec<CanisterId>,
-) {
-    let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, LOCAL_SUBNET_ID).unwrap();
-    routing_table_insert_subnet(&mut routing_table, REMOTE_SUBNET_ID).unwrap();
-    let wasm =
-        Project::cargo_bin_maybe_from_env("subnet-memory-test-canister", &[]).bytes();
+const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
-    // Generate local environment and install canisters.
-    let local_env = StateMachineBuilder::new()
-        .with_subnet_id(LOCAL_SUBNET_ID)
-        .with_subnet_type(SubnetType::Application)
-        .with_routing_table(routing_table.clone())
-        .build();
-    let local_canister_ids = (0..local_canisters_count)
-        .map(|_| install_canister(&local_env, wasm.clone()))
-        .collect();
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1))]
+    #[test]
+    fn check_guaranteed_response_message_memory_limits_are_respected(
+        seeds in proptest::collection::vec(any::<u64>(), 3),
+        max_payload_bytes in (MAX_PAYLOAD_BYTES / 4)..=MAX_PAYLOAD_BYTES,
+        calls_per_round in 3..=10,
+    ) {
+        // The number of rounds to execute while chatter is on.
+        const CHATTER_PHASE_ROUND_COUNT: u64 = 40;
+        // The maximum number of rounds to execute after chatter is turned off. It it takes more than
+        // this number of rounds until there are no more hanging calls, the test fails.
+        const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 100;
+        // The amount of memory available for guaranteed response message memory on `local_env`.
+        const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
+        // The amount of memory available for guaranteed response message memory on `remote_env`.
+        const REMOTE_MESSAGE_MEMORY_CAPACITY: u64 = 50 * MB;
 
-    // Generate remote environment and install canisters.
-    let remote_env = StateMachineBuilder::new()
-        .with_subnet_id(REMOTE_SUBNET_ID)
-        .with_subnet_type(SubnetType::Application)
-        .with_routing_table(routing_table.clone())
-        .build();
-    let remote_canister_ids = (0..remote_canisters_count)
-        .map(|_| install_canister(&remote_env, wasm.clone()))
-        .collect();
+        let fixture = Fixture::new(FixtureConfig {
+            local_canisters_count: 2,
+            local_max_instructions_per_round: 100_000_000,
+            local_message_memory_capacity: LOCAL_MESSAGE_MEMORY_CAPACITY,
+            remote_canisters_count: 1,
+            remote_max_instructions_per_round: 100_000_000,
+            remote_message_memory_capacity: REMOTE_MESSAGE_MEMORY_CAPACITY,
+        });
 
-    (
-        local_env.into(),
-        local_canister_ids,
-        remote_env.into(),
-        remote_canister_ids,
-    )
+        let config = CanisterConfig::try_new(
+            fixture.canisters(),    // receivers
+            0..=max_payload_bytes,  // call_bytes
+            0..=max_payload_bytes,  // reply_bytes
+            0..=0,                  // instructions_count
+            1,                      // downstream_call_weight
+            2,                      // reply_weight
+        )
+        .unwrap();
+
+        // Send configs to canisters, seed the rng.
+        for (index, canister) in fixture.canisters().into_iter().enumerate() {
+            fixture.replace_config(canister, config.clone()).unwrap();
+            fixture.seed_rng(canister, seeds[index]);
+        }
+
+        // Start chatter on all canisters.
+        fixture.start_chatter(calls_per_round as u32).unwrap();
+
+        // Build up backlog and keep up chatter for while.
+        for _ in 0..CHATTER_PHASE_ROUND_COUNT {
+            fixture.tick();
+
+            // Check message memory limits are respected.
+            let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
+            prop_assert!(local_memory <= LOCAL_MESSAGE_MEMORY_CAPACITY.into());
+            prop_assert!(remote_memory <= REMOTE_MESSAGE_MEMORY_CAPACITY.into());
+        }
+
+        // Stop chatter on all canisters.
+        fixture.stop_chatter().unwrap();
+
+        // Keep ticking until all calls are answered.
+        for counter in 0.. {
+            fixture.tick();
+
+            // Check message memory limits are respected.
+            let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
+            prop_assert!(local_memory <= LOCAL_MESSAGE_MEMORY_CAPACITY.into());
+            prop_assert!(remote_memory <= REMOTE_MESSAGE_MEMORY_CAPACITY.into());
+
+            if fixture
+                .collect_metrics()
+                .into_iter()
+                .all(|(_canister, metrics)| metrics.hanging_calls == 0)
+            {
+                break;
+            }
+
+            prop_assert!(counter <= SHUTDOWN_PHASE_MAX_ROUNDS);
+        }
+    }
+
 }
 
-/// Installs a 'saturating-subnet-memory-test-canister' in `env`.
-fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
-    env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
-        .expect("Installing subnet-memory-test-canister failed")
-}
-/*
-/// Queries the metrics from `canister` on the subnet `env`.
-fn query_metrics(env: &StateMachine, canister: CanisterId) -> CanisterMetrics {
-    let reply = env.query(canister, "metrics", vec![]).unwrap();
-    Decode!(&reply.bytes(), CanisterMetrics).unwrap()
+#[derive(Debug)]
+struct FixtureConfig {
+    local_canisters_count: u64,
+    local_max_instructions_per_round: u64,
+    local_message_memory_capacity: u64,
+    remote_canisters_count: u64,
+    remote_max_instructions_per_round: u64,
+    remote_message_memory_capacity: u64,
 }
 
-/// Calls `start` on `canister` on the subnet `env`.
-fn call_start(env: &StateMachine, canister: CanisterId, config: CanisterConfig) -> String {
-    let msg = Encode!(&config).unwrap();
-    let reply = env.execute_ingress(canister, "start", msg).unwrap();
-    Decode!(&reply.bytes(), String).unwrap()
-}
-*/
-prop_compose! {
-    fn arb_test_fixture(
-        local_env_canister_count_range: RangeInclusive<usize>,
-        remote_env_canister_count_range: RangeInclusive<usize>,
-    )(
-        local_env_canister_count in local_env_canister_count_range,
-        remote_env_canister_count in remote_env_canister_count_range,
-    ) -> (Arc<StateMachine>, Vec<CanisterId>, Arc<StateMachine>, Vec<CanisterId>) {
-        new_fixture(local_env_canister_count, remote_env_canister_count)
+impl Default for FixtureConfig {
+    fn default() -> Self {
+        Self {
+            local_canisters_count: 2,
+            local_max_instructions_per_round: 100_000_000,
+            local_message_memory_capacity: 100 * MB,
+            remote_canisters_count: 1,
+            remote_max_instructions_per_round: 100_000_000,
+            remote_message_memory_capacity: 50 * MB,
+        }
     }
 }
 
+impl FixtureConfig {
+    /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
+    /// subnet message memory capacity and the maximum number of instructions per round.
+    fn state_machine_config(
+        subnet_message_memory_capacity: u64,
+        max_instructions_per_round: u64,
+    ) -> StateMachineConfig {
+        StateMachineConfig::new(
+            SubnetConfig {
+                scheduler_config: SchedulerConfig {
+                    scheduler_cores: 4,
+                    max_instructions_per_round: max_instructions_per_round.into(),
+                    max_instructions_per_message_without_dts: max_instructions_per_round.into(),
+                    max_instructions_per_slice: max_instructions_per_round.into(),
+                    ..SchedulerConfig::application_subnet()
+                },
+                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+            },
+            HypervisorConfig {
+                subnet_message_memory_capacity: subnet_message_memory_capacity.into(),
+                ..HypervisorConfig::default()
+            },
+        )
+    }
 
-prop_compose! {
-    fn arb_inter_canister_traffic(
-        count: RangeInclusive<usize>,
-        request_payload_bytes: RangeInclusive<u64>,
-        response_payload_bytes: RangeInclusive<u64>,
-        response_num_instructions: RangeInclusive<u64>,
-    )(
-        (request_payload_bytes, response_payload_bytes, response_num_instructions) in count
-        .prop_flat_map(move |count| {
-            (
-                proptest::collection::vec(request_payload_bytes.clone(), count),
-                proptest::collection::vec(response_payload_bytes.clone(), count),
-                proptest::collection::vec(response_num_instructions.clone(), count),
-            )
-        })
-    ) -> (Vec<NumBytes>, Vec<(NumBytes, NumInstructions)>) {
-        (
-            request_payload_bytes.into_iter().map(|bytes| bytes.into()).collect(),
-            response_payload_bytes
-                .into_iter()
-                .zip(response_num_instructions.into_iter())
-                .map(|(bytes, instructions)| (bytes.into(), instructions.into()))
-                .collect(),
+    /// Generates a `StateMachineConfig` for the `local_env`.
+    fn local_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.local_message_memory_capacity,
+            self.local_max_instructions_per_round,
+        )
+    }
+
+    /// Generates a `StateMachineConfig` for the `remote_env`.
+    fn remote_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.remote_message_memory_capacity,
+            self.remote_max_instructions_per_round,
         )
     }
 }
 
-prop_compose! {
-    fn arb_canister_configs(
-        canister_ids: Vec<CanisterId>,
-        count: RangeInclusive<usize>,
-        request_payload_bytes: RangeInclusive<u64>,
-        response_payload_bytes: RangeInclusive<u64>,
-        response_num_instructions: RangeInclusive<u64>,
-    )(
-        configs in Just((canister_ids.clone(), canister_ids.clone()))
-        .prop_flat_map(move |(senders, receivers)| {
-            let mut request_payloads = Vec::<(NumBytes, CanisterId)>::new();
-            for sender in senders {
-                for receivers in receivers {
-                    (request_payloads, response_payloads) in arb_inter_canister_traffic(
-                        count.clone(),
-                        request_payload_bytes.clone(),
-                        response_payload_bytes.clone(),
-                        response_num_instructions.clone(),
-                    )
-                }
-            }
-        })
-
-            for _ in 0..count {
-                
-            }
-            for receiver in receivers {
-                
-            }
-        })
+#[derive(Debug, Clone)]
+struct Fixture {
+    pub local_env: Arc<StateMachine>,
+    pub local_canisters: Vec<CanisterId>,
+    pub remote_env: Arc<StateMachine>,
+    pub remote_canisters: Vec<CanisterId>,
 }
 
+impl Fixture {
+    /// Generates a local environment with `local_canisters_count` canisters installed;
+    /// and a remote environment with `remote_canisters_count` canisters installed.
+    fn new(config: FixtureConfig) -> Self {
+        let mut routing_table = RoutingTable::new();
+        routing_table_insert_subnet(&mut routing_table, LOCAL_SUBNET_ID).unwrap();
+        routing_table_insert_subnet(&mut routing_table, REMOTE_SUBNET_ID).unwrap();
+        let wasm = Project::cargo_bin_maybe_from_env("random-traffic-test-canister", &[]).bytes();
 
+        // Generate local environment and install canisters.
+        let local_env = StateMachineBuilder::new()
+            .with_subnet_id(LOCAL_SUBNET_ID)
+            .with_subnet_type(SubnetType::Application)
+            .with_routing_table(routing_table.clone())
+            .with_config(Some(config.local_state_machine_config()))
+            .build();
+        let local_canisters = (0..config.local_canisters_count)
+            .map(|_| install_canister(&local_env, wasm.clone()))
+            .collect();
 
-/*
-prop_compose! {
-    fn arb_canister_config(
-        receivers: Vec<CanisterId>,
-        params: CanisterConfigParams,
-    )(
-        requests_per_round in params.requests_per_round_range,
-        (receivers, request_payloads) in params.request_count_range
-        .prop_flat_map(move |request_count| {
-            (
-                proptest::collection::vec(proptest::sample::select(receivers.clone()), request_count),
-                proptest::collection::vec(params.request_payload_range.clone(), request_count),
-            )
-        }),
-        response_payloads in proptest::collection::vec(params.response_payload_range, params.response_count),
-        instructions_count in proptest::collection::vec(params.instructions_count_range, params.response_count),
-    ) -> CanisterConfig {
-        CanisterConfig {
-            requests_per_round: requests_per_round as u32,
-            request_configs: request_payloads
-                .into_iter()
-                .zip(receivers.into_iter())
-                .map(|(payload_bytes, receiver)| RequestConfig {
-                    payload_bytes,
-                    receiver,
-                })
-                .collect(),
-            response_configs: response_payloads
-                .into_iter()
-                .zip(instructions_count.into_iter())
-                .map(|(payload_bytes, instructions_count)| ResponseConfig {
-                    payload_bytes,
-                    instructions_count,
-                })
-                .collect(),
+        // Generate remote environment and install canisters.
+        let remote_env = StateMachineBuilder::new()
+            .with_subnet_id(REMOTE_SUBNET_ID)
+            .with_subnet_type(SubnetType::Application)
+            .with_routing_table(routing_table.clone())
+            .with_config(Some(config.remote_state_machine_config()))
+            .build();
+        let remote_canisters = (0..config.remote_canisters_count)
+            .map(|_| install_canister(&remote_env, wasm.clone()))
+            .collect();
+
+        Self {
+            local_env: local_env.into(),
+            local_canisters,
+            remote_env: remote_env.into(),
+            remote_canisters,
         }
     }
-}
 
-struct CanisterConfigParams {
-    pub requests_per_round_range: RangeInclusive<usize>,
-    pub request_count_range: RangeInclusive<usize>,
-    pub request_payload_range: RangeInclusive<u32>,
-    pub response_count: usize,
-    pub response_payload_range: RangeInclusive<u32>,
-    pub instructions_count_range: RangeInclusive<u64>,
-}
+    /// Returns all canisters installed in the fixture, local canisters first.
+    pub fn canisters(&self) -> Vec<CanisterId> {
+        self.local_canisters
+            .iter()
+            .cloned()
+            .chain(self.remote_canisters.iter().cloned())
+            .collect()
+    }
 
-const LOCAL_ENV_CANISTER_COUNT_RANGE: RangeInclusive<usize> = 1..=2;
-const REMOTE_ENV_CANISTER_COUNT_RANGE: RangeInclusive<usize> = 1..=2;
-const PARAMS: CanisterConfigParams = CanisterConfigParams {
-    requests_per_round_range: 1..=10,
-    request_count_range: 100..=200,
-    request_payload_range: 0..=(2 * MB),
-    response_count: 100,
-    response_payload_range: 0..=(2 * MB),
-    instructions_count_range: 0..=100_000_000,
-};
+    /// Returns a reference to `self.local_env` if `canister` is installed on it.
+    /// Else a reference to `self.remote_env` if `canister` is installed on it.
+    ///
+    /// Panics if `canister` is not installed on either env.
+    pub fn get_env(&self, canister: &CanisterId) -> &StateMachine {
+        if self.local_canisters.contains(canister) {
+            return &self.local_env;
+        }
+        if self.remote_canisters.contains(canister) {
+            return &self.remote_env;
+        }
+        unreachable!();
+    }
 
-#[test]
-fn manual() {
-    let (local_env, local_canister_ids, remote_env, remote_canister_ids) = new_fixture(2, 1);
-    let config_1 = CanisterConfig {
-        requests_per_round: 3,
-        request_configs: vec![
-            RequestConfig {
-                payload_bytes: 100 * 1024,
-                receiver: local_canister_ids[0],
-            },
-            RequestConfig {
-                payload_bytes: 200 * 1024,
-                receiver: local_canister_ids[1],
-            },
-            RequestConfig {
-                payload_bytes: 150 * 1024,
-                receiver: remote_canister_ids[0],
-            },
-        ],
-        response_configs: vec![ResponseConfig {
-            payload_bytes: 1 * 1024,
-            instructions_count: 100_000_000_000,
-        }],
-    };
-    call_start(&local_env, local_canister_ids[0], config_1);
+    /// Helper function for replacing canister state elements.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    fn replace_canister_state<T>(
+        &self,
+        method: &str,
+        canister: CanisterId,
+        item: T,
+    ) -> Result<T, ()>
+    where
+        T: candid::CandidType + for<'a> candid::Deserialize<'a>,
+    {
+        let msg = candid::Encode!(&item).unwrap();
+        let reply = self
+            .get_env(&canister)
+            .execute_ingress(canister, method, msg)
+            .unwrap();
+        candid::Decode!(&reply.bytes(), Result<T, ()>).unwrap()
+    }
 
-    //    assert_eq!(0, 1, "{:#?}", local_env.get_latest_state().metadata.clone());
-    local_env.tick();
-    //    assert_eq!(0, 1, "{:#?}", local_env.get_latest_state().metadata.clone());
-    let metrics = query_metrics(&local_env, local_canister_ids[0]);
-    assert_eq!(None, Some(metrics));
-}
-*/
-/*
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1))]
-    #[test]
-    fn inter_canister_traffic_respects_memory_limits(
+    /// Replaces the `CanisterConfig` in `canister`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn replace_config(
+        &self,
+        canister: CanisterId,
+        config: CanisterConfig,
+    ) -> Result<CanisterConfig, ()> {
+        self.replace_canister_state("replace_config", canister, config)
+    }
+
+    /// Replaces the `calls_per_round` in `canister`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn replace_calls_per_round(&self, canister: CanisterId, count: u32) -> Result<u32, ()> {
+        self.replace_canister_state("replace_calls_per_round", canister, count)
+    }
+
+    /// Sets the `Rng` in `canister`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn seed_rng(&self, canister: CanisterId, seed: u64) {
+        let msg = candid::Encode!(&seed).unwrap();
+        self.get_env(&canister)
+            .execute_ingress(canister, "seed_rng", msg)
+            .unwrap();
+    }
+
+    /// Sets `calls_per_round` on all canisters to the same value.
+    pub fn start_chatter(&self, calls_per_round: u32) -> Result<(), ()> {
+        for canister in self.canisters() {
+            self.replace_calls_per_round(canister, calls_per_round)
+                .map_err(|_| ())?;
+        }
+        Ok(())
+    }
+
+    /// Sets `call_per_round` on all canisters to 0.
+    pub fn stop_chatter(&self) -> Result<(), ()> {
+        self.start_chatter(0)
+    }
+
+    /// Queries the records from `canister` on the subnet `env`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn query_records(&self, canister: CanisterId) -> Vec<Record> {
+        let reply = self
+            .get_env(&canister)
+            .query(canister, "records", vec![])
+            .unwrap();
+        candid::Decode!(&reply.bytes(), Vec<Record>).unwrap()
+    }
+
+    /// Collects the metrics for all installed canisters on the fixture.
+    pub fn collect_metrics(&self) -> BTreeMap<CanisterId, CanisterMetrics> {
+        self.canisters()
+            .into_iter()
+            .map(|canister| (canister, extract_metrics(&self.query_records(canister))))
+            .collect()
+    }
+
+    /// Return the number of bytes take by guaranteed response memory (`local_env`, `remote_env`).
+    pub fn guaranteed_response_message_memory_taken(&self) -> (NumBytes, NumBytes) {
         (
-            local_env,
-            local_canister_ids,
-            local_canister_configs,
-            remote_env,
-            remote_canister_ids,
-            remote_canister_configs,
-        ) in arb_test_fixture(LOCAL_ENV_CANISTER_COUNT_RANGE, REMOTE_ENV_CANISTER_COUNT_RANGE)
-        .prop_flat_map(|(local_env, local_canister_ids, remote_env, remote_canister_ids)| {
-            let receivers = local_canister_ids
-                .iter()
-                .chain(remote_canister_ids.iter())
-                .cloned()
-                .collect::<Vec<_>>();
-            let local_canister_ids_len = local_canister_ids.len();
-            let remote_canister_ids_len = remote_canister_ids.len();
-            (
-                Just(local_env),
-                Just(local_canister_ids),
-                proptest::collection::vec(arb_canister_config(receivers.clone(), PARAMS), local_canister_ids_len),
-                Just(remote_env),
-                Just(remote_canister_ids),
-                proptest::collection::vec(arb_canister_config(receivers, PARAMS), remote_canister_ids_len),
-            )
-        })
-    ) {
-        for (canister_id, config) in local_canister_ids.iter().zip(local_canister_configs.into_iter()) {
-            call_start(&local_env, *canister_id, config);
-        }
-        for (canister_id, config) in remote_canister_ids.iter().zip(remote_canister_configs.into_iter()) {
-            call_start(&remote_env, *canister_id, config);
+            self.local_env
+                .get_latest_state()
+                .guaranteed_response_message_memory_taken(),
+            self.remote_env
+                .get_latest_state()
+                .guaranteed_response_message_memory_taken(),
+        )
+    }
+
+    /// Executes one round on both the `local_env` and the `remote_env` by generating a XNet
+    /// payload on one and inducting it into the other, and vice versa.
+    pub fn tick(&self) {
+        if let Ok(xnet_payload) = self.local_env.generate_xnet_payload(
+            self.remote_env.get_subnet_id(),
+            None,
+            None,
+            None,
+            None,
+        ) {
+            self.remote_env
+                .execute_block_with_xnet_payload(xnet_payload);
+        } else {
+            self.remote_env.tick();
         }
 
-        let mut last_local_state = local_env.get_latest_state();
-        let mut last_remote_state = remote_env.get_latest_state();
-        for _ in 0..30 {
-
-            if let Ok(xnet_payload) = remote_env.generate_xnet_payload(
-                local_env.get_subnet_id(),
-                None,
-                None,
-                None,
-                None,
-            ) {
-                local_env.execute_block_with_xnet_payload(xnet_payload);
-            }
-
-            if let Ok(xnet_payload) = local_env.generate_xnet_payload(
-                remote_env.get_subnet_id(),
-                None,
-                None,
-                None,
-                None,
-            ) {
-                remote_env.execute_block_with_xnet_payload(xnet_payload);
-            }
-
-            let local_state = local_env.get_latest_state();
-            let remote_state = remote_env.get_latest_state();
-            if last_local_state.canister_states == local_state.canister_states && remote_state.canister_states == last_remote_state.canister_states {
-                break;
-            } else {
-                last_local_state = local_state;
-                last_remote_state = remote_state;
-            }
+        if let Ok(xnet_payload) = self.remote_env.generate_xnet_payload(
+            self.local_env.get_subnet_id(),
+            None,
+            None,
+            None,
+            None,
+        ) {
+            self.local_env.execute_block_with_xnet_payload(xnet_payload);
+        } else {
+            self.local_env.tick();
         }
-        assert_eq!(None, Some(last_local_state));
-//        assert_eq!(None, Some(query_metrics(&local_env, local_canister_ids[0])));
     }
 }
-*/
+
+/// Installs a 'random-traffic-test-canister' in `env`.
+fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
+    env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
+        .expect("Installing random-traffic-test-canister failed")
+}
