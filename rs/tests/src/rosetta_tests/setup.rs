@@ -259,16 +259,19 @@ fn install_rosetta(
 echo \"Docker images (before loading Rosetta image):\"
 docker images
 echo \"Loading Rosetta image...\"
-docker load -i {image_file}
+# read the digest produced by the load so we can create a container with
+# this image
+rosetta_image_sha=$(docker load -i {image_file} | grep -oE 'sha256:\\S+')
 echo \"Docker images (after loading Rosetta image):\"
 docker images
+echo \"Image sha: $rosetta_image_sha\"
 docker run -d -u $(id -u) \
     -p {port}:{port} \
     --network host \
     --rm -v /home/admin/rosetta/{port}/data:/data \
     --rm -v /home/admin/rosetta/{port}/logs:/home/rosetta/log \
     --name rosetta-{port} \
-    bazel/rs/rosetta-api:rosetta_image \
+    \"$rosetta_image_sha\" \
     --blockchain \"{}\" \
     --ic-url \"{}\" \
     --canister-id {} \
