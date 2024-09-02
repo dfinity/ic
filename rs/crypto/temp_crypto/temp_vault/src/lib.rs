@@ -177,10 +177,10 @@ impl<C: CspVault + 'static> TempCspVaultServer<C> {
     fn start_server(server_builder: TarpcCspVaultServerImplBuilder<C>) -> Self {
         let mut temp_socket = TempSocket::new_in_temp_dir();
         let tokio_runtime = tokio::runtime::Runtime::new().expect("failed to create runtime");
-        let handle = tokio_runtime.handle();
-
-        let listener = temp_socket.bind_unix_listener(&handle);
-        let join_handle = handle.spawn(server_builder.build(listener).run());
+        let listener = temp_socket.bind_unix_listener(tokio_runtime.handle());
+        let join_handle = tokio_runtime
+            .handle()
+            .spawn(server_builder.build(listener).run());
 
         Self {
             server_builder,
@@ -209,9 +209,7 @@ impl<C: CspVault + 'static> TempCspVaultServer<C> {
 
 impl<Builder> TempCspVaultServer<Builder> {
     pub fn shutdown_now(&mut self) {
-        println!("DOWN");
         self.status = ServerStatus::Down; //drops tokio::task::JoinHandle<()> and tokio::runtime::Runtime
-        println!("DOWN 2");
     }
 
     pub fn vault_socket_path(&self) -> PathBuf {

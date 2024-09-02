@@ -63,15 +63,11 @@ pub fn temp_crypto_component_with_tls_keys(
     registry: Arc<FakeRegistryClient>,
     node_id: NodeId,
 ) -> (TempCryptoComponent, TlsPublicKeyCert) {
-    let mut temp_crypto_builder = TempCryptoComponent::builder()
+    let temp_crypto_builder = TempCryptoComponent::builder()
         .with_registry(registry)
         .with_node_id(node_id)
         .with_remote_vault()
         .with_keys(NodeKeysToGenerate::only_tls_key_and_cert());
-
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        temp_crypto_builder = temp_crypto_builder.with_vault_client_runtime(handle);
-    }
 
     let temp_crypto = temp_crypto_builder.build();
     let tls_certificate = temp_crypto
