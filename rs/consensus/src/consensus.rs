@@ -53,7 +53,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId,
-    consensus::{ConsensusMessage, ConsensusMessageHashable},
+    consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
