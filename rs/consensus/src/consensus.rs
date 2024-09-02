@@ -590,6 +590,10 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

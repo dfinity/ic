@@ -479,6 +479,10 @@ impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgGossipImpl {
         let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
+    }
 }
 
 fn compute_bouncer(

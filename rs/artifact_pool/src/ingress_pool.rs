@@ -395,6 +395,10 @@ impl BouncerFactory<IngressMessageId, IngressPoolImpl> for IngressPrioritizer {
             }
         })
     }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
+    }
 }
 
 #[cfg(test)]

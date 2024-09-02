@@ -398,6 +398,10 @@ impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgGossipImpl {
             }
         })
     }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
+    }
 }
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the

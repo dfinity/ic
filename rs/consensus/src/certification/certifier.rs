@@ -80,6 +80,10 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
             }
         })
     }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
+    }
 }
 
 /// Return both Certifier and CertifierGossip components.

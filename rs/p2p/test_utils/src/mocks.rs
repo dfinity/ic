@@ -71,6 +71,7 @@ mock! {
 
     impl<A: IdentifiableArtifact + Sync> BouncerFactory<A::Id, MockValidatedPoolReader<A>> for BouncerFactory<A> {
         fn new_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
+        fn refresh_period(&self) -> std::time::Duration;
     }
 }
 

@@ -290,4 +290,8 @@ impl BouncerFactory<u64, TestConsensus<U64Artifact>> for TestConsensus<U64Artifa
     ) -> ic_interfaces::p2p::consensus::Bouncer<u64> {
         Box::new(|_| BouncerValue::Wants)
     }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
+    }
 }

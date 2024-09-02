@@ -89,4 +89,8 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
             }
         })
     }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
+    }
 }
