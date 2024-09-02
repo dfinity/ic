@@ -52,9 +52,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -122,9 +120,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -167,9 +163,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -222,9 +216,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
@@ -261,9 +253,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
@@ -328,9 +318,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Build IC
         id: build-ic
         shell: bash
