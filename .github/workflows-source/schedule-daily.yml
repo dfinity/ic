@@ -127,6 +127,7 @@ jobs:
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
               --file_share_ssh_key "$(realpath file2)" \
+              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
               --file_share_username ci_interim \
               --ci_mode
           bazel clean
