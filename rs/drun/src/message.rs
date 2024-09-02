@@ -1,15 +1,9 @@
-use super::CanisterId;
-
+use crate::{
+    CanisterInstallModeV2, SkipPreUpgrade, WasmMemoryPersistence,
+    ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
+};
+use candid::Principal;
 use hex::decode;
-use ic_execution_environment::execution::upgrade::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
-use ic_management_canister_types::{
-    self as ic00, CanisterInstallModeV2, CanisterUpgradeOptions, Payload, WasmMemoryPersistence,
-};
-use ic_types::{
-    messages::{Query, QuerySource, SignedIngress},
-    time::expiry_time_from_now,
-    PrincipalId, UserId,
-};
 
 use std::{
     fmt,
@@ -20,11 +14,35 @@ use std::{
 };
 
 #[derive(Debug, PartialEq)]
+pub(crate) enum CanisterInstallMode {
+    Install,
+    Reinstall,
+    Upgrade,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct CanisterInstallArgs {
+    pub canister_id: Principal,
+    pub wasm_module: Vec<u8>,
+    pub arg: Vec<u8>,
+    pub sender: Principal,
+    pub mode: CanisterInstallModeV2,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct CanisterCall {
+    pub canister_id: Principal,
+    pub method_name: String,
+    pub arg: Vec<u8>,
+    pub sender: Principal,
+}
+
+#[derive(Debug, PartialEq)]
 pub(crate) enum Message {
-    Ingress(SignedIngress),
-    Query(Query),
-    Install(SignedIngress),
-    Create(SignedIngress),
+    Ingress(CanisterCall),
+    Query(CanisterCall),
+    Install(CanisterInstallArgs),
+    Create,
 }
 
 #[derive(Debug)]
@@ -138,56 +156,54 @@ pub(crate) fn msg_stream_from_file(
             _ => true,
         })
         .map(|(i, line)| match line {
-            Ok(line) => {
-                parse_message(&line, i as u64).map_err(|e| format!("Line {}: {}", i + 1, e))
-            }
+            Ok(line) => parse_message(&line).map_err(|e| format!("Line {}: {}", i + 1, e)),
             Err(e) => Err(format!("Error while reading line {}: {}", i, e)),
         }))
 }
 
-fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
+fn parse_message(s: &str) -> Result<Message, String> {
     let s = s.trim_end();
     let tokens: Vec<&str> = s.splitn(4, char::is_whitespace).collect();
 
     match &tokens[..] {
         [] => Err("Too few arguments.".to_string()),
         ["ingress", canister_id, method_name, payload] => {
-            use ic_test_utilities_types::messages::SignedIngressBuilder;
-
             let canister_id = parse_canister_id(canister_id)?;
             let method_name = validate_method_name(method_name)?;
             let method_payload = parse_octet_string(payload)?;
 
-            let signed_ingress = SignedIngressBuilder::new()
-                // `source` should become a self-authenticating id according
-                // to https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes
-                .canister_id(canister_id)
-                .method_name(method_name)
-                .method_payload(method_payload)
-                .nonce(nonce)
-                .build();
-            Ok(Message::Ingress(signed_ingress))
+            Ok(Message::Ingress(CanisterCall {
+                canister_id,
+                method_name,
+                arg: method_payload,
+                sender: Principal::anonymous(),
+            }))
         }
-        ["query", canister_id, method_name, payload] => Ok(Message::Query(Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
-                nonce: Some(nonce.to_le_bytes().to_vec()),
-            },
-            receiver: parse_canister_id(canister_id)?,
+        ["query", canister_id, method_name, payload] => Ok(Message::Query(CanisterCall {
+            sender: Principal::anonymous(),
+            canister_id: parse_canister_id(canister_id)?,
             method_name: validate_method_name(method_name)?,
-            method_payload: parse_octet_string(payload)?,
+            arg: parse_octet_string(payload)?,
         })),
-        ["create"] => parse_create(nonce),
-        ["install", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "install")
-        }
-        ["reinstall", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "reinstall")
-        }
-        ["upgrade", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "upgrade")
-        }
+        ["create"] => parse_create(),
+        ["install", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Install,
+        ),
+        ["reinstall", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Reinstall,
+        ),
+        ["upgrade", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Upgrade,
+        ),
         _ => Err(format!(
             "Failed to parse line {}, don't have a pattern to match this with",
             s
@@ -195,10 +211,9 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
     }
 }
 
-fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
-    use std::str::FromStr;
-    match PrincipalId::from_str(canister_id) {
-        Ok(id) => Ok(CanisterId::unchecked_from_principal(id)),
+fn parse_canister_id(canister_id: &str) -> Result<Principal, String> {
+    match Principal::from_text(canister_id) {
+        Ok(id) => Ok(id),
         Err(err) => Err(format!(
             "Failed to convert {} to principal id with {}",
             canister_id, err
@@ -206,17 +221,8 @@ fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
     }
 }
 
-fn parse_create(nonce: u64) -> Result<Message, String> {
-    use ic_test_utilities_types::messages::SignedIngressBuilder;
-
-    let signed_ingress = SignedIngressBuilder::new()
-        .method_name(ic00::Method::ProvisionalCreateCanisterWithCycles)
-        .canister_id(ic00::IC_00)
-        .method_payload(ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None, None).encode())
-        .nonce(nonce)
-        .build();
-
-    Ok(Message::Create(signed_ingress))
+fn parse_create() -> Result<Message, String> {
+    Ok(Message::Create)
 }
 
 fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
@@ -235,14 +241,11 @@ fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result
 }
 
 fn parse_install(
-    nonce: u64,
     canister_id: &str,
     payload: &str,
     wasm_file: &str,
-    mode: &str,
+    mode: CanisterInstallMode,
 ) -> Result<Message, String> {
-    use ic_test_utilities_types::messages::SignedIngressBuilder;
-
     let mut wasm_data = Vec::new();
     let mut wasm_file = File::open(wasm_file)
         .map_err(|e| format!("Could not open wasm file: {} - Error: {}", wasm_file, e))?;
@@ -254,9 +257,9 @@ fn parse_install(
     let payload = parse_octet_string(payload)?;
 
     let install_mode = match mode {
-        "install" => CanisterInstallModeV2::Install,
-        "reinstall" => CanisterInstallModeV2::Reinstall,
-        "upgrade" => {
+        CanisterInstallMode::Install => CanisterInstallModeV2::Install,
+        CanisterInstallMode::Reinstall => CanisterInstallModeV2::Reinstall,
+        CanisterInstallMode::Upgrade => {
             let wasm_memory_persistence = if contains_icp_private_custom_section(
                 wasm_data.as_ref(),
                 ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
@@ -265,35 +268,20 @@ fn parse_install(
             } else {
                 None
             };
-            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade {
                 skip_pre_upgrade: None,
                 wasm_memory_persistence,
             }))
         }
-        _ => {
-            return Err(String::from("Unsupported install mode: {mode}"));
-        }
     };
 
-    let signed_ingress = SignedIngressBuilder::new()
-        // `source` should become a self-authenticating id according
-        // to https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes
-        .canister_id(ic00::IC_00)
-        .method_name(ic00::Method::InstallCode)
-        .method_payload(
-            ic00::InstallCodeArgsV2::new(
-                install_mode,
-                canister_id,
-                wasm_data,
-                payload,
-                None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
-            )
-            .encode(),
-        )
-        .nonce(nonce)
-        .build();
-    Ok(Message::Install(signed_ingress))
+    Ok(Message::Install(CanisterInstallArgs {
+        canister_id,
+        wasm_module: wasm_data,
+        arg: payload,
+        sender: Principal::anonymous(),
+        mode: install_mode,
+    }))
 }
 
 fn validate_method_name(method_name: &str) -> Result<String, String> {
@@ -404,108 +392,75 @@ enum Radix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities_types::{ids::canister_test_id, messages::SignedIngressBuilder};
     use std::io::Cursor;
-
-    const APP_CANISTER_URL: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-    const APP_CANISTER_ID: u64 = 2;
 
     #[test]
     fn test_parse_message_quoted_payload_succeeds() {
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
         let s = &format!(
             "ingress {} write \"payload \\x0a\\b00010001\"",
-            APP_CANISTER_URL
+            app_canister_id
         );
-        let parsed_message = parse_message(s, 0).unwrap();
-        let expiry_time = match &parsed_message {
-            Message::Ingress(signed_ingress) => signed_ingress.expiry_time(),
-            _ => panic!(
-                "parse_message() returned an unexpected message type: {:?}",
-                parsed_message
-            ),
-        };
-        let expected = Message::Ingress(
-            SignedIngressBuilder::new()
-                .canister_id(canister_test_id(APP_CANISTER_ID))
-                .method_name("write".to_string())
-                .method_payload(vec![112, 97, 121, 108, 111, 97, 100, 32, 10, 17])
-                .nonce(0)
-                .expiry_time(expiry_time)
-                .build(),
-        );
+        let parsed_message = parse_message(s).unwrap();
+        let expected = Message::Ingress(CanisterCall {
+            canister_id: app_canister_id,
+            method_name: "write".to_string(),
+            arg: vec![112, 97, 121, 108, 111, 97, 100, 32, 10, 17],
+            sender: Principal::anonymous(),
+        });
         assert_eq!(expected, parsed_message);
     }
 
     #[test]
     fn test_parse_message_hex_payload_succeeds() {
-        let s = &format!("ingress {} write 0x010203", APP_CANISTER_URL);
-        let parsed_message = parse_message(s, 0).unwrap();
-        let expiry_time = match &parsed_message {
-            Message::Ingress(signed_ingress) => signed_ingress.expiry_time(),
-            _ => panic!(
-                "parse_message() returned an unexpected message type: {:?}",
-                parsed_message
-            ),
-        };
-        let expected = Message::Ingress(
-            SignedIngressBuilder::new()
-                .canister_id(canister_test_id(APP_CANISTER_ID))
-                .method_name("write".to_string())
-                .method_payload(vec![1, 2, 3])
-                .nonce(0)
-                .expiry_time(expiry_time)
-                .build(),
-        );
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+        let s = &format!("ingress {} write 0x010203", app_canister_id);
+        let parsed_message = parse_message(s).unwrap();
+        let expected = Message::Ingress(CanisterCall {
+            canister_id: app_canister_id,
+            method_name: "write".to_string(),
+            arg: vec![1, 2, 3],
+            sender: Principal::anonymous(),
+        });
         assert_eq!(expected, parsed_message);
 
-        let s = &format!("query {} read 0x010203", APP_CANISTER_URL);
-        let nonce: u64 = 0;
-        let parsed_message = parse_message(s, 0).unwrap();
-        let ingress_expiry = match &parsed_message {
-            Message::Query(query) => match query.source {
-                QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-                QuerySource::Anonymous => panic!("Expected a user query but got an anonymous one"),
-            },
-            _ => panic!(
-                "parse_message() returned an unexpected message type: {:?}",
-                parsed_message
-            ),
-        };
-        let expected = Message::Query(Query {
-            source: QuerySource::User {
-                user_id: UserId::from(PrincipalId::new_anonymous()),
-                ingress_expiry,
-                nonce: Some(nonce.to_le_bytes().to_vec()),
-            },
-            receiver: canister_test_id(APP_CANISTER_ID),
+        let s = &format!("query {} read 0x010203", app_canister_id);
+        let parsed_message = parse_message(s).unwrap();
+        let expected = Message::Query(CanisterCall {
+            sender: Principal::anonymous(),
+            canister_id: app_canister_id,
             method_name: String::from("read"),
-            method_payload: vec![1, 2, 3],
+            arg: vec![1, 2, 3],
         });
         assert_eq!(expected, parsed_message);
     }
 
     #[test]
     fn test_parse_message_invalid_escapes_fails() {
-        let s = &format!("query {} read \"\\xzz\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
-        let s = &format!("query {} read \"\\b01\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let s = &format!("query {} read \"\\xzz\"", app_canister_id);
+        assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} read \"\\x1\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let s = &format!("query {} read \"\\b01\"", app_canister_id);
+        assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} read \"\\b2\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let s = &format!("query {} read \"\\x1\"", app_canister_id);
+        assert!(parse_message(s).is_err());
+
+        let s = &format!("query {} read \"\\b2\"", app_canister_id);
+        assert!(parse_message(s).is_err());
     }
 
     #[test]
     fn test_illegal_method_name_must_fail() {
-        let s = &format!("query {} 0read \"\\xzz\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 
-        let s = &format!("query {} üread \"\\xzz\"", APP_CANISTER_URL);
-        assert!(parse_message(s, 0).is_err());
+        let s = &format!("query {} 0read \"\\xzz\"", app_canister_id);
+        assert!(parse_message(s).is_err());
+
+        let s = &format!("query {} üread \"\\xzz\"", app_canister_id);
+        assert!(parse_message(s).is_err());
     }
 
     #[test]

@@ -2664,7 +2664,7 @@ dependencies = [
  "itertools 0.12.0",
  "log",
  "smallvec",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmtime-types",
 ]
 
@@ -7840,40 +7840,14 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "clap 3.2.25",
- "futures",
  "hex",
- "ic-canister-sandbox-backend-lib",
- "ic-config",
- "ic-crypto-test-utils-ni-dkg",
- "ic-cycles-account-manager",
- "ic-error-types",
- "ic-execution-environment",
- "ic-http-endpoints-metrics",
- "ic-interfaces",
- "ic-interfaces-state-manager",
- "ic-management-canister-types",
- "ic-messaging",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
- "ic-registry-provisional-whitelist",
- "ic-registry-routing-table",
- "ic-registry-subnet-type",
- "ic-state-machine-tests",
- "ic-state-manager",
- "ic-test-utilities-consensus",
- "ic-test-utilities-registry",
- "ic-test-utilities-types",
- "ic-types",
- "rand 0.8.5",
- "slog",
- "slog-term",
- "tokio",
- "tower",
- "wasmparser",
+ "pocket-ic",
+ "serde",
+ "tempfile",
+ "wasmparser 0.115.0",
+ "wat",
 ]
 
 [[package]]
@@ -7927,7 +7901,7 @@ dependencies = [
  "slog",
  "slog-term",
  "wasm-encoder",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
@@ -8037,7 +8011,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wat",
 ]
 
@@ -12873,7 +12847,7 @@ name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
  "wasm-encoder",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmprinter",
  "wat",
 ]
@@ -20854,7 +20828,7 @@ dependencies = [
  "log",
  "walrus-macro",
  "wasm-encoder",
- "wasmparser",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -20995,7 +20969,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501940df4418b8929eb6d52f1aade1fdd15a5b86c92453cb696e3c906bd3fc33"
 dependencies = [
  "leb128",
- "wasmparser",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21009,6 +20983,16 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.115.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e06c0641a4add879ba71ccb3a1e4278fd546f76f1eafb21d8f7b07733b547cd5"
+dependencies = [
+ "indexmap 2.2.6",
+ "semver",
 ]
 
 [[package]]
@@ -21033,7 +21017,7 @@ checksum = "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
 dependencies = [
  "anyhow",
  "termcolor",
- "wasmparser",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21066,7 +21050,7 @@ dependencies = [
  "smallvec",
  "sptr",
  "target-lexicon",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmtime-asm-macros",
  "wasmtime-component-macro",
  "wasmtime-cranelift",
@@ -21126,7 +21110,7 @@ dependencies = [
  "object 0.36.1",
  "target-lexicon",
  "thiserror",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmtime-environ",
  "wasmtime-versioned-export-macros",
 ]
@@ -21149,7 +21133,7 @@ dependencies = [
  "serde_derive",
  "target-lexicon",
  "wasm-encoder",
- "wasmparser",
+ "wasmparser 0.212.0",
  "wasmprinter",
  "wasmtime-types",
 ]
@@ -21183,7 +21167,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "smallvec",
- "wasmparser",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21636,7 +21620,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid",
- "wasmparser",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
