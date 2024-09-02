@@ -445,6 +445,9 @@ Plug in your HSM key. Unplug your Ubikey.
 Optionally, you can test that your security hardware is ready by running
 
 ```bash
+pkcs11-tool --list-slots
+
+# If you want to practice entering your password:
 pkcs11-tool --login --test
 ```
 
