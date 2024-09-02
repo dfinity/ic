@@ -150,7 +150,7 @@ jobs:
     runs-on:
       labels: macOS
     # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
-    if: ${{ github.ref_protected }} | ${{ github.event_name == 'workflow_dispatch' }} # allow manual testing
+    if: ${{ github.ref_protected }} || ${{ github.event_name == 'workflow_dispatch' }} # allow manual testing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
