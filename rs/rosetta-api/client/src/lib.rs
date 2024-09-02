@@ -190,6 +190,13 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn account_balance(
+        &self,
+        request: AccountBalanceRequest,
+    ) -> anyhow::Result<AccountBalanceResponse> {
+        self.call_endpoint("/account/balance", &request).await
+    }
+
     pub async fn search_transactions(
         &self,
         request: &SearchTransactionsRequest,

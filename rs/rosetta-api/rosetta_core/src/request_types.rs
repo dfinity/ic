@@ -308,6 +308,48 @@ pub struct AccountBalanceRequest {
     pub metadata: Option<ObjectMap>,
 }
 
+impl AccountBalanceRequest {
+    pub fn builder(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder::new(network_identifier, account_identifier)
+    }
+}
+
+pub struct AccountBalanceRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    account_identifier: AccountIdentifier,
+    block_identifier: Option<PartialBlockIdentifier>,
+}
+
+impl AccountBalanceRequestBuilder {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder {
+            network_identifier,
+            account_identifier,
+            block_identifier: None,
+        }
+    }
+
+    pub fn with_block_identifier(mut self, block_identifier: PartialBlockIdentifier) -> Self {
+        self.block_identifier = Some(block_identifier);
+        self
+    }
+
+    pub fn build(self) -> AccountBalanceRequest {
+        AccountBalanceRequest {
+            network_identifier: self.network_identifier,
+            account_identifier: self.account_identifier,
+            block_identifier: self.block_identifier,
+            metadata: None,
+        }
+    }
+}
+
 /// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashRequest {
