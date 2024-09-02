@@ -33,9 +33,6 @@ PyGithub==2.3.0
 # extra requirements that were previously in docker container, not sure what they are used for (potentially remove later)
 freezegun
 junit-xml
-libhoney
 mypy
-pylint
-pytest-shutil
 retry
 xmltodict
