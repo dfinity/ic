@@ -372,7 +372,7 @@ impl IngressPrioritizer {
     }
 }
 
-impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
+impl BouncerFactory<IngressMessageId, IngressPoolImpl> for IngressPrioritizer {
     fn new_bouncer(&self, pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to

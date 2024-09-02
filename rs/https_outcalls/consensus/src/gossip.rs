@@ -43,7 +43,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseShare, Pool>
+impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
     for CanisterHttpGossipImpl
 {
     fn new_bouncer(&self, _canister_http_pool: &Pool) -> Bouncer<CanisterHttpResponseId> {

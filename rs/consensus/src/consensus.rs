@@ -588,7 +588,7 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusGossipImpl {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         new_bouncer(pool, self.message_routing.expected_batch_height())

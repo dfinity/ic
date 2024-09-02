@@ -69,7 +69,7 @@ mock! {
 mock! {
     pub BouncerFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A, MockValidatedPoolReader<A>> for BouncerFactory<A> {
+    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A::Id, MockValidatedPoolReader<A>> for BouncerFactory<A::Id> {
         fn new_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
     }
 }
