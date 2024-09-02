@@ -475,10 +475,6 @@ h11==0.14.0 \
     --hash=sha256:8f19fbbe99e72420ff35c00b27a34cb9937e902a8b810e2c88300c6f0a3b699d \
     --hash=sha256:e3fe4ac4b851c468cc8363d500db52c2ead036020723024a109d37346efaa761
     # via httpcore
-honeycomb-beeline==3.5.1 \
-    --hash=sha256:1440a670eaab95b7ade146ac0173fd7e1eeabcd473650166d3138257d6eb42ce \
-    --hash=sha256:911e4322d9ded9055654c3ffb3c5b546b267630f7faf150c55d744a64cfa4191
-    # via -r requirements.in
 httpcore==0.16.3 \
     --hash=sha256:c5d6f04e2fc530f39e0c077e6a30caa53f1451096120f1f38b954afd0b17c0cb \
     --hash=sha256:da1fb708784a938aa084bde4feb8317056c55037247c787bd7e19eb2c2949dc0
@@ -644,9 +640,7 @@ leb128==1.0.5 \
 libhoney==2.3.0 \
     --hash=sha256:04b7358513ff3eb11c07c6d4dd726de45b93a918ffe42748710c0e53a616c04a \
     --hash=sha256:c1ffa35a22061bb6e5c1f9711da39055cf905a9588899626303b73b9cd398772
-    # via
-    #   -r requirements.in
-    #   honeycomb-beeline
+    # via -r requirements.in
 loguru==0.7.2 \
     --hash=sha256:003d71e3d3ed35f0f8984898359d65b79e5b21943f78af86aa5491210429b8eb \
     --hash=sha256:e671a53522515f34fd406340ee968cb9ecafbc4b36c679da03c18fd8d0bd51ac
@@ -1316,7 +1310,6 @@ wrapt==1.15.0 \
     # via
     #   astroid
     #   deprecated
-    #   honeycomb-beeline
 xmltodict==0.13.0 \
     --hash=sha256:341595a488e3e01a85a9d8911d8912fd922ede5fecc4dce437eb4b6c8d037e56 \
     --hash=sha256:aa89e8fd76320154a40d19a0df04a4695fb9dc5ba977cbb68ab3e4eb225e7852
