@@ -532,41 +532,42 @@ fn setup_registry(
 #[cfg(feature = "tls")]
 fn setup_tls_resolver(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
-    use rustls::server::ResolvesServerCertUsingSni;
     use tokio_util::sync::CancellationToken;
 
     let resolver = if let Some(v) = &cli.acme_credentials_path {
+        warn!("TLS: Using ACME ALPN-01 (staging: {})", cli.acme_staging);
+
+        let hostname = cli
+            .hostname
+            .clone()
+            .ok_or(anyhow!("hostname not specified"))?;
+
         let opts = tls::acme::AcmeOptions::new(
-            vec![cli.hostname.clone()],
+            vec![hostname],
             v.clone(),
             Duration::from_secs(86400 * 14),
             false,
-            true,
+            cli.acme_staging,
             "mailto:boundary-nodes@dfinity.org".into(),
         );
 
         tls::acme::alpn::new(opts, CancellationToken::new())
     } else {
+        warn!("TLS: Using static certificates");
+
         let cert = cli
             .tls_cert_path
             .clone()
-            .ok_or(anyhow!("tls cert not specified"))?;
+            .ok_or(anyhow!("TLS cert not specified"))?;
         let key = cli
             .tls_pkey_path
             .clone()
-            .ok_or(anyhow!("tls key not specified"))?;
+            .ok_or(anyhow!("TLS key not specified"))?;
 
-        let cert = std::fs::read(cert).context("unable to read tls cert")?;
-        let key = std::fs::read(key).context("unable to read tls key")?;
+        let cert = std::fs::read(cert).context("unable to read TLS cert")?;
+        let key = std::fs::read(key).context("unable to read TLS key")?;
 
-        let ckey =
-            tls::pem_convert_to_rustls(&key, &cert).context("unable to parse cert and/or key")?;
-
-        let mut resolver = ResolvesServerCertUsingSni::new();
-        resolver
-            .add(&cli.hostname, ckey)
-            .context("unable to add hostname/cert to resolver")?;
-
+        let resolver = tls::StubResolver::new(&cert, &key)?;
         Arc::new(resolver)
     };
 

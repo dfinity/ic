@@ -181,8 +181,8 @@ pub struct FirewallConfig {
 #[derive(Args)]
 pub struct TlsConfig {
     /// Hostname to request TLS certificate for
-    #[clap(long, default_value = "")]
-    pub hostname: String,
+    #[clap(long)]
+    pub hostname: Option<String>,
 
     /// Path to the ACME credentials folder, needs to be writeable - it stores the account info & issued certificate.
     /// This enables the ACME client.
@@ -190,14 +190,18 @@ pub struct TlsConfig {
     #[clap(long)]
     pub acme_credentials_path: Option<PathBuf>,
 
+    /// Whether to use LetsEncrypt staging environment.
+    #[clap(long)]
+    pub acme_staging: bool,
+
     /// The path to the TLS certificate in PEM format.
     /// This is required if the ACME client is not used.
-    #[clap(long, default_value = "cert.pem")]
+    #[clap(long)]
     pub tls_cert_path: Option<PathBuf>,
 
     /// The path to the TLS private key in PEM format.
     /// This is required if the ACME client is not used.
-    #[clap(long, default_value = "pkey.pem")]
+    #[clap(long)]
     pub tls_pkey_path: Option<PathBuf>,
 }
 
@@ -206,24 +210,31 @@ pub struct MonitoringConfig {
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
     pub metrics_addr: SocketAddr,
+
     /// Maximum logging level
     #[clap(long, default_value = "info")]
     pub max_logging_level: tracing::Level,
+
     /// Disable per-request logging and metrics recording
     #[clap(long)]
     pub disable_request_logging: bool,
+
     /// Log only failed (non-2xx status code or other problems) requests
     #[clap(long)]
     pub log_failed_requests_only: bool,
+
     /// Enables logging to stdout
     #[clap(long)]
     pub log_stdout: bool,
+
     /// Enables logging to Journald
     #[clap(long)]
     pub log_journald: bool,
+
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(long)]
     pub log_null: bool,
+
     /// Path to a GeoIP country database file
     #[clap(long)]
     pub geoip_db: Option<PathBuf>,
@@ -234,6 +245,7 @@ pub struct RateLimitingConfig {
     /// Allowed number of update calls per second per subnet per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_subnet: Option<u32>,
+
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
@@ -262,12 +274,15 @@ pub struct CacheConfig {
     /// Maximum size of in-memory cache in bytes. Specify a size to enable caching.
     #[clap(long)]
     pub cache_size_bytes: Option<u64>,
+
     /// Maximum size of a single cached response item in bytes
     #[clap(long, default_value = "131072")]
     pub cache_max_item_size_bytes: u64,
+
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
     pub cache_ttl_seconds: u64,
+
     /// Whether to cache non-anonymous requests
     #[clap(long, default_value = "false")]
     pub cache_non_anonymous: bool,
