@@ -49,11 +49,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -96,11 +96,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -142,11 +142,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -196,11 +196,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup python deps
         id: setup-python-deps
         shell: bash

@@ -35,11 +35,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         with:
@@ -74,11 +74,11 @@ jobs:
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
-        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
