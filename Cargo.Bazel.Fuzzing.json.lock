@@ -1,5 +1,5 @@
 {
-  "checksum": "9777661c45a002d7b9c56a839325b2fbfe28ff35a03cb6ca4eb947bf4265ae41",
+  "checksum": "78eea62df2bc566c12ff628f2434e8e7e975a218e19e97ba9ac6e796e5febb94",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -49123,7 +49123,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn-proto 0.11.6",
+              "id": "quinn-proto 0.11.7",
               "target": "quinn_proto",
               "alias": "proto"
             },
@@ -49169,14 +49169,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-proto 0.11.6": {
+    "quinn-proto 0.11.7": {
       "name": "quinn-proto",
-      "version": "0.11.6",
+      "version": "0.11.7",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-proto/0.11.6/download",
-          "sha256": "ba92fb39ec7ad06ca2582c0ca834dfeadcaf06ddfc8e635c80aa7e1c05315fdd"
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.7/download",
+          "sha256": "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
         }
       },
       "targets": [
@@ -49248,7 +49248,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.6"
+        "version": "0.11.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
