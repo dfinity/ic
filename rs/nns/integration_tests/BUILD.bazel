@@ -123,6 +123,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_utils",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]
@@ -270,6 +271,7 @@ rust_ic_test_suite_with_extra_srcs(
             "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/hotkeys_migration_test.rs",
         ],
     ),
     aliases = ALIASES,
@@ -407,6 +409,27 @@ rust_ic_test(
     ],
     aliases = ALIASES,
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "hotkeys_migration_test",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/hotkeys_migration_test.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/hotkeys_migration_test.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

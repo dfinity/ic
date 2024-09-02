@@ -4979,10 +4979,12 @@ impl Governance {
             | Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
-            | Action::SetDefaultFollowees(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
 
+            Action::SetDefaultFollowees(obsolete_action) => {
+                Self::validate_obsolete_proposal_action(obsolete_action)
+            }
             Action::SetSnsTokenSwapOpenTimeWindow(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }

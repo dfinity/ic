@@ -1236,16 +1236,10 @@ pub enum ProposalActionRequest {
     AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
     #[prost(message, tag = "17")]
     RewardNodeProvider(RewardNodeProvider),
-    #[prost(message, tag = "18")]
-    SetDefaultFollowees(SetDefaultFollowees),
     #[prost(message, tag = "19")]
     RewardNodeProviders(RewardNodeProviders),
     #[prost(message, tag = "21")]
     RegisterKnownNeuron(KnownNeuron),
-    #[prost(message, tag = "22")]
-    SetSnsTokenSwapOpenTimeWindow(SetSnsTokenSwapOpenTimeWindow),
-    #[prost(message, tag = "23")]
-    OpenSnsTokenSwap(OpenSnsTokenSwap),
     #[prost(message, tag = "24")]
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     #[prost(message, tag = "25")]

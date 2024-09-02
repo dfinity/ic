@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
+use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -35,10 +36,13 @@ use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod list;
 pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
+mod table;
 pub mod unit_helpers;
+mod utils;
 
 #[cfg(test)]
 mod tests;
@@ -76,6 +80,14 @@ pub enum SubCommand {
     Propose(ProposeArgs),
     /// Converts a Neuron ID to a blob for use in ManageNeuron.
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
+    /// List SNSes
+    List(list::ListArgs),
+}
+
+impl CliArgs {
+    pub fn agent(&self) -> Result<Agent> {
+        crate::utils::get_mainnet_agent()
+    }
 }
 
 /// The arguments used to configure a SNS testflight deployment
@@ -769,7 +781,7 @@ fn all_arguments_have_description() {
             if arg.get_help().is_none() && arg.get_long_help().is_none() {
                 let arg_name = arg.get_id().to_string();
                 panic!(
-                    "Argument '{}' in command '{}' doesn't have a description",
+                    "Argument '{}' in command '{}' doesn't have a description. Add one (probably as a doc comment of the field).",
                     arg_name, path
                 );
             }

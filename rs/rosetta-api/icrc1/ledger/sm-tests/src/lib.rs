@@ -2582,7 +2582,7 @@ pub fn test_upgrade_serialization(
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
                     // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
-                    verify_ledger_state(&env, ledger_id);
+                    verify_ledger_state(&env, ledger_id, None);
                 }
 
                 Ok(())
@@ -2591,7 +2591,7 @@ pub fn test_upgrade_serialization(
         .unwrap();
 }
 
-pub fn icrc1_test_upgrade_serialization_deterministic<T>(
+pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
     ledger_wasm_upgradetomemorymanager: Vec<u8>,

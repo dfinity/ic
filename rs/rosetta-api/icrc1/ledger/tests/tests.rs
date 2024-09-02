@@ -411,8 +411,8 @@ fn icrc1_test_upgrade_serialization() {
 }
 
 #[test]
-fn icrc1_test_upgrade_serialization_deterministic() {
-    ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_deterministic(
+fn icrc1_test_upgrade_serialization_fixed_tx() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_fixed_tx(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         ledger_wasm_upgradetomemorymanager(),
@@ -1090,7 +1090,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state(&env, ledger_id);
+    verify_ledger_state(&env, ledger_id, None);
 }
 
 #[test]

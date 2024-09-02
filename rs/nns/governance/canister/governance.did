@@ -782,9 +782,6 @@ type ProposalActionRequest = variant {
   CreateServiceNervousSystem : CreateServiceNervousSystem;
   ExecuteNnsFunction : ExecuteNnsFunction;
   RewardNodeProvider : RewardNodeProvider;
-  OpenSnsTokenSwap : OpenSnsTokenSwap;
-  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
-  SetDefaultFollowees : SetDefaultFollowees;
   RewardNodeProviders : RewardNodeProviders;
   ManageNetworkEconomics : NetworkEconomics;
   ApproveGenesisKyc : Principals;
