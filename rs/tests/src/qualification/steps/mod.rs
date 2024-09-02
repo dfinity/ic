@@ -11,7 +11,16 @@ pub mod xnet;
 pub trait Step: Sync + Send {
     fn execute(&self, env: TestEnv, rt: Handle) -> anyhow::Result<()>;
 
-    fn max_retries(&self) -> usize;
+    // Specify the total number of runs for a step
+    //
+    // Useful for flaky steps like workload testing or
+    // xnet testing. In general, the whole test will be
+    // retried 3 times, but since it's a long test, this
+    // mechianism allows us to retry flaky steps quickly
+    // and cut down the time needed for the overall test.
+    fn total_runs(&self) -> usize {
+        1
+    }
 
     fn name(&self) -> &'static str {
         std::any::type_name::<Self>()
@@ -21,15 +30,15 @@ pub trait Step: Sync + Send {
         let logger = env.logger();
         info!(logger, "Running step: {}", self.name());
 
-        let mut max_retries = self.max_retries();
+        let mut total_runs = self.total_runs();
         loop {
-            max_retries -= 1;
+            total_runs -= 1;
             match self.execute(env.clone(), rt.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     let formatted = format!("Step `{}` failed with error: {:?}", self.name(), e);
                     error!(logger, "{}", formatted);
-                    if max_retries.eq(&0) {
+                    if total_runs.eq(&0) {
                         env.emit_report(formatted);
                         return Err(e);
                     }
@@ -39,9 +48,9 @@ pub trait Step: Sync + Send {
 
         info!(
             logger,
-            "Step `{}` finished successfully after {} retries",
+            "Step `{}` finished successfully after {} runs",
             self.name(),
-            self.max_retries() - max_retries
+            self.total_runs() - total_runs
         );
         Ok(())
     }

@@ -23,7 +23,7 @@ impl Step for Workload {
         .map(|_| ())
     }
 
-    fn max_retries(&self) -> usize {
+    fn total_runs(&self) -> usize {
         3
     }
 }

@@ -144,10 +144,6 @@ impl Step for UpdateSubnetType {
 
         Ok(())
     }
-
-    fn max_retries(&self) -> usize {
-        1
-    }
 }
 
 async fn assert_version_on_all_nodes(

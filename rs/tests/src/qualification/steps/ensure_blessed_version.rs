@@ -52,9 +52,4 @@ impl Step for EnsureBlessedVersion {
             false => Err(anyhow::anyhow!("Blessed version not found in the registry")),
         }
     }
-
-    // Should be able to bless version in one try
-    fn max_retries(&self) -> usize {
-        1
-    }
 }

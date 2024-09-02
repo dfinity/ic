@@ -99,8 +99,4 @@ impl Step for RetireBlessedVersions {
         ));
         Ok(())
     }
-
-    fn max_retries(&self) -> usize {
-        1
-    }
 }

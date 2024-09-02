@@ -21,12 +21,10 @@ pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let old_version = match std::env::var("OLD_VERSION") {
         Ok(v) => v,
-        Err(_) => read_dependency_to_string("testnet/mainnet_nns_revision.txt").map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `testnet/mainnet_nns_revision.txt` nur in `INITIAL_VERSION` env variable"))?,
+        Err(_) => read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+            .map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `testnet/mainnet_nns_revision.txt` or in `OLD_VERSION` env variable"))?,
     };
-    let new_version = match std::env::var("NEW_VERSION") {
-        Ok(v) => Some(v),
-        Err(_) => None,
-    };
+    let new_version = std::env::var("NEW_VERSION").ok();
 
     let config = IcConfig {
         subnets: Some(vec![
@@ -49,7 +47,7 @@ pub fn main() -> anyhow::Result<()> {
         // the old version. If we didn't specify the new version
         // it means that we are running from the tip of the branch
         // and images will not be present.
-        initial_version: new_version.as_ref().map(|_| old_version.clone()),
+        initial_version: new_version.is_some().then_some(old_version.clone()),
     };
 
     // If both versions are specified do:

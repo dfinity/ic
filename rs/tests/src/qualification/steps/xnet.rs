@@ -12,7 +12,7 @@ impl Step for XNet {
     fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        _rt: tokio::runtime::Handle,
+        rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         let subnets = env
             .topology_snapshot()
@@ -27,12 +27,11 @@ impl Step for XNet {
             panic!("Need at least two application subnets");
         }
         let subnets = subnets[0..2].to_vec();
-        message_routing::global_reboot_test::test_on_subnets(env, subnets);
-        Ok(())
+        let handle = rt.spawn_blocking(|| message_routing::global_reboot_test::test_on_subnets(env, subnets));
+        rt.block_on(handle).map_err(|e| anyhow::anyhow!("Received panic while running xnet test: {:?}", e))
     }
 
-    // Would need to refactor the test in order to make it retriable, at the moment it asserts and is retried by the `system_test`
-    fn max_retries(&self) -> usize {
-        1
+    fn total_runs(&self) -> usize {
+        3
     }
 }
