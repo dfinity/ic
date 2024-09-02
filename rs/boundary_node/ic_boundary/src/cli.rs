@@ -184,23 +184,19 @@ pub struct TlsConfig {
     #[clap(long, default_value = "")]
     pub hostname: String,
 
-    /// How many days before certificate expires to start renewing it
-    #[clap(long, default_value = "30", value_parser = clap::value_parser!(u32).range(1..90))]
-    pub renew_days_before: u32,
-
-    /// Path to the ACME credentials file. If file does not exist - new account will be created & saved to it, so the folder needs to be writeable.
-    /// If this argument is not specified or the file is empty then ACME client will not be created and only certificate specified by
-    /// --tls-*-path options will be used (this is useful mostly for testing).
+    /// Path to the ACME credentials folder, needs to be writeable - it stores the account info & issued certificate.
+    /// This enables the ACME client.
+    /// On the first start the account will be created.
     #[clap(long)]
     pub acme_credentials_path: Option<PathBuf>,
 
-    /// The path to the ingress TLS cert.
-    /// If ACME client is used (see above) - the file needs to be writeable.
+    /// The path to the TLS certificate in PEM format.
+    /// This is required if the ACME client is not used.
     #[clap(long, default_value = "cert.pem")]
     pub tls_cert_path: Option<PathBuf>,
 
-    /// The path to the ingress TLS private-key.
-    /// If ACME client is used (see above) - the file needs to be writeable.
+    /// The path to the TLS private key in PEM format.
+    /// This is required if the ACME client is not used.
     #[clap(long, default_value = "pkey.pem")]
     pub tls_pkey_path: Option<PathBuf>,
 }

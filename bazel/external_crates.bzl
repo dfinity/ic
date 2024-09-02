@@ -196,6 +196,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tls-rustls",
                 ],
             ),
+            "axum-server_0_6_0": crate.spec(
+                package = "axum-server",
+                version = "^0.6.0",
+                features = [
+                    "tls-rustls",
+                ],
+            ),
             "backoff": crate.spec(
                 version = "^0.4.0",
             ),

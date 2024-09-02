@@ -1,5 +1,5 @@
 {
-  "checksum": "9cfa746ae36824282dd00071b03e95cb22f206a6af91ceb10ed79faa3efd9058",
+  "checksum": "96df40b2a41f6c7a27dcdc7893f494708ff254aa6ea6bc39e41c1d3ddaddd141",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5572,6 +5572,120 @@
         },
         "edition": "2018",
         "version": "0.5.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "axum-server 0.6.0": {
+      "name": "axum-server",
+      "version": "0.6.0",
+      "package_url": "https://github.com/programatik29/axum-server",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/axum-server/0.6.0/download",
+          "sha256": "c1ad46c3ec4e12f4a4b6835e173ba21c25e484c9d02b49770bf006ce5367c036"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_server",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum_server",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arc-swap",
+            "default",
+            "rustls",
+            "rustls-pemfile",
+            "tls-rustls",
+            "tokio-rustls"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arc-swap 1.7.1",
+              "target": "arc_swap"
+            },
+            {
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.4.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.7",
+              "target": "hyper_util"
+            },
+            {
+              "id": "pin-project-lite 0.2.14",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "rustls 0.21.12",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 2.1.3",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "tokio 1.40.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -17977,6 +18091,11 @@
             {
               "id": "axum-server 0.5.1",
               "target": "axum_server"
+            },
+            {
+              "id": "axum-server 0.6.0",
+              "target": "axum_server",
+              "alias": "axum_server_0_6_0"
             },
             {
               "id": "backoff 0.4.0",
@@ -78352,6 +78471,7 @@
     "axum 0.7.5",
     "axum-extra 0.9.3",
     "axum-server 0.5.1",
+    "axum-server 0.6.0",
     "backoff 0.4.0",
     "backon 0.4.4",
     "base32 0.4.0",
