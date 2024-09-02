@@ -27,8 +27,10 @@ impl Step for XNet {
             panic!("Need at least two application subnets");
         }
         let subnets = subnets[0..2].to_vec();
-        let handle = rt.spawn_blocking(|| message_routing::global_reboot_test::test_on_subnets(env, subnets));
-        rt.block_on(handle).map_err(|e| anyhow::anyhow!("Received panic while running xnet test: {:?}", e))
+        let handle = rt
+            .spawn_blocking(|| message_routing::global_reboot_test::test_on_subnets(env, subnets));
+        rt.block_on(handle)
+            .map_err(|e| anyhow::anyhow!("Received panic while running xnet test: {:?}", e))
     }
 
     fn total_runs(&self) -> usize {
