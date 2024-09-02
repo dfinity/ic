@@ -697,6 +697,10 @@ mypy-extensions==1.0.0 \
 nested-lookup==0.2.25 \
     --hash=sha256:6fa832748c90381f2291d850809e32492519ee5f253d6a5acbc29d937eca02e8
     # via -r requirements.in
+node-semver==0.9.0 \
+    --hash=sha256:04aa0b0016dbc06748d6378c42d8cf82a343415bd9fca6284f488041d08b33bb \
+    --hash=sha256:8153270903772b1e59500ced6f0aca0f7bdb021651c27584e9283b7077b4916b
+    # via -r requirements.in
 numpy==1.24.2 \
     --hash=sha256:003a9f530e880cb2cd177cba1af7220b9aa42def9c4afc2a2fc3ee6be7eb2b22 \
     --hash=sha256:150947adbdfeceec4e5926d956a06865c1c690f2fd902efede4ca6fe2e657c3f \
