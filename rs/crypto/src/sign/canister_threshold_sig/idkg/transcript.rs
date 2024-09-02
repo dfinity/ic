@@ -5,7 +5,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
     key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
-use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
+use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     create_transcript as idkg_create_transcript,
@@ -32,8 +32,9 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-pub fn create_transcript<C: CspSigner + CspSigVerifier>(
+pub fn create_transcript<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     dealings: &BatchSignedIDkgDealings,
@@ -45,6 +46,7 @@ pub fn create_transcript<C: CspSigner + CspSigVerifier>(
     for dealing in dealings {
         verify_signature_batch(
             csp_client,
+            vault,
             registry,
             dealing,
             params.verification_threshold(),
@@ -95,8 +97,9 @@ pub fn create_transcript<C: CspSigner + CspSigVerifier>(
     })
 }
 
-pub fn verify_transcript<C: CspSigner + CspSigVerifier>(
+pub fn verify_transcript<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     transcript: &IDkgTranscript,
@@ -114,6 +117,7 @@ pub fn verify_transcript<C: CspSigner + CspSigVerifier>(
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
         verify_signature_batch(
             csp_client,
+            vault,
             registry,
             signed_dealing,
             transcript.verification_threshold(),
@@ -584,8 +588,9 @@ fn signature_batch_err_to_verify_transcript_err(
     }
 }
 
-fn verify_signature_batch<C: CspSigner + CspSigVerifier>(
+fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
+    vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     dealing: &BatchSignedIDkgDealing,
     verification_threshold: NumberOfNodes,
@@ -602,7 +607,7 @@ fn verify_signature_batch<C: CspSigner + CspSigVerifier>(
     }
 
     if BasicSigVerifierInternal::verify_basic_sig_batch(
-        csp_client,
+        vault,
         registry,
         &dealing.signature,
         dealing.signed_idkg_dealing(),

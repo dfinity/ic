@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 indoc = "1.0.9"
+itertools = { workspace = true }
 pcre2 = "0.2.6"
 tempfile = { workspace = true }
 tokio = { workspace = true }

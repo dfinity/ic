@@ -1,9 +1,11 @@
+use crate::sns::Sns;
 use anyhow::{anyhow, Result};
-use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_wasm::pb::v1::{GetWasmRequest, GetWasmResponse};
-use ic_sns_wasm::pb::v1::{ListUpgradeStepsRequest, ListUpgradeStepsResponse};
+use ic_sns_wasm::pb::v1::{
+    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest,
+    ListUpgradeStepsResponse,
+};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 use tokio::fs::File;
@@ -11,21 +13,15 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
 
+use crate::call;
+
 pub async fn query_sns_upgrade_steps(agent: &Agent) -> Result<ListUpgradeStepsResponse> {
-    let sns_wasm_canister_id = Principal::from(SNS_WASM_CANISTER_ID);
     let request = ListUpgradeStepsRequest {
         limit: 0,
         sns_governance_canister_id: None,
         starting_at: None,
     };
-    let request_bytes = Encode!(&request)?;
-    let response = agent
-        .query(&sns_wasm_canister_id, "list_upgrade_steps")
-        .with_arg(request_bytes)
-        .call()
-        .await?;
-    let response_bytes = response.as_slice();
-    Decode!(&response_bytes, ListUpgradeStepsResponse).map_err(|e| anyhow!(e))
+    call(agent, SNS_WASM_CANISTER_ID, request).await
 }
 
 pub async fn get_git_version_for_sns_hash(
@@ -33,27 +29,27 @@ pub async fn get_git_version_for_sns_hash(
     ic_wasm_path: &Path,
     hash: &[u8],
 ) -> Result<String> {
-    let sns_wasm_canister_id = Principal::from(SNS_WASM_CANISTER_ID);
-
-    let arg = candid::Encode!(&GetWasmRequest {
+    let request = GetWasmRequest {
         hash: hash.to_vec(),
-    })?;
-    let response = agent
-        .query(&sns_wasm_canister_id, "get_wasm")
-        .with_arg(arg)
-        .call()
-        .await?;
-    let response = Decode!(&response.as_slice(), GetWasmResponse).map_err(|e| anyhow!(e))?;
+    };
+    let response: GetWasmResponse = call(agent, SNS_WASM_CANISTER_ID, request).await?;
 
     let dir = tempdir()?;
-
     let wasm_file_gz: PathBuf = write_wasm_to_temp_file(&response, dir.path()).await?;
-
     let wasm_file: PathBuf = decompress_gzip(&wasm_file_gz).await?;
-
     let git_commit_id = extract_git_commit_id(&wasm_file, ic_wasm_path).await?;
 
     Ok(git_commit_id)
+}
+
+pub async fn list_deployed_snses(agent: &Agent) -> Result<Vec<Sns>> {
+    let response = call(agent, SNS_WASM_CANISTER_ID, ListDeployedSnsesRequest {}).await?;
+    let snses = response
+        .instances
+        .into_iter()
+        .filter_map(|deployed_sns| crate::sns::Sns::try_from(deployed_sns).ok())
+        .collect::<Vec<_>>();
+    Ok(snses)
 }
 
 async fn write_wasm_to_temp_file(

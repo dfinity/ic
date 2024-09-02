@@ -681,9 +681,6 @@ impl NnsFunction {
             NnsFunction::ChangeSubnetTypeAssignment => {
                 (CYCLES_MINTING_CANISTER_ID, "change_subnet_type_assignment")
             }
-            NnsFunction::UpdateAllowedPrincipals => {
-                (SNS_WASM_CANISTER_ID, "update_allowed_principals")
-            }
             NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
             }
@@ -691,7 +688,9 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateAllowedPrincipals => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
@@ -815,9 +814,9 @@ impl Proposal {
                             NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
+                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateNodesHostosVersion
                             | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
                             NnsFunction::BlessReplicaVersion
@@ -4980,10 +4979,12 @@ impl Governance {
             | Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
-            | Action::SetDefaultFollowees(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
 
+            Action::SetDefaultFollowees(obsolete_action) => {
+                Self::validate_obsolete_proposal_action(obsolete_action)
+            }
             Action::SetSnsTokenSwapOpenTimeWindow(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }

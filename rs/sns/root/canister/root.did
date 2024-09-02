@@ -145,7 +145,6 @@ type SnsRootCanister = record {
   index_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
-  updated_framework_canisters_memory_limit : opt bool;
 };
 
 service : (SnsRootCanister) -> {

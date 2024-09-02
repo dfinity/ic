@@ -1310,7 +1310,6 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
     let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
     if create_file_atomically(started_file_path).is_ok() {
         let mut cmd = Command::new(PathBuf::from(bin_path));
@@ -1324,18 +1323,19 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
 
     let start = Instant::now();
     loop {
-        match ready_file_path.try_exists() {
-            Ok(true) => {
-                let port_string = std::fs::read_to_string(port_file_path)
-                    .expect("Failed to read port from port file");
-                let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if port_string.contains("\n") {
+                let port: u16 = port_string
+                    .trim_end()
+                    .parse()
+                    .expect("Failed to parse port to number");
+                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
-            _ => std::thread::sleep(Duration::from_millis(20)),
         }
         if start.elapsed() > Duration::from_secs(10) {
             panic!("Failed to start PocketIC service in time");
         }
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 
