@@ -33,7 +33,10 @@ use std::{
     time::Duration,
 };
 
-use axum::{middleware::from_fn_with_state, Router};
+use axum::{
+    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
+    middleware::Next, Router,
+};
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
@@ -56,7 +59,6 @@ use tokio_util::{sync::CancellationToken, time::DelayQueue};
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    utils::collect_metrics,
     ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
@@ -681,4 +683,26 @@ impl ConnectionManager {
         };
         Ok(conn)
     }
+}
+
+/// Axum middleware to collect metrics
+async fn collect_metrics(
+    State(state): State<QuicTransportMetrics>,
+    request: Request<Body>,
+    next: Next,
+) -> axum::response::Response {
+    state
+        .request_handle_bytes_received_total
+        .with_label_values(&[request.uri().path()])
+        .inc_by(request.body().size_hint().lower());
+    let _timer = state
+        .request_handle_duration_seconds
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
+    let out_counter = state
+        .request_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let response = next.run(request).await;
+    out_counter.inc_by(response.body().size_hint().lower());
+    response
 }
