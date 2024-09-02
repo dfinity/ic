@@ -430,6 +430,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                         &from,
                         &None,
                         &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        0,
                     );
                 } else {
                     self.process_transfer(
