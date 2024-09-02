@@ -225,7 +225,7 @@ impl XNetEndpoint {
                 });
 
             (
-                addr.clone(),
+                addr,
                 builder
                     .executor(ExecuteOnRuntime(runtime_handle.clone()))
                     .serve(make_service_closure(addr)),
