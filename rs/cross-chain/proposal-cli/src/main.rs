@@ -18,7 +18,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// A fictional versioning CLI
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser)] // requires `derive` feature
+#[command(about = "CLI to make canister upgrade proposals", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
