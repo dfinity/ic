@@ -60,9 +60,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash
@@ -92,9 +90,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -137,9 +133,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -184,9 +178,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -231,9 +223,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
@@ -295,9 +285,7 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          if [ -n "${NODE_NAME:-}" ]; then
-              echo "Node: $NODE_NAME"
-          fi
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Setup environment deps
         id: setup-environment-deps
         shell: bash
