@@ -1,0 +1,18 @@
+[package]
+name = "random-traffic-test"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "random-traffic-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+dfn_core = { path = "../dfn_core" }
+ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }

@@ -1,5 +1,3 @@
-use crate::canister_state::queues::QueueOp;
-
 use super::*;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
@@ -892,6 +890,12 @@ pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
 /// Generates an `Id` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Response, Context::Inbound, class, generator)
+}
+
+#[derive(PartialEq, Eq)]
+enum QueueOp {
+    Push,
+    Pop,
 }
 
 /// Fixture for validating updates to the message stats. Relies on a parallel

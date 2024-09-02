@@ -170,29 +170,44 @@ fn streams_stats() {
     let mut streams = Streams::new();
     // Empty response size map.
     let mut expected_responses_size = Default::default();
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     streams.push(SUBNET_1, req_a1);
     // Pushed a request, response size stats are unchanged.
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `Streams::push()`.
     streams.push(SUBNET_1, rep_a1);
     // `rep_a1` is now accounted for against `local_a`.
     expected_responses_size.insert(local_a, rep_a1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `StreamHandle::push()`.
     streams.get_mut(&SUBNET_1).unwrap().push(rep_b1);
     // `rep_b1` is accounted for against `local_b`.
     expected_responses_size.insert(local_b, rep_b1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
     streams.get_mut_or_insert(SUBNET_2).push(rep_b2);
     // `rep_b2` is accounted for against `local_b`.
     *expected_responses_size.get_mut(&local_b).unwrap() += rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Discard `req_a1` and `rep_a1` from the stream for `SUBNET_1`.
     streams
@@ -201,12 +216,18 @@ fn streams_stats() {
         .discard_messages_before(2.into(), &Default::default());
     // No more responses from `local_a` in `streams`.
     *expected_responses_size.get_mut(&local_a).unwrap() = 0;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
-    streams.prune_zero_responses_size_bytes();
+    streams.prune_zero_guaranteed_responses_size_bytes();
     // Zero valued entry for `local_a` pruned.
     expected_responses_size.remove(&local_a);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Discard `rep_b2` from the stream for `SUBNET_2`.
     streams
@@ -215,7 +236,104 @@ fn streams_stats() {
         .discard_messages_before(1.into(), &Default::default());
     // `rep_b2` is gone.
     *expected_responses_size.get_mut(&local_b).unwrap() -= rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+}
+
+#[test]
+fn streams_stats_best_effort_messages() {
+    let local = canister_test_id(1);
+    let remote = canister_test_id(2);
+
+    let request = |sender: CanisterId, receiver: CanisterId| -> RequestOrResponse {
+        RequestBuilder::default()
+            .sender(sender)
+            .receiver(receiver)
+            .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+            .build()
+            .into()
+    };
+    let response =
+        |respondent: CanisterId, originator: CanisterId, payload: &str| -> RequestOrResponse {
+            ResponseBuilder::default()
+                .respondent(respondent)
+                .originator(originator)
+                .response_payload(Payload::Data(payload.as_bytes().to_vec()))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                .build()
+                .into()
+        };
+
+    // A bunch of best-effort requests and responses from the local canister to the remote one.
+    let req = request(local, remote);
+    let rep_1 = response(local, remote, "a");
+    let rep_2 = response(local, remote, "bb");
+    let rep_3 = response(local, remote, "ccc");
+
+    let mut streams = Streams::new();
+
+    // Expecting no guaranteed responses throughout.
+    let expected_responses_size = BTreeMap::default();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.push(SUBNET_1, req);
+    // Pushed a request, response size stats are unchanged.
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `Streams::push()`.
+    streams.push(SUBNET_1, rep_1);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()`.
+    streams.get_mut(&SUBNET_1).unwrap().push(rep_2);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
+    streams.get_mut_or_insert(SUBNET_2).push(rep_3);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard everything from the stream for `SUBNET_1`.
+    streams
+        .get_mut(&SUBNET_1)
+        .unwrap()
+        .discard_messages_before(3.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.prune_zero_guaranteed_responses_size_bytes();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard `rep_b2` from the stream for `SUBNET_2`.
+    streams
+        .get_mut(&SUBNET_2)
+        .unwrap()
+        .discard_messages_before(1.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 }
 
 #[test]
@@ -245,8 +363,10 @@ fn streams_stats_after_deserialization() {
     assert_eq!(system_metadata, deserialized_system_metadata);
     // Double-check that the stats match.
     assert_eq!(
-        system_metadata.streams.responses_size_bytes(),
-        deserialized_system_metadata.streams.responses_size_bytes()
+        system_metadata.streams.guaranteed_responses_size_bytes(),
+        deserialized_system_metadata
+            .streams
+            .guaranteed_responses_size_bytes()
     );
 }
 
@@ -566,7 +686,7 @@ fn system_metadata_split() {
 
     let streams = Streams {
         streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
-        responses_size_bytes: btreemap! { CANISTER_1 => 169 },
+        guaranteed_responses_size_bytes: btreemap! { CANISTER_1 => 169 },
     };
 
     // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
@@ -1653,8 +1773,8 @@ fn stream_handle_pushing_signals_increments_signals_end() {
     );
     assert!(stream.reject_signals().is_empty());
 
-    let mut responses_size_bytes = BTreeMap::default();
-    let mut handle = StreamHandle::new(&mut stream, &mut responses_size_bytes);
+    let mut guaranteed_responses_size_bytes = BTreeMap::default();
+    let mut handle = StreamHandle::new(&mut stream, &mut guaranteed_responses_size_bytes);
 
     handle.push_accept_signal();
     assert_eq!(StreamIndex::new(31), handle.signals_end());

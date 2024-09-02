@@ -18,8 +18,8 @@ use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, NextInputQueue, ReplicatedState, SchedulerState,
-    StateError, SystemState,
+    CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
+    SystemState,
 };
 use ic_test_utilities_state::{arb_replicated_state_with_output_queues, ExecutionStateBuilder};
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
@@ -170,7 +170,7 @@ impl ReplicatedStateFixture {
             .unwrap()
             .system_state
             .queues()
-            .get_remote_subnet_input_schedule()
+            .remote_sender_schedule()
     }
 
     fn local_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
@@ -179,7 +179,7 @@ impl ReplicatedStateFixture {
             .unwrap()
             .system_state
             .queues()
-            .get_local_subnet_input_schedule()
+            .local_sender_schedule()
     }
 }
 
@@ -657,7 +657,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 }
 
 #[test]
-fn time_out_requests_updates_subnet_input_schedules_correctly() {
+fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
     // Push 3 requests into the canister with id `local_canister_id1`:
@@ -673,7 +673,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!(3, fixture.state.time_out_requests());
+    assert_eq!(3, fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
@@ -848,25 +848,23 @@ fn split() {
 }
 
 #[test]
-fn next_input_queue_round_trip() {
+fn input_source_roundtrip() {
     use ic_protobuf::state::queues::v1::canister_queues as pb;
 
-    for initial in NextInputQueue::iter() {
+    for initial in InputSource::iter() {
         let encoded = pb::NextInputQueue::from(&initial);
-        let round_trip = NextInputQueue::from(encoded);
+        let round_trip = InputSource::from(encoded);
 
         assert_eq!(initial, round_trip);
     }
 }
 
 #[test]
-fn compatibility_for_next_input_queue() {
+fn compatibility_for_input_source() {
     // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.
     assert_eq!(
-        NextInputQueue::iter()
-            .map(|x| x as i32)
-            .collect::<Vec<i32>>(),
+        InputSource::iter().map(|x| x as i32).collect::<Vec<i32>>(),
         [0, 1, 2]
     );
 }
@@ -1011,18 +1009,6 @@ proptest! {
         }
 
         prop_assert_eq!(replicated_state.output_message_count(), 0);
-
-    }
-
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        while output_iter.peek().is_some() {
-            output_iter.next();
-        }
     }
 
     #[test]
@@ -1058,5 +1044,48 @@ proptest! {
             }
             output_iter.next();
         }
+    }
+
+    #[test]
+    fn iter_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
+        batch_time_seconds in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        // Just consume all output messages.
+        //
+        // We cannot check the exact ordering because timing out some messages messes it
+        // up, both across canisters and across a cainster's output queues.
+        let output_messages = replicated_state.output_into_iter().count();
+
+        // All messages have either been timed out or output.
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
+    }
+
+    #[test]
+    fn peek_next_loop_with_stale_entries_terminates(
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
+        batch_time in any::<u32>(),
+    ) {
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(batch_time as u64 * NANOS_PER_SEC);
+        let timed_out_messages = replicated_state.time_out_messages();
+
+        let mut output_iter = replicated_state.output_into_iter();
+
+        let mut output_messages = 0;
+        while let Some(msg) = output_iter.peek() {
+            output_messages += 1;
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+        }
+        drop(output_iter);
+
+        // All messages have either been timed out or output.
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 }
