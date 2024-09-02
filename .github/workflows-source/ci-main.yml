@@ -164,8 +164,7 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
-    if: ${{ github.ref_protected }} || ${{ github.event_name == 'workflow_dispatch' }} # allow manual testing
+    if: ${{ github.ref_protected }} # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
     steps:
       - <<: *checkout
       - name: Set PATH
