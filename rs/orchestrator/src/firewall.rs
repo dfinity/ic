@@ -768,29 +768,37 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_test() {
+    #[test]
+    fn nftables_golden_test() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         golden_test(
+            rt,
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
-        )
-        .await
+        );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_boundary_node_test() {
+    #[test]
+    fn nftables_golden_boundary_node_test() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         golden_test(
+            rt,
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
-        )
-        .await
+        );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    async fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(rt: tokio::runtime::Runtime, role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -803,25 +811,19 @@ mod tests {
             .config_file
             .clone_from(&nftables_config_path);
 
-        let (_tmp_dir, mut firewall) = tokio::task::spawn_blocking(move || {
-            let path = tmp_dir.path().to_owned();
-            (
-                tmp_dir,
-                set_up_firewall_dependencies(
-                    replica_firewall_config,
-                    boundary_node_firewall_config,
-                    &path,
-                    role,
-                ),
-            )
-        })
-        .await
-        .unwrap();
+        let mut firewall = set_up_firewall_dependencies(
+            replica_firewall_config,
+            boundary_node_firewall_config,
+            tmp_dir.path(),
+            role,
+        );
 
-        firewall
-            .check_for_firewall_config(RegistryVersion::new(1))
-            .await
-            .expect("Should successfully produce a firewall config");
+        rt.block_on(async {
+            firewall
+                .check_for_firewall_config(RegistryVersion::new(1))
+                .await
+                .expect("Should successfully produce a firewall config");
+        });
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
