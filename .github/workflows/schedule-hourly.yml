@@ -15,7 +15,6 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-build-all-no-cache:
@@ -33,9 +32,16 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then
+              echo "Node: $NODE_NAME"
+          fi
+      - name: Login to Dockerhub
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
         with:
@@ -67,9 +73,16 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then
+              echo "Node: $NODE_NAME"
+          fi
+      - name: Login to Dockerhub
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKER_HUB_USER }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -105,9 +118,10 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then
+              echo "Node: $NODE_NAME"
+          fi
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
