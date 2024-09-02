@@ -4,7 +4,7 @@ load("//rs/tests:system_tests.bzl", "system_test_nns")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
-    name = "qualification",
+    name = "guest_os_qualification",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
