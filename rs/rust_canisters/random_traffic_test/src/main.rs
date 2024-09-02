@@ -4,6 +4,7 @@ use ic_base_types::CanisterId;
 use rand::{distributions::Distribution, rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use random_traffic_test::*;
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 thread_local! {
