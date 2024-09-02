@@ -905,7 +905,7 @@ impl dyn StorageLayout + '_ {
             file.read_exact(&mut len);
             result = max(result, len);
         }
-        result
+        Ok(result)
     }
 }
 
