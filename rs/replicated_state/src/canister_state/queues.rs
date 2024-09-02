@@ -85,9 +85,6 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///  * The reference at the front of a non-empty canister input or output queue
 ///    is non-stale.
 ///
-///  * Input schedules are internally consistent: a canister is enqueued in the
-///    local or remote input schedule iff in the `input_schedule_canisters` set.
-///
 /// # Soft invariants
 ///
 ///  * `QueueStats`' input / output queue slot reservation stats are consistent
@@ -96,11 +93,9 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///  * All keys (references) in the pool and in the shed / expired callback maps
 ///    are enqueued in the canister queues exactly once.
 ///
-///  * All non-empty input queues are scheduled in an input schedule.
-///
-///  * Local canisters (including ourselves) are scheduled in the local input
-///    schedule. Canisters that are not known to be local (including potentially
-///    deleted local canisters) may be scheduled in either input schedule.
+///  * `InputSchedule` invariants: all non-empty input queues are scheduled;
+///    input schedules are internally consistent; local canisters are scheduled
+///    in the local input schedule, remote canisters in any schedule.
 ///
 ///  # External invariants
 ///
