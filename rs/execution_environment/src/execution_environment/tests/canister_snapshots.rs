@@ -1752,17 +1752,12 @@ fn snapshot_must_include_globals() {
       )"#;
     let wasm = wat::parse_str(wat).unwrap();
 
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-
     let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
         .with_snapshots(FlagStatus::Enabled)
-        .with_caller(own_subnet, caller_canister)
         .build();
 
     // Create canister.
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
