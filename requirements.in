@@ -18,21 +18,16 @@ packaging==21.3
 paramiko>=2.11.0
 parse==1.19.0
 pybars3>=0.9.7
-pydot
 pytest
 pytest-cov
 PyYAML>=5.4.1
 requests>=2.26.0
 simple-parsing
 six>=1.16.0
-termcolor>=1.1.0
-toml
 tqdm
 uuid
 PyGithub==2.3.0
 # extra requirements that were previously in docker container, not sure what they are used for (potentially remove later)
-freezegun
 junit-xml
 mypy
 retry
-xmltodict
