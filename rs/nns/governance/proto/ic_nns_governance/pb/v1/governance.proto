@@ -84,8 +84,8 @@ enum Topic {
   // creating new subnets, adding and removing subnet nodes, and
   // splitting subnets.
   TOPIC_SUBNET_MANAGEMENT = 7;
-  // Installing and upgrading “system” canisters that belong to the network.
-  // For example, upgrading the NNS.
+  // All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
+  // Management or Service Nervous System Management).
   TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
   // Proposals that update KYC information for regulatory purposes,
   // for example during the initial Genesis distribution of ICP in the
@@ -124,6 +124,14 @@ enum Topic {
 
   // Proposals related to subnet rental.
   TOPIC_SUBNET_RENTAL = 16;
+
+  // All proposals to manage protocol canisters, which are considered part of the ICP protocol and
+  // are essential for its proper functioning.
+  TOPIC_PROTOCOL_CANISTER_MANAGEMENT = 17;
+
+  // All proposals to manage the canisters of service nervous systems (SNS), including upgrading
+  // relevant canisters and managing SNS framework canister WASMs through SNS-W.
+  TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT = 18;
 
   // Superseded by SNS_COMMUNITY_FUND.
   reserved 11;
@@ -187,6 +195,21 @@ message BallotInfo {
   Vote vote = 2;
 }
 
+// Controls how much information non-controller and non-hot-key principals can
+// see about this neuron. Currently, if a neuron is private, recent_ballots and
+// joined_community_fund_timestamp_seconds are redacted when being read by an
+// unprivileged principal.
+//
+// https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360
+//
+// As of Jul 19, this is not yet enforced, but will be once the plan described
+// above is fully executed.
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PRIVATE = 1;
+  VISIBILITY_PUBLIC = 2;
+}
+
 // The result of querying for the state of a single neuron.
 message NeuronInfo {
   // The exact time at which this data was computed. This means, for
@@ -221,6 +244,8 @@ message NeuronInfo {
   // The type of the Neuron. See [NeuronType] for a description
   // of the different states.
   optional NeuronType neuron_type = 11;
+  // See the Visibility enum.
+  optional Visibility visibility = 12;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -401,6 +426,9 @@ message Neuron {
   // The type of the Neuron. See [NeuronType] for a description
   // of the different states.
   optional NeuronType neuron_type = 22;
+
+  // See the Visibility enum.
+  optional Visibility visibility = 23;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -425,6 +453,7 @@ message AbridgedNeuron {
   bool not_for_profit = 16;
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
+  optional Visibility visibility = 23;
 
   reserved 1;
   reserved "id";
@@ -844,6 +873,12 @@ message Proposal {
     OpenSnsTokenSwap open_sns_token_swap = 23 [deprecated = true];
     // Create a new SNS.
     CreateServiceNervousSystem create_service_nervous_system = 24;
+    // Install, reinstall or upgrade the code of a canister that is controlled by the NNS.
+    InstallCode install_code = 25;
+    // Stop or start a canister that is controlled by the NNS.
+    StopOrStartCanister stop_or_start_canister = 26;
+    // Update the settings of a canister that is controlled by the NNS.
+    UpdateCanisterSettings update_canister_settings = 27;
   }
 }
 
@@ -910,6 +945,9 @@ message ManageNeuron {
   message ChangeAutoStakeMaturity {
     bool requested_setting_for_auto_stake_maturity = 1;
   }
+  message SetVisibility {
+    optional Visibility visibility = 1;
+  }
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to be the
   // controller of the neuron.
@@ -924,6 +962,7 @@ message ManageNeuron {
       JoinCommunityFund join_community_fund = 7;
       LeaveCommunityFund leave_community_fund = 8;
       ChangeAutoStakeMaturity change_auto_stake_maturity = 9;
+      SetVisibility set_visibility = 10;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
@@ -1219,6 +1258,8 @@ message GovernanceError {
     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
     // The neuron attempted to leave the community fund but is not a member.
     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
+    // The neuron attempted to vote on a proposal that it has already voted on before.
+    ERROR_TYPE_NEURON_ALREADY_VOTED = 19;
   }
 
   ErrorType error_type = 1;
@@ -1359,10 +1400,8 @@ message ProposalData {
   // This is populated when an OpenSnsTokenSwap proposal is first made.
   optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 
-  // This is populated when OpenSnsTokenSwap is executed. It is used when our
-  // conclude_community_fund_participation Candid method is called to either
-  // mint ICP, or restore CF neuron maturity.
-  repeated ic_sns_swap.pb.v1.CfParticipant cf_participants = 18;
+  reserved "cf_participants";
+  reserved 18;
 
   // This gets set to one of the terminal values (i.e. Committed or Aborted)
   // when the swap canister calls our conclude_community_fund_participation
@@ -1503,11 +1542,18 @@ message NeuronsFundSnapshot {
     optional uint64 amount_icp_e8s = 2;
     // Overall amount of maturity of the neuron from which this portion is taken.
     optional uint64 maturity_equivalent_icp_e8s = 3;
-    // The principal that can vote on behalf of this neuron.
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4;
     // Whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
     // participation constraints.
     optional bool is_capped = 5;
+
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    optional ic_base_types.pb.v1.PrincipalId controller = 6;
+
+    // The principals that can vote, propose, and follow on behalf of this neuron.
+    repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
+
+    // Deprecated. Please use `controller` instead (not `hotkeys`!)
+    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4 [deprecated = true];
   }
 
   repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;
@@ -2008,6 +2054,76 @@ message CreateServiceNervousSystem {
   GovernanceParameters governance_parameters = 10;
 }
 
+message InstallCode {
+  // The target canister ID to call install_code on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  enum CanisterInstallMode {
+    CANISTER_INSTALL_MODE_UNSPECIFIED = 0;
+    CANISTER_INSTALL_MODE_INSTALL = 1;
+    CANISTER_INSTALL_MODE_REINSTALL = 2;
+    CANISTER_INSTALL_MODE_UPGRADE = 3;
+  }
+  // The install mode. Either install, reinstall, or upgrade. Required.
+  optional CanisterInstallMode install_mode = 2;
+
+  // The wasm module to install. required.
+  optional bytes wasm_module = 3;
+  // The arg to pass to the canister. Optional.
+  optional bytes arg = 4;
+  // Whether to skip stopping the canister before installing. Optional. Default is false.
+  optional bool skip_stopping_before_installing = 5;
+}
+
+message StopOrStartCanister {
+  // The target canister ID to call stop_canister or start_canister on. The canister must be
+  // controlled by NNS Root, and it cannot be NNS Governance or Lifeline. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The action to take on the canister. Required.
+  enum CanisterAction {
+    CANISTER_ACTION_UNSPECIFIED = 0;
+    CANISTER_ACTION_STOP = 1;
+    CANISTER_ACTION_START = 2;
+  }
+  optional CanisterAction action = 2;
+}
+
+message UpdateCanisterSettings {
+  // The target canister ID to call update_settings on. Required.
+  optional ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // Log visibility of a canister.
+  enum LogVisibility {
+    LOG_VISIBILITY_UNSPECIFIED = 0;
+    // The log is visible to the controllers of the dapp canister.
+    LOG_VISIBILITY_CONTROLLERS = 1;
+    // The log is visible to the public.
+    LOG_VISIBILITY_PUBLIC = 2;
+  }
+
+  // The controllers of the canister. We use a message to wrap the repeated field because prost does
+  // not generate `Option<Vec<T>>` for repeated fields.
+  message Controllers {
+    // The controllers of the canister.
+    repeated ic_base_types.pb.v1.PrincipalId controllers = 1;
+  }
+
+  // The CanisterSettings struct as defined in the ic-interface-spec
+  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
+  message CanisterSettings {
+    optional Controllers controllers = 1;
+    optional uint64 compute_allocation = 2;
+    optional uint64 memory_allocation = 3;
+    optional uint64 freezing_threshold = 4;
+    optional LogVisibility log_visibility = 5;
+    optional uint64 wasm_memory_limit = 6;
+  }
+
+  // The settings to update. Required.
+  optional CanisterSettings settings = 2;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2165,11 +2281,40 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+
+    // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
+    optional uint64 total_voting_power_non_self_authenticating_controller = 36;
+    optional uint64 total_staked_e8s_non_self_authenticating_controller = 37;
+
+    // Statistics about some subset (not necessarily a proper subset) of
+    // neurons. So far, these are mostly totals.
+    message NeuronSubsetMetrics {
+      // The values in these fields can be derived from the value in the
+      // analogous fields (declared a little lower in this message). For
+      // example, count = count_buckets.values().sum().
+      optional uint64 count = 1;
+      optional uint64 total_staked_e8s = 2;
+      optional uint64 total_staked_maturity_e8s_equivalent = 3;
+      optional uint64 total_maturity_e8s_equivalent = 4;
+      optional uint64 total_voting_power = 5;
+
+      // These fields are keyed by floor(dissolve delay / 0.5 years). These are
+      // analogous to the (singular) fields above. Here, the usual definition of
+      // year for the IC is used: exactly 365.25 days.
+      map<uint64, uint64> count_buckets = 6;
+      map<uint64, uint64> staked_e8s_buckets = 7;
+      map<uint64, uint64> staked_maturity_e8s_equivalent_buckets = 8;
+      map<uint64, uint64> maturity_e8s_equivalent_buckets = 9;
+      map<uint64, uint64> voting_power_buckets = 10;
+    }
+
+    NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
+    NeuronSubsetMetrics public_neuron_subset_metrics = 39;
   }
 
   GovernanceCachedMetrics metrics = 15;
 
-  MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
+  MonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
 
   // Cached value for the maturity modulation as calculated each day.
   optional int32 cached_daily_maturity_modulation_basis_points = 17;
@@ -2338,6 +2483,22 @@ message ListNeurons {
   // If true, the "requested list" also contains the neuron ID of the
   // neurons that the calling principal is authorized to read.
   bool include_neurons_readable_by_caller = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  // Whether to also include empty neurons readable by the caller. This field only has an effect
+  // when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
+  // `neuron_ids` field, then the neuron will be included in the response regardless of the value of
+  // this field. Since the previous behavior was to always include empty neurons readable by caller,
+  // if this field is not provided, it defaults to true, in order to maintain backwards
+  // compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+  optional bool include_empty_neurons_readable_by_caller = 3;
+  // If this is set to true, and a neuron in the "requested list" has its
+  // visibility set to public, then, it will (also) be included in the
+  // full_neurons field in the response (which is of type ListNeuronsResponse).
+  // Note that this has no effect on which neurons are in the "requested list".
+  // In particular, this does not cause all public neurons to become part of the
+  // requested list. In general, you probably want to set this to true, but
+  // since this feature was added later, it is opt in to avoid confusing
+  // existing (unmigrated) callers.
+  optional bool include_public_neurons_in_full_neurons = 4;
 }
 
 // A response to a `ListNeurons` request.
@@ -2389,10 +2550,30 @@ message ClaimOrRefreshNeuronFromAccountResponse {
   }
 }
 
-// The most recent monthly Node Provider rewards
-message MostRecentMonthlyNodeProviderRewards {
+// The monthly Node Provider rewards as of a point in time.
+message MonthlyNodeProviderRewards {
+  // The time when the rewards were calculated.
   uint64 timestamp = 1;
+  // The Rewards calculated and rewarded.
   repeated RewardNodeProvider rewards = 2;
+
+  // The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+  // This field snapshots the actual rate used by governance when the rewards were calculated.
+  optional XdrConversionRate xdr_conversion_rate = 3;
+
+  // The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+  // why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+  optional uint64 minimum_xdr_permyriad_per_icp = 4;
+
+  // The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+  // from the value in network economics.
+  optional uint64 maximum_node_provider_rewards_e8s = 5;
+
+  // The registry version used to calculate these rewards at the time the rewards were calculated.
+  optional uint64 registry_version = 6;
+
+  // The list of node_provieders at the time when the rewards were calculated.
+  repeated NodeProvider node_providers = 7;
 }
 
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
@@ -2517,8 +2698,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
@@ -2529,11 +2710,17 @@ message SettleNeuronsFundParticipationResponse {
     optional uint64 nns_neuron_id = 1;
     // The amount of Neurons' Fund participation associated with this neuron.
     optional uint64 amount_icp_e8s = 2;
-    // The principal that can vote on behalf of this neuron.
-    optional string hotkey_principal = 3;
+    // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    optional ic_base_types.pb.v1.PrincipalId controller = 6;
+    // The principals that can vote, propose, and follow on behalf of this neuron.
+    optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
+
     // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
+
+    // Deprecated. Please use `controller` instead (not `hotkeys`!)
+    optional string hotkey_principal = 3 [deprecated = true];
   }
 
   // Request was completed successfully.
@@ -2658,5 +2845,20 @@ message RestoreAgingSummary {
     optional uint64 previous_total_stake_e8s = 3;
     // The current total stake of neurons in this group when considering to restore aging.
     optional uint64 current_total_stake_e8s = 4;
+  }
+}
+
+// The historical rewards that were provided to node providers, along with the contextual data
+// needed to calculate it.
+message ArchivedMonthlyNodeProviderRewards {
+  // The version of the rewards data.  These versions are added to accommodate changes to the
+  // rewards data structure over time.
+  oneof version {
+    V1 version_1 = 1;
+  }
+
+  // The first version of the stored rewards.
+  message V1 {
+    ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
 }

@@ -8,19 +8,22 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ed25519-consensus = "2.0.1"
 ic-agent = { workspace = true }
 ic-constants = { path = "../../../constants" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
+ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-icrc1 = { path = ".." }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+ic-types = { path = "../../../types/types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
-proptest = "1.0"
-rand = "0.8"
-rand_chacha = "0.3"
+proptest = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../../rosetta_core" }
 serde_bytes = { workspace = true }
+serde_json = { workspace = true }

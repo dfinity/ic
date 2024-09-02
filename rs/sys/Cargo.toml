@@ -9,16 +9,16 @@ documentation.workspace = true
 [dependencies]
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-tokio = { workspace = true }
-lazy_static = "1.4.0"
-libc = "0.2.91"
+lazy_static = { workspace = true }
+libc = { workspace = true }
 nix = { workspace = true }
-prost = { workspace = true }
-wsl = "0.1.0"
 phantom_newtype = { path = "../phantom_newtype" }
+prost = { workspace = true }
+tokio = { workspace = true }
+wsl = "0.1.0"
 
 [target.'cfg(target_family = "unix")'.dependencies]
-rand = "0.8.3"
+rand = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cvt = "0.1.1"
@@ -26,4 +26,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

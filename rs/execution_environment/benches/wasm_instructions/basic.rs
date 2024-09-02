@@ -375,35 +375,10 @@ pub fn benchmarks() -> Vec<Benchmark> {
         "tabop/table.get",
         "(drop (table.get $table (local.get $zero_i32)))",
     ));
-    // The throughput for the following benchmarks is ~0.02 Gops/s
-    benchmarks.extend(benchmark_with_confirmation(
-        "tabop/table.set-ref.func",
-        "(table.set $table (local.get $zero_i32) (ref.func 0))",
-    ));
     // The throughput for the following benchmarks is ~2.8 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "tabop/table.size",
         "(global.set $x_i32 (table.size))",
-    ));
-    // The throughput for the following benchmarks is ~0.02 Gops/s
-    benchmarks.extend(benchmark_with_confirmation(
-        "tabop/table.copy",
-        "(table.copy (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
-    ));
-    // The throughput for the following benchmarks is ~0.02 Gops/s
-    benchmarks.extend(benchmark_with_confirmation(
-        "tabop/table.init",
-        "(table.init 0 (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
-    ));
-    // The throughput for the following benchmarks is ~0.009 Gops/s
-    benchmarks.extend(benchmark_with_confirmation(
-        "tabop/table.grow-ref.func",
-        "(global.set $x_i32 (table.grow $table (ref.func 0) (local.get $zero_i32)))",
-    ));
-    // The throughput for the following benchmarks is ~0.01 Gops/s
-    benchmarks.extend(benchmark_with_confirmation(
-        "tabop/table.fill-ref.func",
-        "(table.fill $table (local.get $zero_i32) (ref.func 0) (local.get $zero_i32))",
     ));
 
     ////////////////////////////////////////////////////////////////////

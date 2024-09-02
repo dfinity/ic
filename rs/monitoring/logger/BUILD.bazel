@@ -8,8 +8,8 @@ rust_library(
     crate_name = "ic_logger",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/config",
-        "//rs/monitoring/context_logger",
         "//rs/protobuf",
         "//rs/utils",
         "@crate_index//:chrono",

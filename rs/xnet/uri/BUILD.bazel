@@ -3,8 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types",
-    "@crate_index//:http",
+    "@crate_index//:http_0_2_12",
 ]
 
 rust_library(

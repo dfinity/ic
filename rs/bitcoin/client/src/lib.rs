@@ -4,15 +4,15 @@ use crate::metrics::{
     Metrics, LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS,
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
-use ic_adapter_metrics::AdapterMetrics;
+use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
+use ic_btc_replica_types::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+};
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceSendTransactionRequest,
-};
-use ic_btc_types_internal::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
@@ -22,6 +22,7 @@ use std::{convert::TryFrom, path::PathBuf};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
+use tracing::instrument;
 
 fn convert_tonic_error(status: tonic::Status) -> RpcError {
     match status.code() {
@@ -51,6 +52,7 @@ impl BitcoinAdapterClientImpl {
 impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl {
     type Response = BitcoinAdapterResponseWrapper;
 
+    #[instrument(skip_all)]
     fn send_blocking(
         &self,
         request: BitcoinAdapterRequestWrapper,

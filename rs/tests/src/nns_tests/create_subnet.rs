@@ -22,25 +22,27 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 
-use crate::driver::ic::{InternetComputer, Subnet};
 use ic_base_types::{NodeId, SubnetId};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use slog::info;
 
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::nns::get_subnet_list_from_registry;
-use crate::nns::{
+use ic_system_test_driver::nns::get_subnet_list_from_registry;
+use ic_system_test_driver::nns::{
     self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
     vote_execute_proposal_assert_executed,
 };
 
-use crate::util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister};
+use ic_system_test_driver::util::{
+    assert_create_agent, block_on, runtime_from_url, UniversalCanister,
+};
 
 const NNS_PRE_MASTER: usize = 4;
 const APP_PRE_MASTER: usize = 4;

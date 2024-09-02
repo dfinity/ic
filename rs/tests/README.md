@@ -174,9 +174,6 @@ like `basic_health_test`.
   the file system directory or only through information available through the test environment.
 * Put your test in a suitable folder in the src directory or create a new
   sub-directory. Don't forget to modify CODEOWNERS accordingly.
-* Add your test to a suitable suite in `rs/tests/bin/prod-test-driver.rs`.
-  If your test takes more than 50min, it must only run nightly and the pipeline
-  might need to be adjusted in `testnet/tests/pipeline/pipeline.yml`.
 
 ### A note on the CLI
 

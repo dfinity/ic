@@ -1,12 +1,14 @@
-use crate::driver::test_env::TestEnv;
-use crate::rosetta_tests::lib::{make_user_ed25519, NeuronDetails};
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
+use crate::rosetta_tests::{
+    lib::{make_user_ed25519, NeuronDetails},
+    setup::setup,
+    test_neurons::TestNeurons,
+};
 use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::KnownNeuronData;
-use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
-use ic_rosetta_api::models::CallResponse;
+use ic_nns_governance_api::pb::v1::KnownNeuronData;
+use ic_rosetta_api::{
+    ledger_client::list_known_neurons_response::ListKnownNeuronsResponse, models::CallResponse,
+};
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use std::collections::HashMap;
 
 const PORT: u32 = 8107;
@@ -50,7 +52,8 @@ pub fn test(env: TestEnv) {
         let mut known_neurons_response =
             ListKnownNeuronsResponse::try_from(Some(known_neurons.result)).unwrap();
         known_neurons_response.known_neurons.sort_by(
-            |a: &ic_nns_governance::pb::v1::KnownNeuron, b| {
+            |a: &ic_nns_governance_api::pb::v1::KnownNeuron,
+             b: &ic_nns_governance_api::pb::v1::KnownNeuron| {
                 a.id.unwrap().partial_cmp(&b.id.unwrap()).unwrap()
             },
         );

@@ -28,9 +28,9 @@ certificate authority.
 
 The following three files are used to setup and start the service on the boundary node:
 
-* [setup-certificate-issuer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
-* [setup-certificate-issuer.sh](../../../ic-os/rootfs/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
-* [certificate-issuer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/certificate-issuer.service)
+* [setup-certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
+* [setup-certificate-issuer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
+* [certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-issuer.service)
 
 The `/registration` endpoint needs to be publicly accessible. To this end, the
 `nginx` configuration needs to expose and endpoint, which is routed to the certificate issuer.

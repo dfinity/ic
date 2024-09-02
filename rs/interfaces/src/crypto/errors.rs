@@ -3,6 +3,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
     IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
@@ -336,6 +337,51 @@ impl ErrorReproducibility for ThresholdEcdsaVerifyCombinedSignatureError {
             Self::SerializationError { .. } => true,
             // Invalid commitment type or wrong algorithm ID
             Self::InternalError { .. } => true,
+            // true, as validity checks of arguments are stable across replicas
+            Self::InvalidArguments(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for ThresholdSchnorrVerifySigShareError {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Signature share verification does not depend on any local or private
+        // state and so is inherently replicated.
+        match self {
+            // The error returned if signature share commitments are invalid
+            Self::InvalidSignatureShare => true,
+            // The purported signer does exist in the transcript
+            Self::InvalidArgumentMissingSignerInTranscript { .. } => true,
+            // The signature share could not even be deserialized correctly
+            Self::SerializationError(_) => true,
+            // The share included an invalid commitment type
+            Self::InternalError(_) => true,
+            // true, as validity checks of arguments are stable across replicas
+            Self::InvalidArguments(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for ThresholdSchnorrVerifyCombinedSigError {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // Signature verification does not depend on any local or
+        // private state and so is inherently replicated.
+        match self {
+            // The Schnorr signature was invalid or did not match the
+            // presignature transcript
+            Self::InvalidSignature => true,
+            // The signature could not even be deserialized correctly
+            Self::SerializationError(_) => true,
+            // Invalid commitment type or wrong algorithm ID
+            Self::InternalError(_) => true,
             // true, as validity checks of arguments are stable across replicas
             Self::InvalidArguments(_) => true,
         }

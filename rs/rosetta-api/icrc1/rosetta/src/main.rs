@@ -21,7 +21,7 @@ use ic_icrc_rosetta::{
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, process};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
@@ -59,6 +59,8 @@ struct Args {
     #[arg(short, long)]
     ledger_id: CanisterId,
 
+    /// The symbol of the ICRC-1 token.
+    /// If set Rosetta will check the symbol against the ledger it connects to. If the symbol does not match, it will exit.
     #[arg(long)]
     icrc1_symbol: Option<String>,
 
@@ -80,7 +82,7 @@ struct Args {
     store_type: StoreType,
 
     /// The file to use for the store if [store_type] is file.
-    #[arg(short = 'f', long, default_value = "db.sqlite")]
+    #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     store_file: PathBuf,
 
     /// The network type that rosetta connects to.
@@ -316,10 +318,28 @@ async fn main() -> Result<()> {
     });
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
+    if let Some(token_symbol) = args.icrc1_symbol.clone() {
+        if metadata.symbol != token_symbol {
+            bail!(
+                "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
+                metadata.symbol, token_symbol
+            );
+        }
+    }
+
+    info!(
+        "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
+        args.ledger_id
+    );
+    info!(
+        "The token symbol of the ICRC-1 ledger is: {}",
+        metadata.symbol
+    );
 
     let shared_state = Arc::new(AppState {
         icrc1_agent: icrc1_agent.clone(),
         ledger_id: args.ledger_id,
+        synched: Arc::new(Mutex::new(None)),
         storage: storage.clone(),
         archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
         metadata,
@@ -343,7 +363,9 @@ async fn main() -> Result<()> {
     }
 
     let app = Router::new()
+        .route("/ready", get(ready))
         .route("/health", get(health))
+        .route("/call", post(call))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))
@@ -381,26 +403,37 @@ async fn main() -> Result<()> {
     }
 
     if !args.offline {
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-            loop {
-                if let Err(e) = start_synching_blocks(
-                    icrc1_agent.clone(),
-                    storage.clone(),
-                    *MAXIMUM_BLOCKS_PER_REQUEST,
-                    shared_state.clone().archive_canister_ids.clone(),
-                )
-                .await
-                {
-                    error!("Error while syncing blocks: {}", e);
-                    sync_wait_secs = std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
-                    info!("Retrying in {} seconds.", sync_wait_secs);
-                } else {
-                    sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-                }
 
-                tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
-            }
+            let block_sync_storage = match args.store_type {
+                StoreType::InMemory => storage.clone(),
+                StoreType::File => {
+                    Arc::new(StorageClient::new_persistent(&args.store_file).unwrap())
+                }
+            };
+
+            tokio::runtime::Handle::current().block_on(async {
+                loop {
+                    if let Err(e) = start_synching_blocks(
+                        icrc1_agent.clone(),
+                        block_sync_storage.clone(),
+                        *MAXIMUM_BLOCKS_PER_REQUEST,
+                        shared_state.clone().archive_canister_ids.clone(),
+                    )
+                    .await
+                    {
+                        error!("Error while syncing blocks: {}", e);
+                        sync_wait_secs =
+                            std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
+                        info!("Retrying in {} seconds.", sync_wait_secs);
+                    } else {
+                        sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+                    }
+
+                    tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
+                }
+            });
         });
     }
 

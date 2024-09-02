@@ -1,6 +1,7 @@
 use crate::utils::{expect_error, expect_reply, test_canister_wasm};
 use candid::{CandidType, Encode};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     Cycles, EcdsaCurve, EcdsaKeyId, ErrorCode, PrincipalId, StateMachineBuilder, SubnetId,
@@ -44,7 +45,7 @@ fn run_bench<M: criterion::measurement::Measurement>(
                     .with_subnet_type(SubnetType::Application)
                     .with_nns_subnet_id(nns_subnet_id)
                     .with_subnet_id(subnet_id)
-                    .with_ecdsa_key(ecdsa_key.clone())
+                    .with_idkg_key(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()))
                     .build();
                 let test_canister = env
                     .install_canister_with_cycles(

@@ -234,15 +234,21 @@ pub struct CanisterThresholdSerializationError(pub String);
 pub type CanisterThresholdSerializationResult<T> =
     std::result::Result<T, CanisterThresholdSerializationError>;
 
-#[derive(Copy, Clone, Debug, EnumIter)]
-pub enum CanisterThresholdSignatureAlgorithm {
+/// Identifies an IDKG protocol purposes
+///
+/// The IDKG is flexible, and usable for many different purposes.
+/// This enumeration identifies what the intended use of an IDKG
+/// instance is.
+///
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialEq)]
+pub enum IdkgProtocolAlgorithm {
     EcdsaSecp256k1,
     EcdsaSecp256r1,
     Bip340,
     Ed25519,
 }
 
-impl CanisterThresholdSignatureAlgorithm {
+impl IdkgProtocolAlgorithm {
     pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
         match alg_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Some(Self::EcdsaSecp256k1),
@@ -262,7 +268,7 @@ impl CanisterThresholdSignatureAlgorithm {
         }
     }
 
-    pub fn to_string(&self) -> &'static str {
+    pub fn tag(&self) -> &'static str {
         match self {
             Self::EcdsaSecp256k1 => "ecdsa-secp256k1",
             Self::EcdsaSecp256r1 => "ecdsa-secp256r1",
@@ -354,7 +360,7 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
@@ -403,7 +409,7 @@ pub fn create_transcript(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm)?;
 
     IDkgTranscriptInternal::new(
@@ -468,14 +474,16 @@ pub fn verify_transcript(
 pub enum IDkgComputeSecretSharesInternalError {
     ComplaintShouldBeIssued,
     InvalidCiphertext(String),
-    UnableToReconstruct(String),
     UnableToCombineOpenings(String),
+    UnableToReconstruct(String),
+    UnsupportedAlgorithm,
 }
 
 /// Computes secret shares (in the form of commitment openings) from
 /// the given dealings.
 ///
 /// # Arguments:
+/// * `algorithm_id`: the algorithm being executed by this IDKG
 /// * `verified_dealings`: dealings to be decrypted,
 /// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
 /// * `context_data`: associated data used in encryption and the zero-knowledge proofs,
@@ -488,6 +496,7 @@ pub enum IDkgComputeSecretSharesInternalError {
 /// * `InvalidCiphertext`: if a ciphertext cannot be decrypted.
 /// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
 pub fn compute_secret_shares(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     transcript: &IDkgTranscriptInternal,
     context_data: &[u8],
@@ -495,7 +504,11 @@ pub fn compute_secret_shares(
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
 ) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgComputeSecretSharesInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::from_dealings(
+        alg,
         verified_dealings,
         &transcript.combined_commitment,
         context_data,
@@ -510,6 +523,7 @@ pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
     ComplaintShouldBeIssued,
     InsufficientOpenings(usize, usize),
     InvalidCiphertext(String),
+    UnsupportedAlgorithm,
     UnableToReconstruct(String),
     UnableToCombineOpenings(String),
 }
@@ -523,6 +537,7 @@ pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
 ///   many) for each corrupted dealing.
 ///
 /// # Arguments:
+/// * `algorithm_id`: the algorithm being executed by this IDKG
 /// * `verified_dealings`: dealings to be decrypted,
 /// * `openings`: openings answering complaints against dealing that could not be decrypted correctly,
 /// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
@@ -538,6 +553,7 @@ pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
 /// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
 /// * `UnableToReconstruct`: internal error denoting that the received openings cannot be used to recompute a share.
 pub fn compute_secret_shares_with_openings(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
     transcript: &IDkgTranscriptInternal,
@@ -546,7 +562,11 @@ pub fn compute_secret_shares_with_openings(
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
 ) -> Result<CommitmentOpening, IDkgComputeSecretSharesWithOpeningsInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgComputeSecretSharesWithOpeningsInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::from_dealings_and_openings(
+        alg,
         verified_dealings,
         openings,
         &transcript.combined_commitment,
@@ -608,7 +628,7 @@ pub fn publicly_verify_dealing(
 ) -> Result<(), IDkgVerifyDealingInternalError> {
     let key_curve = EccCurveType::K256;
 
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
@@ -639,7 +659,7 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let signature_alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let signature_alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     let key_curve = private_key.curve_type();
@@ -829,6 +849,9 @@ impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalErro
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 #[allow(clippy::too_many_arguments)]
 pub fn combine_ecdsa_signature_shares(
     derivation_path: &DerivationPath,
@@ -840,7 +863,7 @@ pub fn combine_ecdsa_signature_shares(
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
     crate::signing::ecdsa::ThresholdEcdsaCombinedSigInternal::new(
@@ -1030,6 +1053,9 @@ impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalErr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1210,6 +1236,9 @@ impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalEr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_ed25519_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1403,7 +1432,7 @@ pub fn generate_complaints(
     public_key: &MEGaPublicKey,
     seed: Seed,
 ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgGenerateComplaintsInternalError> {
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgGenerateComplaintsInternalError::UnsupportedAlgorithm)?;
 
     Ok(idkg::complaints::generate_complaints(
@@ -1462,7 +1491,7 @@ pub fn verify_complaint(
     dealer_index: NodeIndex,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyComplaintInternalError> {
-    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyComplaintInternalError::UnsupportedAlgorithm)?;
 
     Ok(complaint.verify(
@@ -1478,6 +1507,7 @@ pub fn verify_complaint(
 #[derive(Clone, Debug)]
 pub enum ThresholdOpenDealingInternalError {
     InternalError(String),
+    UnsupportedAlgorithm,
 }
 
 impl From<CanisterThresholdError> for ThresholdOpenDealingInternalError {
@@ -1498,6 +1528,7 @@ impl From<CanisterThresholdError> for ThresholdOpenDealingInternalError {
 /// * The complaint which caused us to provide an opening for this dealing has
 ///   already been verified to be valid.
 pub fn open_dealing(
+    algorithm_id: AlgorithmId,
     verified_dealing: &IDkgDealingInternal,
     associated_data: &[u8],
     dealer_index: NodeIndex,
@@ -1505,7 +1536,11 @@ pub fn open_dealing(
     opener_secret_key: &MEGaPrivateKey,
     opener_public_key: &MEGaPublicKey,
 ) -> Result<CommitmentOpening, ThresholdOpenDealingInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(ThresholdOpenDealingInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::open_dealing(
+        alg,
         verified_dealing,
         associated_data,
         dealer_index,
@@ -1541,11 +1576,11 @@ impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
 /// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
-/// not match with the polynomial commitment.
+///   not match with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::MismatchingType` if the opening
-/// has a type that is inconsistent with the polynomial commitment.
+///   has a type that is inconsistent with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::InternalError` if there is an
-/// unexpected internal error.
+///   unexpected internal error.
 pub fn verify_dealing_opening(
     verified_dealing: &IDkgDealingInternal,
     opener_index: NodeIndex,
@@ -1583,7 +1618,7 @@ pub fn verify_mega_public_key(
 // Returns None if the AlgorithmId does not map to threshold ECDSA
 fn ecdsa_signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
     if algorithm_id.is_threshold_ecdsa() {
-        CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id).map(|alg| {
+        IdkgProtocolAlgorithm::from_algorithm(algorithm_id).map(|alg| {
             let curve = alg.curve();
             (curve, curve.scalar_bytes())
         })

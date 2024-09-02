@@ -17,7 +17,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    messages::{extract_effective_canister_id, SignedIngressContent},
+    messages::{extract_effective_canister_id, SignedIngressContent, MAX_RESPONSE_COUNT_BYTES},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
@@ -320,7 +320,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         let mut canister = new_canister_state(
             canister_test_id(1),
             canister_test_id(11).get(),
-            Cycles::from(std::u128::MAX),
+            Cycles::from(u128::MAX),
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
@@ -538,7 +538,7 @@ fn cycles_withdraw_for_execution() {
     let message_memory_usage = NumBytes::from(8 * 1024 * 1024);
     let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
-    let initial_amount = std::u128::MAX;
+    let initial_amount = u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
     let freeze_threshold = NumSeconds::from(10);
     let canister_id = canister_test_id(1);
@@ -690,9 +690,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
@@ -704,9 +702,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
     assert!(consumed_cycles_before < consumed_cycles_after);
 }
 
@@ -717,9 +713,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
     let mut balance = Cycles::new(5_000_000_000_000);
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .withdraw_cycles_for_transfer(
             system_state.canister_id,
@@ -735,9 +729,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
 
     // Cycles are not consumed
     assert_eq!(consumed_cycles_before, consumed_cycles_after);
@@ -750,9 +742,7 @@ fn consume_cycles_updates_consumed_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
     cycles_account_manager
         .consume_cycles(
             &mut system_state,
@@ -765,9 +755,7 @@ fn consume_cycles_updates_consumed_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started;
+    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
@@ -890,6 +878,75 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
         )
         .unwrap();
     assert_eq!(Cycles::zero(), new_balance);
+}
+
+#[test]
+fn withdraw_up_to_respects_freezing_threshold() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let initial_cycles = Cycles::new(200_000_000_000);
+    let mut system_state = SystemState::new_running_for_testing(
+        canister_test_id(1),
+        canister_test_id(2).get(),
+        initial_cycles,
+        NumSeconds::from(1_000),
+    );
+    let memory_usage = NumBytes::from(1_000_000);
+    let message_memory_usage = NumBytes::from(1_000);
+    let compute_allocation = ComputeAllocation::default();
+    let payload_size = NumBytes::from(0);
+    system_state.memory_allocation = MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap();
+    let untouched_cycles = cycles_account_manager.freeze_threshold_cycles(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        memory_usage,
+        message_memory_usage + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+        compute_allocation,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    ) + cycles_account_manager
+        .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager
+            .xnet_call_bytes_transmitted_fee(payload_size, SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+
+    // full amount can be withdrawn
+    let mut new_balance = system_state.balance();
+    let withdraw_amount_1 = Cycles::new(1_000_000);
+    let withdrawn_amount_1 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        payload_size,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        &mut new_balance,
+        withdraw_amount_1,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    );
+    assert_eq!(withdraw_amount_1, withdrawn_amount_1);
+    assert_eq!(initial_cycles - withdraw_amount_1, new_balance);
+
+    // freezing threshold limits the amount that can be withdrawn
+    let withdraw_amount_2 = Cycles::new(u128::MAX);
+    let withdrawn_amount_2 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        payload_size,
+        memory_usage,
+        message_memory_usage,
+        compute_allocation,
+        &mut new_balance,
+        withdraw_amount_2,
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    );
+    assert_eq!(
+        initial_cycles - withdrawn_amount_1 - untouched_cycles,
+        withdrawn_amount_2
+    );
+    assert_eq!(untouched_cycles, new_balance);
 }
 
 #[test]

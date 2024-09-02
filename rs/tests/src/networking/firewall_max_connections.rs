@@ -4,7 +4,7 @@ Title:: Firewall limit connection count.
 Goal:: Verify that nodes set a hard limit on number of simultaneous connections from a single IP addresses as defined in the firewall.
 
 Runbook::
-. Set up a test net with a nns subnet and application of 1 node each.
+. Set up a test net, application typ, with 2 nodes.
 . Set up a universal vm with default config.
 . Set `max_simultaneous_connections_per_ip_address` to the configured value `max_simultaneous_connections_per_ip_address` in template file
 `ic.json5.template`.
@@ -17,19 +17,16 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            SshSession,
-        },
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession},
         universal_vm::{UniversalVm, UniversalVms},
     },
     util::block_on,
 };
-use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info};
 use std::net::IpAddr;
 use std::time::Duration;
@@ -52,7 +49,6 @@ pub fn config(env: TestEnv) {
 
     info!(log, "Universal VM successfully deployed.");
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System, 1))
         .add_subnet(Subnet::fast(SubnetType::Application, 2))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -63,14 +59,6 @@ pub fn config(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-
-    let nns_node = topology.root_subnet().nodes().next().unwrap();
-    info!(log, "Installing NNS canisters on the root subnet...");
-
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("Could not install NNS canisters");
-    info!(&log, "NNS canisters installed successfully.");
 }
 
 pub fn connection_count_test(env: TestEnv) {

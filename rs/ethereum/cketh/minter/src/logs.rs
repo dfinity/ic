@@ -15,6 +15,7 @@ pub const INFO: PrintProxySink = PrintProxySink("INFO", &INFO_BUF);
 pub const DEBUG: PrintProxySink = PrintProxySink("DEBUG", &DEBUG_BUF);
 pub const TRACE_HTTP: PrintProxySink = PrintProxySink("TRACE_HTTP", &TRACE_HTTP_BUF);
 
+#[derive(Debug)]
 pub struct PrintProxySink(&'static str, &'static GlobalBuffer);
 
 impl Sink for PrintProxySink {

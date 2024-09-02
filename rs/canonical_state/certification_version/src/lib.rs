@@ -43,6 +43,9 @@ pub enum CertificationVersion {
     V17 = 17,
     /// Added `deadline` fields to `Request` and `Response`.
     V18 = 18,
+    /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
+    /// Deprecated `reject_signals_deltas`.
+    V19 = 19,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -75,13 +78,13 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V18;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V18;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

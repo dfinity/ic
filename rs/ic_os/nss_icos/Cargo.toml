@@ -13,8 +13,8 @@ name = "nss_icos"
 crate-type = ["cdylib"]
 
 [dependencies]
-libc = "0.2.152"
-lazy_static = "1.4.0"
-paste = "1.0.14"
+lazy_static = { workspace = true }
+libc = { workspace = true }
 libnss = { workspace = true }
 local-ip-address = { workspace = true }
+paste = "1.0.14"

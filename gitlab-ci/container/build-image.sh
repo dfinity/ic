@@ -40,7 +40,7 @@ DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build:latest \
-    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     --build-arg RUST_VERSION="$RUST_VERSION" \
     -f gitlab-ci/container/Dockerfile .
 

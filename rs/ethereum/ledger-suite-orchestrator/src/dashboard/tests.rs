@@ -22,8 +22,10 @@ fn should_display_managed_canisters() {
 
     const USDC_LEDGER_ID: &str = "apia6-jaaaa-aaaar-qabma-cai";
     const USDC_INDEX_ID: &str = "s3zol-vqaaa-aaaar-qacpa-cai";
+    const USDC_ARCHIVE_ID: &str = "t4dy3-uiaaa-aaaar-qafua-cai";
     const USDT_LEDGER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
     const USDT_INDEX_ID: &str = "n5wcd-faaaa-aaaar-qaaea-cai";
+    const USDT_ARCHIVE_ID: &str = "xrs4b-hiaaa-aaaar-qafoa-cai";
     const LEDGER_WASM_HASH: &str =
         "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0";
     const INDEX_WASM_HASH: &str =
@@ -103,6 +105,18 @@ fn should_display_managed_canisters() {
         .has_erc20("ckUSDT", 1, USDT_ADDRESS)
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH);
+
+    state.record_archives(&usdc(), vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()]);
+    state.record_archives(&usdt(), vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()]);
+    DashboardAssert::assert_that_dashboard_from_state(&state)
+        .has_erc20("ckUSDC", 1, USDC_ADDRESS)
+        .has_ledger(USDC_LEDGER_ID, LEDGER_WASM_HASH)
+        .has_index(USDC_INDEX_ID, INDEX_WASM_HASH)
+        .has_archive(USDC_ARCHIVE_ID)
+        .has_erc20("ckUSDT", 1, USDT_ADDRESS)
+        .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
+        .has_index(USDT_INDEX_ID, INDEX_WASM_HASH)
+        .has_archive(USDT_ARCHIVE_ID);
 }
 
 #[test]
@@ -353,6 +367,10 @@ mod assertions {
 
         pub fn has_index(self, expected_canister_id: &str, expected_version: &str) -> Self {
             self.has_erc20_table_row_string_value("Index", expected_canister_id, expected_version)
+        }
+
+        pub fn has_archive(self, expected_canister_id: &str) -> Self {
+            self.has_erc20_table_row_string_value("Archive", expected_canister_id, "N/A")
         }
 
         fn has_erc20_table_row_string_value(

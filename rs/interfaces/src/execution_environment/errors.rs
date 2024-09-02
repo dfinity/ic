@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
 use serde::{Deserialize, Serialize};
 
@@ -322,7 +322,7 @@ impl std::fmt::Display for HypervisorError {
             Self::WasmMemoryLimitExceeded { bytes, limit } => {
                 write!(f,
                         "Canister exceeded its current Wasm memory limit of {} bytes. \
-                        The peak Wasm memory usage was {} bytes.\
+                        The peak Wasm memory usage was {} bytes. \
                         If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
@@ -343,35 +343,99 @@ impl CountBytes for HypervisorError {
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
-        let empty_user_error = ErrorHelp::UserError {
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
-        };
         match self {
             Self::FunctionNotFound(_, _)
-            | Self::ToolchainContractViolation { .. } => ErrorHelp::ToolchainError,
+            | Self::ToolchainContractViolation { .. }
+            | Self::InvalidPrincipalId(_) => ErrorHelp::ToolchainError,
             Self::MethodNotFound(_) => ErrorHelp::UserError {
-                suggestion: "Check that the method being called is exported by the target canister.".to_string(),
-                doc_link: "http://internetcomputer.org/docs/current/references/execution-errors#method-not-found".to_string(),
+                suggestion: "Check that the method being called is exported by \
+                the target canister."
+                    .to_string(),
+                doc_link: doc_ref("method-not-found"),
             },
-            Self::InstructionLimitExceeded(_)
-            | Self::Trapped(_)
-            | Self::CalledTrap(_)
-            | Self::WasmModuleNotFound
-            | Self::OutOfMemory
-            | Self::InvalidPrincipalId(_)
-            | Self::MessageRejected
-            | Self::InsufficientCyclesBalance(_)
-            | Self::Cleanup { .. }
-            | Self::WasmEngineError(_)
-            | Self::ReservedPagesForOldMotoko
-            | Self::Aborted
-            | Self::SliceOverrun { .. }
-            | Self::MemoryAccessLimitExceeded(_)
-            | Self::InsufficientCyclesInMemoryGrow { .. }
-            | Self::ReservedCyclesLimitExceededInMemoryGrow { .. }
-            | Self::InsufficientCyclesInMessageMemoryGrow { .. }
-            | Self::WasmMemoryLimitExceeded { .. } => empty_user_error,
+            Self::InstructionLimitExceeded(_) => ErrorHelp::UserError {
+                suggestion: "Try optimizing this method to consume fewer \
+                instructions or split the work across multiple messages."
+                    .to_string(),
+                doc_link: doc_ref("instruction-limit-exceeded"),
+            },
+            Self::Trapped(_) => ErrorHelp::UserError {
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
+                doc_link: doc_ref("trapped"),
+            },
+            Self::CalledTrap(_) => ErrorHelp::UserError {
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
+                doc_link: doc_ref("trapped-explicitly"),
+            },
+            Self::WasmModuleNotFound => ErrorHelp::UserError {
+                suggestion: "Please install code to this canister before calling it.".to_string(),
+                doc_link: doc_ref("wasm-module-not-found"),
+            },
+            Self::OutOfMemory => ErrorHelp::UserError {
+                suggestion: "Check the canister's memory usage against its allocation \
+                and the system wide limits to determine why more memory cannot be \
+                allocated."
+                    .to_string(),
+                doc_link: doc_ref("out-of-memory"),
+            },
+            Self::MessageRejected => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::InsufficientCyclesBalance(_) => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::Cleanup { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::WasmEngineError(_) => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::ReservedPagesForOldMotoko => ErrorHelp::UserError {
+                suggestion: "Upgrade the canister to the latest version of Motoko.".to_string(),
+                doc_link: doc_ref("reserved-pages-for-old-motoko"),
+            },
+            Self::Aborted => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::SliceOverrun { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking up large copies within the canister code \
+                into smaller chunks."
+                    .to_string(),
+                doc_link: doc_ref("slice-overrun"),
+            },
+            Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError {
+                suggestion: "Try optimizing the use of stable memory so that individual \
+                messages don't need to access as much stable memory."
+                    .to_string(),
+                doc_link: doc_ref("memory-access-limit-exceeded"),
+            },
+            Self::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try topping up the canister.".to_string(),
+                doc_link: doc_ref("insufficient-cycles-in-memory-grow"),
+            },
+            Self::ReservedCyclesLimitExceededInMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try increasing the canister's reserved cycles limit.".to_string(),
+                doc_link: doc_ref("reserved-cycles-limit-exceeded-in-memory-grow"),
+            },
+            Self::InsufficientCyclesInMessageMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try topping up the canister.".to_string(),
+                doc_link: doc_ref("insufficient-cycles-in-message-memory-grow"),
+            },
+            Self::WasmMemoryLimitExceeded { .. } => ErrorHelp::UserError {
+                suggestion: "Try checking the canister for a possible memory leak \
+                or modifying it to use more stable memory instead of Wasm memory."
+                    .to_string(),
+                doc_link: doc_ref("wasm-memory-limit-exceeded"),
+            },
             Self::UserContractViolation {
                 suggestion,
                 doc_link,

@@ -30,19 +30,18 @@ ic-management-canister-types = { path = "../../../../types/management_canister_t
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../../../nervous_system/common" }
-ic-nervous-system-runtime = { path = "../../../../nervous_system/runtime" }
 ic-nervous-system-common-build-metadata = { path = "../../../../nervous_system/common/build_metadata" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../../../../nervous_system/proxied_canister_calls_tracker" }
 ic-nervous-system-root = { path = "../../../../nervous_system/root" }
+ic-nervous-system-runtime = { path = "../../../../nervous_system/runtime" }
 ic-nns-common = { path = "../../../common" }
 ic-nns-constants = { path = "../../../constants" }
-ic-nns-governance = { path = "../../../governance" }
 ic-nns-handler-root-interface = { path = "../interface" }
 ic-protobuf = { path = "../../../../protobuf" }
 ic-registry-keys = { path = "../../../../registry/keys" }
-ic-registry-transport = { path = "../../../../registry/transport" }
 ic-registry-routing-table = { path = "../../../../registry/routing_table" }
-lazy_static = "1.4.0"
+ic-registry-transport = { path = "../../../../registry/transport" }
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../../../rust_canisters/on_wire" }
 prost = { workspace = true }
@@ -50,18 +49,18 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+assert_matches = { workspace = true }
 canister-test = { path = "../../../../rust_canisters/canister_test" }
+hex = { workspace = true }
 ic-nns-constants = { path = "../../../constants" }
 ic-nns-handler-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-nns-test-utils = { path = "../../../../nns/test_utils" }
-ic-types = { path = "../../../../types/types" }
 ic-test-utilities = { path = "../../../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+ic-types = { path = "../../../../types/types" }
 on_wire = { path = "../../../../rust_canisters/on_wire" }
-assert_matches = { workspace = true }
-hex = { workspace = true }
 registry-canister = { path = "../../../../registry/canister" }
+tempfile = { workspace = true }
 
 [build-dependencies]
 build-info-build = { workspace = true }

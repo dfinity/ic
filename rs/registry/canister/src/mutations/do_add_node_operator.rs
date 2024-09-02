@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -25,7 +25,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
             key: node_operator_record_key,
-            value: encode_or_panic(&node_operator_record),
+            value: node_operator_record.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations

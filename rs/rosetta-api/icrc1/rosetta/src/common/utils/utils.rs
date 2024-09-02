@@ -62,9 +62,6 @@ pub fn get_rosetta_block_from_partial_block_identifier(
     partial_block_identifier: &PartialBlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
-    if storage_client.get_block_count()? == 0 {
-        bail!("Could not fetch the block, the database is empty!")
-    }
     Ok(
         match (
             partial_block_identifier.index,

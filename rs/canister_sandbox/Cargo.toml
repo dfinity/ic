@@ -12,7 +12,7 @@ cc = "1.0"
 [dependencies]
 
 ic-interfaces = { path = "../interfaces" }
-bincode = "1.3.3"
+bincode = { workspace = true }
 bytes = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
@@ -28,20 +28,20 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-lazy_static = "1.4.0"
-libc = "0.2.119"
-libflate = "1.1.2"
+lazy_static = { workspace = true }
+libc = { workspace = true }
+libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 once_cell = "1.8"
 prometheus = { workspace = true }
-rayon = "1.5.1"
-regex = "1.5.4"
+rayon = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-threadpool = "1.8.1"
+threadpool = { workspace = true }
 which = "4.2.2"
 
 [dev-dependencies]
@@ -52,10 +52,10 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 # produced by `cargo test`.
 ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
-tempfile = "3.1.0"
-wat = "1.0.52"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
+tempfile = { workspace = true }
+wat = { workspace = true }
 
 [features]
 sigsegv_handler_checksum = ["memory_tracker/sigsegv_handler_checksum"]

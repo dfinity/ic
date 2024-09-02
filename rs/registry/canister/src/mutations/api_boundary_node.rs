@@ -1,9 +1,10 @@
-use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use ic_base_types::NodeId;
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::make_api_boundary_node_record_key;
 use ic_registry_transport::pb::v1::RegistryValue;
+use prost::Message;
 
 impl Registry {
     /// Get the ApiBoundaryNode record
@@ -17,9 +18,7 @@ impl Registry {
             self.latest_version(),
         )?;
 
-        Some(decode_registry_value::<ApiBoundaryNodeRecord>(
-            api_boundary_node_record_vec.clone(),
-        ))
+        Some(ApiBoundaryNodeRecord::decode(api_boundary_node_record_vec.as_slice()).unwrap())
     }
 
     /// Get the ApiBoundaryNode record or panic on error with a message.

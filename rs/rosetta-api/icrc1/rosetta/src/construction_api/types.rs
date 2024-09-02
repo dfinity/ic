@@ -40,9 +40,9 @@ pub struct SignedTransaction<'a> {
     pub envelopes: Vec<Envelope<'a>>,
 }
 
-impl<'a> ToString for SignedTransaction<'a> {
-    fn to_string(&self) -> String {
-        hex::encode(serde_cbor::ser::to_vec(self).unwrap())
+impl<'a> std::fmt::Display for SignedTransaction<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(serde_cbor::ser::to_vec(self).unwrap()))
     }
 }
 
@@ -112,12 +112,12 @@ impl CanisterMethodName {
     }
 }
 
-impl ToString for CanisterMethodName {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for CanisterMethodName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Icrc2Approve => "icrc2_approve".to_string(),
-            Self::Icrc2TransferFrom => "icrc2_transfer_from".to_string(),
-            Self::Icrc1Transfer => "icrc1_transfer".to_string(),
+            Self::Icrc2Approve => write!(f, "icrc2_approve"),
+            Self::Icrc2TransferFrom => write!(f, "icrc2_transfer_from"),
+            Self::Icrc1Transfer => write!(f, "icrc1_transfer"),
         }
     }
 }
@@ -139,9 +139,9 @@ pub struct UnsignedTransaction {
     pub envelope_contents: Vec<EnvelopeContent>,
 }
 
-impl ToString for UnsignedTransaction {
-    fn to_string(&self) -> String {
-        hex::encode(serde_cbor::ser::to_vec(self).unwrap())
+impl std::fmt::Display for UnsignedTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(serde_cbor::ser::to_vec(self).unwrap()))
     }
 }
 

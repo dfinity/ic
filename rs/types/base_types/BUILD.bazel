@@ -10,15 +10,16 @@ filegroup(
 )
 
 COMMON_DEPS = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "@crate_index//:byte-unit",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:comparable",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:comparable",
 ]
 
 rust_library(
@@ -46,9 +47,11 @@ rust_test(
     name = "base_types_test",
     crate = ":base_types",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:proptest-derive",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:serde_cbor",
@@ -63,6 +66,7 @@ generated_files_check(
     ]) + [":protos"],
     manifest_dir = "rs/types/base_types",
     deps = [
+        # Keep sorted.
         "//rs/test_utilities/compare_dirs",
         "//rs/types/base_types/protobuf_generator:lib",
         "@crate_index//:tempfile",

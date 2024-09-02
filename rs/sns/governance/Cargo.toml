@@ -61,14 +61,14 @@ ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_to
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 prost = { workspace = true }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 serde = { workspace = true }
@@ -87,6 +87,7 @@ prost-build = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+candid_parser = { workspace = true }
 futures = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
@@ -97,10 +98,10 @@ ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
-proptest = "1.0"
-tempfile = "3.1.0"
+proptest = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 

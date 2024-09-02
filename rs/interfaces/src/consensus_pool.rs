@@ -10,8 +10,8 @@ use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
-        Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        EquivocationProof, Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization,
+        NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     crypto::CryptoHashOf,
     time::Time,
@@ -70,6 +70,7 @@ pub enum ChangeAction {
 pub enum PurgeableArtifactType {
     NotarizationShare,
     FinalizationShare,
+    EquivocationProof,
 }
 
 impl From<ChangeAction> for ChangeSet {
@@ -166,7 +167,7 @@ impl TryFrom<pb::ValidatedConsensusArtifact> for ValidatedConsensusArtifact {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeightRange {
     pub min: Height,
     pub max: Height,
@@ -202,38 +203,41 @@ pub trait PoolSection<T> {
     /// Lookup the timestamp of an artifact by its ConsensusMessageId.
     fn get_timestamp(&self, msg_id: &ConsensusMessageId) -> Option<Time>;
 
-    /// Return the HeightIndexedPool for RandomBeacon.
+    /// Return the HeightIndexedPool for [`RandomBeacon`].
     fn random_beacon(&self) -> &dyn HeightIndexedPool<RandomBeacon>;
 
-    /// Return the HeightIndexedPool for BlockProposal.
+    /// Return the HeightIndexedPool for [`BlockProposal`].
     fn block_proposal(&self) -> &dyn HeightIndexedPool<BlockProposal>;
 
-    /// Return the HeightIndexedPool for Notarization.
+    /// Return the HeightIndexedPool for [`Notarization`].
     fn notarization(&self) -> &dyn HeightIndexedPool<Notarization>;
 
-    /// Return the HeightIndexedPool for Finalization.
+    /// Return the HeightIndexedPool for [`Finalization`].
     fn finalization(&self) -> &dyn HeightIndexedPool<Finalization>;
 
-    /// Return the HeightIndexedPool for RandomBeaconShare.
+    /// Return the HeightIndexedPool for [`RandomBeaconShare`].
     fn random_beacon_share(&self) -> &dyn HeightIndexedPool<RandomBeaconShare>;
 
-    /// Return the HeightIndexedPool for NotarizationShare.
+    /// Return the HeightIndexedPool for [`NotarizationShare`].
     fn notarization_share(&self) -> &dyn HeightIndexedPool<NotarizationShare>;
 
-    /// Return the HeightIndexedPool for FinalizationShare.
+    /// Return the HeightIndexedPool for [`FinalizationShare`].
     fn finalization_share(&self) -> &dyn HeightIndexedPool<FinalizationShare>;
 
-    /// Return the HeightIndexedPool for RandomTape.
+    /// Return the HeightIndexedPool for [`RandomTape`].
     fn random_tape(&self) -> &dyn HeightIndexedPool<RandomTape>;
 
-    /// Return the HeightIndexedPool for RandomTapeShare.
+    /// Return the HeightIndexedPool for [`RandomTapeShare`].
     fn random_tape_share(&self) -> &dyn HeightIndexedPool<RandomTapeShare>;
 
-    /// Return the HeightIndexedPool for CatchUpPackage.
+    /// Return the HeightIndexedPool for [`CatchUpPackage`].
     fn catch_up_package(&self) -> &dyn HeightIndexedPool<CatchUpPackage>;
 
-    /// Return the HeightIndexedPool for CatchUpPackageShare.
+    /// Return the HeightIndexedPool for [`CatchUpPackageShare`].
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare>;
+
+    /// Return the HeightIndexedPool for [`EquivocationProof`].
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof>;
 
     fn highest_catch_up_package(&self) -> CatchUpPackage {
         let proto = self.highest_catch_up_package_proto();

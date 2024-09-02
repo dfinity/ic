@@ -25,8 +25,12 @@ use ic_replicated_state::{
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+    messages::{
+        Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SubnetId,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -38,13 +42,11 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 256;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,7 +78,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -174,9 +176,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-
-    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
-    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -193,18 +192,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
-            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
-    }
-
-    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
-        self.use_cost_scaling_flag = use_cost_scaling_flag;
-    }
-
-    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&self) -> bool {
-        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -219,10 +207,7 @@ impl CyclesAccountManager {
 
     // Scale cycles cost according to a subnet size.
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
-        match self.use_cost_scaling_flag {
-            false => cycles,
-            true => (cycles * subnet_size) / self.config.reference_subnet_size,
-        }
+        (cycles * subnet_size) / self.config.reference_subnet_size
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -393,6 +378,48 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Withdraws up to `cycles` worth of cycles from the canister's balance
+    /// without putting the canister below its freezing threshold even if
+    /// the call currently under construction is performed.
+    ///
+    /// NOTE: This method is intended for use in inter-canister transfers.
+    ///       It doesn't report these cycles as consumed. To withdraw cycles
+    ///       and have them reported as consumed, use `consume_cycles`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn withdraw_up_to_cycles_for_transfer(
+        &self,
+        freeze_threshold: NumSeconds,
+        memory_allocation: MemoryAllocation,
+        current_payload_size_bytes: NumBytes,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        cycles_balance: &mut Cycles,
+        cycles: Cycles,
+        subnet_size: usize,
+        reserved_balance: Cycles,
+    ) -> Cycles {
+        let call_perform_cost = self.xnet_call_performed_fee(subnet_size)
+            + self.xnet_call_bytes_transmitted_fee(current_payload_size_bytes, subnet_size)
+            + self.prepayment_for_response_transmission(subnet_size)
+            + self.prepayment_for_response_execution(subnet_size);
+        let memory_used_to_enqueue_message =
+            current_payload_size_bytes.max((MAX_RESPONSE_COUNT_BYTES as u64).into());
+        let freeze_threshold = self.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage + memory_used_to_enqueue_message,
+            canister_compute_allocation,
+            subnet_size,
+            reserved_balance,
+        );
+        let available_for_withdrawal = *cycles_balance - freeze_threshold - call_perform_cost;
+        let withdrawn_cycles = available_for_withdrawal.min(cycles);
+        *cycles_balance -= withdrawn_cycles;
+        withdrawn_cycles
+    }
+
     /// Charges the canister for ingress induction cost.
     ///
     /// Note that this method reports the cycles withdrawn as consumed (i.e.
@@ -477,6 +504,32 @@ impl CyclesAccountManager {
             system_state.reserved_balance(),
         );
         self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
+    }
+
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions.
+    pub fn consume_cycles_for_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let cycles = self.execution_cost(amount, subnet_size);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            compute_allocation,
+            cycles,
+            subnet_size,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -632,6 +685,11 @@ impl CyclesAccountManager {
     /// Amount to charge for an ECDSA signature.
     pub fn ecdsa_signature_fee(&self, subnet_size: usize) -> Cycles {
         self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
+    }
+
+    /// Amount to charge for a Schnorr signature.
+    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -886,6 +944,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -988,7 +1047,7 @@ impl CyclesAccountManager {
     /// 1. It burns no more cycles than the `amount_to_burn`.
     ///
     /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
-    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///    is the amount of idle cycles burned by the canister during its `freezing_threshold`.
     ///
     /// Returns the number of cycles that were burned.
     pub fn cycles_burn(
@@ -1163,7 +1222,6 @@ mod tests {
             own_subnet_type: SubnetType::Application,
             own_subnet_id: subnet_test_id(0),
             config,
-            use_cost_scaling_flag: true,
         }
     }
 
@@ -1177,7 +1235,15 @@ mod tests {
                 .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]
@@ -1194,8 +1260,8 @@ mod tests {
 
         // Check overflow case.
         assert_eq!(
-            cam.scale_cost(Cycles::new(std::u128::MAX), 1_000_000),
-            Cycles::new(std::u128::MAX) / reference_subnet_size
+            cam.scale_cost(Cycles::new(u128::MAX), 1_000_000),
+            Cycles::new(u128::MAX) / reference_subnet_size
         );
     }
 

@@ -8,18 +8,22 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+candid = { workspace = true }
 hex = { workspace = true }
+ic-icrc1-test-utils = { path = "../icrc1/test_utils" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-rosetta-api = { path = "../" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
-log = "0.4.14"
 nix = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../rosetta_core" }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }

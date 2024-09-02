@@ -1,7 +1,4 @@
-use crate::{
-    common::LOG_PREFIX, mutations::common::decode_registry_value,
-    pb::v1::GetSubnetForCanisterResponse, registry::Registry,
-};
+use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
 
 use std::convert::TryFrom;
 
@@ -21,12 +18,14 @@ pub enum GetSubnetForCanisterError {
     NoSubnetAssigned,
 }
 
-impl ToString for GetSubnetForCanisterError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for GetSubnetForCanisterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GetSubnetForCanisterError::InvalidCanisterId => "Invalid canister ID.".to_string(),
+            GetSubnetForCanisterError::InvalidCanisterId => {
+                write!(f, "Invalid canister ID.")
+            }
             GetSubnetForCanisterError::NoSubnetAssigned => {
-                "Canister is not assigned to any subnet.".to_string()
+                write!(f, "Canister is not assigned to any subnet.")
             }
         }
     }
@@ -72,10 +71,8 @@ impl Registry {
             .get(make_routing_table_record_key().as_bytes(), version)
             .unwrap_or_else(|| panic!("{}routing table not found in the registry.", LOG_PREFIX));
 
-        RoutingTable::try_from(decode_registry_value::<pb::RoutingTable>(
-            routing_table_bytes.clone(),
-        ))
-        .expect("failed to decode the routing table from protobuf")
+        RoutingTable::try_from(pb::RoutingTable::decode(routing_table_bytes.as_slice()).unwrap())
+            .expect("failed to decode the routing table from protobuf")
     }
 
     /// Applies the given mutation to the routing table at the specified version.
@@ -131,9 +128,9 @@ impl Registry {
     pub fn get_canister_migrations(&self, version: u64) -> Option<CanisterMigrations> {
         self.get(make_canister_migrations_record_key().as_bytes(), version)
             .map(|registry_value| {
-                CanisterMigrations::try_from(decode_registry_value::<pb::CanisterMigrations>(
-                    registry_value.value.clone(),
-                ))
+                CanisterMigrations::try_from(
+                    pb::CanisterMigrations::decode(registry_value.value.as_slice()).unwrap(),
+                )
                 .expect("failed to decode the canister migrations from protobuf")
             })
     }
@@ -196,7 +193,7 @@ impl Registry {
     pub fn get_subnet_for_canister(
         &self,
         principal_id: &PrincipalId,
-    ) -> Result<GetSubnetForCanisterResponse, GetSubnetForCanisterError> {
+    ) -> Result<SubnetForCanister, GetSubnetForCanisterError> {
         let latest_version = self.latest_version();
         let routing_table = self.get_routing_table_or_panic(latest_version);
         let canister_id = CanisterId::try_from(*principal_id)
@@ -206,7 +203,7 @@ impl Registry {
             .lookup_entry(canister_id)
             .map(|(_, subnet_id)| subnet_id.get())
         {
-            Some(subnet_id) => Ok(GetSubnetForCanisterResponse {
+            Some(subnet_id) => Ok(SubnetForCanister {
                 subnet_id: Some(subnet_id),
             }),
             None => Err(GetSubnetForCanisterError::NoSubnetAssigned),

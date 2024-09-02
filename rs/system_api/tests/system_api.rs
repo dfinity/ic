@@ -10,7 +10,6 @@ use ic_interfaces::execution_environment::{
     PerformanceCounterType, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::DataSize;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
@@ -28,12 +27,12 @@ use ic_test_utilities_types::{
 use ic_types::{
     messages::{CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
     methods::{Callback, WasmClosure},
-    time,
-    time::UNIX_EPOCH,
+    time::{self, UNIX_EPOCH},
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
+use more_asserts::assert_le;
 use std::{
     collections::BTreeSet,
     convert::From,
@@ -269,6 +268,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CallDataAppend => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::CallCyclesAdd => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::CallCyclesAdd128 => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::CallCyclesAdd128UpTo => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::CallPerform => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::CallWithBestEffortResponse => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::StableSize => vec!["*", "s"],
@@ -546,6 +546,19 @@ fn api_availability_test(
                 |mut api| {
                     let _ = api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[42; 128]);
                     api.ic0_call_cycles_add128(Cycles::new(0))
+                },
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CallCyclesAdd128UpTo => {
+            assert_api_availability(
+                |mut api| {
+                    let _ = api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[42; 128]);
+                    api.ic0_call_cycles_add128_up_to(Cycles::new(0), 0, &mut [42; 128])
                 },
                 api_type,
                 &system_state,
@@ -972,6 +985,105 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() as u128,
         cycles_amount - amount
+    );
+}
+
+fn call_cycles_add128_up_to_helper(
+    api: &mut SystemApiImpl,
+    amount: Cycles,
+) -> Result<Cycles, HypervisorError> {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    api.ic0_call_cycles_add128_up_to(amount, 0, &mut buf)?;
+    let attached_cycles = u128::from_le_bytes(buf.try_into().unwrap());
+    Ok(Cycles::from(attached_cycles))
+}
+
+#[test]
+fn test_call_cycles_add_up_to() {
+    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let max_num_instructions = NumInstructions::from(1 << 30);
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(max_num_instructions)
+        .build();
+    let system_state = get_system_state_with_cycles(cycles_amount);
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        cycles_account_manager,
+    );
+
+    // Check ic0_canister_cycle_balance after first ic0_call_new.
+    assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
+    // Check cycles balance.
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount
+    );
+
+    // Add an available amount of cycles to call.
+    let amount1 = Cycles::new(49);
+    assert_eq!(
+        call_cycles_add128_up_to_helper(&mut api, amount1),
+        Ok(amount1)
+    );
+    // Check cycles balance
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount - amount1
+    );
+
+    // Adding more cycles than available to call means the rest of the available balance gets added
+    let untouched_cycles = cycles_account_manager.freeze_threshold_cycles(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        api.get_current_memory_usage(),
+        api.get_allocated_message_bytes() + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+        api.get_compute_allocation(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    ) + cycles_account_manager
+        .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager
+            .xnet_call_bytes_transmitted_fee(0.into(), SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    assert_eq!(
+        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)),
+        Ok(cycles_amount - amount1 - untouched_cycles)
+    );
+    // Check cycles balance
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        untouched_cycles
+    );
+
+    assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
+    // Check cycles balance.
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount
+    );
+
+    // With some allocated memory the freezing threshold is no longer at 0.
+    api.try_grow_wasm_memory(0, 1).unwrap();
+    let untouched_cycles = cycles_account_manager.freeze_threshold_cycles(
+        system_state.freeze_threshold,
+        system_state.memory_allocation,
+        api.get_current_memory_usage(),
+        api.get_allocated_message_bytes() + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+        api.get_compute_allocation(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
+    ) + cycles_account_manager
+        .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager
+            .xnet_call_bytes_transmitted_fee(0.into(), SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    assert_eq!(
+        cycles_amount - untouched_cycles,
+        call_cycles_add128_up_to_helper(&mut api, Cycles::new(u128::MAX)).unwrap()
     );
 }
 
@@ -1699,8 +1811,6 @@ fn test_ic0_cycles_burn() {
     assert_eq!(Cycles::new(0), Cycles::from(&heap));
 }
 
-const CANISTER_LOGGING_IS_ENABLED: bool = true;
-
 #[test]
 fn test_save_log_message_adds_canister_log_records() {
     let messages: Vec<Vec<_>> = vec![
@@ -1718,7 +1828,7 @@ fn test_save_log_message_adds_canister_log_records() {
     let initial_records_number = api.canister_log().records().len();
     // Save several log messages.
     for message in &messages {
-        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, message.len(), message);
+        api.save_log_message(0, message.len(), message);
     }
     let records = api.canister_log().records();
     // Expect increased number of log records and the content to match the messages.
@@ -1740,7 +1850,7 @@ fn test_save_log_message_invalid_message_size() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, invalid_size, message);
+    api.save_log_message(0, invalid_size, message);
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1761,12 +1871,7 @@ fn test_save_log_message_invalid_message_offset() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(
-        CANISTER_LOGGING_IS_ENABLED,
-        invalid_src,
-        message.len(),
-        message,
-    );
+    api.save_log_message(invalid_src, message.len(), message);
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1787,7 +1892,7 @@ fn test_save_log_message_trims_long_message() {
     let initial_records_number = api.canister_log().records().len();
     // Save a long log message.
     let bytes = vec![b'x'; long_message_size];
-    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
+    api.save_log_message(0, bytes.len(), &bytes);
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1807,10 +1912,10 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Save several long messages.
     for _ in 0..messages_number {
         let bytes = vec![b'x'; long_message_size];
-        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
+        api.save_log_message(0, bytes.len(), &bytes);
     }
-    // Expect only one log record to be kept, with the total size kept within the limit.
-    let records = api.canister_log().records();
-    assert_eq!(records.len(), initial_records_number + 1);
-    assert!(records.data_size() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    // Expect only one log record to be kept, staying within the size limit.
+    let log = api.canister_log();
+    assert_eq!(log.records().len(), initial_records_number + 1);
+    assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }

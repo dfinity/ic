@@ -587,6 +587,19 @@ impl<'a> PoolReader<'a> {
             registry_version,
         )
     }
+
+    /// Returns the height of the next CUP.
+    pub fn get_next_cup_height(&self) -> Height {
+        self.get_highest_catch_up_package()
+            .content
+            .block
+            .as_ref()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height()
+    }
 }
 
 /// Take a slice returned by [`PoolReader::get_payloads_from_height`]
@@ -723,6 +736,7 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let start = pool.make_next_block();
+            pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             pool.insert_block_chain_with(start.clone(), Height::from(10));
             let ten_block = pool
                 .validated()
@@ -778,19 +792,22 @@ pub mod test {
     // sorted in ascending order.
     fn test_get_by_height_range() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
-            // Let's generate 4 proposals so that 2 of them end up in the
-            // unvalidated pool and have the same height.
             let rounds = 30;
-            let replicas = 3;
+            let replicas = 10;
+            let f = 3;
+            let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
+
+            // Because `TestConsensusPool::advance_round` alternates between
+            // putting blocks in validated and unvalidated pools for each rank,
+            // we expect (f+1)/2 blocks in the unvalidated pool per round.
             let mut round = pool
                 .prepare_round()
-                .with_replicas(replicas)
-                .with_new_block_proposals(replicas + 1)
-                .with_random_beacon_shares(replicas)
-                .with_notarization_shares(replicas)
-                .with_finalization_shares(replicas);
-            // Grow the artifact pool for `rounds` mimicking a subnet with 3 replicas.
+                .with_replicas(replicas as u32)
+                .with_new_block_proposals(f + 1)
+                .with_random_beacon_shares(replicas as u32)
+                .with_notarization_shares(replicas as u32)
+                .with_finalization_shares(replicas as u32);
+            // Grow the artifact pool for `rounds`.
             for _ in 0..rounds {
                 round.advance();
             }
@@ -815,9 +832,9 @@ pub mod test {
                     Height::from((rounds * 2) as u64),
                 ))
                 .collect::<Vec<_>>();
-            // We expect to see `2*rounds` unvalidated block proposals sorted by
+            // We expect to see `rounds * ((f+1)/2)` unvalidated block proposals sorted by
             // height in ascending order.
-            assert_eq!(artifacts.len(), 2 * rounds);
+            assert_eq!(artifacts.len(), rounds * ((f as usize + 1) / 2));
             for i in 0..artifacts.len() - 1 {
                 // Heights are ascending, but NOT unique.
                 assert!(artifacts[i].content.height() <= artifacts[i + 1].content.height());

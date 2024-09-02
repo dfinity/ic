@@ -23,9 +23,9 @@ use crate::{
             claim_swap_neurons_response::SwapNeuron,
             get_neuron_response, get_proposal_response,
             governance::{
-                self, neuron_in_flight_command,
-                neuron_in_flight_command::Command as InFlightCommand, MaturityModulation,
-                NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                self,
+                neuron_in_flight_command::{self, Command as InFlightCommand},
+                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -1089,6 +1089,7 @@ impl Governance {
     ///   the initial neuron claim that we didn't know about.
     /// - The transfer of funds previously failed for some reason (e.g. the
     ///   ledger was unavailable or broken).
+    ///
     /// The ledger canister still guarantees that a transaction cannot
     /// transfer, i.e., disburse, more than what was in the neuron's account
     /// on the ledger.
@@ -2907,6 +2908,12 @@ impl Governance {
             .expect("NervousSystemParameters must have max_followees_per_function")
     }
 
+    fn max_number_of_principals_per_neuron_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .max_number_of_principals_per_neuron
+            .expect("NervousSystemParameters must have max_followees_per_function")
+    }
+
     /// Inserts a proposals that has already been validated in the state.
     ///
     /// This is a low-level function that makes no verification whatsoever.
@@ -3828,9 +3835,9 @@ impl Governance {
     /// Preconditions:
     /// - The caller must be the Sale canister deployed along with this SNS Governance
     ///   canister.
-    /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
+    /// - Each NeuronRecipe's `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
-    /// - Each NeuronParameters' `followees` does not exceed max_followees_per_function
+    /// - Each NeuronRecipe's `followees` does not exceed max_followees_per_function
     ///   as defined in the `NervousSystemParameters`
     /// - There is available memory in the Governance canister for the newly created
     ///   Neuron.
@@ -3873,30 +3880,54 @@ impl Governance {
         // Safe to do with the validation step above
         let neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s_or_panic();
         let max_followees_per_function = self.max_followees_per_function_or_panic();
+        let max_number_of_principals_per_neuron =
+            self.max_number_of_principals_per_neuron_or_panic();
         let neuron_claimer_permissions = self.neuron_claimer_permissions_or_panic();
 
         let mut swap_neurons = vec![];
 
-        for neuron_parameter in &request.neuron_parameters {
-            match neuron_parameter.validate(neuron_minimum_stake_e8s, max_followees_per_function) {
+        let Some(neuron_recipes) = request.neuron_recipes else {
+            log!(
+                ERROR,
+                "Swap called claim_swap_neurons, but did not populate `neuron_recipes`."
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        };
+
+        // TODO(NNS1-3198): Remove this after `NeuronParameters` is fully removed
+        #[allow(deprecated)]
+        if !request.neuron_parameters.is_empty() {
+            log!(
+                ERROR,
+                "NeuronParameters is obselete. Please use NeuronRecipes instead."
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        }
+
+        for neuron_recipe in Vec::<_>::from(neuron_recipes) {
+            match neuron_recipe.validate(
+                neuron_minimum_stake_e8s,
+                max_followees_per_function,
+                max_number_of_principals_per_neuron,
+            ) {
                 Ok(_) => (),
                 Err(err) => {
-                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
-                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                        neuron_parameter,
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
                         ClaimedSwapNeuronStatus::Invalid,
                     ));
                     continue;
                 }
             }
 
-            // Its safe to get all fields in NeuronParameters because of the previous validation.
-            let neuron_id = neuron_parameter.get_neuron_id_or_panic();
+            // It's safe to get all fields in NeuronRecipe because of the previous validation.
+            let neuron_id = neuron_recipe.get_neuron_id_or_panic();
 
-            // This neuron was claimed previously.
+            // Skip this neuron if it was previously claimed.
             if self.proto.neurons.contains_key(&neuron_id.to_string()) {
-                swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                    neuron_parameter,
+                swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
                     ClaimedSwapNeuronStatus::AlreadyExists,
                 ));
                 continue;
@@ -3904,38 +3935,38 @@ impl Governance {
 
             let neuron = Neuron {
                 id: Some(neuron_id.clone()),
-                permissions: neuron_parameter
+                permissions: neuron_recipe
                     .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
-                cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s_or_panic(),
+                cached_neuron_stake_e8s: neuron_recipe.get_stake_e8s_or_panic(),
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_parameter.construct_followees(),
+                followees: neuron_recipe.construct_followees(),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    neuron_parameter.get_dissolve_delay_seconds_or_panic(),
+                    neuron_recipe.get_dissolve_delay_seconds_or_panic(),
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-                source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
+                source_nns_neuron_id: neuron_recipe.source_nns_neuron_id(),
                 staked_maturity_e8s_equivalent: None,
-                auto_stake_maturity: neuron_parameter.construct_auto_staking_maturity(),
+                auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
             };
 
             // Add the neuron to the various data structures and indexes to support neurons. This
             // method may fail if the memory limits of Governance have been reached, which is a
-            // recoverable error. The sale canister can retry claiming after GC or manual upgrades
+            // recoverable error. The swap canister can retry claiming after GC or upgrades
             // of SNS Governance.
             match self.add_neuron(neuron) {
-                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                    neuron_parameter,
+                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
                     ClaimedSwapNeuronStatus::Success,
                 )),
                 Err(err) => {
-                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
-                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                        neuron_parameter,
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
                         ClaimedSwapNeuronStatus::MemoryExhausted,
                     ))
                 }
@@ -3954,7 +3985,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being added are voting-related.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
     ///   as defined in the nervous system parameters. To see what the current parameters are
@@ -4048,7 +4079,7 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`), or the caller has the permission to
-    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   manage voting-related permissions (permission `ManageVotingPermission`)
     ///   and the permissions being removed are voting-related.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
@@ -4692,8 +4723,8 @@ impl Governance {
     ///
     /// This method:
     /// * collects all proposals in state ReadyToSettle, that is, proposals that
-    /// can no longer accept votes for the purpose of rewards and that have
-    /// not yet been considered in a reward event
+    ///   can no longer accept votes for the purpose of rewards and that have
+    ///   not yet been considered in a reward event
     /// * associates those proposals to the new reward event and cleans their ballots
     fn distribute_rewards(&mut self, supply: Tokens) {
         log!(INFO, "distribute_rewards. Supply: {:?}", supply);
@@ -5141,7 +5172,9 @@ impl Governance {
         // In this case, we do not have a running archive, so we just clone the value so the check
         // does not fail on that account.
         if running_version.archive_wasm_hash.is_empty() {
-            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+            running_version
+                .archive_wasm_hash
+                .clone_from(&target_version.archive_wasm_hash);
         }
 
         let deployed_version = match self.proto.deployed_version.clone() {
@@ -9635,14 +9668,14 @@ mod tests {
 
     /// Main Narrative:
     ///
-    ///   1. There are three neurons. One votes directly. The other two follow the (direct) voter.
-    ///   2. The difference between the two follower neurons is what they follow on:
-    ///     a. catch-all/fallback: This neuron does nothing on critical proposals.
-    ///     b. TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
-    ///   3. There are two proposals that the (direct) voter neuron votes on:
-    ///     A. Motion: Here, only the first follower neuron follows.
-    ///     B. TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
-    ///        the first follower neuron uses catch-all/fallback following.
+    /// 1. There are three neurons. One votes directly. The other two follow the (direct) voter.
+    /// 2. The difference between the two follower neurons is what they follow on:
+    ///   * catch-all/fallback: This neuron does nothing on critical proposals.
+    ///   * TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
+    /// 3. There are two proposals that the (direct) voter neuron votes on:
+    ///   * Motion: Here, only the first follower neuron follows.
+    ///   * TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
+    ///     the first follower neuron uses catch-all/fallback following.
     ///
     /// What the first follower neuron does is the most interesting, because what we are trying to
     /// demonstrate here is that catch-all/fallback following applies iff the proposal is

@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
     "@crate_index//:anyhow",
     "@crate_index//:axum",
@@ -12,33 +11,36 @@ DEPENDENCIES = [
     "@crate_index//:cloudflare",
     "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:http",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-utils",
-    "@crate_index//:ic-response-verification",
     "@crate_index//:ic-http-certification",
+    "@crate_index//:ic-response-verification",
+    "@crate_index//:ic-utils",
     "@crate_index//:idna",
     "@crate_index//:instant-acme",
     "@crate_index//:leb128",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_0_20_0",
+    "@crate_index//:opentelemetry_prometheus_0_13_0",
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
-    "@crate_index//:serde",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tower",
-    "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:trust-dns-resolver",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
@@ -47,6 +49,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
 

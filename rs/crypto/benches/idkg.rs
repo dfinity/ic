@@ -453,7 +453,6 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
                                 receivers,
                                 test_case.alg(),
                                 key_transcript,
-                                false,
                                 rng,
                             )
                         };

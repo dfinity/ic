@@ -24,7 +24,7 @@ use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,
     dkg as consensus_dkg,
-    idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
+    idkg::{IDkgComplaintContent, IDkgOpeningContent},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
@@ -62,15 +62,17 @@ pub trait Crypto:
     // IDkgDealing
     + BasicSigner<IDkgDealing>
     + BasicSigVerifier<IDkgDealing>
-    // EcdsaComplaintContent
-    + BasicSigner<EcdsaComplaintContent>
-    + BasicSigVerifier<EcdsaComplaintContent>
-    // EcdsaOpeningContent
-    + BasicSigner<EcdsaOpeningContent>
-    + BasicSigVerifier<EcdsaOpeningContent>
+    // IDkgComplaintContent
+    + BasicSigner<IDkgComplaintContent>
+    + BasicSigVerifier<IDkgComplaintContent>
+    // IDkgOpeningContent
+    + BasicSigner<IDkgOpeningContent>
+    + BasicSigVerifier<IDkgOpeningContent>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
+    + ThresholdSchnorrSigner
+    + ThresholdSchnorrSigVerifier
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseMetadata>
     + BasicSigVerifier<CanisterHttpResponseMetadata>
@@ -129,16 +131,18 @@ impl<T> Crypto for T where
         + BasicSigVerifier<SignedIDkgDealing>
         + BasicSigner<IDkgDealing>
         + BasicSigVerifier<IDkgDealing>
-        + BasicSigner<EcdsaComplaintContent>
-        + BasicSigVerifier<EcdsaComplaintContent>
-        + BasicSigner<EcdsaOpeningContent>
-        + BasicSigVerifier<EcdsaOpeningContent>
+        + BasicSigner<IDkgComplaintContent>
+        + BasicSigVerifier<IDkgComplaintContent>
+        + BasicSigner<IDkgOpeningContent>
+        + BasicSigVerifier<IDkgOpeningContent>
         + BasicSigner<CanisterHttpResponseMetadata>
         + BasicSigVerifier<CanisterHttpResponseMetadata>
         + BasicSigner<QueryResponseHash>
         + IDkgProtocol
         + ThresholdEcdsaSigner
         + ThresholdEcdsaSigVerifier
+        + ThresholdSchnorrSigner
+        + ThresholdSchnorrSigVerifier
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>

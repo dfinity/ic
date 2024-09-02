@@ -15,16 +15,16 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
-prost-derive = "0.12"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -37,16 +37,19 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icp-index = { path = "index" }
+ic-icrc1-ledger-sm-tests = { path = "../icrc1/ledger/sm-tests" }
 ic-ledger-test-utils = { path = "test_utils" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
 maplit = "1.0.2"
 pocket-ic = { path = "../../../packages/pocket-ic" }
-proptest = "1"
-rand = "0.8"
-rand_chacha = "0.3"
-tempfile = "3.1.0"
+proptest = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+tempfile = { workspace = true }
 
 [[test]]
 name = "test"

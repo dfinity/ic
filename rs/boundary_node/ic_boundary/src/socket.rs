@@ -1,8 +1,10 @@
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::Path,
 };
+
+#[cfg(not(feature = "tls"))]
+use std::path::Path;
 
 #[cfg(feature = "tls")]
 use anyhow::Error;
@@ -14,7 +16,9 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::net::{TcpListener, TcpSocket, TcpStream, UnixListener, UnixSocket, UnixStream};
+#[cfg(not(feature = "tls"))]
+use tokio::net::UnixSocket;
+use tokio::net::{TcpListener, TcpSocket, TcpStream, UnixListener, UnixStream};
 
 // These are used in case the peer_addr() below fails for whatever reason
 const DEFAULT_IP_ADDR: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
@@ -35,6 +39,7 @@ pub struct SocketUnix {
     listener: UnixListener,
 }
 
+#[cfg(not(feature = "tls"))]
 impl SocketUnix {
     pub fn bind(path: impl AsRef<Path>, backlog: u32) -> Result<Self, std::io::Error> {
         let socket = UnixSocket::new_stream()?;
@@ -65,8 +70,9 @@ pub struct SocketTcp {
 impl SocketTcp {
     pub fn bind(addr: SocketAddr, backlog: u32) -> Result<Self, std::io::Error> {
         let socket = TcpSocket::new_v6()?;
-        socket.bind(addr)?;
         socket.set_keepalive(true)?;
+        socket.set_reuseaddr(true)?;
+        socket.bind(addr)?;
         let listener = socket.listen(backlog)?;
         Ok(Self { listener })
     }
@@ -87,19 +93,20 @@ impl Accept for SocketTcp {
 }
 
 // Convenience methods for constructing a Hyper Server listening on TCP/Unix sockets with a backlog set
+#[cfg(not(feature = "tls"))]
 pub trait UnixServerExt {
     fn bind_unix(path: impl AsRef<Path>, backlog: u32) -> Result<Builder<SocketUnix>, io::Error>;
 }
-
-pub trait TcpServerExt {
-    fn bind_tcp(addr: SocketAddr, backlog: u32) -> Result<Builder<SocketTcp>, io::Error>;
-}
-
+#[cfg(not(feature = "tls"))]
 impl UnixServerExt for Server<SocketUnix, ()> {
     fn bind_unix(path: impl AsRef<Path>, backlog: u32) -> Result<Builder<SocketUnix>, io::Error> {
         let incoming = SocketUnix::bind(path, backlog)?;
         Ok(Server::builder(incoming))
     }
+}
+
+pub trait TcpServerExt {
+    fn bind_tcp(addr: SocketAddr, backlog: u32) -> Result<Builder<SocketTcp>, io::Error>;
 }
 
 impl TcpServerExt for Server<SocketTcp, ()> {

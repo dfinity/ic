@@ -133,9 +133,10 @@ get_nns_canister_code_location() {
     LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
     LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
+    SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
-    code_location__governance="$RUST_DIR/nns/governance"
+    code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
     code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
     code_location__root="$RUST_DIR/nns/handlers/root/impl"
@@ -144,7 +145,7 @@ get_nns_canister_code_location() {
     code_location__genesis_token="$RUST_DIR/nns/gtc"
     code_location__identity="$RUST_DIR/nns/identity"
     code_location__nns_ui="$RUST_DIR/nns/nns-ui"
-    code_location__sns_wasm="$RUST_DIR/nns/sns-wasm"
+    code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}

@@ -74,10 +74,10 @@ impl Debug for StaticCertResolver {
         write!(
             f,
             "StaticCertResolver{{ \
-                certified_key: CertifiedKey{{ cert: {:?}, key: OMITTED, ocsp: {:?}, sct_list: {:?} }}, \
+                certified_key: CertifiedKey{{ cert: {:?}, key: OMITTED, ocsp: {:?} }}, \
                 sig_scheme: {:?} \
             }}",
-            self.certified_key.cert, self.certified_key.ocsp, self.certified_key.sct_list, self.sig_scheme
+            self.certified_key.cert, self.certified_key.ocsp, self.sig_scheme
         )
     }
 }

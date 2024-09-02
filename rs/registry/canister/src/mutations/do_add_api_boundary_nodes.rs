@@ -5,11 +5,13 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::make_api_boundary_node_record_key;
 use ic_registry_transport::insert;
+use prost::Message;
 use serde::Serialize;
 
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::check_replica_version_is_blessed;
+
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddApiBoundaryNodesPayload {
     pub node_ids: Vec<NodeId>,
@@ -29,9 +31,10 @@ impl Registry {
             let key = make_api_boundary_node_record_key(node_id);
             insert(
                 key,
-                encode_or_panic(&ApiBoundaryNodeRecord {
+                ApiBoundaryNodeRecord {
                     version: payload.version.clone(),
-                }),
+                }
+                .encode_to_vec(),
             )
         });
 
@@ -111,13 +114,14 @@ mod tests {
     };
     use ic_registry_transport::{insert, update, upsert};
     use ic_types::ReplicaVersion;
+    use prost::Message;
 
     use crate::{
         common::test_helpers::{
             add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
-        mutations::common::{decode_registry_value, encode_or_panic, test::TEST_NODE_ID},
+        mutations::common::test::TEST_NODE_ID,
     };
 
     use super::AddApiBoundaryNodesPayload;
@@ -165,9 +169,10 @@ mod tests {
 
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(node_id), // key
-            encode_or_panic(&ApiBoundaryNodeRecord {
+            ApiBoundaryNodeRecord {
                 version: payload.version.clone(),
-            }),
+            }
+            .encode_to_vec(),
         )]);
 
         registry.do_add_api_boundary_nodes(payload);
@@ -251,29 +256,31 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Create and bless version
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 
@@ -288,7 +295,7 @@ mod tests {
         node_record.domain = None;
         let update_node_record = update(
             make_node_record_key(node_id).as_bytes(),
-            encode_or_panic(&node_record),
+            node_record.encode_to_vec(),
         );
         let mutations = vec![update_node_record];
         registry.maybe_apply_mutation_internal(mutations);
@@ -314,29 +321,31 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Create and bless version
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 
@@ -368,29 +377,31 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Create and bless version
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 
@@ -419,29 +430,31 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Create and bless version
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 
@@ -480,29 +493,31 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Create and bless version
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 

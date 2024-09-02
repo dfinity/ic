@@ -1,12 +1,9 @@
 use std::time::Duration;
 
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::{GetDerivedStateResponse, GetLifecycleResponse, Lifecycle};
-use slog::info;
-use tokio::time::sleep;
-
-use crate::{
+use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
     canister_api::{CallMode, SnsRequestProvider},
     driver::{
@@ -15,6 +12,8 @@ use crate::{
     },
     sns_client::SnsClient,
 };
+use slog::info;
+use tokio::time::sleep;
 
 /// If the swap is committed, waits for the swap to finalize (for up to 2 minutes).
 pub async fn finalize_committed_swap(
@@ -272,7 +271,7 @@ async fn get_all_neurons(env: &TestEnv) -> Vec<ic_sns_governance::pb::v1::Neuron
                 .neurons;
             match neurons_page.last() {
                 Some(last_neuron) => {
-                    start_page_at = last_neuron.id.clone();
+                    start_page_at.clone_from(&last_neuron.id);
                 }
                 None => {
                     assert!(neurons_page.is_empty());

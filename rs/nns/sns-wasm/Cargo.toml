@@ -36,37 +36,37 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ic-wasm = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-libflate = "1.1.2"
 maplit = "1.0.2"
+prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-prost = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-registry-canister = { path = "../../registry/canister" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-keys = { path = "../../registry/keys" }
+registry-canister = { path = "../../registry/canister" }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
-tempfile = "3.1.0"
-tokio = { workspace = true }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [features]
 test = ["ic-sns-init/test"]

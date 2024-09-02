@@ -1,5 +1,5 @@
 [package]
-name = "testing-verifcation-tests"
+name = "testing-verification-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -9,8 +9,14 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-tests = { path = ".." }
+ic-system-test-driver = { path = "../driver" }
+slog = { workspace = true }
 spec-compliance = { path = "./spec_compliance" }
+tests = { path = ".." }
+
+[[bin]]
+name = "ic-systest-basic-health-test"
+path = "basic_health_test.rs"
 
 [[bin]]
 name = "ic-systest-spec-compliance-application-subnet"

@@ -639,7 +639,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
+        include_bytes!("../../../ic-os/components/ic/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
@@ -795,9 +795,13 @@ mod tests {
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
         let mut replica_firewall_config = config.firewall.unwrap();
-        replica_firewall_config.config_file = nftables_config_path.clone();
+        replica_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut boundary_node_firewall_config = config.boundary_node_firewall.unwrap();
-        boundary_node_firewall_config.config_file = nftables_config_path.clone();
+        boundary_node_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut firewall = set_up_firewall_dependencies(
             replica_firewall_config,
             boundary_node_firewall_config,
@@ -832,7 +836,6 @@ mod tests {
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ replica_log_debug_overrides }}", "[]")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
             .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
@@ -900,7 +903,7 @@ mod tests {
     /// 1) two node records - one for the specified node + another one,
     /// 2) a bunch of firewall rules,
     /// 3) a Subnet record,
-    /// and returns a registry client.
+    ///    and returns a registry client.
     fn set_up_registry(role: Role, node: NodeId) -> Arc<FakeRegistryClient> {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());

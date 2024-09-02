@@ -9,8 +9,7 @@ use hyper_util::rt::TokioExecutor;
 use hyper_util::rt::TokioIo;
 use ic_agent::agent::{
     http_transport::{
-        hyper_transport::HyperReplicaV2Transport,
-        route_provider::RouteProvider as RouteProviderTrait,
+        hyper_transport::HyperTransport, route_provider::RouteProvider as RouteProviderTrait,
     },
     Agent, AgentError,
 };
@@ -139,7 +138,7 @@ pub fn setup<C: HyperService<Body> + 'static>(
         .iter()
         .map(|v| {
             let transport =
-                HyperReplicaV2Transport::create_with_service(v.domain.to_string(), client.clone())
+                HyperTransport::create_with_service(v.domain.to_string(), client.clone())
                     .context("failed to create transport")?
                     .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
 
@@ -202,13 +201,12 @@ pub fn setup_unix_socket<C: HyperService<Body> + 'static>(
 ) -> Result<Runner, anyhow::Error> {
     // Hostname can be anything, the URL is just here to make Agent happy
     // It will be overridden with the Unix socket in the client later on
-    let url = Url::parse("http://0.0.0.0/api/v2/")?;
+    let url = Url::parse("http://0.0.0.0")?;
     let provider = RouteProvider(url);
 
-    let transport =
-        HyperReplicaV2Transport::create_with_service_route(Arc::new(provider), args.client)
-            .context("failed to create transport")?
-            .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
+    let transport = HyperTransport::create_with_service_route(Arc::new(provider), args.client)
+        .context("failed to create transport")?
+        .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
 
     let agent = Agent::builder()
         .with_transport(transport)
@@ -323,13 +321,14 @@ impl Runner {
         match self.listen {
             ListenProto::Tcp(x) => {
                 info!("Starting server. Listening on http://{}/", x);
-                axum_server::bind(x)
-                    .serve(
-                        self.router
-                            .into_make_service_with_connect_info::<SocketAddr>(),
-                    )
-                    .await
-                    .context("failed to start proxy server")?;
+                let listener = tokio::net::TcpListener::bind(x).await?;
+                axum::serve(
+                    listener,
+                    self.router
+                        .into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .await
+                .context("failed to start proxy server")?;
             }
 
             ListenProto::Unix(x) => {

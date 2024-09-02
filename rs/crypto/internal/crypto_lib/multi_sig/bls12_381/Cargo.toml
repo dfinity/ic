@@ -15,13 +15,13 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path= "../../../../sha2" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 serde = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_cbor = { workspace = true }

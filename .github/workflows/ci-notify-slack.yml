@@ -2,7 +2,7 @@ name: PR Slack Notification
 
 on:
   pull_request:
-    types: [ready_for_review]
+    types: [review_requested]
 
 jobs:
   notify-slack:
@@ -13,37 +13,27 @@ jobs:
         uses: actions/checkout@v4
       - name: Get requested team reviewers
         id: get-reviewers
-        uses: actions/github-script@v5
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { owner, repo, number: issue_number } = context.issue;
-            const team_reviewers = context.payload.pull_request.requested_teams.map(team => team.name);
-            return team_reviewers;
+            return "requested_team" in context.payload ? context.payload.requested_team.name : ""
       - name: Lookup Slack channel
         id: lookup
+        if: steps.get-reviewers.outputs.result != '""'
         run: |
-          TEAM_REVIEWERS=$(echo '${{ steps.get-reviewers.outputs.result }}' | jq -c '.[]')
-          CHANNELS=""
-          for TEAM in $TEAM_REVIEWERS; do
-            CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
-            if [ "$CHANNEL" != "null" ]; then
-              if [ -z "$CHANNELS" ]; then
-                CHANNELS="$CHANNEL"
-              else
-                CHANNELS="$CHANNELS,$CHANNEL"
-              fi
-            fi
-          done
-          echo "channels=${CHANNELS}" >> $GITHUB_OUTPUT
+          TEAM=${{ steps.get-reviewers.outputs.result }}
+          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' .github/workflows/team-channels.json)
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
           MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
       - name: Post to a Slack channel
+        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack
-        uses: slackapi/slack-github-action@v1.25.0
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
-          channel-id: ${{ steps.lookup.outputs.channels }}
+          channel-id: ${{ steps.lookup.outputs.channel }}
           slack-message: "${{ steps.lookup.outputs.message }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

@@ -8,12 +8,14 @@ use crate::consensus::{
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
 use ic_logger::{info, trace, ReplicaLogger};
-use ic_types::consensus::{
-    hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
-    FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+use ic_types::{
+    consensus::{
+        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+    },
+    malicious_flags::MaliciousFlags,
+    Time,
 };
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::Time;
 use std::time::Duration;
 
 /// Return a `ChangeSet` that moves all block proposals in the range to the
@@ -114,7 +116,7 @@ fn maliciously_propose_blocks(
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
                             let metadata = BlockMetadata::from_block(
                                 &hashed_block,
-                                &block_maker.replica_config,
+                                block_maker.replica_config.subnet_id,
                             );
                             if let Ok(signature) = block_maker.crypto.sign(
                                 &metadata,

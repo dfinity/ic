@@ -62,3 +62,10 @@ impl WeiPerGas {
             .map(|value| value.change_units())
     }
 }
+
+impl Wei {
+    pub fn into_wei_per_gas(self, gas: GasAmount) -> Option<WeiPerGas> {
+        self.checked_div_floor(gas.into_inner())
+            .map(|value| value.change_units())
+    }
+}

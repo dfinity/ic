@@ -15,6 +15,7 @@ path = "bin/principal_to_hex.rs"
 askama = { workspace = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
+evm-rpc-client = { path = "../../evm-rpc-client" }
 futures = { workspace = true }
 hex = { workspace = true }
 hex-literal = "0.4.1"
@@ -23,18 +24,18 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
 ic-crypto-sha3 = { path = "../../../crypto/sha3" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-ethereum-types = { path = "../../types" }
-icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
+icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
-num-bigint = "0.4.3"
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
 rlp = "0.5.2"
@@ -44,26 +45,29 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-time = { workspace = true }
 thiserror = { workspace = true }
 thousands = "0.2"
+time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ethers-core = "2.0.8"
-flate2 = "1.0.22"
+flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cketh-test-utils = { path = "../test_utils" }
-ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
+ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 maplit = "1"
-proptest = "1.0"
-rand = "0.8"
+proptest = { workspace = true }
+rand = { workspace = true }
 scraper = "0.17.1"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+debug_checks = []

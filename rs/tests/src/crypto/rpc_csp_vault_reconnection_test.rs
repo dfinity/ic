@@ -28,16 +28,15 @@ Coverage::
 
 
 end::catalog[] */
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot, SshSession,
-};
-use crate::retry_with_msg;
-use crate::util::{assert_create_agent, block_on, MessageCanister};
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot, SshSession,
+};
+use ic_system_test_driver::util::{assert_create_agent, block_on, MessageCanister};
 use slog::{debug, info, Logger};
 
 pub fn setup_with_single_node(env: TestEnv) {
@@ -149,7 +148,7 @@ impl SystemdCli<'_> {
             .expect("establish SSH session");
         let cmd = format!("journalctl -u {} | grep --count '{}'", self.service, msg);
         self.log_ssh_command(&cmd);
-        retry_with_msg!(
+        ic_system_test_driver::retry_with_msg!(
             "check if log entry contains expected message",
             self.logger.clone(),
             Duration::from_secs(20),

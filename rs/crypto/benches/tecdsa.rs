@@ -72,7 +72,6 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
-                    false,
                     rng,
                 );
                 signer.load_tecdsa_sig_transcripts(&inputs);
@@ -85,7 +84,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn sign_share(signer: &Node, inputs: &ThresholdEcdsaSigInputs) -> ThresholdEcdsaSigShare {
-    signer.sign_share(inputs).unwrap_or_else(|error| {
+    signer.create_sig_share(inputs).unwrap_or_else(|error| {
         panic!(
             "failed to generate threshold ECDSA signature share for signer {:?} with inputs {:?}: {:?}",
             signer.id(),
@@ -119,7 +118,6 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
-                    false,
                     rng,
                 );
                 let signer = env
@@ -183,7 +181,6 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
-                    false,
                     rng,
                 );
                 let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
@@ -237,7 +234,6 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     seed,
                     &derivation_path,
                     test_case.alg(),
-                    false,
                     rng,
                 );
                 let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);

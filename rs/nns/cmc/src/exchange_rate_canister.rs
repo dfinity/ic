@@ -499,19 +499,20 @@ fn validate_exchange_rate(exchange_rate: &ExchangeRate) -> Result<(), ValidateEx
 #[cfg(test)]
 mod test {
 
+    use super::*;
+    use crate::environment::Environment;
+    use crate::{
+        DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+        DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+    };
+    use futures::FutureExt;
+    use ic_xrc_types::ExchangeRateMetadata;
     use std::{
         cell::RefCell,
         collections::VecDeque,
         sync::{Arc, Mutex},
         time::UNIX_EPOCH,
     };
-
-    use super::*;
-
-    use crate::environment::Environment;
-
-    use futures::FutureExt;
-    use ic_xrc_types::ExchangeRateMetadata;
 
     #[derive(Default)]
     pub struct TestExchangeRateCanisterEnvironment {
@@ -952,7 +953,15 @@ mod test {
             state.average_icp_xdr_conversion_rate.clone()
         });
 
-        assert!(average_icp_xdr_conversion_rate.is_none());
+        // Require starting with the expected initial ICP/XDR conversion rate.
+        let initial_average_icp_xdr_conversion_rate = Some(IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+        });
+        assert_eq!(
+            average_icp_xdr_conversion_rate,
+            initial_average_icp_xdr_conversion_rate
+        );
 
         let now_timestamp_seconds = (dfn_core::api::now()
             .duration_since(UNIX_EPOCH)
@@ -995,6 +1004,13 @@ mod test {
         let average_icp_xdr_conversion_rate = read_state(&STATE, |state| {
             state.average_icp_xdr_conversion_rate.clone()
         });
+
+        // Ensure the observed ICP/XDR conversion rate is different from the initial one.
+        assert_ne!(
+            average_icp_xdr_conversion_rate,
+            initial_average_icp_xdr_conversion_rate
+        );
+
         assert!(
             matches!(average_icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000),
             "rate: {:#?}",

@@ -9,26 +9,24 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-bincode = "1.2.1"
 bytes = { workspace = true }
-either = "1.6.0"
 futures = { workspace = true }
-http-serde = "2.0.0"
 ic-async-utils = { path = "../../async_utils" }
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-base-types = { path = "../../types/base_types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
+prost = { workspace = true }
 quinn = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
-serde = { workspace = true }
-serde_bytes = { workspace = true }
+rustls = { workspace = true }
 slog = { workspace = true }
 socket2 = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-util = { workspace = true }
@@ -36,7 +34,7 @@ tower = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

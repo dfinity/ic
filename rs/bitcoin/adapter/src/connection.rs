@@ -39,31 +39,19 @@ pub struct ConnectionConfig {
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
     /// This variant represents that the connection has not yet been connected.
-    Initializing {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    Initializing,
     /// This variant represents that the connection is now connected with the stream.
     Connected {
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
     /// This variant represents that the version handshake has been completed.
-    HandshakeComplete {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    HandshakeComplete,
     /// This variant represents that the adapter has discarded the connection
     /// due to bad behavior.
-    AdapterDiscarded {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    AdapterDiscarded,
     /// This variant represents that the connection has been dropped.
-    NodeDisconnected {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    NodeDisconnected,
     /// The connection has sent a `getaddr` message and is now waiting for a response.
     AwaitingAddresses {
         /// The timestamp when the state change occurred.
@@ -120,8 +108,8 @@ impl Connection {
 
         Self {
             address_entry,
+            state: ConnectionState::Initializing,
             handle,
-            state: ConnectionState::Initializing { timestamp },
             writer,
             ping_state: PingState::Idle {
                 last_pong_at: timestamp,
@@ -183,9 +171,7 @@ impl Connection {
     }
 
     pub fn completed_handshake(&mut self) {
-        self.state = ConnectionState::HandshakeComplete {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::HandshakeComplete;
     }
 
     /// Used to set the connections state to the AwaitingAddresses state.
@@ -198,9 +184,7 @@ impl Connection {
     /// This function is used to set a connection to a disconnected state,
     /// which will cause the ConnectionManager to clean up this connection.
     pub fn disconnect(&mut self) {
-        self.state = ConnectionState::NodeDisconnected {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::NodeDisconnected;
         self.handle.abort();
     }
 
@@ -208,9 +192,7 @@ impl Connection {
     /// manager will use this to clean up the connection and remove the address
     /// from the address book.
     pub fn discard(&mut self) {
-        self.state = ConnectionState::AdapterDiscarded {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::AdapterDiscarded;
         self.handle.abort();
     }
 
@@ -218,19 +200,13 @@ impl Connection {
     pub fn is_disconnected(&self) -> bool {
         matches!(
             self.state,
-            ConnectionState::NodeDisconnected { timestamp: _ }
-        ) || matches!(
-            self.state,
-            ConnectionState::AdapterDiscarded { timestamp: _ }
+            ConnectionState::NodeDisconnected | ConnectionState::AdapterDiscarded
         )
     }
 
     /// This function checks to see if the connection is available to receive messages.
     pub fn is_available(&self) -> bool {
-        matches!(
-            self.state,
-            ConnectionState::HandshakeComplete { timestamp: _ }
-        )
+        matches!(self.state, ConnectionState::HandshakeComplete)
     }
 
     /// This function checks to see if the connection needs to perform a ping.
@@ -272,42 +248,27 @@ impl Connection {
 
 #[cfg(test)]
 mod test {
-
+    use super::*;
     use std::net::SocketAddr;
     use std::str::FromStr;
-
     use tokio::{
         runtime::Runtime,
         sync::mpsc::{unbounded_channel, UnboundedReceiver},
     };
 
-    use super::*;
-
-    impl ConnectionState {
-        /// This function is used to pull the timestamp from the various states.
-        fn get_timestamp(&self) -> &SystemTime {
-            match self {
-                ConnectionState::Initializing { timestamp } => timestamp,
-                ConnectionState::Connected { timestamp } => timestamp,
-                ConnectionState::HandshakeComplete { timestamp } => timestamp,
-                ConnectionState::AdapterDiscarded { timestamp } => timestamp,
-                ConnectionState::NodeDisconnected { timestamp } => timestamp,
-                ConnectionState::AwaitingAddresses { timestamp } => timestamp,
-            }
-        }
-    }
-
     impl Connection {
         /// This function creates a new connection that will be used to manage a
         /// connection to the BTC network.
-        pub fn new_with_state(config: ConnectionConfig, state: ConnectionState) -> Self {
+        pub fn new_with_state(
+            config: ConnectionConfig,
+            state: ConnectionState,
+            last_pong_at: SystemTime,
+        ) -> Self {
             let ConnectionConfig {
                 address_entry,
                 handle,
                 writer,
             } = config;
-
-            let last_pong_at = *state.get_timestamp();
 
             Self {
                 address_entry,
@@ -342,9 +303,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         assert!(!conn.is_disconnected());
-        conn.state = ConnectionState::NodeDisconnected {
-            timestamp: SystemTime::now(),
-        };
+        conn.state = ConnectionState::NodeDisconnected;
         assert!(conn.is_disconnected());
     }
 
@@ -353,9 +312,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         assert!(!conn.is_available());
-        conn.state = ConnectionState::HandshakeComplete {
-            timestamp: SystemTime::now(),
-        };
+        conn.state = ConnectionState::HandshakeComplete;
         assert!(conn.is_available());
     }
 
@@ -364,9 +321,6 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         conn.disconnect();
-        assert!(matches!(
-            conn.state,
-            ConnectionState::NodeDisconnected { timestamp: _ }
-        ));
+        assert!(matches!(conn.state, ConnectionState::NodeDisconnected));
     }
 }

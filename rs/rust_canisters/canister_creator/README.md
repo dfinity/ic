@@ -20,7 +20,7 @@ Run
 To quickly generate 100K canisters, run 10 instances of the canister creator in parallel.
 
 ```bash
-export NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
+export NODE='http://[2602:fb2b:110:10:5000:67ff:fe4f:650d]:8080'
 # Payload (a json string) has to be encoded in hex.
 export PAYLOAD=$(echo -n '10000'|od -t x1 -A none|xargs|sed -e 's/ //g')
 seq 1 10 | xargs -n 1 -P 10 bash run.sh

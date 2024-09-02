@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -12,10 +12,7 @@ use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
-    messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId, Query,
-        SignedIngressContent,
-    },
+    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
@@ -31,7 +28,7 @@ use tower::util::BoxCloneService;
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
 /// created up until the moment they are requested.
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct InstanceStats {
     /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
@@ -134,6 +131,8 @@ pub enum SystemApiCallId {
     CallCyclesAdd,
     /// Tracker for `ic0.call_cycles_add128()`
     CallCyclesAdd128,
+    /// Tracker for `ic0.call_cycles_add128_up_to()`
+    CallCyclesAdd128UpTo,
     /// Tracker for `ic0.call_data_append()`
     CallDataAppend,
     /// Tracker for `ic0.call_new()`
@@ -244,7 +243,7 @@ pub enum SystemApiCallId {
 
 /// System API call counters, i.e. how many times each tracked System API call
 /// was invoked.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
@@ -456,10 +455,6 @@ pub enum ExecutionMode {
 }
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
-
-/// Interface for the component to execute internal queries triggered by IC.
-pub type AnonymousQueryService =
-    BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
@@ -742,9 +737,9 @@ pub trait SystemApi {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -781,7 +776,7 @@ pub trait SystemApi {
     /// `ic0.call_perform`.
     ///
     /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call>
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
     /// can only add a 64-bit value.
@@ -807,6 +802,28 @@ pub trait SystemApi {
     /// This traps if trying to transfer more cycles than are in the current
     /// balance of the canister.
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()>;
+
+    /// Adds cycles to a call by moving them from the canister's balance onto
+    /// the call under construction. The cycles are deducted immediately
+    /// from the canister's balance and moved back if the call cannot be
+    /// performed (e.g. if `ic0.call_perform` signals an error or if the
+    /// canister invokes `ic0.call_new` or returns without invoking
+    /// `ic0.call_perform`).
+    ///
+    /// The number of cycles added to the call will be `<= amount` and such that a
+    /// subsequent `ic0.call_perform` will not fail because of insufficient cycles
+    /// balance (assuming no `ic0.call_data_append` is called between
+    /// `ic0.call_cycles_add128_up_to` and `ic0.call_perform`).
+    ///
+    /// This system call also copies the actual amount of cycles that were moved
+    /// onto the call represented by a 128-bit value starting at the location
+    /// `dst` in the canister memory.
+    fn ic0_call_cycles_add128_up_to(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// This call concludes assembling the call. It queues the call message to
     /// the given destination, but does not actually act on it until the current
@@ -1168,14 +1185,36 @@ pub enum ExecutionRoundType {
     OrdinaryRound,
 }
 
+/// Execution round properties collected form the last DKG summary block.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExecutionRoundSummary {
+    /// The next checkpoint round height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_round: ExecutionRound,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: ExecutionRound,
+}
+
 /// Configuration of execution that comes from the registry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
-    pub max_ecdsa_queue_size: u32,
-    pub quadruples_to_create_in_advance: u32,
+    pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+}
+
+/// Chain key configuration of execution that comes from the registry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainKeySettings {
+    pub max_queue_size: u32,
+    pub pre_signatures_to_create_in_advance: u32,
 }
 
 pub trait Scheduler: Send {
@@ -1195,7 +1234,7 @@ pub trait Scheduler: Send {
     ///   use during an execution round.
     /// * `max_instructions_per_round`: max number of instructions a single
     ///   round on a single thread can
-    /// consume.
+    ///   consume.
     /// * `max_instructions_per_message`: max number of instructions a single
     ///   message execution can consume.
     ///
@@ -1232,16 +1271,16 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        next_checkpoint_round: Option<ExecutionRound>,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,

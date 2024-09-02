@@ -7,14 +7,14 @@ edition = "2021"
 name = "ic_neurons_fund"
 
 [dependencies]
-lazy_static = "1.4.0"
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+lazy_static = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.40"
-ic-nervous-system-common = { path = "../../nervous_system/common" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_bytes = { workspace = true }

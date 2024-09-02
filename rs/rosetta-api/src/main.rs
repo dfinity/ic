@@ -49,7 +49,7 @@ struct Opt {
     /// Supported options: sqlite, sqlite-in-memory
     #[clap(long = "store-type", default_value = "sqlite")]
     store_type: String,
-    #[clap(long = "store-location", default_value = "./data")]
+    #[clap(long = "store-location", default_value = "/data")]
     store_location: PathBuf,
     #[clap(long = "store-max-blocks")]
     store_max_blocks: Option<u64>,
@@ -66,6 +66,10 @@ struct Opt {
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
     expose_metrics: bool,
+
+    #[cfg(feature = "rosetta-blocks")]
+    #[clap(long = "enable-rosetta-blocks")]
+    enable_rosetta_blocks: bool,
 }
 
 impl Opt {
@@ -228,6 +232,16 @@ async fn main() -> std::io::Result<()> {
         blockchain,
         ..
     } = opt;
+
+    // Set rosetta blocks option if feature is enabled
+    #[allow(unused_mut)]
+    #[allow(unused_assignments)]
+    let mut enable_rosetta_blocks = false;
+    #[cfg(feature = "rosetta-blocks")]
+    {
+        enable_rosetta_blocks = opt.enable_rosetta_blocks;
+    }
+
     let client = ledger_client::LedgerClient::new(
         url,
         canister_id,
@@ -237,6 +251,7 @@ async fn main() -> std::io::Result<()> {
         store_max_blocks,
         offline,
         root_key,
+        enable_rosetta_blocks,
     )
     .await
     .map_err(|e| {

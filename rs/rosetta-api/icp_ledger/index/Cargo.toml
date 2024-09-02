@@ -13,12 +13,15 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-icrc1-index-ng = { path = "../../icrc1/index-ng" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
@@ -32,7 +35,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
+ic-ledger-test-utils = { path = "../test_utils" }
+ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

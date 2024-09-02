@@ -25,8 +25,8 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_test_utils::{
     itest_helpers::{
         install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
-        UserInfo,
+        install_swap_canister, local_test_on_sns_subnet, state_machine_test_on_sns_subnet,
+        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
     },
     state_test_helpers::{
         setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
@@ -107,7 +107,7 @@ fn setup_sns(
     let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(status.memory_allocation(), 2 << 30);
@@ -160,7 +160,7 @@ fn test_upgrade_canister_proposal_is_successful() {
     }
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     // Assert that memory allocation is not changed.
@@ -537,7 +537,7 @@ fn test_upgrade_canister_proposal_too_large() {
 
 #[test]
 fn governance_mem_test() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         println!("Initializing governance mem test canister...");
 
         let mut runtime = runtime;

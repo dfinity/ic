@@ -24,6 +24,7 @@ ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = ".." }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
@@ -39,15 +40,18 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-icrc1-index = { path = "../index" }
 ic-icrc1-ledger = { path = "../ledger" }
+ic-icrc1-ledger-sm-tests = { path = "../ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
-ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icrc3_disabled = []
+get_blocks_disabled = []

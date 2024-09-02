@@ -1,7 +1,8 @@
 //! The state manager public interface.
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
-    consensus::certification::Certification, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
+    CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
 use std::sync::Arc;
@@ -269,7 +270,13 @@ pub trait StateManager: StateReader {
     ///
     /// Panics if the state at `height` has already been committed before but
     /// has a different hash.
-    fn commit_and_certify(&self, state: Self::State, height: Height, scope: CertificationScope);
+    fn commit_and_certify(
+        &self,
+        state: Self::State,
+        height: Height,
+        scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
+    );
 
     /// Returns the version of the state that can be modified in-place and the
     /// height of that state.

@@ -32,6 +32,19 @@ instance IsOption Endpoint where
 endpointOption :: OptionDescription
 endpointOption = Option (Proxy :: Proxy Endpoint)
 
+-- Configuration: The default protocol (http:// or https://) for the httpbin endpoint for http_request tests
+
+newtype HttpbinProto = HttpbinProto String
+
+instance IsOption HttpbinProto where
+  defaultValue = HttpbinProto "https://"
+  parseValue = Just . HttpbinProto
+  optionName = return "httpbin-proto"
+  optionHelp = return "httpbin protocol (default: https://)"
+
+httpbinProtoOption :: OptionDescription
+httpbinProtoOption = Option (Proxy :: Proxy HttpbinProto)
+
 -- Configuration: The URL of the httpbin endpoint for http_request tests
 
 newtype Httpbin = Httpbin String

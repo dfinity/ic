@@ -11,19 +11,20 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_chain_key_signing_subnet_list_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
 use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -265,10 +266,10 @@ struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
     features: SubnetFeatures,
+    // TODO: Remove this field
+    #[allow(unused)]
     ecdsa_config: EcdsaConfig,
     /// This field will replace ecdsa_config.
-    /// TODO[NNS1-2969]: Remove allow unused.
-    #[allow(unused)]
     chain_key_config: ChainKeyConfig,
     max_number_of_canisters: u64,
 }
@@ -279,7 +280,7 @@ impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
             .with_membership(record.membership)
             .with_subnet_type(record.subnet_type)
             .with_features(record.features)
-            .with_ecdsa_config(record.ecdsa_config)
+            .with_chain_key_config(record.chain_key_config)
             .with_max_number_of_canisters(record.max_number_of_canisters)
             .build()
     }
@@ -475,21 +476,14 @@ impl RegistryFixture {
         &self,
         idkg_signing_subnets: &BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
-        use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
-        use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
         use ic_types::subnet_id_into_protobuf;
 
         for (idkg_key, subnet_ids) in idkg_signing_subnets.iter() {
-            let key_id = match idkg_key {
-                MasterPublicKeyId::Ecdsa(key_id) => key_id,
-                // TODO(CON-1292): provide a way to handle other key types.
-                _ => panic!("Only ECDSA keys are supported at the moment."),
-            };
             self.write_record(
-                &make_ecdsa_signing_subnet_list_key(key_id),
+                &make_chain_key_signing_subnet_list_key(idkg_key),
                 subnet_ids
                     .as_ref()
-                    .map(|subnet_ids| EcdsaSigningSubnetList {
+                    .map(|subnet_ids| ChainKeySigningSubnetList {
                         subnets: subnet_ids
                             .iter()
                             .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))
@@ -677,8 +671,7 @@ fn make_batch_processor(
     let registry_settings = Arc::new(Mutex::new(RegistryExecutionSettings {
         max_number_of_canisters: 0,
         provisional_whitelist: ProvisionalWhitelist::All,
-        max_ecdsa_queue_size: 0,
-        quadruples_to_create_in_advance: 0,
+        chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
     }));
     let batch_processor = BatchProcessorImpl {
@@ -738,22 +731,28 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 http_requests: true,
                 ..Default::default()
             },
-            ecdsa_config: EcdsaConfig {
-                key_ids: vec![
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 1".to_string(),
+            ecdsa_config: EcdsaConfig::default(),
+            chain_key_config: ChainKeyConfig {
+                key_configs: vec![
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 1".to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 891,
+                        max_queue_size: 891,
                     },
-                    EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "ecdsa key 2".to_string(),
+                    KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: "ecdsa key 2".to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 891,
+                        max_queue_size: 891,
                     },
                 ],
-                max_queue_size: Some(891),
-                ..Default::default()
+                ..ChainKeyConfig::default()
             },
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: ChainKeyConfig::default(),
 
             max_number_of_canisters: 387,
         };
@@ -924,11 +923,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             assert_eq!(subnet_record.features, subnet_topology.subnet_features);
             assert_eq!(
                 subnet_record
-                    .ecdsa_config
-                    .key_ids
+                    .chain_key_config
+                    .key_configs
                     .iter()
-                    .cloned()
-                    .map(MasterPublicKeyId::Ecdsa)
+                    .map(|key_config| key_config.key_id.clone())
                     .collect::<BTreeSet<_>>(),
                 subnet_topology.idkg_keys_held
             );
@@ -954,10 +952,17 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             provisional_whitelist,
             registry_execution_settings.provisional_whitelist,
         );
-        assert_eq!(
-            own_subnet_record.ecdsa_config.max_queue_size,
-            Some(registry_execution_settings.max_ecdsa_queue_size),
-        );
+        for key_config in own_subnet_record.chain_key_config.key_configs {
+            assert_eq!(
+                key_config.max_queue_size,
+                registry_execution_settings
+                    .chain_key_settings
+                    .get(&key_config.key_id)
+                    .unwrap()
+                    .max_queue_size
+            );
+        }
+
         assert_eq!(
             own_subnet_record.membership.len(),
             registry_execution_settings.subnet_size,
@@ -1004,7 +1009,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         // Check `network_topology` and `subnet_features` are mapped into the new state correctly
         // by calling `BatchProcessorImpl::process_batch()` which will pass the `network_topology` and
@@ -1023,12 +1033,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         );
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            ecdsa_subnet_public_keys: BTreeMap::default(),
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            idkg_subnet_public_keys: BTreeMap::default(),
+            idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
@@ -1813,16 +1823,21 @@ fn process_batch_updates_subnet_metrics() {
             make_batch_processor(fixture.registry.clone(), log);
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            ecdsa_subnet_public_keys: BTreeMap::default(),
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            idkg_subnet_public_keys: BTreeMap::default(),
+            idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
@@ -1902,7 +1917,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
             // Commit state with modified streams.
             height.inc_assign();
-            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata);
+            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
 
             // Encode slice.
             src_state_manager

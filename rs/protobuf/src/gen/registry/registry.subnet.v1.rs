@@ -3,6 +3,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetRecord {
+    /// The IDs of the nodes that are part of this subnet.
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub membership: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Maximum amount of bytes per message. This is a hard cap, which means
@@ -22,9 +23,6 @@ pub struct SubnetRecord {
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
     #[prost(uint64, tag = "10")]
     pub dkg_interval_length: u64,
-    /// Gossip Config
-    #[prost(message, optional, tag = "13")]
-    pub gossip_config: ::core::option::Option<GossipConfig>,
     /// If set to yes, the subnet starts as a (new) NNS
     #[prost(bool, tag = "14")]
     pub start_as_nns: bool,
@@ -43,18 +41,6 @@ pub struct SubnetRecord {
     /// The maximum combined size of the ingress and xnet messages that fit into a block.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "20")]
-    pub max_instructions_per_message: u64,
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "21")]
-    pub max_instructions_per_round: u64,
-    /// The maximum number of instructions an `install_code` message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "22")]
-    pub max_instructions_per_install_code: u64,
     /// Information on whether a feature is supported by this subnet.
     #[prost(message, optional, tag = "23")]
     pub features: ::core::option::Option<SubnetFeatures>,
@@ -102,6 +88,15 @@ pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "2")]
     pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyInitialization {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealings: ::core::option::Option<InitialIDkgDealings>,
+}
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 /// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
@@ -132,6 +127,9 @@ pub struct CatchUpPackageContents {
     /// / The initial ECDSA dealings for boot strapping target subnets.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
+    /// / The initial IDkg dealings for boot strapping target chain key subnets.
+    #[prost(message, repeated, tag = "8")]
+    pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -319,39 +317,6 @@ pub struct ExtendedDerivationPath {
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-}
-/// Per subnet P2P configuration
-/// Note: protoc is mangling the name P2PConfig to P2pConfig
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipConfig {
-    /// max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
-    #[prost(uint32, tag = "1")]
-    pub max_artifact_streams_per_peer: u32,
-    /// timeout for a outstanding request 3_000/15_000/180_000
-    #[prost(uint32, tag = "2")]
-    pub max_chunk_wait_ms: u32,
-    /// max duplicate requests in underutilized networks 1/28/6000
-    #[prost(uint32, tag = "3")]
-    pub max_duplicity: u32,
-    /// maximum chunk size supported on this subnet 1024/4096/131_072
-    #[prost(uint32, tag = "4")]
-    pub max_chunk_size: u32,
-    /// history size for receive check 1_000/5_000/30_000
-    #[prost(uint32, tag = "5")]
-    pub receive_check_cache_size: u32,
-    /// period for re evaluating the priority function. 1_000/3_000/30_000
-    #[prost(uint32, tag = "6")]
-    pub pfn_evaluation_period_ms: u32,
-    /// period for polling the registry for updates 1_000/3_000/30_000
-    #[prost(uint32, tag = "7")]
-    pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request
-    ///
-    /// config for advert distribution.
-    #[prost(uint32, tag = "8")]
-    pub retransmission_request_ms: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize, candid::CandidType, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]

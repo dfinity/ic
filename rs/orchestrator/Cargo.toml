@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+backoff = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 exec = "0.3.1"
@@ -21,44 +22,45 @@ ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-dashboard = { path = "./dashboard" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-utils = { path = "../http_utils" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-local-store = { path = "../registry/local_store" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
+ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+idna = { workspace = true }
 indoc = "1.0.9"
 nix = { workspace = true }
 prometheus = { workspace = true }
-rand = "0.8"
 prost = { workspace = true }
-registry-canister = { path = "../registry/canister" }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
+slog-async = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }

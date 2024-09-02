@@ -29,7 +29,7 @@ fn main() {
         cycles_used_file,
         subnet_type,
     };
-    run_drun(uo)
+    run_drun(uo).unwrap()
 }
 
 fn get_arg_matches() -> ArgMatches {

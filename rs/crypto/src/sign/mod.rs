@@ -16,7 +16,7 @@ use ic_interfaces::crypto::{
 };
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -62,7 +62,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentIm
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<H>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "BasicSigner",
@@ -107,7 +107,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
@@ -149,7 +149,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         signatures: BTreeMap<NodeId, &BasicSigOf<H>>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSignatureBatch<H>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
@@ -183,7 +183,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         message: &H,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifier",
@@ -196,7 +196,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch(
-            &self.csp,
+            self.vault.as_ref(),
             self.registry_client.as_ref(),
             signature,
             message,
@@ -227,7 +227,7 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
         signed_bytes: &S,
         public_key: &UserPublicKey,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "BasicSigVerifierByPublicBytes",
@@ -270,7 +270,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentIm
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<IndividualMultiSigOf<H>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
@@ -315,7 +315,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
@@ -359,7 +359,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signatures: BTreeMap<NodeId, IndividualMultiSigOf<H>>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<CombinedMultiSigOf<H>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
@@ -402,7 +402,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         signers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "MultiSigner",
@@ -444,7 +444,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
     fn sign_threshold(&self, message: &T, dkg_id: NiDkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigner",
@@ -487,7 +487,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         dkg_id: NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
@@ -529,7 +529,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
         dkg_id: NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
@@ -569,7 +569,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         message: &T,
         dkg_id: NiDkgId,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifier",
@@ -615,7 +615,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSigVerifierByPublicKey",
@@ -661,7 +661,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         public_key: &UserPublicKey,
         root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "CanisterSigVerifier",
@@ -702,11 +702,11 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
 }
 
 impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
-    fn sign_share(
+    fn create_sig_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigner",
@@ -743,7 +743,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
         inputs: &ThresholdEcdsaSigInputs,
         share: &ThresholdEcdsaSigShare,
     ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
@@ -777,7 +777,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
         inputs: &ThresholdEcdsaSigInputs,
         shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
@@ -811,7 +811,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
         inputs: &ThresholdEcdsaSigInputs,
         signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdEcdsaSigVerifier",
@@ -845,7 +845,7 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigner for CryptoComponentImpl<C>
         &self,
         inputs: &ThresholdSchnorrSigInputs,
     ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSchnorrSigner",
@@ -885,7 +885,7 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentIm
         inputs: &ThresholdSchnorrSigInputs,
         share: &ThresholdSchnorrSigShare,
     ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSchnorrSigVerifier",
@@ -919,7 +919,7 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentIm
         inputs: &ThresholdSchnorrSigInputs,
         shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
     ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSchnorrSigVerifier",
@@ -953,7 +953,7 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentIm
         inputs: &ThresholdSchnorrSigInputs,
         signature: &ThresholdSchnorrCombinedSignature,
     ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "ThresholdSchnorrSigVerifier",

@@ -1,5 +1,4 @@
-use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
-use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
+use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
 use proptest::{collection::vec as pvec, prelude::*, prop_assert, proptest};
 
 proptest! {
@@ -8,30 +7,24 @@ proptest! {
         derivation_path_bytes in pvec(pvec(any::<u8>(), 1..10), 1..10),
         message_hash in pvec(any::<u8>(), 32),
     ) {
-        const CHAIN_CODE: &[u8] = &[0; 32];
         let private_key_bytes =
             hex::decode("fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920").unwrap();
 
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
-            let derivation_path = DerivationPath::new(
-                derivation_path_bytes
-                    .into_iter()
-                    .map(DerivationIndex)
-                    .collect(),
-            );
 
-        let signature = crate::sign_prehashed_message_with_derived_key(&ecdsa_secret_key, &message_hash, derivation_path.clone());
+        let derivation_path = DerivationPath::new(
+            derivation_path_bytes
+                .into_iter()
+                .map(DerivationIndex)
+                .collect(),
+        );
 
-        let public_key = ecdsa_secret_key.public_key();
+        let derived_secret_key = ecdsa_secret_key.derive_subkey(&derivation_path).0;
+        let signature = derived_secret_key.sign_message_with_ecdsa(&message_hash);
 
-        let derived_public_key_bytes = derivation_path
-            .public_key_derivation(&public_key.serialize_sec1(true), CHAIN_CODE)
-            .expect("couldn't derive ecdsa public key");
-        let derived_public_key = PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
-            .expect("couldn't deserialize sec1");
-
-        prop_assert!(derived_public_key.verify_signature_prehashed(&message_hash, &signature));
+        let derived_public_key = derived_secret_key.public_key();
+        prop_assert!(derived_public_key.verify_ecdsa_signature(&message_hash, &signature));
     }
 }
 
@@ -67,9 +60,9 @@ fn check_derived_signature() {
     let ecdsa_secret_key: PrivateKey =
         PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-    let signature =
-        crate::sign_prehashed_message_with_derived_key(&ecdsa_secret_key, &DIGEST, derivation_path);
+    let derived_key = ecdsa_secret_key.derive_subkey(&derivation_path).0;
 
+    let signature = derived_key.sign_digest_with_ecdsa(&DIGEST);
     assert_eq!(signature, SIGNATURE);
 
     let derived_public_key =
@@ -79,9 +72,6 @@ fn check_derived_signature() {
 
 #[test]
 fn public_derivation_path() {
-    use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-    use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-    use ic_types::crypto::AlgorithmId;
     use ic_types::PrincipalId;
 
     let private_key_bytes =
@@ -90,38 +80,18 @@ fn public_derivation_path() {
     let ecdsa_secret_key: PrivateKey =
         PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-    let master_public_key = MasterPublicKey {
-        algorithm_id: AlgorithmId::EcdsaSecp256k1,
-        public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
-    };
-
     let caller = PrincipalId::new_user_test_id(1);
 
-    let extended_derivation_path = ExtendedDerivationPath {
-        caller,
-        derivation_path: vec![],
-    };
+    let path = DerivationPath::from_canister_id_and_path(caller.as_slice(), &[]);
 
-    let derivation_path = DerivationPath::new(
-        std::iter::once(caller.as_slice().to_vec())
-            .map(DerivationIndex)
-            .collect::<Vec<_>>(),
-    );
-
-    let derived_public_key_bytes = derivation_path
-        .public_key_derivation(
-            &ecdsa_secret_key.public_key().serialize_sec1(true),
-            &[0; 32],
-        )
-        .expect("couldn't derive ecdsa public key");
+    let derived_key = ecdsa_secret_key
+        .public_key()
+        .derive_subkey(&path)
+        .0
+        .serialize_sec1(true);
 
     assert_eq!(
-        ic_crypto_tecdsa::derive_threshold_public_key(
-            &master_public_key,
-            &extended_derivation_path
-        )
-        .expect("failed to derive tecdsa key")
-        .public_key,
-        derived_public_key_bytes.derived_public_key
+        hex::encode(&derived_key),
+        "03fda02786d72d691d807a10a3de60522b664472ec2f06a704cc34ebe2fc26724c"
     );
 }

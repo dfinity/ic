@@ -9,9 +9,9 @@ documentation.workspace = true
 [dependencies]
 ic-crypto-ecdsa-secp256r1 = { path = "../../ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
-ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
+ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../utils/tls" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -20,10 +20,10 @@ ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
 pkcs8 = { workspace = true }
-rand = "0.8"
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rand = { workspace = true }
+rustls = { workspace = true }
 signature = { workspace = true }
-time = "0.3.20"
+time = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 x509-cert = { workspace = true }

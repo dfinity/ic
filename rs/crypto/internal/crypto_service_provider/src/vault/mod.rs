@@ -6,7 +6,7 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
 };
-use ic_adapter_metrics::AdapterMetrics;
+use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{info, ReplicaLogger};

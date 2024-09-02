@@ -1,21 +1,9 @@
 //! Artifact related types.
-//!
-//! Notably it includes the following definitions and their sub-types:
-//!
-//! - [`Artifact`]
-//! - [`ArtifactTag`]
-//! - [`ArtifactId`]
-//!
-//! An [`ArtifactKind`] trait is provided for convenience to carry multiple type
-//! definitions that belong to the same "artifact kind".
-//!
-//! All [`Artifact`] sub-types must also implement [`ChunkableArtifact`] trait
-//! defined in the chunkable module.
 use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
-        idkg::EcdsaArtifactId,
+        idkg::IDkgArtifactId,
         ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
     },
     crypto::{crypto_hash, CryptoHash},
@@ -31,121 +19,33 @@ use std::{
     convert::{TryFrom, TryInto},
     hash::Hash,
 };
-use strum_macros::{EnumIter, IntoStaticStr};
 
-/// Artifact tags is used to select an artifact subtype when we do not have
-/// Artifact/ArtifactId/ArtifactAttribute. For example, when lookup quota
-/// or filters.
-#[derive(EnumIter, Clone, Copy, Debug, PartialEq, Eq, Hash, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-pub enum ArtifactTag {
-    #[strum(serialize = "canister_http")]
-    CanisterHttpArtifact,
-    #[strum(serialize = "certification")]
-    CertificationArtifact,
-    #[strum(serialize = "consensus")]
-    ConsensusArtifact,
-    #[strum(serialize = "dkg")]
-    DkgArtifact,
-    #[strum(serialize = "ecdsa")]
-    EcdsaArtifact,
-    #[strum(serialize = "file_tree_sync")]
-    FileTreeSyncArtifact,
-    #[strum(serialize = "ingress")]
-    IngressArtifact,
+pub trait IdentifiableArtifact: Send + 'static {
+    const NAME: &'static str;
+    type Id: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;
+    fn id(&self) -> Self::Id;
 }
 
-impl std::fmt::Display for ArtifactTag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                ArtifactTag::CanisterHttpArtifact => "CanisterHttp",
-                ArtifactTag::CertificationArtifact => "Certification",
-                ArtifactTag::ConsensusArtifact => "Consensus",
-                ArtifactTag::DkgArtifact => "DKG",
-                ArtifactTag::EcdsaArtifact => "ECDSA",
-                ArtifactTag::FileTreeSyncArtifact => "FileTreeSync",
-                ArtifactTag::IngressArtifact => "Ingress",
-            }
-        )
-    }
-}
-
-/// Priority of artifact.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
-pub enum Priority {
-    /// Drop the advert, the local replica doesn't need the corresponding artifact for
-    /// making progress.
-    Drop,
-    /// Stash the advert. It may be requested at a later point in time.
-    Stash,
-    /// High priority adverts, fetch the artifact immediately.
-    FetchNow,
-}
-
-/// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
-
-/// Related artifact sub-types (Message/Id/Attribute) are
-/// parameterized by a type variable, which is of `ArtifactKind` trait.
-/// It is mostly a convenience to pass around a collection of types
-/// instead of all of them individually.
-pub trait ArtifactKind: Send + Sized + 'static {
-    const TAG: ArtifactTag;
-
+pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
     /// Protobuf ID wire type
-    type PbId: prost::Message + Default;
+    type PbId: prost::Message
+        + From<Self::Id>
+        + TryInto<Self::Id, Error = Self::PbIdError>
+        + Default;
     /// Protobuf to rust conversion error
     type PbIdError: std::error::Error + Into<ProxyDecodeError>;
-    /// Rust artifact ID type. Needs to implement Hash etc. such that it can be used
-    /// as an index in data structures.
-    type Id: Into<Self::PbId>
-        + TryFrom<Self::PbId, Error = Self::PbIdError>
-        + Hash
-        + Clone
-        + PartialEq
-        + Eq
-        + Send
-        + Sync
-        + 'static;
 
-    type PbMessage: prost::Message + Default;
+    type PbMessage: prost::Message
+        + From<Self>
+        + TryInto<Self, Error = Self::PbMessageError>
+        + Default;
     type PbMessageError: std::error::Error + Into<ProxyDecodeError>;
-    type Message: Into<Self::PbMessage>
-        + TryFrom<Self::PbMessage, Error = Self::PbMessageError>
-        + Send
-        + Sync
-        + 'static;
-
-    type PbAttribute: prost::Message + Default;
-    /// Protobuf to rust conversion error
-    type PbAttributeError: std::error::Error + Into<ProxyDecodeError>;
-    type Attribute: Into<Self::PbAttribute>
-        + TryFrom<Self::PbAttribute, Error = Self::PbAttributeError>
-        + Send
-        + Sync
-        + 'static;
-
-    /// Returns the advert of the given message.
-    fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum UnvalidatedArtifactMutation<Artifact: ArtifactKind> {
-    Insert((Artifact::Message, NodeId)),
+pub enum UnvalidatedArtifactMutation<Artifact: IdentifiableArtifact> {
+    Insert((Artifact, NodeId)),
     Remove(Artifact::Id),
-}
-
-/// A helper type that represents a type-indexed Advert.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Advert<Artifact: ArtifactKind> {
-    /// The id _must_ contain the integrity hash of the message.
-    pub id: Artifact::Id,
-    pub attribute: Artifact::Attribute,
-    pub size: usize,
 }
 
 // -----------------------------------------------------------------------------
@@ -338,9 +238,9 @@ impl From<&CertificationMessage> for CertificationMessageHash {
 }
 
 // -----------------------------------------------------------------------------
-// ECDSA artifacts
+// IDKG artifacts
 
-pub type EcdsaMessageId = EcdsaArtifactId;
+pub type IDkgMessageId = IDkgArtifactId;
 
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts

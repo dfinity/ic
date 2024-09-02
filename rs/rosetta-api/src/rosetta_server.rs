@@ -3,6 +3,7 @@ use crate::{
     ledger_client::LedgerAccess,
     models::*,
     request_handler::RosettaRequestHandler,
+    request_types::RosettaStatus,
 };
 use actix_rt::time::interval;
 use actix_web::{
@@ -204,11 +205,8 @@ async fn construction_submit(
 }
 
 #[post("/network/list")]
-async fn network_list(
-    msg: web::Json<rosetta_core::request_types::MetadataRequest>,
-    req_handler: web::Data<RosettaRequestHandler>,
-) -> HttpResponse {
-    let res = req_handler.network_list(msg.into_inner()).await;
+async fn network_list(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
+    let res = req_handler.network_list().await;
     to_rosetta_response(res)
 }
 
@@ -320,6 +318,14 @@ async fn rosetta_metrics() -> HttpResponse {
         .body(String::from_utf8(buffer).unwrap())
 }
 
+#[get("/status")]
+async fn status(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
+    let rosetta_blocks_mode = req_handler.rosetta_blocks_mode().await;
+    to_rosetta_response(Ok(RosettaStatus {
+        rosetta_blocks_mode,
+    }))
+}
+
 enum ServerState {
     Unstarted(Server),
     Started(tokio::task::JoinHandle<()>),
@@ -375,7 +381,8 @@ impl RosettaApiServer {
                 .service(network_list)
                 .service(network_options)
                 .service(network_status)
-                .service(search_transactions);
+                .service(search_transactions)
+                .service(status);
             if expose_metrics {
                 app.service(rosetta_metrics)
             } else {

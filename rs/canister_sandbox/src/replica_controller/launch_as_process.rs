@@ -7,11 +7,11 @@ use crate::{
     launcher_client_stub::LauncherClientStub,
     launcher_service::LauncherService,
     process::spawn_socketed_process,
+    protocol::ctllaunchersvc,
     protocol::{
         self,
         launchersvc::{LaunchSandboxReply, LaunchSandboxRequest},
     },
-    protocol::{ctllaunchersvc, ctlsvc},
     rpc,
     sandbox_client_stub::SandboxClientStub,
     sandbox_service::SandboxService,
@@ -50,7 +50,7 @@ pub fn spawn_launcher_process(
                 controller_service,
                 out.make_sink::<protocol::ctllaunchersvc::Reply>(),
             )),
-            reply_handler,
+            reply_handler.clone(),
         );
         transport::socket_read_messages::<_, _>(
             move |message| {
@@ -59,6 +59,10 @@ pub fn spawn_launcher_process(
             socket,
             SocketReaderConfig::default(),
         );
+        reply_handler.flush_with_errors();
+        // Send a notification to the writer thread to stop.
+        // Otherwise, the writer thread will remain waiting forever.
+        out.stop();
     });
 
     Ok((svc, child_handle))
@@ -77,7 +81,7 @@ pub fn spawn_canister_sandbox_process(
     exec_path: &str,
     argv: &[String],
     canister_id: CanisterId,
-    controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
+    controller_service: Arc<super::controller_service_impl::ControllerServiceImpl>,
     launcher: &dyn LauncherService,
 ) -> std::io::Result<(Arc<dyn SandboxService>, u32, std::thread::JoinHandle<()>)> {
     let (sock_controller, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
@@ -108,10 +112,10 @@ pub fn spawn_canister_sandbox_process(
     let thread_handle = std::thread::spawn(move || {
         let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
             Arc::new(rpc::ServerStub::new(
-                controller_service,
+                Arc::clone(&controller_service) as Arc<_>,
                 out.make_sink::<protocol::ctlsvc::Reply>(),
             )),
-            reply_handler,
+            reply_handler.clone(),
         );
         transport::socket_read_messages::<_, _>(
             move |message| {
@@ -120,6 +124,8 @@ pub fn spawn_canister_sandbox_process(
             socket,
             SocketReaderConfig::default(),
         );
+        reply_handler.flush_with_errors();
+        controller_service.flush_with_errors();
         // Send a notification to the writer thread to stop.
         // Otherwise, the writer thread will remain waiting forever.
         out.stop();
@@ -130,7 +136,7 @@ pub fn spawn_canister_sandbox_process(
 
 /// Spawns a sandbox process for the given canister.
 pub fn create_sandbox_process(
-    controller_service: Arc<dyn rpc::DemuxServer<ctlsvc::Request, ctlsvc::Reply> + Send + Sync>,
+    controller_service: Arc<super::controller_service_impl::ControllerServiceImpl>,
     launcher_service: &dyn LauncherService,
     canister_id: CanisterId,
     mut argv: Vec<String>,
@@ -142,7 +148,7 @@ pub fn create_sandbox_process(
         &argv[0],
         &argv[1..],
         canister_id,
-        Arc::clone(&controller_service) as Arc<_>,
+        controller_service,
         launcher_service,
     )
     .expect("Failed to start sandbox process");

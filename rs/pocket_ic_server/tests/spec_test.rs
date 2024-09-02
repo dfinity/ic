@@ -7,10 +7,15 @@ use ic_registry_subnet_type::SubnetType;
 use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
 use spec_compliance::run_ic_ref_test;
+use std::process::{Command, Stdio};
+use std::time::Duration;
+use tempfile::NamedTempFile;
+
+const LOCALHOST: &str = "127.0.0.1";
 
 const EXCLUDED: &[&str] = &[
-    // blocked on canister https outcalls in PocketIC
-    "$0 ~ /canister http outcalls/",
+    // we do not enforce https in PocketIC
+    "$0 ~ /url must start with https:/",
     // replica issues
     "$0 ~ /wrong effective canister id.in management call/",
     "$0 ~ /access denied with different effective canister id/",
@@ -20,6 +25,7 @@ const EXCLUDED: &[&str] = &[
 fn subnet_config(
     subnet_id: Principal,
     subnet_type: SubnetType,
+    node_ids: Vec<Principal>,
     canister_ranges: Vec<CanisterIdRange>,
 ) -> String {
     format!(
@@ -30,7 +36,11 @@ fn subnet_config(
             SubnetType::Application => "application",
             SubnetType::System => "system",
         },
-        "",
+        node_ids
+            .into_iter()
+            .map(|n| format!("\"{}\"", n))
+            .collect::<Vec<String>>()
+            .join(","),
         canister_ranges
             .iter()
             .map(|r| format!(
@@ -44,6 +54,30 @@ fn subnet_config(
 }
 
 fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
+    // start httpbin webserver to test canister HTTP outcalls
+    let httpbin_path = std::env::var_os("HTTPBIN_BIN").expect("Missing httpbin binary path");
+    let mut cmd = Command::new(httpbin_path);
+    let port_file = NamedTempFile::new().unwrap();
+    let port_file_path = port_file.path().to_path_buf();
+    cmd.arg("--port-file")
+        .arg(port_file_path.as_os_str().to_str().unwrap());
+    cmd.stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("httpbin binary crashed");
+    let httpbin_url = loop {
+        let port_string = std::fs::read_to_string(port_file_path.clone())
+            .expect("Failed to read port from port file");
+        if !port_string.is_empty() {
+            let port: u16 = port_string
+                .trim_end()
+                .parse()
+                .expect("Failed to parse port to number");
+            break format!("{}:{}", LOCALHOST, port);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+
     // create live PocketIc instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -54,8 +88,18 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     let topo = pic.topology();
     let app_subnet_id = topo.get_app_subnets()[0];
     let app_config = topo.0.get(&app_subnet_id).unwrap();
+    let app_node_ids = app_config
+        .node_ids
+        .iter()
+        .map(|n| Principal::from_slice(&n.node_id))
+        .collect();
     let nns_subnet_id = topo.get_nns().unwrap();
     let nns_config = topo.0.get(&nns_subnet_id).unwrap();
+    let nns_node_ids = nns_config
+        .node_ids
+        .iter()
+        .map(|n| Principal::from_slice(&n.node_id))
+        .collect();
 
     // derive artifact paths
     let ic_ref_test_root = std::env::var_os("IC_REF_TEST_ROOT")
@@ -75,7 +119,12 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
         .iter()
         .map(raw_canister_id_range_into)
         .collect();
-    let nns_subnet_config = subnet_config(nns_subnet_id, SubnetType::System, nns_canister_ranges);
+    let nns_subnet_config = subnet_config(
+        nns_subnet_id,
+        SubnetType::System,
+        nns_node_ids,
+        nns_canister_ranges,
+    );
 
     // app subnet config
     let app_canister_ranges = app_config
@@ -83,8 +132,12 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
         .iter()
         .map(raw_canister_id_range_into)
         .collect();
-    let app_subnet_config =
-        subnet_config(app_subnet_id, SubnetType::Application, app_canister_ranges);
+    let app_subnet_config = subnet_config(
+        app_subnet_id,
+        SubnetType::Application,
+        app_node_ids,
+        app_canister_ranges,
+    );
 
     // decide on which subnet to test
     let test_subnet_config = if test_nns {
@@ -99,7 +152,8 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     };
 
     run_ic_ref_test(
-        None,
+        Some("http://".to_string()),
+        Some(httpbin_url),
         ic_ref_test_path.into_os_string().into_string().unwrap(),
         ic_test_data_path,
         endpoint.to_string(),

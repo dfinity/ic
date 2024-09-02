@@ -6,10 +6,9 @@ use ic_nns_constants::{
     EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX, LEDGER_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
-    proposal::Action,
-    ExecuteNnsFunction, NnsFunction, Proposal, Vote,
+    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -21,8 +20,7 @@ use ic_nns_test_utils::{
         setup_subnet_rental_canister_with_correct_canister_id, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
-use ic_state_machine_tests::WasmResult;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_types::Time;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger::{
@@ -178,7 +176,7 @@ fn send_icp_to_rent_subnet(machine: &StateMachine, user_principal_id: PrincipalI
 }
 
 fn check_balance(
-    machine: &mut StateMachine,
+    machine: &StateMachine,
     owner: PrincipalId,
     subaccount: Option<Subaccount>,
 ) -> Tokens {
@@ -205,7 +203,7 @@ fn check_balance(
 /// In the end, this results in no rental requests, and renter gets their money back.
 #[test]
 fn subnet_rental_request_lifecycle() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     setup_mock_exchange_rate_canister(&state_machine, 5_000_000_000);
     let price1 = get_todays_price(&state_machine);
@@ -247,18 +245,20 @@ fn subnet_rental_request_lifecycle() {
         user: renter,
         rental_condition_id: RentalConditionId::App13CH,
     };
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::SubnetRentalRequest as i32,
-            payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::SubnetRentalRequest as i32,
+                payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
+            },
+        )),
     };
     // Make proposal with small neuron. It does not have enough voting power such that the proposal would be adopted immediately.
     let cmd = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         small_neuron.principal_id,
         small_neuron.neuron_id,
         &proposal,
@@ -288,12 +288,12 @@ fn subnet_rental_request_lifecycle() {
 
     // the proposal should not be decided yet as it was proposed by the small neuron
     let proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&mut state_machine, proposal_id.id);
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(proposal_info.decided_timestamp_seconds, 0);
 
     // large neuron votes and thus the proposal should be executed now
     let response = nns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         large_neuron.principal_id,
         large_neuron.neuron_id,
         proposal_id.id,
@@ -305,7 +305,7 @@ fn subnet_rental_request_lifecycle() {
         response,
         CommandResponse::RegisterVote(RegisterVoteResponse {})
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     // check that the rental request has been created
     let raw_rental_requests = state_machine
@@ -354,7 +354,7 @@ fn subnet_rental_request_lifecycle() {
     assert_eq!(initial_cost_icp, price3);
 
     // test user aborts rental request and gets refund
-    let balance_before = check_balance(&mut state_machine, renter, None);
+    let balance_before = check_balance(&state_machine, renter, None);
     state_machine
         .execute_ingress_as(
             renter,
@@ -363,7 +363,7 @@ fn subnet_rental_request_lifecycle() {
             Encode!(&()).unwrap(),
         )
         .unwrap();
-    let balance_after = check_balance(&mut state_machine, renter, None);
+    let balance_after = check_balance(&state_machine, renter, None);
     assert_eq!(
         balance_before.get_e8s() + refundable_icp.get_e8s(),
         balance_after.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s(),
@@ -386,7 +386,7 @@ fn subnet_rental_request_lifecycle() {
 
 #[test]
 fn test_renting_a_subnet_without_paying_fails() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     setup_mock_exchange_rate_canister(&state_machine, 25_000_000_000);
 
@@ -397,18 +397,20 @@ fn test_renting_a_subnet_without_paying_fails() {
         user: renter,
         rental_condition_id: RentalConditionId::App13CH,
     };
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::SubnetRentalRequest as i32,
-            payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::SubnetRentalRequest as i32,
+                payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
+            },
+        )),
     };
     // Make proposal with large neuron. It has enough voting power such that the proposal will be adopted immediately.
     let cmd = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         large_neuron.principal_id,
         large_neuron.neuron_id,
         &proposal,
@@ -421,9 +423,9 @@ fn test_renting_a_subnet_without_paying_fails() {
     };
 
     // the proposal is expected to fail since the user did not make the initial transfer
-    nns_wait_for_proposal_failure(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_failure(&state_machine, proposal_id.id);
     let proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&mut state_machine, proposal_id.id);
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert!(proposal_info
         .failure_reason
         .unwrap()

@@ -17,16 +17,20 @@ use ic_crypto_tree_hash::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
+// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, Method, IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
+    IC_00,
 };
 use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
@@ -398,6 +402,10 @@ impl Default for State {
     fn default() -> Self {
         let resolution = Duration::from_secs(60);
         let max_age = Duration::from_secs(60 * 60);
+        let initial_icp_xdr_conversion_rate = IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+        };
 
         Self {
             ledger_canister_id: CanisterId::ic_00(),
@@ -407,11 +415,8 @@ impl Default for State {
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
-            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
-                xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
-            }),
-            average_icp_xdr_conversion_rate: None,
+            icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
+            average_icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
@@ -1481,9 +1486,18 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
         return Ok(());
     }
 
+    // This is a hack to enable testing (related features) of nns-dapp. In
+    // tests, the nns-dapp backend canister happens to use ID of the production
+    // ICP ledger archive 1 canister. Ideally, the test nns-dapp backend
+    // canister would have the same ID as the production nns-dapp backend
+    // canister. This difference should probably be considered a bug. This hack
+    // can be removed after that bug is fixed.
+    const TEST_NNS_DAPP_BACKEND_CANISTER_ID: CanisterId = ICP_LEDGER_ARCHIVE_1_CANISTER_ID;
     lazy_static! {
-        static ref ALLOWED_CALLERS: [PrincipalId; 1] =
-            [PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),];
+        static ref ALLOWED_CALLERS: [PrincipalId; 2] = [
+            PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),
+            PrincipalId::from(TEST_NNS_DAPP_BACKEND_CANISTER_ID),
+        ];
     }
 
     if ALLOWED_CALLERS.contains(&caller) {
@@ -2164,9 +2178,11 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+            CanisterSettingsArgs::from(
+                Ic00CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![controller_id])
+                    .build(),
+            )
         });
 
     for subnet_id in subnets {
@@ -2175,7 +2191,7 @@ async fn do_create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(canister_settings.clone()),
+                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
@@ -2443,7 +2459,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
-    use std::cmp::{max, min};
+    use std::str::FromStr;
 
     pub(crate) fn init_test_state() {
         init(Some(CyclesCanisterInitPayload {
@@ -2543,6 +2559,15 @@ mod tests {
         }
 
         let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
+        assert!(
+            caller_is_nns_dapp_result.is_ok(),
+            "{:#?}",
+            caller_is_nns_dapp_result,
+        );
+
+        // Also allow nns-dapp backend canister ID used in test.
+        let caller_is_nns_dapp_result =
+            authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
         assert!(
             caller_is_nns_dapp_result.is_ok(),
             "{:#?}",
@@ -2747,13 +2772,20 @@ mod tests {
     #[test]
     /// The function verifies that a default ICP/XDR conversion rate is set.
     fn test_default_icp_xdr_conversion_rate() {
-        let state = State::default();
-        let conversion_rate = state.icp_xdr_conversion_rate;
-        let default_rate = IcpXdrConversionRate {
-            timestamp_seconds: 1620633600,
-            xdr_permyriad_per_icp: 1_000_000,
+        let expected_initial_rate = IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
         };
-        assert!(matches!(conversion_rate, Some(rate) if rate == default_rate));
+
+        let state = State::default();
+        assert_eq!(
+            state.icp_xdr_conversion_rate,
+            Some(expected_initial_rate.clone()),
+        );
+        assert_eq!(
+            state.average_icp_xdr_conversion_rate,
+            Some(expected_initial_rate),
+        );
     }
 
     #[test]
@@ -2941,27 +2973,21 @@ mod tests {
             .sum::<u64>() as i32)
             / (interval as i32);
 
-        let term1 = max(
-            min(10_000 * (a0 - a7) / a7, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term1 = (10_000 * (a0 - a7) / a7).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term2 = max(
-            min(10_000 * (a7 - a14) / a14, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term2 = (10_000 * (a7 - a14) / a14).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term3 = max(
-            min(
-                10_000 * (a14 - a21) / a21,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term3 = (10_000 * (a14 - a21) / a21).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term4 = max(
-            min(
-                10_000 * (a21 - a28) / a28,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term4 = (10_000 * (a21 - a28) / a28).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
 
         let maturity_modulation = (term1 + term2 + term3 + term4) / 4;

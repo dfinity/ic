@@ -4,18 +4,32 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
 arc-swap = "1"
 async-trait = { workspace = true }
+http = { workspace = true }
 ic-agent = { workspace = true }
+rand = { workspace = true }
+ring = { version = "0.17.7", features = ["std"] }
+simple_moving_average = "1.0.2"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-http = "0.2.9"
-url = "2.4.0"
-simple_moving_average = "1.0.2"
-rand = { workspace = true }
+url = { workspace = true }
 
 [lib]
 name = "discower_bowndary"
+
+[[bin]]
+path = "examples/fetch_api_bns.rs"
+name = "fetch_api_bns"
+
+[[bin]]
+path = "examples/api_bn_dynamic_routing.rs"
+name = "api_bn_dynamic_routing"
+
+[[bin]]
+path = "examples/basic_library_usage.rs"
+name = "basic_library_usage"

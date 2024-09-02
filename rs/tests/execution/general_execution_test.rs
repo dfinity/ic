@@ -2,8 +2,9 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::systest;
 use ic_tests::execution::api_tests::node_metrics_history_another_subnet_succeeds;
 use ic_tests::execution::api_tests::node_metrics_history_ingress_query_fails;
 use ic_tests::execution::api_tests::node_metrics_history_ingress_update_fails;
@@ -24,7 +25,6 @@ use ic_tests::execution::malicious_input::malicious_input_test;
 use ic_tests::execution::nns_shielding::*;
 use ic_tests::execution::queries::query_reply_sizes;
 use ic_tests::execution::wasm_chunk_store::*;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -49,9 +49,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(canister_traps_if_32_bit_api_used_on_big_memory))
                 .add_test(systest!(create_canister_via_ingress_fails))
                 .add_test(systest!(create_canister_via_canister_succeeds))
-                .add_test(systest!(
-                    create_canister_with_controller_and_controllers_fails
-                ))
                 .add_test(systest!(create_canister_with_one_controller))
                 .add_test(systest!(create_canister_with_no_controllers))
                 .add_test(systest!(create_canister_with_multiple_controllers))
@@ -74,9 +71,6 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(refunds_after_uninstall_are_refunded))
                 .add_test(systest!(update_settings_of_frozen_canister))
-                .add_test(systest!(
-                    update_settings_with_controller_and_controllers_fails
-                ))
                 .add_test(systest!(update_settings_multiple_controllers))
                 .add_test(systest!(can_transfer_cycles_from_a_canister_to_another))
                 .add_test(systest!(

@@ -15,7 +15,7 @@ use ic_management_canister_types::{
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState};
+use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
@@ -275,6 +275,32 @@ impl InstallCodeHelper {
                 round.counters.charging_from_balance_error,
             );
 
+        let wasm_memory_usage = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |es| {
+                num_bytes_try_from(es.wasm_memory.size).unwrap()
+            });
+
+        if let Some(wasm_memory_limit) = self.canister.system_state.wasm_memory_limit {
+            // A Wasm memory limit of 0 means unlimited.
+            if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                let err = HypervisorError::WasmMemoryLimitExceeded {
+                    bytes: wasm_memory_usage,
+                    limit: wasm_memory_limit,
+                };
+                return finish_err(
+                    clean_canister,
+                    self.instructions_left(),
+                    original,
+                    round,
+                    CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
+                    self.take_canister_log(),
+                );
+            }
+        }
+
         if self.allocated_bytes > self.deallocated_bytes {
             let bytes = self.allocated_bytes - self.deallocated_bytes;
 
@@ -479,10 +505,10 @@ impl InstallCodeHelper {
 
         validate_canister_settings(
             CanisterSettings {
-                controller: None,
                 controllers: None,
                 compute_allocation: original.requested_compute_allocation,
                 memory_allocation: original.requested_memory_allocation,
+                wasm_memory_threshold: None,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
                 log_visibility: None,

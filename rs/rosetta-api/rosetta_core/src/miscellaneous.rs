@@ -7,7 +7,6 @@ use std::fmt::Display;
 /// when it cannot be queried  until some sync phase occurs.  If an
 /// implementation is immediately queryable, this model is often not populated.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SyncStatus {
     /// CurrentIndex is the index of the last synced block in the current stage. This is a separate field from current_block_identifier in NetworkStatusResponse because blocks with indices up to and including the current_index may not yet be queryable by the caller. To reiterate, all indices up to and including current_block_identifier in NetworkStatusResponse must be queryable via the /block endpoint (excluding indices less than oldest_block_identifier).
     pub current_index: i64,
@@ -39,7 +38,6 @@ impl SyncStatus {
 
 /// A Peer is a representation of a node's peer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Peer {
     pub peer_id: String,
 
@@ -117,7 +115,6 @@ impl Version {
 /// Both the code and message fields can be individually used to correctly
 /// identify an error. Implementations MUST use unique values for both fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Error {
     /// Code is a network-specific error code. If desired, this code can be
     /// equivalent to an HTTP status code.
@@ -175,8 +172,8 @@ impl From<hex::FromHexError> for Error {
     }
 }
 
-impl From<ic_crypto_ecdsa_secp256k1::KeyDecodingError> for Error {
-    fn from(e: ic_crypto_ecdsa_secp256k1::KeyDecodingError) -> Error {
+impl From<ic_crypto_secp256k1::KeyDecodingError> for Error {
+    fn from(e: ic_crypto_secp256k1::KeyDecodingError) -> Error {
         Error {
             code: 701,
             message: "ecdsa_secp256k1 key could not be decoded!".to_string(),

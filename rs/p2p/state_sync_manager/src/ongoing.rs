@@ -382,7 +382,7 @@ mod tests {
 
     /// Verify that state sync gets aborted if state sync should be cancelled.
     #[test]
-    fn test_should_cancel() {
+    fn test_cancel_if_running() {
         with_test_replica_logger(|log| {
             let mut t = MockTransport::default();
             t.expect_rpc().returning(|_, _| {
@@ -410,7 +410,7 @@ mod tests {
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -449,7 +449,7 @@ mod tests {
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -491,7 +491,7 @@ mod tests {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }

@@ -6,16 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tests = { path = "../../tests" }
 ic-prep = { path = "../../prep" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../tests/driver" }
 ic-types = { path = "../../types/types" }
 
 clap = { version = "3.2.25", features = ["derive"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
-url = "2.1.1"
+tempfile = { workspace = true }
+url = { workspace = true }

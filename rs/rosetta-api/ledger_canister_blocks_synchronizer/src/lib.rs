@@ -7,12 +7,14 @@ pub mod canister_access;
 pub mod certification;
 pub mod errors;
 pub mod ledger_blocks_sync;
+pub mod rosetta_block;
 
 pub fn timestamp_to_iso8601(ts: TimeStamp) -> String {
     let secs = (ts.as_nanos_since_unix_epoch() / 1_000_000_000) as i64;
     let nsecs = (ts.as_nanos_since_unix_epoch() % 1_000_000_000) as u32;
-    let datetime = chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap();
-    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(datetime, chrono::Utc).to_rfc3339()
+    chrono::DateTime::from_timestamp(secs, nsecs)
+        .unwrap()
+        .to_rfc3339()
 }
 
 pub fn iso8601_to_timestamp(s: String) -> TimeStamp {

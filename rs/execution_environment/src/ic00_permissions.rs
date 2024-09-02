@@ -98,15 +98,20 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::ComputeInitialEcdsaDealings => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: true,
-            },
             Ic00Method::ComputeInitialIDkgDealings => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+            },
+            Ic00Method::SchnorrPublicKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::SignWithSchnorr => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
             },
             Ic00Method::BitcoinGetBalance => Self {
                 method,
@@ -114,6 +119,11 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::BitcoinGetUtxos => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::BitcoinGetBlockHeaders => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -160,14 +170,13 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::UploadChunk
-            | Ic00Method::StoredChunks
-            | Ic00Method::DeleteChunks
-            | Ic00Method::ClearChunkStore => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-            },
+            Ic00Method::UploadChunk | Ic00Method::StoredChunks | Ic00Method::ClearChunkStore => {
+                Self {
+                    method,
+                    allow_remote_subnet_sender: true,
+                    allow_only_nns_subnet_sender: false,
+                }
+            }
             Ic00Method::TakeCanisterSnapshot
             | Ic00Method::LoadCanisterSnapshot
             | Ic00Method::ListCanisterSnapshots

@@ -26,7 +26,7 @@ pub struct PrepareCanisterMigrationPayload {
 pub enum PrepareCanisterMigrationError {
     SubnetRecordError(String),
     DisallowedSubnetType(SubnetId, Option<SubnetType>),
-    SubnetIsEcdsaSubnet(SubnetId),
+    SubnetIsSigningSubnet(SubnetId),
     SubnetSizesMismatch(
         /*source size=*/ usize,
         /*destination size=*/ usize,
@@ -119,7 +119,7 @@ impl Registry {
 /// Validates that the subnets satisfy the following conditions:
 /// 1. Both subnets have the same size,
 /// 2. Both subnets have the same type,
-/// 3. Neither of the subnets is an ECDSA subnet, and
+/// 3. Neither of the subnets is a signing subnet, and
 /// 4. Both subnets are Application subnets.
 fn validate_subnets(
     source_subnet_id: SubnetId,
@@ -149,11 +149,11 @@ fn validate_subnet(
     }
 
     if subnet_record
-        .ecdsa_config
+        .chain_key_config
         .as_ref()
-        .is_some_and(|ecdsa_config| !ecdsa_config.key_ids.is_empty())
+        .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
     {
-        return Err(PrepareCanisterMigrationError::SubnetIsEcdsaSubnet(
+        return Err(PrepareCanisterMigrationError::SubnetIsSigningSubnet(
             subnet_id,
         ));
     }
@@ -193,10 +193,10 @@ impl fmt::Display for PrepareCanisterMigrationError {
                     subnet_type, subnet_id, SUPPORTED_SUBNET_TYPES
                 )
             }
-            PrepareCanisterMigrationError::SubnetIsEcdsaSubnet(subnet_id) => {
+            PrepareCanisterMigrationError::SubnetIsSigningSubnet(subnet_id) => {
                 write!(
                     f,
-                    "Subnet with id {} should not be an ECDSA subnet",
+                    "Subnet with id {} should not be a signing subnet",
                     subnet_id
                 )
             }

@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{Context, Error};
 use async_trait::async_trait;
+use bytes::Bytes;
 use http::Version;
 use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
 use hyper::body;
@@ -163,7 +164,7 @@ pub fn reqwest_error_infer(e: ReqwestError) -> ErrorCause {
 pub async fn read_streaming_body<H: HttpBody>(
     body_stream: H,
     size_limit: usize,
-) -> Result<Vec<u8>, ErrorCause>
+) -> Result<Bytes, ErrorCause>
 where
     <H as HttpBody>::Error: std::error::Error + Send + Sync + 'static,
 {
@@ -177,5 +178,5 @@ where
         }
     })?;
 
-    Ok(data.to_vec())
+    Ok(data)
 }

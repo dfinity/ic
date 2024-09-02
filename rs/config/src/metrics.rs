@@ -16,7 +16,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             exporter: Exporter::Log,
-            connection_read_timeout_seconds: 300, // 5 min
             max_concurrent_requests: 50,
             request_timeout_seconds: 30,
         }
@@ -27,12 +26,6 @@ impl Default for Config {
 #[serde(default)]
 pub struct Config {
     pub exporter: Exporter,
-
-    /// If no bytes are read from a connection for the duration of
-    /// 'connection_read_timeout_seconds', then the connection is dropped.
-    /// There is no point is setting a timeout on the write bytes since
-    /// they are conditioned on the received requests.
-    pub connection_read_timeout_seconds: u64,
 
     /// There can be at most 'max_concurrent_requests' in-flight requests.
     pub max_concurrent_requests: usize,

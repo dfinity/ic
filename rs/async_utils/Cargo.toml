@@ -7,16 +7,19 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-stream = "0.3.4"
-bytes = { workspace = true }
+anyhow = { workspace = true }
+async-stream = { workspace = true }
+axum = { workspace = true }
 byte-unit = "4.0.14"
+bytes = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { version = "0.14.16", features = ["full"] }
 slog = { workspace = true }
+sync_wrapper = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = { workspace = true }

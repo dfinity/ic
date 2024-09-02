@@ -10,20 +10,24 @@ use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::models::amount::tokens_to_amount;
 use ic_rosetta_api::models::Amount;
+use ic_rosetta_api::models::CallRequest;
+use ic_rosetta_api::models::QueryBlockRangeRequest;
+use ic_rosetta_api::models::QueryBlockRangeResponse;
 use ic_rosetta_api::models::{AccountBalanceRequest, PartialBlockIdentifier};
 use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
     ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
     MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
-    SearchTransactionsResponse, SyncStatus,
+    SearchTransactionsResponse,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
+use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
-use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -88,12 +92,7 @@ async fn smoke_test() {
             .unwrap(),
             block_id(scribe.blockchain.front().unwrap()).unwrap(),
             None,
-            SyncStatus {
-                current_index: scribe.blockchain.back().unwrap().index as i64,
-                target_index: None,
-                stage: None,
-                synced: None
-            },
+            None,
             vec![]
         ))
     );
@@ -131,8 +130,7 @@ async fn smoke_test() {
         Some(block_id(scribe.blockchain.get(expected_first_block).unwrap()).unwrap())
     );
 
-    let msg = MetadataRequest::new();
-    let res = req_handler.network_list(msg).await;
+    let res = req_handler.network_list().await;
     assert_eq!(
         res,
         Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
@@ -378,11 +376,13 @@ async fn blocks_test() {
         };
         let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
-        let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
-            &block,
-            ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
-        )
-        .unwrap()];
+        let transactions = vec![
+            ic_rosetta_api::convert::hashed_block_to_rosetta_core_transaction(
+                &block,
+                ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
+            )
+            .unwrap(),
+        ];
         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
         let transaction = resp.block.unwrap().transactions[0].clone();
         let block_id = BlockIdentifier {
@@ -673,7 +673,7 @@ async fn load_from_store_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     let mut last_verified = 0;
     for hb in &scribe.blockchain {
         blocks.push(hb).unwrap();
@@ -696,7 +696,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     assert!(blocks.is_verified_by_idx(&10).unwrap());
     assert!(blocks.get_account_balance(&some_acc, &10).is_ok());
     assert!(!blocks.is_verified_by_idx(&20).unwrap());
@@ -708,7 +708,7 @@ async fn load_from_store_test() {
 
     drop(blocks);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     verify_balances(&scribe, &blocks, 0);
 
     // now load pruned
@@ -727,7 +727,7 @@ async fn load_from_store_test() {
 
     drop(req_handler);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     verify_balances(&scribe, &blocks, 10);
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
@@ -760,7 +760,7 @@ async fn load_unverified_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     for hb in &scribe.blockchain {
         blocks.push(hb).unwrap();
         if hb.index < 20 {
@@ -777,7 +777,7 @@ async fn load_unverified_test() {
 
     drop(blocks);
 
-    let blocks = Blocks::new_persistent(location).unwrap();
+    let blocks = Blocks::new_persistent(location, false).unwrap();
     let last_verified = (scribe.blockchain.len() - 1) as u64;
     blocks.set_hashed_block_to_verified(&last_verified).unwrap();
 
@@ -797,7 +797,7 @@ async fn store_batch_test() {
     let location = tmpdir.path();
     let scribe = Scribe::new_with_sample_data(10, 150);
 
-    let mut blocks = Blocks::new_persistent(location).unwrap();
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
     for hb in &scribe.blockchain {
         if hb.index < 21 {
             blocks.push(hb).unwrap();
@@ -842,4 +842,168 @@ async fn store_batch_test() {
 
     blocks.set_hashed_block_to_verified(&last_idx).unwrap();
     verify_balances(&scribe, &blocks, 0);
+}
+
+#[actix_rt::test]
+async fn test_query_block_range() {
+    let tmpdir = create_tmp_dir();
+    let location = tmpdir.path();
+    let scribe = Scribe::new_with_sample_data(10, 1000);
+
+    let mut blocks = Blocks::new_persistent(location, false).unwrap();
+    let mut block_indices = Vec::new();
+
+    // Test with empty rosetta
+    let ledger = Arc::new(TestLedger::new());
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
+    let response: QueryBlockRangeResponse = req_handler
+        .call(CallRequest {
+            network_identifier: req_handler.network_id(),
+
+            method_name: "query_block_range".to_owned(),
+            parameters: ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index: 100,
+                number_of_blocks: 10,
+            })
+            .unwrap(),
+        })
+        .await
+        .unwrap()
+        .result
+        .try_into()
+        .unwrap();
+    assert!(response.blocks.is_empty());
+
+    for hb in &scribe.blockchain {
+        blocks.push(hb).unwrap();
+        blocks.set_hashed_block_to_verified(&hb.index).unwrap();
+        block_indices.push(hb.index);
+    }
+    block_indices.sort();
+
+    // Test with non-empty rosetta
+    let ledger = Arc::new(TestLedger::from_blockchain(blocks));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
+
+    let highest_block_index = block_indices.last().unwrap();
+    // Call with 0 numbers of blocks
+    let response: QueryBlockRangeResponse = req_handler
+        .call(CallRequest {
+            network_identifier: req_handler.network_id(),
+            method_name: "query_block_range".to_owned(),
+            parameters: ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index: *highest_block_index,
+                number_of_blocks: 0,
+            })
+            .unwrap(),
+        })
+        .await
+        .unwrap()
+        .result
+        .try_into()
+        .unwrap();
+    assert!(response.blocks.is_empty());
+    // Call with higher index than there are blocks in the database
+    let response = req_handler
+        .call(CallRequest {
+            network_identifier: req_handler.network_id(),
+            method_name: "query_block_range".to_owned(),
+            parameters: ObjectMap::try_from(QueryBlockRangeRequest {
+                highest_block_index: (block_indices.len() * 2) as u64,
+                number_of_blocks: std::cmp::max(
+                    block_indices.len() as u64,
+                    MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
+                ),
+            })
+            .unwrap(),
+        })
+        .await
+        .unwrap();
+    let query_block_response: QueryBlockRangeResponse = response.result.try_into().unwrap();
+    // If the blocks measured from the highest block index asked for are not in the database the service should return an empty array of blocks
+    if block_indices.len() >= MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize {
+        assert_eq!(query_block_response.blocks.len(), 0);
+        assert!(!response.idempotent);
+    }
+    // If some of the blocks measured from the highest block index asked for are in the database the service should return the blocks that are in the database
+    else {
+        if block_indices.len() * 2 > MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize {
+            assert_eq!(
+                query_block_response.blocks.len(),
+                block_indices
+                    .len()
+                    .saturating_sub(
+                        (block_indices.len() * 2)
+                            .saturating_sub(MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize)
+                    )
+                    .saturating_sub(1)
+            );
+        } else {
+            assert_eq!(query_block_response.blocks.len(), block_indices.len());
+        }
+        assert!(!response.idempotent);
+    }
+    let number_of_blocks = (block_indices.len() / 2) as u64;
+    let query_blocks_request = QueryBlockRangeRequest {
+        highest_block_index: *highest_block_index,
+        number_of_blocks,
+    };
+
+    let query_blocks_response = req_handler
+        .call(CallRequest {
+            network_identifier: req_handler.network_id(),
+
+            method_name: "query_block_range".to_owned(),
+            parameters: ObjectMap::try_from(query_blocks_request.clone()).unwrap(),
+        })
+        .await
+        .unwrap();
+    assert!(query_blocks_response.idempotent);
+    let response: QueryBlockRangeResponse = query_blocks_response.result.try_into().unwrap();
+
+    let querried_blocks = response.blocks;
+    assert_eq!(
+        querried_blocks.len(),
+        std::cmp::min(number_of_blocks, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST) as usize
+    );
+    if !querried_blocks.is_empty() {
+        assert_eq!(
+            querried_blocks.first().unwrap().block_identifier.index,
+            highest_block_index
+                .saturating_sub(std::cmp::min(
+                    number_of_blocks,
+                    MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
+                ))
+                .saturating_add(1)
+        );
+        assert_eq!(
+            querried_blocks.last().unwrap().block_identifier.index,
+            *highest_block_index
+        );
+    }
+
+    let query_blocks_request = QueryBlockRangeRequest {
+        highest_block_index: *highest_block_index,
+        number_of_blocks: MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST + 1,
+    };
+
+    let query_blocks_response: QueryBlockRangeResponse = req_handler
+        .call(CallRequest {
+            network_identifier: req_handler.network_id(),
+
+            method_name: "query_block_range".to_owned(),
+            parameters: ObjectMap::try_from(query_blocks_request).unwrap(),
+        })
+        .await
+        .unwrap()
+        .result
+        .try_into()
+        .unwrap();
+    assert_eq!(
+        query_blocks_response.blocks.len(),
+        std::cmp::min(
+            MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize,
+            block_indices.len()
+        )
+    );
 }

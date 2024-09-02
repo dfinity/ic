@@ -1,8 +1,8 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
-use crate::util::block_on;
 use ic_rosetta_api::models::Error;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::response_types::NetworkListResponse;
 use slog::{debug, Logger};

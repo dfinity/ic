@@ -16,17 +16,18 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-wasm-types = { path = "../types/wasm_types" }
 ic-utils = { path = "../utils" }
+ic-wasm-types = { path = "../types/wasm_types" }
+itertools = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -34,6 +35,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-embedders = { path = "../test_utilities/embedders" }
@@ -41,5 +43,5 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
-ic-nns-constants = { path = "../nns/constants" }
+more-asserts = "0.3.1"
 strum = { workspace = true }

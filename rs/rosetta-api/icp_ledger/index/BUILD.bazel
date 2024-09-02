@@ -5,12 +5,16 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1/index-ng",
+    "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
@@ -25,14 +29,17 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/rosetta-api/ledger_canister_core",
+    # Keep sorted.
+    "//rs/rosetta-api/icp_ledger/test_utils",
+    "//rs/rosetta-api/icrc1/ledger/sm-tests",
+    "//rs/rosetta-api/test_utils",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/base_types",
     "@crate_index//:candid_parser",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
@@ -60,6 +67,7 @@ rust_canister(
     },
     service_file = ":index.did",
     deps = [
+        # Keep sorted.
         ":ic-icp-index",
     ] + DEPENDENCIES,
 )

@@ -4,15 +4,17 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
-    "@crate_index//:rand",
     "//rs/crypto/sha3",
+    "@crate_index//:rand",
     "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:hex",
 ]
@@ -43,6 +45,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/vetkd.rs"],
     deps = [
+        # Keep sorted.
         ":vetkd",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",

@@ -14,14 +14,19 @@ package_group(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_core",
     "@crate_index//:futures",
+    "@crate_index//:ic-wasm",
+    "@crate_index//:libflate",
+    "@crate_index//:prometheus-parse",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

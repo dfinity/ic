@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../../ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../../secp256k1" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
@@ -16,12 +16,12 @@ ic-types = { path = "../../../../../types/types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-rand = "0.8"
-wycheproof = "0.5"
+rand = { workspace = true }
+wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }

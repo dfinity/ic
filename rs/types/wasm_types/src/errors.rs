@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+/// Create a link to this section of the Execution Errors documentation.
+pub fn doc_ref(section: &str) -> String {
+    format!(
+        "http://internetcomputer.org/docs/current/references/execution-errors#{}",
+        section
+    )
+}
+
 pub enum ErrorHelp {
     UserError {
         suggestion: String,
@@ -55,6 +63,12 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
+    /// Same function name is exported multiple times (with different types).
+    DuplicateExport { name: String },
+    /// There are too many exports defined in the module.
+    TooManyExports { defined: usize, allowed: usize },
+    /// The total length of exported function names is too large.
+    ExportedNamesTooLong { total_length: usize, allowed: usize },
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -73,6 +87,8 @@ pub enum WasmValidationError {
         complexity: usize,
         allowed: usize,
     },
+    /// A function contains an unsupported Wasm instruction.
+    UnsupportedWasmInstruction { index: usize, instruction: String },
     /// A function was too large.
     FunctionTooLarge {
         index: usize,
@@ -81,64 +97,112 @@ pub enum WasmValidationError {
     },
     /// The code section is too large.
     CodeSectionTooLarge { size: u32, allowed: u32 },
+    /// The total module size is too large.
+    ModuleTooLarge { size: u64, allowed: u64 },
 }
 
 impl std::fmt::Display for WasmValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WasmtimeValidation(err) => {
-                write!(f, "Wasmtime failed to validate wasm module {}", err)
+                write!(f, "Wasmtime failed to validate wasm module {err}")
             }
             Self::DecodingError(err) => {
-                write!(f, "Failed to decode wasm module: {}", err)
+                write!(f, "Failed to decode wasm module: {err}")
             }
             Self::InvalidFunctionSignature(err) => {
-                write!(f, "Wasm module has an invalid function signature. {}", err)
+                write!(f, "Wasm module has an invalid function signature. {err}")
             }
             Self::InvalidImportSection(err) => {
-                write!(f, "Wasm module has an invalid import section. {}", err)
+                write!(f, "Wasm module has an invalid import section. {err}")
             }
             Self::InvalidExportSection(err) => {
-                write!(f, "Wasm module has an invalid export section. {}", err)
+                write!(f, "Wasm module has an invalid export section. {err}")
+            }
+            Self::DuplicateExport { name } => {
+                write!(
+                    f,
+                    "Duplicate function '{name}' exported multiple times \
+                    with different call types: update, query, or composite_query."
+                )
+            }
+            Self::TooManyExports { defined, allowed } => {
+                write!(
+                    f,
+                    "The number of exported functions called \
+                    `canister_update <name>`, `canister_query <name>`, or \
+                    `canister_composite_query <name>` is {defined} which exceeds {allowed}."
+                )
+            }
+            Self::ExportedNamesTooLong {
+                total_length,
+                allowed,
+            } => {
+                write!(
+                    f,
+                    "The sum of `<name>` lengths in exported \
+                    functions called `canister_update <name>`, `canister_query <name>`, \
+                    or `canister_composite_query <name>` is {total_length} which exceeds \
+                    the allowed limit of {allowed}."
+                )
             }
             Self::InvalidDataSection(err) => {
-                write!(f, "Wasm module has an invalid data section. {}", err)
+                write!(f, "Wasm module has an invalid data section. {err}")
             }
             Self::InvalidCustomSection(err) => {
-                write!(f, "Wasm module has an invalid custom section. {}", err)
-            },
+                write!(f, "Wasm module has an invalid custom section. {err}")
+            }
             Self::InvalidGlobalSection(err) => {
-                write!(f, "Wasm module has an invalid global section. {}", err)
+                write!(f, "Wasm module has an invalid global section. {err}")
             }
             Self::TooManyGlobals { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} globals which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    globals which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyFunctions { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} functions which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    functions which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} custom sections which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    custom sections which exceeds the maximum number allowed {allowed}.",
             ),
-            Self::FunctionComplexityTooHigh{ index, complexity, allowed } => write!(
+            Self::FunctionComplexityTooHigh {
+                index,
+                complexity,
+                allowed,
+            } => write!(
                 f,
-                "Wasm module contains a function at index {} with complexity {} which exceeds the maximum complexity allowed {}",
-                index, complexity, allowed
+                "Wasm module contains a function at index {index} \
+                    with complexity {complexity} \
+                    which exceeds the maximum complexity allowed {allowed}.",
             ),
-            Self::FunctionTooLarge{index, size, allowed} => write!(
+            Self::UnsupportedWasmInstruction { index, instruction } => write!(
                 f,
-                "Wasm module contains a function at index {} of size {} that exceeds the maximum allowed size of {}",
-                index, size, allowed,
+                "Wasm module contains a function at index {index} \
+                    with unsupported instruction {instruction}.",
             ),
-            Self::CodeSectionTooLarge{size, allowed} => write!(
+            Self::FunctionTooLarge {
+                index,
+                size,
+                allowed,
+            } => write!(
                 f,
-                "Wasm module code section size of {} exceeds the maximum allowed size of {}",
-                size, allowed,
+                "Wasm module contains a function at index {index} \
+                    of size {size} that exceeds the maximum allowed size of {allowed}.",
+            ),
+            Self::CodeSectionTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module code section size of {size} \
+                    exceeds the maximum allowed size of {allowed}.",
+            ),
+            WasmValidationError::ModuleTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module size of {size} exceeds the maximum \
+                    allowed size of {allowed}.",
             ),
         }
     }
@@ -147,22 +211,64 @@ impl std::fmt::Display for WasmValidationError {
 impl AsErrorHelp for WasmValidationError {
     fn error_help(&self) -> ErrorHelp {
         match self {
-            WasmValidationError::WasmtimeValidation(_)
+            WasmValidationError::DecodingError(_)
+            | WasmValidationError::WasmtimeValidation(_)
+            | WasmValidationError::InvalidExportSection(_)
             | WasmValidationError::InvalidFunctionSignature(_)
             | WasmValidationError::InvalidImportSection(_)
             | WasmValidationError::InvalidDataSection(_)
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
-            | WasmValidationError::TooManyGlobals { .. }
+            | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
-            WasmValidationError::DecodingError(_)
-            | WasmValidationError::InvalidExportSection(_)
-            | WasmValidationError::TooManyFunctions { .. }
-            | WasmValidationError::FunctionComplexityTooHigh { .. }
-            | WasmValidationError::FunctionTooLarge { .. }
-            | WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+            WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
+                suggestion: format!(
+                    "Try defining different versions of the function for each \
+                call type, e.g. `{name}_update`, `{name}_query`, etc."
+                ),
+                doc_link: doc_ref("wasm-module-duplicate-exports"),
+            },
+            WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
+            WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter method names.".to_string(),
+                doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
+            },
+            WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
+                suggestion: "Try spliting this canister into multiple canisters.".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-functions"),
+            },
+            WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
+                suggestion: "Try collecting multiple globals into a single \
+                structured which can be stored on the heap."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-many-globals"),
+            },
+            WasmValidationError::FunctionComplexityTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-complexity-too-high"),
+            },
+            WasmValidationError::FunctionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-too-large"),
+            },
+            WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module code section using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-code-section-too-large"),
+            },
+            WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-large"),
             },
         }
     }

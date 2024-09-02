@@ -21,9 +21,6 @@ pub struct LogEntry {
     #[prost(message, optional, tag = "18")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consensus: ::core::option::Option<super::super::consensus_log_entry::v1::ConsensusLogEntry>,
-    #[prost(message, optional, tag = "19")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub p2p: ::core::option::Option<super::super::p2p_log_entry::v1::P2pLogEntry>,
     #[prost(message, optional, tag = "20")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messaging: ::core::option::Option<super::super::messaging_log_entry::v1::MessagingLogEntry>,

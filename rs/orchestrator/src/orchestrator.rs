@@ -13,6 +13,7 @@ use crate::{
     ssh_access_manager::SshAccessManager,
     upgrade::Upgrade,
 };
+use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
@@ -343,22 +344,22 @@ impl Orchestrator {
     /// Starts four asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
-    /// replica version and executes the upgrade to this version if such a
-    /// CUP was found.
+    ///    replica version and executes the upgrade to this version if such a
+    ///    CUP was found.
     ///
     /// 2. Second task is doing two things sequentially. First, it  monitors the
-    /// registry for new SSH readonly keys and deploys the detected keys
-    /// into OS. Second, it monitors the registry for new data centers. If a
-    /// new data center is added, orchestrator will generate a new firewall
-    /// configuration allowing access from the IP range specified in the DC
-    /// record.
+    ///    registry for new SSH readonly keys and deploys the detected keys
+    ///    into OS. Second, it monitors the registry for new data centers. If a
+    ///    new data center is added, orchestrator will generate a new firewall
+    ///    configuration allowing access from the IP range specified in the DC
+    ///    record.
     ///
     /// 3. Third task starts listening for incoming requests to the orchestrator
-    /// dashboard.
+    ///    dashboard.
     ///
-    /// 4. Fourth task checks if this node is part of an tECDSA subnet. If so,
-    /// and it is also time to rotate the iDKG encryption key, instruct crypto
-    /// to do the rotation and attempt to register the rotated key.
+    /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
+    ///    and it is also time to rotate the iDKG encryption key, instruct crypto
+    ///    to do the rotation and attempt to register the rotated key.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
@@ -400,14 +401,27 @@ impl Orchestrator {
             // registry some time to catch up, after starting.
             tokio::time::sleep(Duration::from_secs(60)).await;
 
-            // Run the HostOS upgrade loop with a 15 minute timeout, waiting 1
-            // minute between checks. This timeout is a last resort trying to
-            // revive the upgrade monitoring in case it gets stuck in an
-            // unexpected situation.
-            let interval = Duration::from_secs(60);
-            let timeout = Duration::from_secs(60 * 15);
+            // Run the HostOS upgrade loop with an exponential backoff. A 15
+            // minute liveness timeout will restart the loop if no progress is
+            // made, to ensure the upgrade loop does not get stuck.
+            //
+            // The exponential backoff between retries starts at 1 minute, and
+            // increases by a factor of 1.75, maxing out at two hours.
+            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
+            //
+            // Additionally, there's a random +=50% range added to each delay, for jitter.
+            let backoff = ExponentialBackoffBuilder::new()
+                .with_initial_interval(Duration::from_secs(60))
+                .with_randomization_factor(0.5)
+                .with_multiplier(1.75)
+                .with_max_interval(Duration::from_secs(2 * 60 * 60))
+                .with_max_elapsed_time(None)
+                .build();
+            let liveness_timeout = Duration::from_secs(15 * 60);
 
-            upgrade.upgrade_loop(exit_signal, interval, timeout).await;
+            upgrade
+                .upgrade_loop(exit_signal, backoff, liveness_timeout)
+                .await;
             info!(log, "Shut down the HostOS upgrade loop");
         }
 
@@ -427,7 +441,7 @@ impl Orchestrator {
             info!(log, "Shut down the boundary node management loop");
         }
 
-        async fn tecdsa_key_rotation_check(
+        async fn key_rotation_check(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             registration: NodeRegistration,
             mut exit_signal: Receiver<bool>,
@@ -445,7 +459,7 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the tECDSA key rotation loop");
+            info!(log, "Shut down the key rotation loop");
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
@@ -542,14 +556,13 @@ impl Orchestrator {
             )));
         }
         if let Some(registration) = self.registration.take() {
-            info!(self.logger, "Spawning the tECDSA key rotation loop");
-            self.task_handles
-                .push(tokio::spawn(tecdsa_key_rotation_check(
-                    Arc::clone(&self.subnet_id),
-                    registration,
-                    self.exit_signal.clone(),
-                    self.logger.clone(),
-                )));
+            info!(self.logger, "Spawning the key rotation loop");
+            self.task_handles.push(tokio::spawn(key_rotation_check(
+                Arc::clone(&self.subnet_id),
+                registration,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
         }
     }
 

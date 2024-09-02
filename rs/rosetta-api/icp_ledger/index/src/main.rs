@@ -1,4 +1,5 @@
 use candid::{candid_method, Principal};
+use dfn_core::api::caller;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query};
@@ -10,6 +11,7 @@ use ic_icp_index::{
     Priority, SettledTransaction, SettledTransactionWithId, Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::StableBTreeMap;
@@ -490,7 +492,7 @@ fn get_block_range_from_stable_memory(
     start: u64,
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
-    let length = length.min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64);
+    let length = length.min(icp_ledger::max_blocks_per_request(&caller()) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
@@ -530,13 +532,18 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -588,7 +595,7 @@ fn get_account_identifier_transactions(
 ) -> GetAccountIdentifierTransactionsResult {
     let length = arg
         .max_results
-        .min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64)
+        .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);
@@ -651,7 +658,7 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
 }
 
 #[candid_method(query)]
-#[query]
+#[query(decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

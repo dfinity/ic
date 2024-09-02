@@ -10,12 +10,14 @@ rust_library(
     ),
     crate_name = "orchestrator",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
         "@crate_index//:indoc",
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
         "//rs/canister_client",
         "//rs/canister_client/sender",
@@ -34,19 +36,20 @@ rust_library(
         "//rs/orchestrator/image_upgrader",
         "//rs/orchestrator/registry_replicator",
         "//rs/protobuf",
-        "//rs/registry/canister",
+        "//rs/registry/canister/api",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/local_store",
-        "//rs/registry/proto_data_provider",
         "//rs/sys",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:clap_3_2_25",
         "@crate_index//:exec",
         "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
+        "@crate_index//:idna",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -67,6 +70,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     crate_name = "ic_state_tool",
     deps = [
+        # Keep sorted.
         ":lib",
         "//rs/async_utils",
         "@crate_index//:clap_3_2_25",
@@ -80,13 +84,15 @@ rust_test(
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
-        "//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template",
+        "//ic-os/components:ic/ic.json5.template",
     ],
     deps = [
+        # Keep sorted.
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",

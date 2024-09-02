@@ -25,11 +25,12 @@ rust_library(
     ]),
     crate_name = "icp_ledger",
     proc_macro_deps = [
-        "@crate_index//:prost-derive",
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/sha2",
@@ -43,6 +44,7 @@ rust_library(
         "@crate_index//:comparable",
         "@crate_index//:crc32fast",
         "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",
         "@crate_index//:prost",
         "@crate_index//:serde",
@@ -56,6 +58,7 @@ rust_test(
     name = "icp_ledger_test",
     crate = ":icp_ledger",
     deps = [
+        # Keep sorted.
         "@crate_index//:proptest",
     ],
 )
@@ -77,6 +80,7 @@ rust_canister(
     srcs = ["tests/notified.rs"],
     service_file = ":tests/notified.did",
     deps = [
+        # Keep sorted.
         ":icp_ledger",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
@@ -121,11 +125,13 @@ rust_ic_test_suite(
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
     deps = [
+        # Keep sorted.
         ":icp_ledger",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/canister_client/sender",
+        "//rs/crypto/sha2",
         "//rs/nns/constants",
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
         "//rs/rosetta-api/icp_ledger/test_utils",
@@ -148,10 +154,75 @@ rust_ic_test_suite(
     ],
 )
 
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/rosetta-api/icp_ledger:ledger_canister_integration_golden_nns_state_test
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
+rust_ic_test_suite(
+    name = "ledger_canister_integration_golden_nns_state_test",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "tests/golden_nns_state.rs",
+    ],
+    data = [
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "@mainnet_icp_index_canister//file",
+        "@mainnet_icp_ledger-archive-node-canister//file",
+        "@mainnet_icp_ledger_canister//file",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
+        "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/index:ic-icp-index-canister)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
+        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
+        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+    },
+    tags = [
+        "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = [
+        # Keep sorted.
+        ":icp_ledger",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils/golden_nns_state",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
+        "//rs/rosetta-api/icp_ledger/test_utils",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+    ],
+)
+
 rust_test(
     name = "protobuf_encoding_test",
     srcs = ["tests/protobuf_encoding.rs"],
     deps = [
+        # Keep sorted.
         ":icp_ledger",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//rs/rosetta-api/ledger_core",
@@ -175,6 +246,7 @@ generated_files_check(
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/rosetta-api/icp_ledger",
     deps = [
+        # Keep sorted.
         "//rs/rosetta-api/icp_ledger/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

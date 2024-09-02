@@ -22,9 +22,9 @@ prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+threadpool = { workspace = true }
 tokio = { workspace = true }
-threadpool = "1.8.1"
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 bytes = { workspace = true }

@@ -4,7 +4,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]
 fn should_fail_if_commitment_check_opening_fails() {
-    let alg = crate::CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1;
+    let alg = crate::IdkgProtocolAlgorithm::EcdsaSecp256k1;
     let curve = alg.curve();
     let associated_data = b"assoc_data_test";
 
@@ -35,6 +35,7 @@ fn should_fail_if_commitment_check_opening_fails() {
     // receiver index is 1, but the provided secret key `sk0` and public key `pk0` are at index 0.
     assert_eq!(
         dealing.ciphertext.decrypt_and_check(
+            alg,
             &dealing.commitment,
             associated_data,
             dealer_index,

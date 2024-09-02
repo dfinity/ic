@@ -1,45 +1,76 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/test_utils",
+    "//rs/rust_canisters/http_types",
+    "//rs/state_machine_tests",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:cddl",
+    "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:icrc1-test-env",
+    "@crate_index//:icrc1-test-suite",
+    "@crate_index//:num-traits",
+    "@crate_index//:proptest",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
 
 [
     rust_library(
         name = "sm-tests" + name_suffix,
         testonly = True,
-        srcs = ["src/lib.rs"],
+        srcs = glob([
+            "src/**/*.rs",
+        ]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_sm_tests",
         data = [
             "//rs/rosetta-api/icrc1/ledger:block.cddl",
         ],
-        proc_macro_deps = [
-            "@crate_index//:async-trait",
-        ],
+        proc_macro_deps = MACRO_DEPENDENCIES,
         version = "0.9.0",
-        deps = [
-            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/rosetta-api/icrc1",
-            "//rs/rosetta-api/icrc1/ledger",
-            "//rs/rosetta-api/ledger_canister_core",
-            "//rs/rosetta-api/ledger_core",
-            "//rs/state_machine_tests",
-            "//rs/types/base_types",
-            "//rs/types/error_types",
-            "//rs/types/management_canister_types",
-            "//rs/types/types",
-            "//rs/universal_canister/lib",
-            "@crate_index//:anyhow",
-            "@crate_index//:candid",
-            "@crate_index//:cddl",
-            "@crate_index//:futures",
-            "@crate_index//:hex",
-            "@crate_index//:icrc1-test-env",
-            "@crate_index//:icrc1-test-suite",
-            "@crate_index//:num-traits",
-            "@crate_index//:proptest",
-            "@crate_index//:serde",
-        ] + extra_deps,
+        deps = DEPENDENCIES + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]
+
+[
+    rust_test(
+        name = "sm-tests-unit-tests" + name_suffix,
+        crate = ":sm-tests" + name_suffix,
+        crate_features = features,
+        deps = DEPENDENCIES + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
         (

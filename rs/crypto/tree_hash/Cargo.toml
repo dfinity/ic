@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-assert_matches = { workspace = true }
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../sha2" }
 ic-protobuf = { path = "../../protobuf" }
@@ -16,13 +15,14 @@ serde_bytes = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
+assert_matches = { workspace = true }
+criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-crypto-tree-hash-test-utils = { path = "test_utils" }
 maplit = "1.0.2"
-proptest = "1.0"
+proptest = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 serde_cbor = { workspace = true }
 
 [[bench]]

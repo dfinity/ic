@@ -13,7 +13,6 @@ hex = { workspace = true }
 ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -22,11 +21,12 @@ ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 serde = { workspace = true }
 serde_cbor = {  workspace = true }
 
 [dev-dependencies]
 ic-crypto-test-utils = { path = "../../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }

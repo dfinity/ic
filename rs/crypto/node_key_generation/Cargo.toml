@@ -33,4 +33,4 @@ ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

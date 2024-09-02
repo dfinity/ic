@@ -5,12 +5,13 @@ pub mod common;
 
 use crate::common::{
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy},
+    default_read_certified_state, get_free_localhost_socket_addr,
+    test_agent::{self, wait_for_status_healthy, IngressMessage},
     HttpEndpointBuilder,
 };
 use axum::body::{to_bytes, Body};
 use bytes::Bytes;
+use common::test_agent::APPLICATION_CBOR;
 use futures_util::{future::BoxFuture, FutureExt, StreamExt};
 use http_body::Frame;
 use http_body_util::StreamBody;
@@ -20,7 +21,7 @@ use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
-    serialize_to_cbor, Certificate, CertificateBuilder, CertificateData,
+    serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
@@ -41,6 +42,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1};
 use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
         threshold_sig::{
@@ -50,7 +52,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     ingress::WasmResult,
-    messages::{Blob, CertificateDelegation},
+    messages::{Blob, Certificate, CertificateDelegation},
     signature::ThresholdSignature,
     time::current_time,
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
@@ -59,8 +61,9 @@ use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
 use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    ClientConfig,
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
 };
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
@@ -217,7 +220,7 @@ fn test_unauthorized_query() {
         ..Default::default()
     };
 
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let canister1 = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
     let canister2 = "224lq-3aaaa-aaaaf-ase7a-cai".parse().unwrap();
@@ -225,7 +228,7 @@ fn test_unauthorized_query() {
     // Query mock that returns empty Ok("success") response.
     rt.spawn(async move {
         loop {
-            let (_, resp) = query_handler.next_request().await.unwrap();
+            let (_, resp) = handlers.query_execution.next_request().await.unwrap();
             resp.send_response(Ok((
                 Ok(WasmResult::Reply("success".into())),
                 current_time(),
@@ -277,7 +280,7 @@ fn test_unauthorized_query() {
 /// regardless of the effective canister id.
 #[rstest]
 fn test_update_call_to_management_canister(
-    #[values(test_agent::Call::V2)] endpoint: test_agent::Call,
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] endpoint: test_agent::Call,
     #[values(PrincipalId::default(), "224lq-3aaaa-aaaaf-ase7a-cai")]
     effective_canister_id: PrincipalId,
 ) {
@@ -285,18 +288,19 @@ fn test_update_call_to_management_canister(
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
+        // We set the timeout to 0, such that the replica responds with ACCEPTED instead of OK.
+        ingress_message_certificate_timeout_seconds: 0,
         ..Default::default()
     };
 
     let management_canister = PrincipalId::default();
 
-    let (mut ingress_filter, _ingress_rx, _) =
-        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     // Ingress filter mock that returns empty Ok(()) response.
     rt.spawn(async move {
         loop {
-            let (_, resp) = ingress_filter.next_request().await.unwrap();
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
             resp.send_response(Ok(()))
         }
     });
@@ -304,10 +308,9 @@ fn test_update_call_to_management_canister(
     // Wait for the endpoint to be healthy.
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-
-        let response = endpoint
-            .call_canister_id(addr, management_canister, effective_canister_id)
-            .await;
+        let message =
+            IngressMessage::default().with_canister_id(management_canister, effective_canister_id);
+        let response = endpoint.call(addr, message).await;
 
         assert_eq!(
             StatusCode::ACCEPTED,
@@ -319,20 +322,18 @@ fn test_update_call_to_management_canister(
 
 // Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
 #[rstest]
-#[case::version_2_endpoint(test_agent::Call::V2, StatusCode::ACCEPTED)]
 fn test_unauthorized_call(
-    #[case] endpoint: test_agent::Call,
-    #[case] expected_success_status_code: StatusCode,
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] endpoint: test_agent::Call,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
+        ingress_message_certificate_timeout_seconds: 0,
         listen_addr: addr,
         ..Default::default()
     };
 
-    let (mut ingress_filter, _ingress_rx, _) =
-        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let canister1 = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
     let canister2 = "224lq-3aaaa-aaaaf-ase7a-cai".parse().unwrap();
@@ -340,7 +341,7 @@ fn test_unauthorized_call(
     // Ingress filter mock that returns empty Ok(()) response.
     rt.spawn(async move {
         loop {
-            let (_, resp) = ingress_filter.next_request().await.unwrap();
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
             resp.send_response(Ok(()))
         }
     });
@@ -352,10 +353,11 @@ fn test_unauthorized_call(
 
     // Valid update call with canister_id = effective_canister_id
     rt.block_on(async move {
-        let valid_update_call = endpoint.call_canister_id(addr, canister1, canister1).await;
+        let message = IngressMessage::default().with_canister_id(canister1, canister1);
+        let valid_update_call = endpoint.call(addr, message).await;
 
         assert_eq!(
-            expected_success_status_code,
+            StatusCode::ACCEPTED,
             valid_update_call.status(),
             "Valid update with, canister_id = effective_canister_id, failed."
         );
@@ -363,13 +365,10 @@ fn test_unauthorized_call(
 
     // Invalid update call with canister_id != effective_canister_id
     rt.block_on(async move {
-        let invalid_update_call = endpoint.call_canister_id(addr, canister1, canister2).await;
+        let message = IngressMessage::default().with_canister_id(canister1, canister2);
+        let invalid_update_call = endpoint.call(addr, message).await;
 
-        assert_eq!(
-            StatusCode::BAD_REQUEST,
-            invalid_update_call.status(),
-            "Invalid update with, canister_id != effective_canister_id, succeeded."
-        );
+        assert_eq!(StatusCode::BAD_REQUEST, invalid_update_call.status());
 
         let content_type = invalid_update_call
             .headers()
@@ -424,11 +423,11 @@ fn test_request_timeout() {
         ..Default::default()
     };
 
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     rt.spawn(async move {
         loop {
-            let (_, resp) = query_handler.next_request().await.unwrap();
+            let (_, resp) = handlers.query_execution.next_request().await.unwrap();
             sleep(Duration::from_secs(request_timeout_seconds + 1)).await;
             resp.send_response(Ok((
                 Ok(WasmResult::Reply("success".into())),
@@ -536,6 +535,24 @@ fn test_request_too_slow() {
                 CBOR::Integer(RejectCode::SysTransient as i128),
             ),
         ])))]
+#[case(test_agent::Call::V3, CBOR::Map(BTreeMap::from([
+            (
+                CBOR::Text("status".to_string()),
+                CBOR::Text("non_replicated_rejection".to_string()),
+            ),
+            (
+                CBOR::Text("error_code".to_string()),
+                CBOR::Text("IC0204".to_string()),
+            ),
+            (
+                CBOR::Text("reject_message".to_string()),
+                CBOR::Text("Test reject message".to_string()),
+            ),
+            (
+                CBOR::Text("reject_code".to_string()),
+                CBOR::Integer(RejectCode::SysTransient as i128),
+            ),
+        ])))]
 fn test_status_code_when_ingress_filter_fails(
     #[case] endpoint: test_agent::Call,
     #[case] expected_response: CBOR,
@@ -547,11 +564,11 @@ fn test_status_code_when_ingress_filter_fails(
         ..Default::default()
     };
 
-    let (mut ingress_filter, _, _) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     // handle the update call
     rt.spawn(async move {
-        let request = ingress_filter.next_request().await;
+        let request = handlers.ingress_filter.next_request().await;
         let (_, send_response) = request.unwrap();
 
         let response = UserError::new(ErrorCode::IngressHistoryFull, "Test reject message");
@@ -560,7 +577,8 @@ fn test_status_code_when_ingress_filter_fails(
 
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
-        let call_response = endpoint.call_default_canister(addr).await;
+        let message = Default::default();
+        let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),
             StatusCode::OK,
@@ -656,12 +674,12 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
         ..Default::default()
     };
 
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     // Mock the query handler to return CertifiedStateUnavailable.
     rt.spawn(async move {
         loop {
-            let (_, resp) = query_handler.next_request().await.unwrap();
+            let (_, resp) = handlers.query_execution.next_request().await.unwrap();
             resp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable))
         }
     });
@@ -714,7 +732,7 @@ fn can_retrieve_subnet_metrics() {
         .with_delegation(delegation_from_nns)
         .build();
 
-    let mock_certified_state = |certificate: Certificate| {
+    let mock_certified_state = |certificate: TestCertificate| {
         let hash_tree = certificate.clone().tree();
 
         let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
@@ -958,23 +976,42 @@ fn test_http_alpn_header_is_set(
 
     let socket = TcpSocket::new_v4().unwrap();
 
+    #[derive(Debug)]
     struct NoVerify;
     impl ServerCertVerifier for NoVerify {
         fn verify_server_cert(
             &self,
-            _end_entity: &rustls::Certificate,
-            _intermediates: &[rustls::Certificate],
-            _server_name: &rustls::ServerName,
-            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _end_entity: &CertificateDer,
+            _intermediates: &[CertificateDer],
+            _server_name: &ServerName,
             _ocsp_response: &[u8],
-            _now: std::time::SystemTime,
-        ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
             Ok(ServerCertVerified::assertion())
+        }
+        fn verify_tls12_signature(
+            &self,
+            _: &[u8],
+            _: &CertificateDer<'_>,
+            _: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+        fn verify_tls13_signature(
+            &self,
+            _: &[u8],
+            _: &CertificateDer<'_>,
+            _: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::ED25519]
         }
     }
 
     let mut accept_any_config = ClientConfig::builder()
-        .with_safe_defaults()
+        .dangerous()
         .with_custom_certificate_verifier(Arc::new(NoVerify))
         .with_no_client_auth();
 
@@ -1033,4 +1070,386 @@ fn test_http_1_requests_are_accepted() {
         response
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_11);
+}
+
+/// Test that the V3 call endpoint handles multiple requests with the same ingress message,
+/// by returning `202` for subsequent concurrent requests.
+#[test]
+fn test_duplicate_requests_are_handled() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let message = IngressMessage::default();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    let first_request_submitted_to_ingress = Arc::new(tokio::sync::Notify::new());
+    let first_request_submitted_to_ingress_clone = first_request_submitted_to_ingress.clone();
+
+    rt.spawn(async move {
+        loop {
+            let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+            let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+                panic!("Expected Insert");
+            };
+
+            let message_id = message.id();
+
+            first_request_submitted_to_ingress_clone.notify_one();
+            handlers
+                .terminal_state_ingress_messages
+                .try_send((message_id, Height::from(1)))
+                .unwrap();
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let first_request_join_handle = rt.spawn(test_agent::Call::V3.call(addr, message.clone()));
+        first_request_submitted_to_ingress.notified().await;
+
+        let second_request = test_agent::Call::V3.call(addr, message.clone()).await;
+        handlers
+            .certified_height_watcher
+            .send(Height::from(1))
+            .unwrap();
+
+        assert_eq!(StatusCode::ACCEPTED, second_request.status());
+        assert_eq!(
+            second_request.text().await.unwrap(),
+            "Duplicate request. Message is already being tracked and executed."
+        );
+
+        let first_request = first_request_join_handle.await.unwrap();
+
+        assert_eq!(
+            StatusCode::OK,
+            first_request.status(),
+            "{:?}",
+            first_request.text().await
+        );
+
+        let response_body = first_request.bytes().await.unwrap();
+        let response =
+            serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
+
+        let CBOR::Map(response_map) = response else {
+            panic!("Expected a map, got {:?}", response);
+        };
+
+        assert_eq!(
+            response_map.get(&CBOR::Text("status".to_string())),
+            Some(&CBOR::Text("replied".to_string()))
+        );
+    });
+}
+
+/// Tests that the endpoint responds with a certificate for ingress messages submitted
+/// to the synchronous call.
+#[rstest]
+/// The message is certified after certified state transition.
+#[case(Height::from(0), Some(Height::from(1)), Height::from(1))]
+/// The message is already certified.
+#[case(Height::from(1), None, Height::from(1))]
+#[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
+fn test_sync_call_endpoint_responds_with_certificate(
+    #[case] initial_certified_height: Height,
+    #[case] transitioned_certified_height: Option<Height>,
+    #[case] message_finalization_height: Height,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_certified_height(initial_certified_height)
+        .run();
+
+    let message = IngressMessage::default();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.spawn(async move {
+        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            panic!("Expected Insert");
+        };
+
+        let message_id = message.id();
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((message_id, message_finalization_height))
+            .unwrap();
+
+        if let Some(transitioned_certified_height) = transitioned_certified_height {
+            handlers
+                .certified_height_watcher
+                .send(transitioned_certified_height)
+                .unwrap();
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Call::V3.call(addr, message).await;
+
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            APPLICATION_CBOR,
+        );
+
+        let response_body = response.bytes().await.unwrap();
+        let response =
+            serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
+
+        let CBOR::Map(response_map) = response else {
+            panic!("Expected a map, got {:?}", response);
+        };
+
+        assert_eq!(
+            response_map.get(&CBOR::Text("status".to_string())),
+            Some(&CBOR::Text("replied".to_string()))
+        );
+
+        let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
+            Some(CBOR::Bytes(certificate)) => certificate,
+            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            _ => panic!("Reply is missing."),
+        };
+
+        let _: Certificate = serde_cbor::from_slice(certificate).expect("Valid certificate");
+    });
+}
+
+/// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
+/// ingress messages that complete execution, but its height never
+/// gets certified.
+#[test]
+fn test_synchronous_call_endpoint_no_certification() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ingress_message_certificate_timeout_seconds: 2,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_certified_height(Height::from(0))
+        .run();
+
+    let message = IngressMessage::default();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.spawn(async move {
+        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            panic!("Expected Insert");
+        };
+        let message_id = message.id();
+
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((message_id, Height::from(1)))
+            .unwrap();
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Call::V3.call(addr, message).await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+    });
+}
+
+struct FakeCertifiedStateSnapshot;
+
+impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &ReplicatedState {
+        unimplemented!()
+    }
+
+    fn get_height(&self) -> Height {
+        unimplemented!()
+    }
+
+    fn read_certified_state(
+        &self,
+        _paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        None
+    }
+}
+
+/// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
+/// ingress messages that complete execution and certification
+/// but the state reader fails to read the certified state.
+#[rstest]
+#[case::certified_state_snapshot_unavailable(None)]
+#[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
+fn test_call_v3_response_when_state_reader_fails(
+    #[case] certified_state_snapshot: Option<
+        Box<dyn CertifiedStateSnapshot<State = ReplicatedState>>,
+    >,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_size_bytes: 2048,
+        ..Default::default()
+    };
+
+    let mut mock_state_manager = MockStateManager::new();
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(default_get_latest_state);
+
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
+    // Inject the mock certified state snapshot
+    mock_state_manager
+        .expect_get_certified_state_snapshot()
+        .return_once(move || certified_state_snapshot);
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .run();
+
+    let message = IngressMessage::default();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.spawn(async move {
+        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            panic!("Expected Insert");
+        };
+        let message_id = message.id();
+
+        // Execute the ingress and certify it.
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((message_id, Height::from(1)))
+            .unwrap();
+        handlers
+            .certified_height_watcher
+            .send(Height::from(1))
+            .unwrap();
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Call::V3.call(addr, message).await;
+        let status = response.status();
+        let text = response.text().await;
+        assert_eq!(StatusCode::ACCEPTED, status, "{:?}", text.unwrap());
+
+        assert_eq!(
+            "Certified state is not available. Please try /read_state.",
+            text.unwrap()
+        )
+    });
+}
+
+/// Tests that the HTTP endpoint return `INTERNAL_SERVER_ERROR`
+/// if the call handler is unable to submit the ingress message to
+/// P2P.
+#[rstest]
+fn test_call_response_when_p2p_not_running(
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] call_agent: test_agent::Call,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        // We set the timeout to 0, to avoid waiting for subscription.
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        // Drop the P2P receiver to simulate P2P not running.
+        drop(handlers.ingress_rx);
+
+        let response = call_agent.call(addr, IngressMessage::default()).await;
+
+        assert_eq!(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            "P2P is not running on this node.",
+            response.text().await.unwrap()
+        );
+    });
 }

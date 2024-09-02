@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_crypto_utils_threshold_sig_der",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/types/types",
         "@crate_index//:base64",
@@ -19,6 +20,7 @@ rust_test_suite(
     name = "threshold_sig_der_integration",
     srcs = glob(["tests/**/*.rs"]),
     deps = [
+        # Keep sorted.
         ":threshold_sig_der",
         "//rs/crypto/internal/crypto_lib/types",
         "@crate_index//:hex",

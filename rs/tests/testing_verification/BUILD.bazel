@@ -1,10 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 IC_HS_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/tests:ic-hs",
 ]
 
@@ -22,14 +23,14 @@ rust_binary(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "spec_compliance_application_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
     deps = DEPENDENCIES + [
         "//rs/tests",
@@ -37,14 +38,14 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "spec_compliance_system_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
     deps = DEPENDENCIES + [
         "//rs/tests",
@@ -52,14 +53,14 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "spec_compliance_group_01_application_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
     deps = DEPENDENCIES + [
         "//rs/tests",
@@ -67,14 +68,14 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "spec_compliance_group_01_system_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
     deps = DEPENDENCIES + [
         "//rs/tests",
@@ -82,14 +83,14 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "spec_compliance_group_02_system_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:4"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
     ],
     deps = DEPENDENCIES + [
         "//rs/tests",
@@ -108,11 +109,20 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
     name = "ii_delegation_test",
+    env = {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

@@ -8,5 +8,5 @@ This document covers the GuestOS interface requirements, providing all the infor
 ** Details on populating the GuestOS config partition
 * link:../../../rs/ic_os/vsock/README.md[Vsock]
 ** Communication between GuestOS and HostOS
-* link:../../rootfs/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
+* link:../../components/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
 ** Details on resource allocations used in production

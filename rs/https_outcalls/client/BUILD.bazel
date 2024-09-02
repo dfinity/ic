@@ -2,32 +2,36 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
-    "//rs/monitoring/adapter_metrics",
+    "//rs/monitoring/adapter_metrics/client",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/subnet_type",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:prometheus",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
     "@crate_index//:tower",
+    "@crate_index//:tracing",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "@crate_index//:tower-test",

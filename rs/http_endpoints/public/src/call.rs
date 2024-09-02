@@ -1,61 +1,44 @@
-//! Module that deals with requests to /api/v2/canister/.../call
+//! Module that deals with ingress messages
+pub mod call_v2;
+pub mod call_v3;
+mod ingress_watcher;
+
+pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
-    common::{Cbor, CborUserError},
-    validator_executor::ValidatorExecutor,
+    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
 };
-
-use axum::{
-    body::Body,
-    extract::{DefaultBodyLimit, State},
-    response::{IntoResponse, Response},
-    Router,
-};
-use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
+use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
+    crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
-    messages::{HttpCallContent, HttpRequestEnvelope, SignedIngress, SignedIngressContent},
+    messages::{
+        HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
+    },
+    time::current_time,
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
-use std::convert::{Infallible, TryInto};
+use ic_validator::HttpRequestVerifier;
+use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc::UnboundedSender;
-use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
+use tower::ServiceExt;
 
-#[derive(Clone)]
-pub struct CallService {
+pub struct IngressValidatorBuilder {
     log: ReplicaLogger,
-    node_id: NodeId,
-    subnet_id: SubnetId,
-    registry_client: Arc<dyn RegistryClient>,
-    validator_executor: ValidatorExecutor<SignedIngressContent>,
-    ingress_filter: Arc<Mutex<IngressFilterService>>,
-    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
-}
-
-impl CallService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/:effective_canister_id/call"
-    }
-}
-
-pub struct CallServiceBuilder {
-    log: Option<ReplicaLogger>,
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
@@ -63,35 +46,31 @@ pub struct CallServiceBuilder {
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
-impl CallServiceBuilder {
+impl IngressValidatorBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        ingress_filter: IngressFilterService,
+        ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
-            log: None,
+            log,
             node_id,
             subnet_id,
             malicious_flags: None,
             ingress_verifier,
             registry_client,
-            ingress_filter: Arc::new(Mutex::new(ingress_filter)),
+            ingress_filter,
             ingress_throttler,
             ingress_tx,
         }
-    }
-
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
     }
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
@@ -99,34 +78,35 @@ impl CallServiceBuilder {
         self
     }
 
-    pub(crate) fn build_router(self) -> Router {
-        let log = self.log.unwrap_or(no_op_logger());
-        let state = CallService {
+    pub fn build(self) -> IngressValidator {
+        let log = self.log;
+        IngressValidator {
             log: log.clone(),
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client,
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
-        };
-        Router::new().route_service(
-            CallService::route(),
-            axum::routing::post(call)
-                .with_state(state)
-                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        )
+        }
     }
+}
 
-    pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        let router = self.build_router();
-        BoxCloneService::new(router.into_service())
+pub(crate) enum IngressError {
+    HttpError(HttpError),
+    UserError(UserError),
+}
+
+impl From<HttpError> for IngressError {
+    fn from(err: HttpError) -> Self {
+        IngressError::HttpError(err)
+    }
+}
+
+impl From<UserError> for IngressError {
+    fn from(err: UserError) -> Self {
+        IngressError::UserError(err)
     }
 }
 
@@ -178,107 +158,157 @@ fn get_registry_data(
     Ok((settings, provisional_whitelist))
 }
 
-/// Handles a call to /api/v2/canister/../call
-pub(crate) async fn call(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
-    State(CallService {
-        log,
-        node_id,
-        subnet_id,
-        registry_client,
-        validator_executor,
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
-    }): State<CallService>,
-    Cbor(request): Cbor<HttpRequestEnvelope<HttpCallContent>>,
-) -> impl IntoResponse {
-    let msg: SignedIngress = match request.try_into() {
-        Ok(msg) => msg,
-        Err(e) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = format!("Could not parse body as call message: {}", e);
-            return (status, text).into_response();
+#[derive(Clone)]
+pub struct IngressValidator {
+    log: ReplicaLogger,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
+    validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
+    ingress_filter: Arc<Mutex<IngressFilterService>>,
+    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+}
+
+impl IngressValidator {
+    /// Validates that the IC can process the request by checking that:
+    /// - The ingress pool is not full.
+    /// - Ingress message is valid.
+    /// - The canister is willing to accept it.
+    pub(crate) async fn validate_ingress_message(
+        self,
+        request: HttpRequestEnvelope<HttpCallContent>,
+        effective_canister_id: CanisterId,
+    ) -> Result<IngressMessageSubmitter, IngressError> {
+        let Self {
+            log,
+            node_id,
+            subnet_id,
+            registry_client,
+            validator,
+            ingress_filter,
+            ingress_throttler,
+            ingress_tx,
+        } = self;
+
+        // Load shed the request if the ingress pool is full.
+        let ingress_pool_is_full = ingress_throttler.read().unwrap().exceeds_threshold();
+        if ingress_pool_is_full {
+            Err(HttpError {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                message: "Service is overloaded, try again later.".to_string(),
+            })?;
         }
-    };
 
-    // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
-    // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
-    // in the url and the replica processes the request based on the `canister_id`.
-    // If this is not enforced, a blocked canisters can still be accessed by specifying
-    // a non-blocked `effective_canister_id` and a blocked `canister_id`.
-    if msg.canister_id() != CanisterId::ic_00() && msg.canister_id() != effective_canister_id {
-        let status = StatusCode::BAD_REQUEST;
-        let text = format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            msg.canister_id(),
-            effective_canister_id
-        );
-        return (status, text).into_response();
-    }
+        let msg: SignedIngress = request.try_into().map_err(|e| HttpError {
+            status: StatusCode::BAD_REQUEST,
+            message: format!("Could not parse body as call message: {}", e),
+        })?;
 
-    let message_id = msg.id();
-    let registry_version = registry_client.get_latest_version();
-    let (ingress_registry_settings, provisional_whitelist) =
-        match get_registry_data(&log, subnet_id, registry_version, registry_client.as_ref()) {
-            Ok((s, p)) => (s, p),
-            Err(HttpError { status, message }) => {
-                return (status, message).into_response();
+        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
+        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
+        // in the url and the replica processes the request based on the `canister_id`.
+        // If this is not enforced, a blocked canisters can still be accessed by specifying
+        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
+        if msg.canister_id() != CanisterId::ic_00() && msg.canister_id() != effective_canister_id {
+            Err(HttpError {
+                status: StatusCode::BAD_REQUEST,
+                message: format!(
+                    "Specified CanisterId {} does not match effective canister id in URL {}",
+                    msg.canister_id(),
+                    effective_canister_id
+                ),
+            })?;
+        }
+
+        let message_id = msg.id();
+        let registry_version = registry_client.get_latest_version();
+        let (ingress_registry_settings, provisional_whitelist) =
+            get_registry_data(&log, subnet_id, registry_version, registry_client.as_ref())?;
+        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+            Err(HttpError {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: format!(
+                "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
+                message_id,
+                msg.count_bytes(),
+                ingress_registry_settings.max_ingress_bytes_per_message
+            ),
+            })?;
+        }
+
+        let root_of_trust_provider =
+            RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+        // Since spawn blocking requires 'static we can't use any references
+        let request_c = msg.as_ref().clone();
+
+        tokio::task::spawn_blocking(move || {
+            validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+        })
+        .await
+        .map_err(|_| HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "".into(),
+        })?
+        .map_err(|validation_error| {
+            validation_error_to_http_error(message_id, validation_error, &log)
+        })?;
+
+        let ingress_filter = ingress_filter.lock().unwrap().clone();
+
+        match ingress_filter
+            .oneshot((provisional_whitelist, msg.content().clone()))
+            .await
+        {
+            Err(_) => panic!("Can't panic on Infallible"),
+            Ok(Err(user_error)) => {
+                Err(user_error)?;
             }
-        };
-    if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-        let status = StatusCode::PAYLOAD_TOO_LARGE;
-        let text = format!(
-            "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
-            message_id,
-            msg.count_bytes(),
-            ingress_registry_settings.max_ingress_bytes_per_message
-        );
-        return (status, text).into_response();
-    }
-
-    if let Err(http_err) = validator_executor
-        .validate_request(msg.as_ref().clone(), registry_version)
-        .await
-    {
-        return (http_err.status, http_err.message).into_response();
-    }
-
-    let ingress_filter = ingress_filter.lock().unwrap().clone();
-
-    match ingress_filter
-        .oneshot((provisional_whitelist, msg.content().clone()))
-        .await
-    {
-        Err(_) => panic!("Can't panic on Infallible"),
-        Ok(Err(err)) => {
-            return CborUserError(err).into_response();
+            Ok(Ok(())) => (),
         }
-        Ok(Ok(())) => (),
+
+        Ok(IngressMessageSubmitter {
+            ingress_tx,
+            node_id,
+            message: msg,
+        })
+    }
+}
+
+pub struct IngressMessageSubmitter {
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    node_id: NodeId,
+    message: SignedIngress,
+}
+
+impl IngressMessageSubmitter {
+    /// Returns the message id of the ingress message.
+    pub(crate) fn message_id(&self) -> MessageId {
+        self.message.id()
     }
 
-    let ingress_log_entry = msg.log_entry();
+    /// Attempts to submit the ingress message to the ingress pool.
+    /// An [`HttpError`] is returned if P2P is not running.
+    pub(crate) fn try_submit(self) -> Result<(), HttpError> {
+        let Self {
+            ingress_tx,
+            node_id,
+            message,
+        } = self;
 
-    let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
-        || ingress_tx
-            .send(UnvalidatedArtifactMutation::Insert((msg, node_id)))
+        // Submission will fail if P2P is not running, meaning there is
+        // no receiver for the ingress message.
+        let send_ingress_to_p2p_failed = ingress_tx
+            .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
             .is_err();
 
-    if is_overloaded {
-        let status = StatusCode::TOO_MANY_REQUESTS;
-        let text = "Service is overloaded, try again later.".to_string();
-        (status, text).into_response()
-    } else {
-        // We're pretty much done, just need to send the message to ingress and
-        // make_response to the client
-        info_sample!(
-            "message_id" => &message_id,
-            log,
-            "ingress_message_submit";
-            ingress_message => ingress_log_entry
-        );
-        let status = StatusCode::ACCEPTED;
-        (status, "").into_response()
+        if send_ingress_to_p2p_failed {
+            return Err(HttpError {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "P2P is not running on this node.".to_string(),
+            });
+        }
+        Ok(())
     }
 }
 

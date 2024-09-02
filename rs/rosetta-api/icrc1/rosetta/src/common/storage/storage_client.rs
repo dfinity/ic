@@ -96,6 +96,18 @@ impl StorageClient {
             .collect::<Vec<crate::common::storage::types::IcrcTransaction>>())
     }
 
+    pub fn get_blocks_by_custom_query<P>(
+        &self,
+        sql_query: String,
+        params: P,
+    ) -> anyhow::Result<Vec<RosettaBlock>>
+    where
+        P: rusqlite::Params,
+    {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params)
+    }
+
     pub fn get_blocks_by_transaction_hash(
         &self,
         hash: ByteBuf,
@@ -182,6 +194,22 @@ impl StorageClient {
             [],
         )?;
 
+        open_connection.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
+        open_connection.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS block_hash_index 
+        ON blocks(hash)
+        "#,
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -227,7 +255,6 @@ impl StorageClient {
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
-    // Returns the number of blocks in the database.
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)

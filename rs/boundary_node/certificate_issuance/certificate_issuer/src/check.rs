@@ -256,7 +256,7 @@ impl Check for Checker {
 
         // Search for name in response body
         if !body.lines().any(|ln| match ln {
-            Ok(ln) => ln.eq(name),
+            Ok(ln) => ln.trim().eq(name),
             _ => false,
         }) {
             return Err(CheckError::MissingKnownDomains {

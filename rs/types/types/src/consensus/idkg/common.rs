@@ -1,37 +1,51 @@
 //! Canister threshold transcripts and references related defininitions.
 use crate::crypto::{
-    canister_threshold_sig::error::IDkgParamsValidationError,
-    canister_threshold_sig::idkg::{
-        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-        IDkgTranscriptType,
+    canister_threshold_sig::{
+        error::IDkgParamsValidationError,
+        idkg::{
+            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+            IDkgTranscriptType,
+        },
+        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
     },
     AlgorithmId,
 };
 use crate::{Height, RegistryVersion};
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom};
 use std::hash::Hash;
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Display, Formatter},
+};
 
 use super::{
-    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
-    schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
+    ecdsa::{
+        PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsError,
+        ThresholdEcdsaSigInputsRef,
+    },
+    schnorr::{
+        PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
+        TranscriptInCreation,
+    },
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
 pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
-/// 1. to identify the matching request in sign_with_ecdsa_contexts.
-/// 2. to identify which quadruple the request is matched to.
+/// 1. to identify the matching request in signature request contexts.
+/// 2. to identify which pre-signature the request is matched to.
 ///
-/// Quadruples must be matched with requests in the same order as requests
+/// Pre-signatures must be matched with requests in the same order as requests
 /// are created.
 ///
 /// The height field represents at which block the RequestId is created.
@@ -629,8 +643,8 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 pub type TranscriptLookupError = String;
 
-/// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader: Send + Sync {
+/// Wrapper to access the IDKG related info from the blocks.
+pub trait IDkgBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
@@ -638,7 +652,9 @@ pub trait EcdsaBlockReader: Send + Sync {
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Returns the IDs of pre-signatures in creation by the tip.
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_>;
+    fn pre_signatures_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;
@@ -689,7 +705,7 @@ impl IDkgTranscriptOperationRef {
     /// Resolves the refs to get the IDkgTranscriptOperation.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptOperation, TranscriptOperationError> {
         match self {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
@@ -924,7 +940,7 @@ impl IDkgTranscriptParamsRef {
     /// Resolves the refs to get the IDkgTranscriptParams.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptParams, TranscriptParamsError> {
         let operation_type = self
             .operation_type_ref
@@ -1071,5 +1087,99 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
             Msg::Schnorr(x) => PreSignatureRef::Schnorr(x.try_into()?),
             Msg::Ecdsa(x) => PreSignatureRef::Ecdsa(x.try_into()?),
         })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ThresholdSigInputsError {
+    Ecdsa(ThresholdEcdsaSigInputsError),
+    Schnorr(ThresholdSchnorrSigInputsError),
+}
+
+type ThresholdSigInputsResult = Result<ThresholdSigInputs, ThresholdSigInputsError>;
+
+fn ok_ecdsa(inputs: ThresholdEcdsaSigInputs) -> ThresholdSigInputsResult {
+    Ok(ThresholdSigInputs::Ecdsa(inputs))
+}
+
+fn ok_schnorr(inputs: ThresholdSchnorrSigInputs) -> ThresholdSigInputsResult {
+    Ok(ThresholdSigInputs::Schnorr(inputs))
+}
+
+fn err_ecdsa(err: ThresholdEcdsaSigInputsError) -> ThresholdSigInputsResult {
+    Err(ThresholdSigInputsError::Ecdsa(err))
+}
+
+fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult {
+    Err(ThresholdSigInputsError::Schnorr(err))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ThresholdSigInputsRef {
+    Ecdsa(ThresholdEcdsaSigInputsRef),
+    Schnorr(ThresholdSchnorrSigInputsRef),
+}
+
+impl ThresholdSigInputsRef {
+    pub fn pre_signature(&self) -> PreSignatureRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => {
+                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
+            }
+            ThresholdSigInputsRef::Schnorr(inputs) => {
+                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
+            }
+        }
+    }
+
+    pub fn caller(&self) -> PrincipalId {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
+        }
+    }
+
+    pub fn scheme(&self) -> SignatureScheme {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
+            ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
+        }
+    }
+
+    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> ThresholdSigInputsResult {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
+                .translate(resolver)
+                .map_or_else(err_ecdsa, ok_ecdsa),
+            ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
+                .translate(resolver)
+                .map_or_else(err_schnorr, ok_schnorr),
+        }
+    }
+}
+
+pub enum ThresholdSigInputs {
+    Ecdsa(ThresholdEcdsaSigInputs),
+    Schnorr(ThresholdSchnorrSigInputs),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CombinedSignature {
+    Ecdsa(ThresholdEcdsaCombinedSignature),
+    Schnorr(ThresholdSchnorrCombinedSignature),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SignatureScheme {
+    Ecdsa,
+    Schnorr,
+}
+
+impl Display for SignatureScheme {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SignatureScheme::Ecdsa => write!(f, "ECDSA"),
+            SignatureScheme::Schnorr => write!(f, "Schnorr"),
+        }
     }
 }

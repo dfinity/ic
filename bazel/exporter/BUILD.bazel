@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/dfinity/ic/bazel/exporter",
     visibility = ["//visibility:private"],
     deps = [
+        # Keep sorted.
         "//bazel/proto:build_event_stream_go_proto",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_honeycombio_beeline_go//:beeline-go",

@@ -12,8 +12,9 @@ use crate::{
             GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
             InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
             ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType,
-            SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
+            ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            MetadataSection as MetadataSectionPb, SnsCanisterIds, SnsCanisterType, SnsUpgrade,
+            SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
             UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
         },
     },
@@ -322,37 +323,40 @@ where
 
     pub fn get_wasm_metadata(
         &self,
-        #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
-    ) -> GetWasmMetadataResponsePb {
-        // TODO[NNS1-2997]: Enable this feature on mainnet.
-        #[cfg(feature = "test")]
-        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
-
-        #[cfg(not(feature = "test"))]
-        let result = Err("get_wasm_metadata is not implemented yet.".to_string());
-
-        GetWasmMetadataResponsePb::from(result)
-    }
-
-    pub fn get_wasm_metadata_impl(
-        &self,
         get_wasm_metadata_payload: GetWasmMetadataRequestPb,
-    ) -> Result<Vec<MetadataSection>, String> {
-        let module_hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
+    ) -> GetWasmMetadataResponsePb {
+        let get_wasm_metadata_impl = move || {
+            let hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
 
-        let wasm_metadata = self.read_wasm_metadata_or_err(&module_hash)?;
-
-        Ok(wasm_metadata)
+            let Some(SnsWasmStableIndex { metadata, .. }) = self.wasm_indexes.get(&hash) else {
+                return Err(format!("Cannot find WASM index for hash `{:?}`.", hash));
+            };
+            let metadata = match metadata
+                .iter()
+                .cloned()
+                .map(MetadataSection::try_from)
+                .collect::<Result<Vec<_>, _>>()
+            {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    let err = format!(
+                        "Inconsistent state detected in WASM metadata for hash `{:?}`: {}",
+                        hash, err
+                    );
+                    println!("{}{}", LOG_PREFIX, err);
+                    return Err(err);
+                }
+            };
+            Ok(metadata)
+        };
+        let result = get_wasm_metadata_impl();
+        GetWasmMetadataResponsePb::from(result)
     }
 
     /// Try reading the metadata sections of a WASM with the given hash from stable memory,
     /// if such a WASM exists.
-    fn read_wasm_metadata_or_err(&self, hash: &[u8; 32]) -> Result<Vec<MetadataSection>, String> {
+    fn read_wasm_metadata_or_err(wasm: &SnsWasm) -> Result<Vec<MetadataSection>, String> {
         use ic_wasm::{metadata, utils};
-
-        let Some(wasm) = self.read_wasm(hash) else {
-            return Err(format!("Cannot find WASM stored under key `{:?}`.", hash));
-        };
 
         // We don't care for symbol names in the WASM module as we just want the custom sections
         // containing the metadata.
@@ -422,11 +426,47 @@ where
         if hash != wasm.sha256_hash() {
             return AddWasmResponse {
                 result: Some(add_wasm_response::Result::Error(SnsWasmError {
-                    message: format!("Invalid Sha256 given for submitted WASM bytes. Provided hash was '{}'  but calculated hash was '{}'",
-                                   hash_to_hex_string(&hash), wasm.sha256_string())
-                }))
+                    message: format!(
+                        "Invalid Sha256 given for submitted WASM bytes. Provided hash was '{}' \
+                         but calculated hash was '{}'",
+                        hash_to_hex_string(&hash),
+                        wasm.sha256_string()
+                    ),
+                })),
             };
         }
+
+        let metadata = match Self::read_wasm_metadata_or_err(&wasm) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                println!("err = {}, wasm = `{:?}`", err, wasm);
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: format!("Cannot read metadata sections from WASM: {}", err),
+                    })),
+                };
+            }
+        };
+
+        let metadata = metadata
+            .into_iter()
+            .map(|metadata| {
+                metadata
+                    .validate()
+                    .map(|_| MetadataSectionPb::from(metadata))
+            })
+            .collect::<Result<Vec<_>, _>>();
+
+        let metadata = match metadata {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: format!("Cannot validate metadata sections from WASM: {}", err),
+                    })),
+                };
+            }
+        };
 
         let result = match self.stable_memory.write_wasm(wasm) {
             Ok((offset, size)) => {
@@ -436,6 +476,7 @@ where
                         hash: hash.to_vec(),
                         offset,
                         size,
+                        metadata,
                     },
                 );
 
@@ -624,10 +665,10 @@ where
     ///   3. Installs SNS root, SNS governance, SNS ledger and SNS index WASMs onto the created canisters.
     ///   4. Fund canisters with cycles
     ///   5. Sets the canisters' controllers:
-    ///     a. Root is controlled only by Governance.
-    ///     b. Governance is controlled only by Root.
-    ///     c. Ledger is controlled only by Root.
-    ///     d. Index is controlled only by Root.
+    ///       * Root is controlled only by Governance.
+    ///       * Governance is controlled only by Root.
+    ///       * Ledger is controlled only by Root.
+    ///       * Index is controlled only by Root.
     ///   6. Transfers control of the dapp_canisters from NNS Root to SNS Root.
     ///
     /// Step 3 requires installation parameters which come from the SnsInitPayload object
@@ -874,12 +915,17 @@ where
                 non_controlled_dapp_canisters: vec![],
             })
         })?;
-
-        // Request that NNS Root make the newly created SNS Root canister the sole controller
-        // of the dapp_canisters, removing itself.
+        // Request that NNS Root add the newly created SNS Root canister as a controller
+        // of the dapp_canisters.
+        // (NNS Root will be removed as a controller after the swap is done)
         let dapp_canister_to_new_controllers: BTreeMap<Canister, Vec<PrincipalId>> = dapp_canisters
             .iter()
-            .map(|canister| (*canister, vec![sns_init_canister_ids.root]))
+            .map(|canister| {
+                (
+                    *canister,
+                    vec![sns_init_canister_ids.root, ROOT_CANISTER_ID.get()],
+                )
+            })
             .collect();
         Self::change_controllers_of_nns_root_owned_canisters(
             nns_root_canister_client,
@@ -1718,6 +1764,44 @@ where
                 )
             })
     }
+
+    // TODO[NNS1-2997]: Remove this function once the migration is completed.
+    pub fn populate_wasm_metadata(&mut self) {
+        let all_wasm_hashes = self.wasm_indexes.keys().cloned().collect::<Vec<_>>();
+        for hash in all_wasm_hashes {
+            if let Some(index) = self.wasm_indexes.get(&hash) {
+                if index.metadata != vec![] {
+                    // No need to recompute metadata if it's already set. This code is unlikely to
+                    // actually be executed as this is a synchronous migration.
+                    continue;
+                }
+            }
+            let metadata = {
+                let Some(wasm) = self.read_wasm(&hash) else {
+                    panic!("Cannot find WASM stored under key `{:?}`.", hash);
+                };
+                Self::read_wasm_metadata_or_err(&wasm).unwrap_or_else(|err| {
+                    panic!(
+                        "Cannot obtain metadata for WASM with hash `{:?}`: {}",
+                        hash, err
+                    );
+                })
+            };
+
+            let metadata = metadata
+                .into_iter()
+                .map(|metadata| {
+                    metadata
+                        .validate()
+                        .expect("Existing WASMs should have valid metadata.");
+                    MetadataSectionPb::from(metadata)
+                })
+                .collect::<Vec<_>>();
+            self.wasm_indexes.entry(hash).and_modify(|index| {
+                index.metadata = metadata;
+            });
+        }
+    }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
@@ -1937,6 +2021,7 @@ mod test {
     use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_crypto_sha2::Sha256;
+    use ic_nervous_system_common_test_utils::wasm_helpers;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_nns_handler_root_interface::client::{
         SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
@@ -2117,7 +2202,7 @@ mod test {
     /// Provides a small wasm
     fn smallest_valid_wasm() -> SnsWasm {
         SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            wasm: wasm_helpers::SMALLEST_VALID_WASM_BYTES.to_vec(),
             canister_type: i32::from(SnsCanisterType::Governance),
             proposal_id: Some(2),
         }
@@ -2129,10 +2214,36 @@ mod test {
         state
     }
 
-    /// Add some placeholder wasms with different values so we can test
-    /// that each value is installed into the correct spot
-    /// group_number tells you which group of wasms you are adding so that they
-    /// will have different content and therefore different hashes
+    // Adds section "icp:[public|private] $name$contents" to `wasm`, returning `wasm`'s new hash.
+    fn annotate_wasm_with_metadata_and_return_new_hash(
+        wasm: &mut SnsWasm,
+        is_public: bool,
+        name: &str,
+        contents: Vec<u8>,
+    ) -> Vec<u8> {
+        wasm.wasm =
+            wasm_helpers::annotate_wasm_with_metadata(&wasm.wasm[..], is_public, name, contents);
+        Sha256::hash(&wasm.wasm).to_vec()
+    }
+
+    fn small_valid_wasm_with_id<T>(wasm_id: T) -> SnsWasm
+    where
+        T: ToString,
+    {
+        let mut wasm = smallest_valid_wasm();
+        annotate_wasm_with_metadata_and_return_new_hash(
+            &mut wasm,
+            true,
+            &wasm_id.to_string(),
+            vec![],
+        );
+        wasm
+    }
+
+    /// Add some placeholder WASMs with different values so we can test that each value is installed
+    /// into the correct spot. The optional argument `group_number` specifies which group of WASMs
+    /// you are adding so that they will have different content and therefore different hashes;
+    /// setting `group_number` to `None` is appropriate in tests that call this function just once.
     fn add_dummy_wasms(
         canister: &mut SnsWasmCanister<TestCanisterStableMemory>,
         group_number: Option<u8>,
@@ -2147,12 +2258,17 @@ mod test {
         let current_version = canister.upgrade_path.latest_version.clone();
         let mut added_versions = vec![];
 
-        let delta = group_number.unwrap_or(0) * 6;
+        let wasm_id = |label: &str| {
+            if let Some(group_number) = group_number {
+                format!("{}_{}", label, group_number)
+            } else {
+                label.to_string()
+            }
+        };
 
         let root = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta],
             canister_type: i32::from(SnsCanisterType::Root),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Root"))
         };
         let root_wasm_hash = root.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2166,9 +2282,8 @@ mod test {
         });
 
         let governance = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 1],
             canister_type: i32::from(SnsCanisterType::Governance),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Governance"))
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2182,9 +2297,8 @@ mod test {
         });
 
         let ledger = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Ledger"))
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2197,9 +2311,8 @@ mod test {
             ..added_versions.last().cloned().unwrap()
         });
         let swap = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 3],
             canister_type: i32::from(SnsCanisterType::Swap),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Swap"))
         };
         let swap_wasm_hash = swap.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2213,9 +2326,8 @@ mod test {
         });
 
         let archive = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 4],
             canister_type: i32::from(SnsCanisterType::Archive),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Archive"))
         };
         let archive_wasm_hash = archive.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2229,9 +2341,8 @@ mod test {
         });
 
         let index = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 5],
             canister_type: i32::from(SnsCanisterType::Index),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id(wasm_id("Index"))
         };
         let index_wasm_hash = index.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2420,7 +2531,7 @@ mod test {
             add_wasm_response::Result::Error(SnsWasmError {
                 message: format!(
                     "Invalid Sha256 given for submitted WASM bytes. Provided hash was \
-                '{}'  but calculated hash was \
+                '{}' but calculated hash was \
                 '{}'",
                     hash_to_hex_string(&bad_hash),
                     hash_to_hex_string(&expected_hash),
@@ -2445,7 +2556,7 @@ mod test {
     #[test]
     fn test_api_insert_upgrade_path_entries_validation() {
         let mut canister = new_wasm_canister();
-        let initial_version = add_dummy_wasms(&mut canister, None).5;
+        let initial_version = add_dummy_wasms(&mut canister, Some(0)).5;
 
         // 1. validate request not empty
         let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
@@ -2478,9 +2589,8 @@ mod test {
 
         // 2. validate that an upgrade path must have real SNS-Wasms in it
         let governance = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: SnsCanisterType::Governance.into(),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id("Governance")
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
 
@@ -2529,12 +2639,13 @@ mod test {
     #[test]
     fn test_api_get_wasm_correctly_checks_caller_for_overrides() {
         let mut canister = new_wasm_canister();
-        let initial_version = add_dummy_wasms(&mut canister, None).5;
+        let initial_version = add_dummy_wasms(&mut canister, Some(0)).5;
+
+        println!("initial_version = {:#?}", initial_version);
 
         let governance = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id("Governance")
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2543,11 +2654,13 @@ mod test {
         });
 
         let ledger = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id("Ledger")
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
+
+        assert_ne!(governance_wasm_hash, ledger_wasm_hash);
+
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
             hash: ledger_wasm_hash.clone(),
@@ -2652,12 +2765,11 @@ mod test {
     #[test]
     fn test_insert_upgrade_path_works_for_non_sns_specific_paths() {
         let mut canister = new_wasm_canister();
-        let initial_version = add_dummy_wasms(&mut canister, None).5;
+        let initial_version = add_dummy_wasms(&mut canister, Some(0)).5;
 
         let governance = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id("Governance")
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2666,9 +2778,8 @@ mod test {
         });
 
         let ledger = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
-            ..SnsWasm::default()
+            ..small_valid_wasm_with_id("Ledger")
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -4019,6 +4130,7 @@ mod test {
         );
     }
 
+    #[track_caller]
     fn assert_nns_root_calls(
         nns_root_canister_client: &SpyNnsRootCanisterClient,
         expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
@@ -4484,9 +4596,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (
                     dapp_ids[1],
                     vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
@@ -4865,9 +4977,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
@@ -4902,8 +5014,6 @@ mod test {
         .await;
     }
 
-    // TODO[NNS1-2997]: remove `#[cfg(feature = "test")]`.
-    #[cfg(feature = "test")]
     mod get_wasm_metadata {
         use super::*;
         use crate::pb::v1::{
@@ -4911,40 +5021,11 @@ mod test {
             GetWasmMetadataResponse as GetWasmMetadataResponsePb,
             MetadataSection as MetadataSectionPb,
         };
-        use libflate::gzip;
         use pretty_assertions::assert_eq;
 
-        // Adds section "icp:[public|private] $name$contents" to `wasm`, returning `wasm`'s new hash.
-        fn annotate_wasm_with_metadata(
-            wasm: &mut SnsWasm,
-            is_public: bool,
-            name: &str,
-            contents: Vec<u8>,
-        ) -> Vec<u8> {
-            use ic_wasm::{metadata, utils};
-
-            let kind = if is_public {
-                metadata::Kind::Public
-            } else {
-                metadata::Kind::Private
-            };
-
-            let mut wasm_module = utils::parse_wasm(&wasm.wasm, false).unwrap();
-            metadata::add_metadata(&mut wasm_module, kind, name, contents);
-
-            wasm.wasm = wasm_module.emit_wasm();
-
-            Sha256::hash(&wasm.wasm).to_vec()
-        }
-
         // Gzips a wasm, returning the hash of its compressed representation.
-        fn gzip_wasm(wasm: &mut SnsWasm) -> Vec<u8> {
-            wasm.wasm = {
-                let mut encoder = gzip::Encoder::new(Vec::new()).unwrap();
-                std::io::copy(&mut &wasm.wasm[..], &mut encoder).unwrap();
-                encoder.finish().into_result().unwrap()
-            };
-
+        fn gzip_wasm_and_return_new_hash(wasm: &mut SnsWasm) -> Vec<u8> {
+            wasm.wasm = wasm_helpers::gzip_wasm(&wasm.wasm[..]);
             Sha256::hash(&wasm.wasm).to_vec()
         }
 
@@ -4974,12 +5055,64 @@ mod test {
         }
 
         #[test]
+        fn test_read_metadata_invalid() {
+            let mut canister = new_wasm_canister();
+
+            let wasm = {
+                let mut wasm = smallest_valid_wasm();
+                // Make this wasm invalid by changing its last byte.
+                let index = wasm.wasm.len() - 1;
+                wasm.wasm[index] = 1;
+                wasm
+            };
+
+            let hash = Sha256::hash(&wasm.wasm);
+
+            // Run code 1st function under test.
+            {
+                let response = canister.add_wasm(AddWasmRequest {
+                    wasm: Some(wasm.clone()),
+                    hash: hash.to_vec(),
+                });
+                use add_wasm_response::Result;
+                assert_eq!(response, AddWasmResponse {
+                    result: Some(Result::Error(SnsWasmError {
+                        message:
+                            "Cannot read metadata sections from WASM: Cannot parse WASM: Could not \
+                            parse the data as WASM module. unknown binary version:  0x1000001 \
+                            (at offset 0x4)"
+                                .to_string()
+                    }))
+                });
+            }
+
+            // Run code 2nd function under test.
+            {
+                let response = canister.get_wasm_metadata(GetWasmMetadataRequestPb {
+                    hash: Some(hash.to_vec()),
+                });
+                use get_wasm_metadata_response::Result;
+                assert_eq!(
+                    response,
+                    GetWasmMetadataResponsePb {
+                        result: Some(Result::Error(SnsWasmError {
+                            message: format!(
+                                "Cannot find WASM index for hash `{:?}`.",
+                                hash.to_vec()
+                            )
+                        }))
+                    }
+                );
+            }
+        }
+
+        #[test]
         fn test_read_metadata_one_section() {
             let git_commit_id = "ABCDEFG".to_string();
             let git_commit_id = git_commit_id.as_bytes();
 
             let mut wasm = smallest_valid_wasm();
-            let hash = annotate_wasm_with_metadata(
+            let hash = annotate_wasm_with_metadata_and_return_new_hash(
                 &mut wasm,
                 true,
                 "git_commit_id",
@@ -5022,13 +5155,13 @@ mod test {
             let mut wasm = smallest_valid_wasm();
 
             let hash = {
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     true,
                     "git_commit_id",
                     git_commit_id.to_vec(),
                 );
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     false,
                     "other_contents",
@@ -5076,13 +5209,13 @@ mod test {
             let mut wasm = smallest_valid_wasm();
 
             let hash = {
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     true,
                     "git_commit_id",
                     git_commit_id.to_vec(),
                 );
-                gzip_wasm(&mut wasm)
+                gzip_wasm_and_return_new_hash(&mut wasm)
             };
 
             let mut canister = new_wasm_canister();

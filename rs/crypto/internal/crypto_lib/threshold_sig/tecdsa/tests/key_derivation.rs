@@ -1,13 +1,10 @@
+use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
-#[allow(dead_code)]
-mod test_utils;
-
-use crate::test_utils::*;
-use assert_matches::assert_matches;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 #[test]
 fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), CanisterThresholdError>
@@ -18,15 +15,11 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Cani
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation_max_length");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,
         seed,
-        true,
     )?;
 
     for i in 0..=255 {
@@ -366,21 +359,17 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), CanisterThresh
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,
         seed,
-        true,
     )?;
 
     let master_key = setup.public_key(&DerivationPath::new(vec![]))?;
     assert_eq!(
         hex::encode(master_key.public_key),
-        "02bef39a470a0fe179cd18509a791e9c5312c07d1346a223a93f723fd90c9690f2"
+        "034313d67f176fcb486756322e2cca9cd0aa4504e7c8128222a7b54bf02f1742c1"
     );
     assert_eq!(
         hex::encode(master_key.chain_key),
@@ -393,31 +382,31 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), CanisterThresh
     let key = setup.public_key(&DerivationPath::new(vec![index1.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "026b299d834bbb242a961192ba5a1d5663b5fa8d76d88aff93fd2a6044a524ce70"
+        "02cf5b8b78e5663d2de5f34b15fae61096335674bae520a0989a1cb19f47a0b1c7"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "5b37a4f4f656bbe83497232deab1be3a468535ca55c296f123ee8339d56100f5"
+        "701de4dca971413c3388039fe838ae9ec000cedcebda8c0b31388d10d959d31a"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index2.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "03bbe7150acce76b3d155a840a5096e334cddc6a129bd3d481a200518efa066098"
+        "03a8299cdbc7fc2e61e56d5dd11c5c933fb32ffbefbf4d451f601f60d0a9f6a1d4"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "68db4ee9e71a592c463e70202b4d49f4408530a7e783c43625360956e6180052"
+        "96420bd99dea768cc5d7bb85ec85753ff1c39e47e24ffb43cfab236832e017e3"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index1, index2]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "02acd25bb5fbd517e5141aa5bc9b58554a96b9e9436bb285abb2090598cdcf850e"
+        "0292879f7c52e7389600602b32f47aa9a694c31370b8d8131f91342952bf6667e9"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "8e808ba4caebadca661fd647fcc8ab5e80a1b538b7ffee7bccf3f3a01a35d19e"
+        "545054338b6149de7b098112c41277b7c8db56802c27a6cef51bc0fe0ac589df"
     );
 
     Ok(())
@@ -432,15 +421,11 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
     let random_seed = Seed::from_rng(rng);
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,
         random_seed,
-        true,
     )?;
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support

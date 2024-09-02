@@ -886,10 +886,9 @@ fn determine_main_memory_handling(
             .as_ref()
             .map_or(false, expects_enhanced_orthogonal_persistence)
     };
-    let new_state_uses_orthogonal_persistence = || {
-        new_state_candidate
-            .as_ref()
-            .map_or(false, expects_enhanced_orthogonal_persistence)
+    let new_state_uses_classical_persistence = || {
+        new_state_candidate.is_ok()
+            && !expects_enhanced_orthogonal_persistence(new_state_candidate.as_ref().unwrap())
     };
 
     match install_mode {
@@ -910,7 +909,7 @@ fn determine_main_memory_handling(
             ..
         })) => {
             // Safety guard checking that the enhanced orthogonal persistence upgrade option is only applied to canisters that support such.
-            if !new_state_uses_orthogonal_persistence() {
+            if new_state_uses_classical_persistence() {
                 let message = "The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.".to_string();
                 return Err(CanisterManagerError::InvalidUpgradeOptionError { message });
             }

@@ -57,6 +57,7 @@ fn get_swap_participation_limits_for_tests() -> impl Iterator<Item = SwapPartici
 
 fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
     let controller = PrincipalId::default();
+    let hotkeys = Vec::new();
     vec![
         // No neurons.
         vec![],
@@ -65,12 +66,14 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
             id: nid(1000),
             maturity_equivalent_icp_e8s: 0,
             controller,
+            hotkeys: hotkeys.clone(),
         }],
         // Single neuron with maximal possible maturity.
         vec![NeuronsFundNeuron {
             id: nid(1000),
             maturity_equivalent_icp_e8s: u64::MAX,
             controller,
+            hotkeys: hotkeys.clone(),
         }],
         // Two equi-mature neurons with super huge maturity.
         vec![
@@ -78,11 +81,13 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
                 id: nid(1000),
                 maturity_equivalent_icp_e8s: u64::MAX / 2,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(1),
                 maturity_equivalent_icp_e8s: u64::MAX / 2,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         ],
         // Two neurons, both with super huge maturity, but one has 1 e8 more than the other.
@@ -91,11 +96,13 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
                 id: nid(1000),
                 maturity_equivalent_icp_e8s: u64::MAX / 2,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(1),
                 maturity_equivalent_icp_e8s: u64::MAX - (u64::MAX / 2),
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         ],
         // The sum of the maturities in this set of neurons is `u64::MAX`.
@@ -106,6 +113,7 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
                 id: nid(i as u64),
                 maturity_equivalent_icp_e8s: 2_u64.pow(i as u32),
                 controller,
+                hotkeys: hotkeys.clone(),
             })
             .collect::<Vec<_>>(),
         // Neurons with a wide range of maturities, and one neuron with a super huge amount of
@@ -115,111 +123,133 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
                 id: nid(1000),
                 maturity_equivalent_icp_e8s: 0,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(1),
                 maturity_equivalent_icp_e8s: 1, // no `* E8` on purpose
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(2),
                 maturity_equivalent_icp_e8s: 10 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(3),
                 maturity_equivalent_icp_e8s: 25 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(4),
                 maturity_equivalent_icp_e8s: 50 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(5),
                 maturity_equivalent_icp_e8s: 100 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(6),
                 maturity_equivalent_icp_e8s: 250 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(7),
                 maturity_equivalent_icp_e8s: 500 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(8),
                 maturity_equivalent_icp_e8s: 1000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(9),
                 maturity_equivalent_icp_e8s: 2500 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(10),
                 maturity_equivalent_icp_e8s: 5000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(11),
                 maturity_equivalent_icp_e8s: 5000 * E8, // Same as for nid(10) on purpose
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(12),
                 maturity_equivalent_icp_e8s: 10_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(13),
                 maturity_equivalent_icp_e8s: 25_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(14),
                 maturity_equivalent_icp_e8s: 50_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(15),
                 maturity_equivalent_icp_e8s: 100_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(16),
                 maturity_equivalent_icp_e8s: 250_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(17),
                 maturity_equivalent_icp_e8s: 500_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(18),
                 maturity_equivalent_icp_e8s: 1_000_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(19),
                 maturity_equivalent_icp_e8s: 2_500_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(20),
                 maturity_equivalent_icp_e8s: 5_000_000 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             },
             NeuronsFundNeuron {
                 id: nid(21),
                 maturity_equivalent_icp_e8s: u64::MAX / 2, // Ensure the Fund's total still fits u64.
                 controller,
+                hotkeys: hotkeys.clone(),
             },
         ],
         // 1K neurons with 1 ICP of maturity each, and another 1k with 100 ICP of maturity each.
@@ -229,11 +259,13 @@ fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
                 id: nid(i),
                 maturity_equivalent_icp_e8s: E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             })
             .chain((1_000..2_000).map(|i: u64| NeuronsFundNeuron {
                 id: nid(i),
                 maturity_equivalent_icp_e8s: 100 * E8,
                 controller,
+                hotkeys: hotkeys.clone(),
             }))
             .collect::<Vec<_>>(),
     ]

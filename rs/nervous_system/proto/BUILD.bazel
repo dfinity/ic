@@ -9,6 +9,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -61,6 +62,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nervous_system/proto",
     deps = [
+        # Keep sorted.
         "//rs/nervous_system/proto/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

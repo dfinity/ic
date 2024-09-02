@@ -2,9 +2,11 @@
 use crate::tls::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
 use assert_matches::assert_matches;
-use rustls::sign::{CertifiedKey, Signer, SigningKey};
-use rustls::SignatureAlgorithm;
-use rustls::{Certificate, Error as TLSError, SignatureScheme};
+use rustls::{
+    pki_types::CertificateDer,
+    sign::{CertifiedKey, Signer, SigningKey},
+    Error as TLSError, SignatureAlgorithm, SignatureScheme,
+};
 use std::sync::Arc;
 
 mod instantiation {
@@ -12,7 +14,7 @@ mod instantiation {
 
     #[test]
     fn should_fail_on_new_new_with_incompatible_sig_schemes() {
-        let cert_chain = vec![Certificate(b"certificate".to_vec())];
+        let cert_chain = vec![CertificateDer::from(b"certificate".to_vec())];
         let certified_key_ecdsa = CertifiedKey::new(
             cert_chain,
             Arc::new(DummySigningKey::new(SignatureScheme::ECDSA_NISTP256_SHA256)),
@@ -28,7 +30,7 @@ mod client_side {
 
     #[test]
     fn should_resolve_to_static_certified_key() {
-        let cert_chain = vec![Certificate(b"certificate".to_vec())];
+        let cert_chain = vec![CertificateDer::from(b"certificate".to_vec())];
         let certified_key =
             CertifiedKey::new(cert_chain.clone(), Arc::new(DummySigningKey::new_ed25519()));
         let sig_scheme = SignatureScheme::ED25519;
@@ -42,14 +44,13 @@ mod client_side {
         // comparing the fields of CertifiedKey because it does not implement Eq
         assert_eq!(result.cert, cert_chain);
         assert_eq!(result.ocsp, certified_key.ocsp);
-        assert_eq!(result.sct_list, certified_key.sct_list);
         // key omitted because SigningKey cannot be compared and also is irrelevant here
     }
 
     #[test]
     fn should_have_certs() {
         let certified_key = CertifiedKey::new(
-            vec![Certificate(b"certificate".to_vec())],
+            vec![CertificateDer::from(b"certificate".to_vec())],
             Arc::new(DummySigningKey::new_ed25519()),
         );
         let resolver = StaticCertResolver::new(certified_key, SignatureScheme::ED25519).unwrap();
@@ -60,7 +61,7 @@ mod client_side {
     #[test]
     fn should_resolve_to_none_if_sig_schemes_do_not_match() {
         let certified_key = CertifiedKey::new(
-            vec![Certificate(b"certificate".to_vec())],
+            vec![CertificateDer::from(b"certificate".to_vec())],
             Arc::new(DummySigningKey::new_ed25519()),
         );
         let resolver = StaticCertResolver::new(certified_key, SignatureScheme::ED25519).unwrap();
@@ -80,9 +81,11 @@ mod server_side {
     // `ResolvesServerCert::resolve`, cannot be instantiated (`new` is private).
 }
 
+#[derive(Debug)]
 struct DummySigningKey {
     signer: DummySigner,
 }
+
 impl DummySigningKey {
     pub fn new(sig_scheme: SignatureScheme) -> Self {
         Self {
@@ -109,7 +112,7 @@ impl SigningKey for DummySigningKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct DummySigner {
     sig_scheme: SignatureScheme,
 }

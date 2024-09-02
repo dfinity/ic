@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-libc = "0.2.153"
-tar = "0.4.40"
+libc = { workspace = true }
+tar = { workspace = true }

@@ -49,6 +49,7 @@ Arguments:
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
        --ic-boundary-config             specify a path to the ic-boundary config file
+       --ic-boundary-ratelimits         specify a path to the ic-boundary ratelimits file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
@@ -118,6 +119,9 @@ for argument in "${@}"; do
             ;;
         --ic-boundary-config=*)
             IC_BOUNDARY_CONFIG="${argument#*=}"
+            ;;
+        --ic-boundary-ratelimits=*)
+            IC_BOUNDARY_RATELIMITS="${argument#*=}"
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
@@ -525,7 +529,7 @@ EOF
 
 function copy_ic_boundary_config() {
     if [[ -z "${IC_BOUNDARY_CONFIG:-}" ]]; then
-        err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
+        err "ic-boundary config file has not been provided, proceeding without copying it"
         return
     fi
 
@@ -541,6 +545,27 @@ function copy_ic_boundary_config() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
         cp "${IC_BOUNDARY_CONFIG}" "${CONFIG_DIR}/${NODE_PREFIX}/ic_boundary.conf"
+    done
+}
+
+function copy_ic_boundary_ratelimits() {
+    if [[ -z "${IC_BOUNDARY_RATELIMITS:-}" ]]; then
+        err "ratelimits file has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_RATELIMITS}" "${CONFIG_DIR}/${NODE_PREFIX}/canister-ratelimit.yml"
     done
 }
 
@@ -659,6 +684,7 @@ function main() {
     copy_deny_list
     copy_geolite2_dbs
     copy_ic_boundary_config
+    copy_ic_boundary_ratelimits
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
     copy_logging_credentials

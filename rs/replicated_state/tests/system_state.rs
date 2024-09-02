@@ -132,10 +132,7 @@ impl SystemStateFixture {
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
-        self.system_state
-            .output_into_iter(CANISTER_ID)
-            .pop()
-            .map(|(_, msg)| msg)
+        self.system_state.output_into_iter().pop()
     }
 
     fn induct_messages_to_self(&mut self) {
@@ -254,7 +251,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
     let request = default_request_to_self();
     let response = default_response_to_self();
 
-    // A system state with a reservation for an outgoing response.
+    // A system state with a slot reservation for an outgoing response.
     let mut fixture = SystemStateFixture {
         system_state: SystemState::new_running_for_testing(
             CANISTER_ID,

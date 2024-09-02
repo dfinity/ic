@@ -4,9 +4,9 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_prep_lib::subnet_configuration::constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::networking::subnet_update_workload::{config, test};
-use ic_tests::systest;
 
 // Test parameters
 const RPS: usize = 5;

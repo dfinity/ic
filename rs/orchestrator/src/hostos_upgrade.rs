@@ -2,6 +2,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
+use backoff::{backoff::Backoff, ExponentialBackoff};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
@@ -39,16 +40,24 @@ impl HostosUpgrader {
     pub async fn upgrade_loop(
         &mut self,
         mut exit_signal: Receiver<bool>,
-        interval: Duration,
-        timeout: Duration,
+        mut backoff: ExponentialBackoff,
+        liveness_timeout: Duration,
     ) {
         while !*exit_signal.borrow() {
-            match tokio::time::timeout(timeout, self.check_for_upgrade()).await {
-                Ok(Ok(())) => {}
+            match tokio::time::timeout(liveness_timeout, self.check_for_upgrade()).await {
+                Ok(Ok(())) => backoff.reset(),
                 e => warn!(&self.logger, "Check for HostOS upgrade failed: {:?}", e),
             }
+
+            // NOTE: We currently do not and should not set `max_elapsed_time`,
+            // so that we never run out of backoffs. If `max_elapsed_time` _is_
+            // ever set, repeat the `max_interval` instead. This is technically
+            // not the same behavior as if `max_elapsed_time` was unset, because
+            // we will not be including jitter, but it should be close enough,
+            // and safe.
+            let safe_backoff = backoff.next_backoff().unwrap_or(backoff.max_interval);
             tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
+                _ = tokio::time::sleep(safe_backoff) => {}
                 _ = exit_signal.changed() => {}
             };
         }

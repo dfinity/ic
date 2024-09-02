@@ -3,8 +3,8 @@ pub mod common;
 use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
     default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy},
-    HttpEndpointBuilder,
+    test_agent::{self, wait_for_status_healthy, IngressMessage},
+    HttpEndpointBuilder, MockIngressPoolThrottler,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -14,6 +14,7 @@ use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
 use ic_types::{ingress::WasmResult, time::current_time};
+use rstest::rstest;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -36,7 +37,7 @@ fn test_load_shedding_query() {
         ..Default::default()
     };
 
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let query_exec_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
@@ -57,7 +58,7 @@ fn test_load_shedding_query() {
 
     // Mock query exec service
     rt.spawn(async move {
-        let (_, resp) = query_handler.next_request().await.unwrap();
+        let (_, resp) = handlers.query_execution.next_request().await.unwrap();
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
@@ -313,12 +314,12 @@ fn test_load_shedding_pprof() {
     });
 }
 
-/// Test concurrency limiter for `/call` endpoint and that when the load shedder kicks in
+/// Test concurrency limiter for `/v2/.../call` endpoint and that when the load shedder kicks in
 /// we return 429.
 /// Test scenario:
 /// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
 /// 2. Send an ingress message where we wait with responding for the update call
-/// inside the ingress filter service handle.
+///    inside the ingress filter service handle.
 /// 3. Concurrently make another update call, and assert it hits the load shedder.
 #[test]
 fn test_load_shedding_update_call() {
@@ -331,8 +332,7 @@ fn test_load_shedding_update_call() {
         ..Default::default()
     };
 
-    let (mut ingress_filter, _ingress_rx, _) =
-        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let ingress_filter_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
@@ -344,14 +344,14 @@ fn test_load_shedding_update_call() {
 
     let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
-        let response = call_agent.call_default_canister(addr).await;
+        let response = call_agent.call(addr, IngressMessage::default()).await;
         load_shedder_returned_clone.notify_one();
         response
     });
 
     // Mock ingress filter
     rt.spawn(async move {
-        let (_, resp) = ingress_filter.next_request().await.unwrap();
+        let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
         ingress_filter_running.notify_one();
         load_shedder_returned.notified().await;
         resp.send_response(Ok(()))
@@ -359,7 +359,7 @@ fn test_load_shedding_update_call() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = call_agent.call_default_canister(addr).await;
+        let response = call_agent.call(addr, IngressMessage::default()).await;
         assert_eq!(
             response.status(),
             StatusCode::ACCEPTED,
@@ -374,4 +374,41 @@ fn test_load_shedding_update_call() {
             load_shedded_response.status()
         );
     })
+}
+
+/// Test that the call endpoints load shed requests when the ingress pool is full.
+#[rstest]
+#[case::v2_endpoint(test_agent::Call::V2)]
+#[case::v3_endpoint(test_agent::Call::V3)]
+fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: test_agent::Call) {
+    use std::sync::RwLock;
+
+    let rt = Runtime::new().unwrap();
+
+    let mut mock_ingress_pool_throttler = MockIngressPoolThrottler::new();
+    mock_ingress_pool_throttler
+        .expect_exceeds_threshold()
+        .return_const(true);
+
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut _handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_ingress_pool_throttler(Arc::new(RwLock::new(mock_ingress_pool_throttler)))
+        .run();
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let message = Default::default();
+        let call_response = endpoint.call(addr, message).await;
+        assert_eq!(
+            call_response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "{:?}",
+            call_response.text().await.unwrap()
+        );
+    });
 }

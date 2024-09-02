@@ -8,12 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-lazy_static = "1.4.0"
-pprof = { version = "0.13", default-features = false, features = [
-    "flamegraph",
-    "prost-codec",
-] }
+lazy_static = { workspace = true }
+pprof = { workspace = true }
 prost = { workspace = true }
-regex = "1.3.9"
+regex = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

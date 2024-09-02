@@ -41,7 +41,7 @@ use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, Repli
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::RegistryClientError,
-    xnet::{CertifiedStreamSlice, StreamIndex},
+    xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
@@ -485,20 +485,20 @@ impl XNetPayloadBuilderImpl {
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`;
+    ///     signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`;
+    ///     `signals_end <= stream.messages_end()`;
     ///
     ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    /// and
+    ///     and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
         signals_end: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
+        reject_signals: &VecDeque<RejectSignal>,
         expected: StreamIndex,
         state: &ReplicatedState,
     ) -> SignalsValidationResult {
@@ -546,20 +546,20 @@ impl XNetPayloadBuilderImpl {
             // messages have been GC-ed). Meaning we can never have signals going back
             // farther than the maximum number of messages in a stream.
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.get() > MAX_STREAM_MESSAGES {
+            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
                     subnet_id,
-                    signals_begin,
+                    signals_begin.index,
                     signals_end
                 );
                 return SignalsValidationResult::Invalid;
             }
 
             let mut next = signals_end;
-            for index in reject_signals.iter().rev() {
-                if index >= &next {
+            for signal in reject_signals.iter().rev() {
+                if signal.index >= next {
                     warn!(
                         self.log,
                         "Invalid signals in stream from {}: reject_signals {:?}, signals_end {}",
@@ -569,7 +569,7 @@ impl XNetPayloadBuilderImpl {
                     );
                     return SignalsValidationResult::Invalid;
                 }
-                next = *index;
+                next = signal.index;
             }
         }
 

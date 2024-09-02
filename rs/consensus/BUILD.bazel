@@ -31,12 +31,13 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:slog",
+    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/ni-dkg",
@@ -60,6 +61,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
@@ -73,10 +75,12 @@ DEV_DEPENDENCIES = [
 ]
 
 MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -151,6 +155,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":consensus",
         "//rs/artifact_pool",
         "//rs/config",

@@ -151,9 +151,7 @@ impl MockNetwork {
 pub struct MockDkgConfig {
     pub algorithm_id: AlgorithmId,
     pub dkg_id: NiDkgId,
-    pub max_corrupt_dealers: NumberOfNodes,
     pub dealers: NiDkgDealers,
-    pub max_corrupt_receivers: NumberOfNodes,
     pub receivers: NiDkgReceivers,
     pub receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
     pub threshold: NiDkgThreshold,
@@ -215,9 +213,6 @@ impl MockDkgConfig {
         let dkg_id = random_ni_dkg_id(rng);
         let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
-        let max_corrupt_receivers =
-            rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
-                                                                                       // (max_corrupt_receivers < threshold)
         let epoch = Epoch::from(rng.gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
@@ -229,9 +224,7 @@ impl MockDkgConfig {
         MockDkgConfig {
             algorithm_id,
             dkg_id,
-            max_corrupt_dealers: NumberOfNodes::from(max_corrupt_dealers as NodeIndex),
             dealers,
-            max_corrupt_receivers: NumberOfNodes::from(max_corrupt_receivers as NodeIndex),
             receivers,
             receiver_keys,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(threshold as NodeIndex))

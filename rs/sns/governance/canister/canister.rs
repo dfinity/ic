@@ -11,7 +11,7 @@
 
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid, candid_one, candid_one_with_config, CandidOne};
 use dfn_core::{
     api::{call_bytes_with_cleanup, caller, id, now, Funds},
     over, over_async, over_init,
@@ -353,7 +353,7 @@ fn get_sns_initialization_parameters_(
 /// Performs a command on a neuron if the caller is authorized to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
-/// dissolve state),
+///   dissolve state),
 /// - disbursing the neuron's stake to a ledger account
 /// - following a set of neurons for proposals of a certain action
 /// - make a proposal in the name of the neuron
@@ -576,14 +576,14 @@ fn get_mode_(request: GetMode) -> GetModeResponse {
 /// only callable by the Swap canister that was deployed along with this
 /// SNS Governance canister.
 ///
-/// This API takes a request of multiple `NeuronParameters` that provide
+/// This API takes a request of multiple `NeuronRecipes` that provide
 /// the configurable parameters of the to-be-created neurons. Since these neurons
 /// are responsible for the decentralization of an SNS during the Swap, there are
 /// a few differences in neuron creation that occur in comparison to the normal
 /// `ManageNeuron::ClaimOrRefresh` API. See `Governance::claim_swap_neurons` for
 /// more details.
 ///
-/// This method is idempotent. If called with a `NeuronParameters` of an already
+/// This method is idempotent. If called with a `NeuronRecipes` of an already
 /// created Neuron, the `ClaimSwapNeuronsResponse.skipped_claims` field will be
 /// incremented and execution will continue.
 #[export_name = "canister_update claim_swap_neurons"]
@@ -639,7 +639,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister
@@ -740,139 +740,11 @@ async fn mint_tokens_(request: MintTokensRequest) -> MintTokensResponse {
     governance_mut().mint_tokens(request).await
 }
 
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-/// A test that fails if the API was updated but the candid definition was not.
-#[cfg(not(feature = "test"))]
-#[test]
-fn check_governance_candid_file() {
-    let did_path = format!(
-        "{}/canister/governance.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance.did. \
-            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) or \
-            `cargo run --bin sns-governance-canister > canister/governance.did` in \
-            rs/sns/governance to update canister/governance.did."
-        )
-    }
-}
-
-#[cfg(feature = "test")]
-#[test]
-fn check_governance_candid_file() {
-    let did_path = format!(
-        "{}/canister/governance_test.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance_test.did. \
-            Run `bazel run :generate_test_did > canister/governance_test.did` (no nix and/or direnv) in \
-            rs/sns/governance to update canister/governance_test.did."
-        )
-    }
-}
-
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
-    use maplit::btreemap;
-
-    /// A test that checks that set_time_warp advances time correctly.
-    #[test]
-    fn test_set_time_warp() {
-        let mut environment = CanisterEnv::new();
-
-        let start = environment.now();
-        environment.set_time_warp(TimeWarp { delta_s: 1_000 });
-        let delta_s = environment.now() - start;
-
-        assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-        assert!(delta_s < 1005, "delta_s = {}", delta_s);
-    }
-
-    #[test]
-    fn test_populate_finalize_disbursement_timestamp_seconds() {
-        // Step 1: prepare a neuron with 2 in progress disbursement, one with
-        // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
-        let mut governance_proto = GovernanceProto {
-            neurons: btreemap! {
-                "1".to_string() => Neuron {
-                    disburse_maturity_in_progress: vec![
-                        DisburseMaturityInProgress {
-                            timestamp_of_disbursement_seconds: 1,
-                            finalize_disbursement_timestamp_seconds: None,
-                            ..Default::default()
-                        },
-                        DisburseMaturityInProgress {
-                            timestamp_of_disbursement_seconds: 2,
-                            finalize_disbursement_timestamp_seconds: Some(3),
-                            ..Default::default()
-                        }
-                    ],
-                    ..Default::default()
-                },
-            },
-            ..Default::default()
-        };
-
-        // Step 2: populates the timestamps.
-        populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
-
-        // Step 3: verifies that both disbursements have the correct finalization timestamps.
-        let expected_governance_proto = GovernanceProto {
-            neurons: btreemap! {
-                "1".to_string() => Neuron {
-                    disburse_maturity_in_progress: vec![
-                        DisburseMaturityInProgress {
-                            timestamp_of_disbursement_seconds: 1,
-                            finalize_disbursement_timestamp_seconds: Some(1 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
-                            ..Default::default()
-                        },
-                        DisburseMaturityInProgress {
-                            timestamp_of_disbursement_seconds: 2,
-                            finalize_disbursement_timestamp_seconds: Some(2 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
-                            ..Default::default()
-                        },
-                    ],
-                    ..Default::default()
-                },
-            },
-            ..Default::default()
-        };
-        assert_eq!(governance_proto, expected_governance_proto);
-    }
-}
+mod tests;

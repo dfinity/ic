@@ -8,25 +8,17 @@ import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
-message EcdsaPayload {
+message IDkgPayload {
+  reserved 2, 3, 4, 9, 11, 12, 16;
   repeated CompletedSignature signature_agreements = 1;
-  repeated OngoingSignature ongoing_signatures = 2;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
   uint64 next_unused_pre_signature_id = 10;
-  repeated EcdsaKeyTranscript key_transcripts = 13;
+  repeated MasterKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
-  // TODO: retire these fields, once we start using `key_transcripts`.
-  UnmaskedTranscriptWithAttributes current_key_transcript = 9;
-  KeyTranscriptCreation next_key_in_creation = 11;
-  registry.crypto.v1.EcdsaKeyId key_id = 12;
-  // TODO: retire these fields, once we start using `pre_signatures`.
-  repeated AvailableQuadruple available_quadruples = 3;
-  repeated QuadrupleInProgress quadruples_in_creation = 4;
-  bool generalized_pre_signatures = 16;
 }
 
 message ConsensusResponse {
@@ -38,30 +30,11 @@ message ConsensusResponse {
   }
 }
 
-message EcdsaKeyTranscript {
-  registry.crypto.v1.EcdsaKeyId key_id = 1;
+message MasterKeyTranscript {
+  reserved 1;
   UnmaskedTranscriptWithAttributes current = 2;
   KeyTranscriptCreation next_in_creation = 3;
   registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
-}
-
-message OngoingSignature {
-  RequestId request_id = 1;
-  ThresholdEcdsaSigInputsRef sig_inputs = 2;
-}
-
-message AvailableQuadruple {
-  reserved 3;
-  reserved "key_id";
-  uint64 pre_signature_id = 1;
-  PreSignatureQuadrupleRef quadruple = 2;
-}
-
-message QuadrupleInProgress {
-  reserved 3;
-  reserved "key_id";
-  uint64 pre_signature_id = 1;
-  QuadrupleInCreation quadruple = 2;
 }
 
 message AvailablePreSignature {
@@ -75,14 +48,14 @@ message PreSignatureInProgress {
 }
 
 message OngoingXnetReshare {
-  EcdsaReshareRequest request = 1;
+  IDkgReshareRequest request = 1;
   ReshareOfUnmaskedParams transcript = 2;
 }
 
 message XnetReshareAgreement {
   reserved 2, 3;
   reserved "response";
-  EcdsaReshareRequest request = 1;
+  IDkgReshareRequest request = 1;
   ConsensusResponse initial_dealings = 4;
 }
 
@@ -194,14 +167,6 @@ message PreSignatureQuadrupleRef {
   registry.crypto.v1.EcdsaKeyId key_id = 6;
 }
 
-message ThresholdEcdsaSigInputsRef {
-  registry.subnet.v1.ExtendedDerivationPath derivation_path = 1;
-  bytes hashed_message = 2;
-  bytes nonce = 3;
-  PreSignatureQuadrupleRef presig_quadruple_ref = 4;
-  UnmaskedTranscript key_transcript_ref = 5;
-}
-
 message TranscriptInCreation {
   registry.crypto.v1.SchnorrKeyId key_id = 1;
   RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
@@ -221,11 +186,10 @@ message CompletedSignature {
   bytes pseudo_random_id = 4;
 }
 
-message EcdsaReshareRequest {
-  reserved 1;
+message IDkgReshareRequest {
+  reserved 1, 4;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
-  registry.crypto.v1.EcdsaKeyId key_id = 4;
   registry.crypto.v1.MasterPublicKeyId master_key_id = 5;
 }
 
@@ -248,13 +212,14 @@ message KeyTranscriptCreation {
   UnmaskedTranscript created = 9;
 }
 
-message EcdsaMessage {
+message IDkgMessage {
   oneof msg {
     registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
     IDkgDealingSupport dealing_support = 2;
-    EcdsaSigShare sig_share = 3;
-    EcdsaComplaint complaint = 4;
-    EcdsaOpening opening = 5;
+    EcdsaSigShare ecdsa_sig_share = 3;
+    SignedIDkgComplaint complaint = 4;
+    SignedIDkgOpening opening = 5;
+    SchnorrSigShare schnorr_sig_share = 6;
   }
 }
 
@@ -264,21 +229,27 @@ message EcdsaSigShare {
   bytes sig_share_raw = 3;
 }
 
-message EcdsaComplaint {
-  EcdsaComplaintContent content = 1;
+message SchnorrSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message SignedIDkgComplaint {
+  IDkgComplaintContent content = 1;
   types.v1.BasicSignature signature = 2;
 }
 
-message EcdsaComplaintContent {
+message IDkgComplaintContent {
   registry.subnet.v1.IDkgComplaint idkg_complaint = 1;
 }
 
-message EcdsaOpening {
-  EcdsaOpeningContent content = 1;
+message SignedIDkgOpening {
+  IDkgOpeningContent content = 1;
   types.v1.BasicSignature signature = 2;
 }
 
-message EcdsaOpeningContent {
+message IDkgOpeningContent {
   registry.subnet.v1.IDkgOpening idkg_opening = 1;
 }
 
@@ -289,23 +260,39 @@ message IDkgDealingSupport {
   types.v1.BasicSignature sig_share = 4;
 }
 
-message EcdsaPrefix {
+message IDkgPrefix {
   uint64 group_tag = 1;
   uint64 meta_hash = 2;
-  uint64 height = 3;
 }
 
-message PrefixHashPair {
-  EcdsaPrefix prefix = 1;
+message IDkgArtifactIdData {
+  uint64 height = 1;
+  bytes hash = 2;
+  types.v1.SubnetId subnet_id = 3;
+}
+
+message SigShareIdData {
+  uint64 height = 1;
   bytes hash = 2;
 }
 
-message EcdsaArtifactId {
+message PrefixPairIDkg {
+  IDkgPrefix prefix = 1;
+  IDkgArtifactIdData id_data = 2;
+}
+
+message PrefixPairSigShare {
+  IDkgPrefix prefix = 1;
+  SigShareIdData id_data = 2;
+}
+
+message IDkgArtifactId {
   oneof kind {
-    PrefixHashPair dealing = 1;
-    PrefixHashPair dealing_support = 2;
-    PrefixHashPair sig_share = 3;
-    PrefixHashPair complaint = 4;
-    PrefixHashPair opening = 5;
+    PrefixPairIDkg dealing = 1;
+    PrefixPairIDkg dealing_support = 2;
+    PrefixPairSigShare ecdsa_sig_share = 3;
+    PrefixPairIDkg complaint = 4;
+    PrefixPairIDkg opening = 5;
+    PrefixPairSigShare schnorr_sig_share = 6;
   }
 }

@@ -342,7 +342,7 @@ fn test_single_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_1]);
         state_sync_n1
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_2_clone {
                     received_advert_n1_a2_clone.store(true, Ordering::SeqCst);
@@ -358,7 +358,7 @@ fn test_single_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_2]);
         state_sync_n2
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
@@ -459,7 +459,7 @@ fn test_multiple_advert_between_two_nodes() {
         let state_sync_id_2_clone = state_sync_id_2.clone();
         let state_sync_id_1_clone = state_sync_id_1.clone();
         state_sync_n1
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
@@ -480,7 +480,7 @@ fn test_multiple_advert_between_two_nodes() {
             .expect_available_states()
             .return_const(vec![state_sync_id_1, state_sync_id_2]);
         state_sync_n2
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .withf(move |id| {
                 if id == &state_sync_id_1_clone {
                     received_advert_n1_a1_clone.store(true, Ordering::SeqCst);
@@ -643,16 +643,18 @@ fn test_state_sync_abortion() {
                 ]
             });
         s1.get_mut().expect_available_states().return_const(vec![]);
-        s1.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+        s1.get_mut()
+            .expect_chunk()
+            .returning(|_, _| Some(vec![].into()));
 
         // Verify that peers got expected number of adverts. The last advert on node 2
         // is used to start the state sync.
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .times(9)
             .returning(|_| None);
         s3.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .times(10)
             .returning(|_| None);
 
@@ -665,15 +667,15 @@ fn test_state_sync_abortion() {
         {
             let c2 = c2.clone();
             s2.get_mut()
-                .expect_start_state_sync()
+                .expect_maybe_start_state_sync()
                 .times(1)
                 .return_once(|_| Some(Box::new(c2)));
         }
-        s2.get_mut().expect_should_cancel().returning(|_| false);
+        s2.get_mut().expect_cancel_if_running().returning(|_| false);
 
         // Wait until both peers have receive one state advert
         wait_for(&mut sim, || {
-            s2.start_state_sync_calls() == 10 && s3.start_state_sync_calls() == 10
+            s2.maybe_start_state_sync_calls() == 10 && s3.maybe_start_state_sync_calls() == 10
         })
         .expect("Node did not receive advert from other peer");
 
@@ -684,7 +686,9 @@ fn test_state_sync_abortion() {
 
         // Add Node 3 to state sync by advertising the state once.
         s3.get_mut().checkpoint();
-        s3.get_mut().expect_chunk().returning(|_, _| Some(vec![]));
+        s3.get_mut()
+            .expect_chunk()
+            .returning(|_, _| Some(vec![].into()));
         s3.get_mut()
             .expect_available_states()
             .once()
@@ -695,11 +699,11 @@ fn test_state_sync_abortion() {
                 }]
             });
         s1.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .once()
             .returning(|_| None);
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .never()
             .returning(|_| None);
         s3.get_mut().expect_available_states().return_const(vec![]);
@@ -709,7 +713,7 @@ fn test_state_sync_abortion() {
         s2.clear();
         s3.clear();
         wait_for(&mut sim, || {
-            s1.start_state_sync_calls() == 1 && s2.start_state_sync_calls() == 0
+            s1.maybe_start_state_sync_calls() == 1 && s2.maybe_start_state_sync_calls() == 0
         })
         .unwrap();
 
@@ -728,7 +732,7 @@ fn test_state_sync_abortion() {
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
         wait_for(&mut sim, || c2.add_chunks_calls() >= 1).unwrap();
 
-        // State sync should now be stopped. This means new incoming adverts will invoke `start_state_sync`
+        // State sync should now be stopped. This means new incoming adverts will invoke `maybe_start_state_sync`
         s2.clear();
         s3.clear();
         s3.get_mut().checkpoint();
@@ -744,10 +748,10 @@ fn test_state_sync_abortion() {
             });
         s2.get_mut().expect_available_states().return_const(vec![]);
         s2.get_mut()
-            .expect_start_state_sync()
+            .expect_maybe_start_state_sync()
             .once()
             .returning(|_| None);
-        wait_for(&mut sim, || s2.start_state_sync_calls() == 1).unwrap();
+        wait_for(&mut sim, || s2.maybe_start_state_sync_calls() == 1).unwrap();
 
         exit_notify.notify_waiters();
         // Check that all expectations are met.

@@ -32,6 +32,7 @@ pub mod cmd;
 pub mod ingress;
 mod mocks;
 pub mod player;
+mod registry_helper;
 mod validator;
 
 /// Replays the past blocks and creates a checkpoint of the latest state.
@@ -262,6 +263,7 @@ fn cmd_get_recovery_cup(
             registry_version: registry_version.get(),
         }),
         ecdsa_initializations: vec![],
+        chain_key_initializations: vec![],
     };
 
     let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(

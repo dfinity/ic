@@ -8,7 +8,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgReceivers;
@@ -46,7 +46,7 @@ pub fn sign_share(
     vault: &dyn CspVault,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
-) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
     ensure_self_was_receiver(self_node_id, inputs.receivers())?;
 
     let key = inputs.key_transcript().transcript_to_bytes();
@@ -57,7 +57,7 @@ pub fn sign_share(
     let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
     let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
 
-    let internal_sig_share = vault.ecdsa_sign_share(
+    let internal_sig_share = vault.create_ecdsa_sig_share(
         inputs.derivation_path().clone(),
         inputs.hashed_message().to_vec(),
         *inputs.nonce(),
@@ -70,7 +70,7 @@ pub fn sign_share(
     )?;
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
-        ThresholdEcdsaSignShareError::SerializationError {
+        ThresholdEcdsaCreateSigShareError::SerializationError {
             internal_error: format!("{:?}", e),
         }
     })?;
@@ -83,29 +83,33 @@ pub fn verify_sig_share(
     inputs: &ThresholdEcdsaSigInputs,
     share: &ThresholdEcdsaSigShare,
 ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-    fn conv_error(e: CanisterThresholdSerializationError) -> ThresholdEcdsaVerifySigShareError {
+    fn conv_error(
+        e: CanisterThresholdSerializationError,
+        target: &str,
+    ) -> ThresholdEcdsaVerifySigShareError {
         ThresholdEcdsaVerifySigShareError::SerializationError {
-            internal_error: e.0,
+            internal_error: format!("failed to deserialize {target} transcript: {}", e.0),
         }
     }
 
     let kappa_unmasked =
         IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
-            .map_err(conv_error)?;
+            .map_err(|e| conv_error(e, "kappa_unmasked"))?;
     let lambda_masked = IDkgTranscriptInternal::try_from(inputs.presig_quadruple().lambda_masked())
-        .map_err(conv_error)?;
+        .map_err(|e| conv_error(e, "lambda_masked"))?;
     let kappa_times_lambda =
         IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_times_lambda())
-            .map_err(conv_error)?;
+            .map_err(|e| conv_error(e, "kappa_times_lambda"))?;
     let key_times_lambda =
         IDkgTranscriptInternal::try_from(inputs.presig_quadruple().key_times_lambda())
-            .map_err(conv_error)?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
+            .map_err(|e| conv_error(e, "key_times_lambda"))?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
+        .map_err(|e| conv_error(e, "key"))?;
 
     let sig_share =
         ThresholdEcdsaSigShareInternal::deserialize(&share.sig_share_raw).map_err(|e| {
             ThresholdEcdsaVerifySigShareError::SerializationError {
-                internal_error: format!("{:?}", e),
+                internal_error: format!("failed to deserialize signature share: {}", e.0),
             }
         })?;
     let signer_index = inputs.key_transcript().index_for_signer_id(signer).ok_or(
@@ -149,22 +153,24 @@ pub fn verify_combined_signature(
 ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
     fn conv_error(
         e: CanisterThresholdSerializationError,
+        target: &str,
     ) -> ThresholdEcdsaVerifyCombinedSignatureError {
         ThresholdEcdsaVerifyCombinedSignatureError::SerializationError {
-            internal_error: e.0,
+            internal_error: format!("failed to deserialize {target} transcript: {}", e.0),
         }
     }
 
     let kappa_unmasked =
         IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
-            .map_err(conv_error)?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
+            .map_err(|e| conv_error(e, "kappa_unmasked"))?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
+        .map_err(|e| conv_error(e, "key"))?;
 
     let signature =
         ThresholdEcdsaCombinedSigInternal::deserialize(inputs.algorithm_id(), &signature.signature)
             .map_err(
                 |e| ThresholdEcdsaVerifyCombinedSignatureError::SerializationError {
-                    internal_error: format!("{:?}", e),
+                    internal_error: format!("failed to deserialize signature share: {}", e.0),
                 },
             )?;
 
@@ -199,9 +205,12 @@ pub fn combine_sig_shares(
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-    fn conv_error(e: CanisterThresholdSerializationError) -> ThresholdEcdsaCombineSigSharesError {
+    fn conv_error(
+        e: CanisterThresholdSerializationError,
+        target: &str,
+    ) -> ThresholdEcdsaCombineSigSharesError {
         ThresholdEcdsaCombineSigSharesError::SerializationError {
-            internal_error: e.0,
+            internal_error: format!("failed to deserialize {target} transcript: {}", e.0),
         }
     }
 
@@ -212,12 +221,13 @@ pub fn combine_sig_shares(
         .kappa_unmasked()
         .internal_transcript_raw;
 
-    let kappa_unmasked =
-        IDkgTranscriptInternal::deserialize(kappa_transcript).map_err(conv_error)?;
+    let kappa_unmasked = IDkgTranscriptInternal::deserialize(kappa_transcript)
+        .map_err(|e| conv_error(e, "kappa_unmasked"))?;
 
     let internal_shares = internal_sig_shares_by_index_from_sig_shares(shares, inputs)?;
 
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
+        .map_err(|e| conv_error(e, "key"))?;
 
     let internal_combined_sig = combine_ecdsa_signature_shares(
         &DerivationPath::from(inputs.derivation_path()),
@@ -241,11 +251,11 @@ pub fn combine_sig_shares(
 fn ensure_self_was_receiver(
     self_node_id: &NodeId,
     receivers: &IDkgReceivers,
-) -> Result<(), ThresholdEcdsaSignShareError> {
+) -> Result<(), ThresholdEcdsaCreateSigShareError> {
     if receivers.contains(*self_node_id) {
         Ok(())
     } else {
-        Err(ThresholdEcdsaSignShareError::NotAReceiver)
+        Err(ThresholdEcdsaCreateSigShareError::NotAReceiver)
     }
 }
 
@@ -281,7 +291,7 @@ fn internal_sig_shares_by_index_from_sig_shares(
             let internal_share = ThresholdEcdsaSigShareInternal::deserialize(&share.sig_share_raw)
                 .map_err(
                     |e| ThresholdEcdsaCombineSigSharesError::SerializationError {
-                        internal_error: format!("{:?}", e),
+                        internal_error: format!("failed to deserialize signature share: {}", e.0),
                     },
                 )?;
             Ok((index, internal_share))

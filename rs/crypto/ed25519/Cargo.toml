@@ -7,15 +7,16 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"] }
 curve25519-dalek = { workspace = true }
+ed25519-dalek = { workspace = true }
 hkdf = "0.12"
-sha2 = "0.10"
-rand = "0.8"
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
 hex-literal = "0.4"
-wycheproof = "0.5"
+rand_chacha = { workspace = true }
+wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

@@ -22,27 +22,27 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = { workspace = true }
 hex-literal = "0.4.1"
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-secp256k1 = { path = "../../crypto/secp256k1" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
-ic-nns-governance = { path = "../governance" }
+ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-libsecp256k1 = "0.7.0"
 prost = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 serde = { workspace = true }
-sha3 = "0.9.1"
-simple_asn1 = { workspace = true }
+sha3 = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

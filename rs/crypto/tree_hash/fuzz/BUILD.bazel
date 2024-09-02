@@ -3,6 +3,7 @@ load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/fuzz/check_witness_equality_utils",

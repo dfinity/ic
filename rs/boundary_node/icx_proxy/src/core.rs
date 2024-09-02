@@ -17,23 +17,6 @@ use crate::{
     validate::Validator,
 };
 
-// TODO: Remove after inspect_err stabilizes (rust-lang/rust#91345)
-trait InspectErr {
-    type E;
-    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self;
-}
-
-impl<R, E> InspectErr for Result<R, E> {
-    type E = E;
-    fn inspect_err<F: FnOnce(&Self::E)>(self, f: F) -> Self {
-        if let Err(ref e) = self {
-            f(e);
-        }
-
-        self
-    }
-}
-
 // Generic function to load a list of canister ids from a text file into a HashSet
 pub fn load_canister_list(path: PathBuf) -> Result<HashSet<Principal>, Error> {
     let data = fs::read_to_string(path).context("failed to read canisters file")?;

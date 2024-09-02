@@ -6,7 +6,7 @@ use crate::{
 };
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -34,10 +34,10 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-            ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+            idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+            idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
             current_round: ExecutionRound,
-            next_checkpoint_round: Option<ExecutionRound>,
+            round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;
@@ -90,8 +90,8 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.ecdsa_subnet_public_keys.clone()),
-            eq(provided_batch.ecdsa_quadruple_ids.clone()),
+            eq(provided_batch.idkg_subnet_public_keys.clone()),
+            eq(provided_batch.idkg_pre_signature_ids.clone()),
             eq(round),
             eq(None),
             eq(round_type),

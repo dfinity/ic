@@ -12,18 +12,18 @@ documentation.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-zeroize = { version = "1", features = ["zeroize_derive"] }
-rand = "0.8"
-rand_chacha = "0.3"
-lazy_static = "1.4"
-ic_bls12_381 = { version = "0.8.0", default-features = false, features = ["pairings", "alloc", "experimental", "zeroize"] }
-sha2 = "0.9"
-sha3 = "0.9"
-pairing = "0.22"
-subtle = "2.5"
-wasm-bindgen = { version = "0.2.84", optional = true }
 # Enable `custom` feature of getrandom dependency. See lib.rs for more details.
 getrandom = { version = "0.2", features = ["custom"], optional = true }
+ic_bls12_381 = { workspace = true }
+lazy_static = { workspace = true }
+pairing = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+subtle = "2.5"
+wasm-bindgen = { version = "0.2.84", optional = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

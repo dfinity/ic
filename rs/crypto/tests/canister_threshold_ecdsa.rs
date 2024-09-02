@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto::get_master_public_key_from_transcript;
-use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     ecdsa::environment_with_sig_inputs, ecdsa_sig_share_from_each_receiver,
@@ -11,9 +10,10 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     IDkgParticipants, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
@@ -40,44 +40,41 @@ mod sign_share {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                let quadruple = generate_ecdsa_presig_quadruple(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    alg,
-                    &key_transcript,
-                    use_random_unmasked_kappa,
-                    rng,
-                );
+            let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            let quadruple = generate_ecdsa_presig_quadruple(
+                &env,
+                &dealers,
+                &receivers,
+                alg,
+                &key_transcript,
+                rng,
+            );
 
-                let inputs = {
-                    let derivation_path = ExtendedDerivationPath {
-                        caller: PrincipalId::new_user_test_id(1),
-                        derivation_path: vec![],
-                    };
-
-                    let hashed_message = rng.gen::<[u8; 32]>();
-                    let seed = Randomness::from(rng.gen::<[u8; 32]>());
-
-                    ThresholdEcdsaSigInputs::new(
-                        &derivation_path,
-                        &hashed_message,
-                        seed,
-                        quadruple,
-                        key_transcript,
-                    )
-                    .expect("failed to create signature inputs")
+            let inputs = {
+                let derivation_path = ExtendedDerivationPath {
+                    caller: PrincipalId::new_user_test_id(1),
+                    derivation_path: vec![],
                 };
 
-                let receiver = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
-                receiver.load_tecdsa_sig_transcripts(&inputs);
-                let result = receiver.sign_share(&inputs);
-                assert_matches!(result, Ok(_));
-            }
+                let hashed_message = rng.gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+                ThresholdEcdsaSigInputs::new(
+                    &derivation_path,
+                    &hashed_message,
+                    seed,
+                    quadruple,
+                    key_transcript,
+                )
+                .expect("failed to create signature inputs")
+            };
+
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
+            receiver.load_tecdsa_sig_transcripts(&inputs);
+            let result = receiver.create_sig_share(&inputs);
+            assert_matches!(result, Ok(_));
         }
     }
 
@@ -98,7 +95,6 @@ mod sign_share {
                 &receivers,
                 alg,
                 &key_transcript,
-                false,
                 rng,
             );
 
@@ -128,9 +124,9 @@ mod sign_share {
                 .with_rng(rng.fork())
                 .build();
 
-            let result = bad_crypto_component.sign_share(&inputs);
+            let result = bad_crypto_component.create_sig_share(&inputs);
             let err = result.unwrap_err();
-            assert_matches!(err, ThresholdEcdsaSignShareError::NotAReceiver);
+            assert_matches!(err, ThresholdEcdsaCreateSigShareError::NotAReceiver);
         }
     }
 
@@ -143,56 +139,53 @@ mod sign_share {
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                let quadruple = generate_ecdsa_presig_quadruple(
-                    &env,
-                    &dealers,
-                    &receivers,
-                    alg,
-                    &key_transcript,
-                    use_random_unmasked_kappa,
-                    rng,
-                );
+            let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            let quadruple = generate_ecdsa_presig_quadruple(
+                &env,
+                &dealers,
+                &receivers,
+                alg,
+                &key_transcript,
+                rng,
+            );
 
-                let inputs = {
-                    let derivation_path = ExtendedDerivationPath {
-                        caller: PrincipalId::new_user_test_id(1),
-                        derivation_path: vec![],
-                    };
-
-                    let hashed_message = rng.gen::<[u8; 32]>();
-                    let seed = Randomness::from(rng.gen::<[u8; 32]>());
-
-                    ThresholdEcdsaSigInputs::new(
-                        &derivation_path,
-                        &hashed_message,
-                        seed,
-                        quadruple,
-                        key_transcript,
-                    )
-                    .expect("failed to create signature inputs")
+            let inputs = {
+                let derivation_path = ExtendedDerivationPath {
+                    caller: PrincipalId::new_user_test_id(1),
+                    derivation_path: vec![],
                 };
 
-                let receiver = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
-                receiver.load_tecdsa_sig_transcripts(&inputs);
-                assert_matches!(receiver.sign_share(&inputs), Ok(_));
-                let another_key_transcript =
-                    generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                let active_transcripts = hashset!(another_key_transcript);
-                assert_eq!(
-                    receiver.retain_active_transcripts(&active_transcripts),
-                    Ok(())
-                );
+                let hashed_message = rng.gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
-                let result = receiver.sign_share(&inputs);
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
-                );
-            }
+                ThresholdEcdsaSigInputs::new(
+                    &derivation_path,
+                    &hashed_message,
+                    seed,
+                    quadruple,
+                    key_transcript,
+                )
+                .expect("failed to create signature inputs")
+            };
+
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
+            receiver.load_tecdsa_sig_transcripts(&inputs);
+            assert_matches!(receiver.create_sig_share(&inputs), Ok(_));
+            let another_key_transcript =
+                generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+            let active_transcripts = hashset!(another_key_transcript);
+            assert_eq!(
+                receiver.retain_active_transcripts(&active_transcripts),
+                Ok(())
+            );
+
+            let result = receiver.create_sig_share(&inputs);
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { .. })
+            );
         }
     }
 
@@ -285,98 +278,90 @@ mod sign_share {
         };
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let hashed_message = rng.gen::<[u8; 32]>();
+            let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
-                const CHACHA_SEED_LEN: usize = 32;
-                let mut runner = TestRunner::new_with_rng(
-                    Config::with_cases(10),
-                    TestRng::from_seed(RngAlgorithm::ChaCha, &rng.gen::<[u8; CHACHA_SEED_LEN]>()),
-                );
-                // retain_active_transcripts is a no-op when the parameter active_transcripts is empty
-                let result = runner.run(
-                    &(
-                        arb_signer_state_with_at_least_one_retained_transcript(),
-                        vec(0..=255u8, CHACHA_SEED_LEN),
-                    ),
-                    |(signer_state, rng_seed)| {
-                        let mut inner_rng = ChaCha20Rng::from_seed(
-                            rng_seed[..]
-                                .try_into()
-                                .expect("Failed to convert seed to array"),
-                        );
-                        let key_transcript = generate_key_transcript(
-                            &env,
-                            &dealers,
-                            &receivers,
-                            alg,
-                            &mut inner_rng,
-                        );
-                        let quadruple = generate_ecdsa_presig_quadruple(
-                            &env,
-                            &dealers,
-                            &receivers,
-                            alg,
-                            &key_transcript,
-                            use_random_unmasked_kappa,
-                            &mut inner_rng,
-                        );
+            const CHACHA_SEED_LEN: usize = 32;
+            let mut runner = TestRunner::new_with_rng(
+                Config::with_cases(10),
+                TestRng::from_seed(RngAlgorithm::ChaCha, &rng.gen::<[u8; CHACHA_SEED_LEN]>()),
+            );
+            // retain_active_transcripts is a no-op when the parameter active_transcripts is empty
+            let result = runner.run(
+                &(
+                    arb_signer_state_with_at_least_one_retained_transcript(),
+                    vec(0..=255u8, CHACHA_SEED_LEN),
+                ),
+                |(signer_state, rng_seed)| {
+                    let mut inner_rng = ChaCha20Rng::from_seed(
+                        rng_seed[..]
+                            .try_into()
+                            .expect("Failed to convert seed to array"),
+                    );
+                    let key_transcript =
+                        generate_key_transcript(&env, &dealers, &receivers, alg, &mut inner_rng);
+                    let quadruple = generate_ecdsa_presig_quadruple(
+                        &env,
+                        &dealers,
+                        &receivers,
+                        alg,
+                        &key_transcript,
+                        &mut inner_rng,
+                    );
 
-                        let inputs = ThresholdEcdsaSigInputs::new(
-                            &derivation_path,
-                            &hashed_message,
-                            seed,
-                            quadruple,
-                            key_transcript,
-                        )
-                        .expect("failed to create signature inputs");
+                    let inputs = ThresholdEcdsaSigInputs::new(
+                        &derivation_path,
+                        &hashed_message,
+                        seed,
+                        quadruple,
+                        key_transcript,
+                    )
+                    .expect("failed to create signature inputs");
 
-                        let receiver = env
-                            .nodes
-                            .random_filtered_by_receivers(inputs.receivers(), &mut inner_rng);
-                        receiver.load_tecdsa_sig_transcripts(&inputs);
+                    let receiver = env
+                        .nodes
+                        .random_filtered_by_receivers(inputs.receivers(), &mut inner_rng);
+                    receiver.load_tecdsa_sig_transcripts(&inputs);
+                    assert_matches!(
+                        receiver.create_sig_share(&inputs),
+                        Ok(_),
+                        "{} failed to sign share with all transcripts loaded for state {:?}",
+                        receiver.id(),
+                        signer_state
+                    );
+
+                    let active_transcripts = signer_state.transcripts_to_retain(&inputs);
+                    assert_eq!(
+                        receiver.retain_active_transcripts(&active_transcripts),
+                        Ok(()),
+                        "{} failed to retain transcripts specified in {:?}",
+                        receiver.id(),
+                        signer_state
+                    );
+
+                    let result = receiver.create_sig_share(&inputs);
+
+                    if signer_state.should_be_able_to_sign_share() {
                         assert_matches!(
-                            receiver.sign_share(&inputs),
+                            result,
                             Ok(_),
-                            "{} failed to sign share with all transcripts loaded for state {:?}",
+                            "{} should have been able to sign a share with state {:?}",
                             receiver.id(),
                             signer_state
                         );
-
-                        let active_transcripts = signer_state.transcripts_to_retain(&inputs);
-                        assert_eq!(
-                            receiver.retain_active_transcripts(&active_transcripts),
-                            Ok(()),
-                            "{} failed to retain transcripts specified in {:?}",
+                    } else {
+                        assert_matches!(
+                            result,
+                            Err(ThresholdEcdsaCreateSigShareError::SecretSharesNotFound { .. }),
+                            "{} should not have been able to sign a share with state {:?}",
                             receiver.id(),
                             signer_state
                         );
-
-                        let result = receiver.sign_share(&inputs);
-
-                        if signer_state.should_be_able_to_sign_share() {
-                            assert_matches!(
-                                result,
-                                Ok(_),
-                                "{} should have been able to sign a share with state {:?}",
-                                receiver.id(),
-                                signer_state
-                            );
-                        } else {
-                            assert_matches!(
-                                result,
-                                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }),
-                                "{} should not have been able to sign a share with state {:?}",
-                                receiver.id(),
-                                signer_state
-                            );
-                        }
-                        Ok(())
-                    },
-                );
-                assert_eq!(result, Ok(()));
-            }
+                    }
+                    Ok(())
+                },
+            );
+            assert_eq!(result, Ok(()));
         }
     }
 }
@@ -392,19 +377,15 @@ mod verify_sig_share {
         let rng = &mut reproducible_rng();
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result = verifier.verify_sig_share(signer_id, &inputs, &sig_share);
+            let result = verifier.verify_sig_share(signer_id, &inputs, &sig_share);
 
-                assert_eq!(result, Ok(()));
-            }
+            assert_eq!(result, Ok(()));
         }
     }
 
@@ -413,28 +394,23 @@ mod verify_sig_share {
         let rng = &mut reproducible_rng();
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let inputs_with_wrong_hash = inputs
-                    .clone()
-                    .into_builder()
-                    .corrupt_hashed_message()
-                    .build();
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let inputs_with_wrong_hash = inputs
+                .clone()
+                .into_builder()
+                .corrupt_hashed_message()
+                .build();
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result =
-                    verifier.verify_sig_share(signer_id, &inputs_with_wrong_hash, &sig_share);
+            let result = verifier.verify_sig_share(signer_id, &inputs_with_wrong_hash, &sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
+            );
         }
     }
 
@@ -442,24 +418,19 @@ mod verify_sig_share {
     fn should_fail_verifying_inputs_with_wrong_nonce() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let inputs_with_wrong_nonce = inputs.clone().into_builder().corrupt_nonce().build();
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let inputs_with_wrong_nonce = inputs.clone().into_builder().corrupt_nonce().build();
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result =
-                    verifier.verify_sig_share(signer_id, &inputs_with_wrong_nonce, &sig_share);
+            let result = verifier.verify_sig_share(signer_id, &inputs_with_wrong_nonce, &sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
+            );
         }
     }
 
@@ -467,25 +438,22 @@ mod verify_sig_share {
     fn should_fail_verifying_corrupted_sig_share() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let (signer_id, corrupted_sig_share) = {
-                    let (signer_id, sig_share) =
-                        signature_share_from_random_receiver(&env, &inputs, rng);
-                    (signer_id, sig_share.clone_with_bit_flipped())
-                };
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let (signer_id, corrupted_sig_share) = {
+                let (signer_id, sig_share) =
+                    signature_share_from_random_receiver(&env, &inputs, rng);
+                (signer_id, sig_share.clone_with_bit_flipped())
+            };
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result = verifier.verify_sig_share(signer_id, &inputs, &corrupted_sig_share);
+            let result = verifier.verify_sig_share(signer_id, &inputs, &corrupted_sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
+            );
         }
     }
 
@@ -493,22 +461,17 @@ mod verify_sig_share {
     fn should_verify_sig_share_from_another_signer_when_threshold_1() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(2..=3, alg, use_random_unmasked_kappa, rng);
-                assert_eq!(inputs.key_transcript().reconstruction_threshold().get(), 1);
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let other_signer_id =
-                    random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(2..=3, alg, rng);
+            assert_eq!(inputs.key_transcript().reconstruction_threshold().get(), 1);
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let other_signer_id = random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
+            let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
 
-                assert_eq!(result, Ok(()));
-            }
+            assert_eq!(result, Ok(()));
         }
     }
 
@@ -516,24 +479,19 @@ mod verify_sig_share {
     fn should_fail_verifying_sig_share_from_another_signer() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(4..10, alg, use_random_unmasked_kappa, rng);
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let other_signer_id =
-                    random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(4..10, alg, rng);
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let other_signer_id = random_receiver_id_excluding(inputs.receivers(), signer_id, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
+            let result = verifier.verify_sig_share(other_signer_id, &inputs, &sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
+            );
         }
     }
 
@@ -541,25 +499,21 @@ mod verify_sig_share {
     fn should_fail_verifying_sig_share_for_unknown_signer() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let unknown_signer_id = NodeId::from(PrincipalId::new_node_test_id(1));
-                assert_ne!(signer_id, unknown_signer_id);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let unknown_signer_id = NodeId::from(PrincipalId::new_node_test_id(1));
+            assert_ne!(signer_id, unknown_signer_id);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
 
-                let result = verifier.verify_sig_share(unknown_signer_id, &inputs, &sig_share);
+            let result = verifier.verify_sig_share(unknown_signer_id, &inputs, &sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidArgumentMissingSignerInTranscript {signer_id})
-                        if signer_id == unknown_signer_id
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidArgumentMissingSignerInTranscript {signer_id})
+                    if signer_id == unknown_signer_id
+            );
         }
     }
 
@@ -567,24 +521,21 @@ mod verify_sig_share {
     fn should_fail_deserializing_invalid_sig_share() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
-                let signer_id = random_receiver_id(inputs.receivers(), rng);
-                let invalid_sig_share = ThresholdEcdsaSigShare {
-                    sig_share_raw: Vec::new(),
-                };
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
+            let signer_id = random_receiver_id(inputs.receivers(), rng);
+            let invalid_sig_share = ThresholdEcdsaSigShare {
+                sig_share_raw: Vec::new(),
+            };
 
-                let result = verifier.verify_sig_share(signer_id, &inputs, &invalid_sig_share);
+            let result = verifier.verify_sig_share(signer_id, &inputs, &invalid_sig_share);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::SerializationError { .. })
-                )
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::SerializationError { .. })
+            )
         }
     }
 
@@ -592,43 +543,39 @@ mod verify_sig_share {
     fn should_fail_when_key_internal_transcript_raw_switched() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, dealers, receivers) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let (signer_id, sig_share) =
-                    signature_share_from_random_receiver(&env, &inputs, rng);
-                let verifier = env
-                    .nodes
-                    .random_filtered_by_receivers(inputs.receivers(), rng);
-                let inputs_with_other_key_internal_transcript_raw = {
-                    let another_key_transcript =
-                        generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                    assert_ne!(inputs.key_transcript(), &another_key_transcript);
-                    let key_transcript_with_other_internal_raw = IDkgTranscript {
-                        internal_transcript_raw: another_key_transcript.internal_transcript_raw,
-                        ..inputs.key_transcript().clone()
-                    };
-                    ThresholdEcdsaSigInputs::new(
-                        inputs.derivation_path(),
-                        inputs.hashed_message(),
-                        *inputs.nonce(),
-                        inputs.presig_quadruple().clone(),
-                        key_transcript_with_other_internal_raw,
-                    )
-                    .expect("invalid ECDSA inputs")
+            let (env, inputs, dealers, receivers) = environment_with_sig_inputs(1..10, alg, rng);
+            let (signer_id, sig_share) = signature_share_from_random_receiver(&env, &inputs, rng);
+            let verifier = env
+                .nodes
+                .random_filtered_by_receivers(inputs.receivers(), rng);
+            let inputs_with_other_key_internal_transcript_raw = {
+                let another_key_transcript =
+                    generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+                assert_ne!(inputs.key_transcript(), &another_key_transcript);
+                let key_transcript_with_other_internal_raw = IDkgTranscript {
+                    internal_transcript_raw: another_key_transcript.internal_transcript_raw,
+                    ..inputs.key_transcript().clone()
                 };
+                ThresholdEcdsaSigInputs::new(
+                    inputs.derivation_path(),
+                    inputs.hashed_message(),
+                    *inputs.nonce(),
+                    inputs.presig_quadruple().clone(),
+                    key_transcript_with_other_internal_raw,
+                )
+                .expect("invalid ECDSA inputs")
+            };
 
-                let result = verifier.verify_sig_share(
-                    signer_id,
-                    &inputs_with_other_key_internal_transcript_raw,
-                    &sig_share,
-                );
+            let result = verifier.verify_sig_share(
+                signer_id,
+                &inputs_with_other_key_internal_transcript_raw,
+                &sig_share,
+            );
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifySigShareError::InvalidSignatureShare)
+            );
         }
     }
 
@@ -642,7 +589,7 @@ mod verify_sig_share {
             .random_filtered_by_receivers(inputs.receivers(), rng);
         signer.load_tecdsa_sig_transcripts(inputs);
         let sig_share = signer
-            .sign_share(inputs)
+            .create_sig_share(inputs)
             .expect("failed to generate sig share");
         (signer.id(), sig_share)
     }
@@ -655,17 +602,13 @@ mod combine_sig_shares {
     fn should_combine_sig_shares_successfully() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner = random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result = combiner.combine_sig_shares(&inputs, &sig_shares);
+            let result = combiner.combine_sig_shares(&inputs, &sig_shares);
 
-                assert_matches!(result, Ok(_));
-            }
+            assert_matches!(result, Ok(_));
         }
     }
 
@@ -673,24 +616,20 @@ mod combine_sig_shares {
     fn should_fail_combining_sig_shares_with_insufficient_shares() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let insufficient_sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs)
-                    .into_iter()
-                    .take(inputs.reconstruction_threshold().get() as usize - 1)
-                    .collect();
-                let combiner =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let insufficient_sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs)
+                .into_iter()
+                .take(inputs.reconstruction_threshold().get() as usize - 1)
+                .collect();
+            let combiner = random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result = combiner.combine_sig_shares(&inputs, &insufficient_sig_shares);
+            let result = combiner.combine_sig_shares(&inputs, &insufficient_sig_shares);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {threshold, share_count})
-                        if threshold == inputs.reconstruction_threshold().get() && share_count == (threshold as usize - 1)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {threshold, share_count})
+                    if threshold == inputs.reconstruction_threshold().get() && share_count == (threshold as usize - 1)
+            );
         }
     }
 }
@@ -704,22 +643,19 @@ mod verify_combined_sig {
     fn should_verify_combined_sig() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
-                let signature = combiner_crypto_component
-                    .combine_sig_shares(&inputs, &sig_shares)
-                    .expect("Failed to generate signature");
-                let verifier_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let signature = combiner_crypto_component
+                .combine_sig_shares(&inputs, &sig_shares)
+                .expect("Failed to generate signature");
+            let verifier_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result = verifier_crypto_component.verify_combined_sig(&inputs, &signature);
+            let result = verifier_crypto_component.verify_combined_sig(&inputs, &signature);
 
-                assert_eq!(result, Ok(()));
-            }
+            assert_eq!(result, Ok(()));
         }
     }
 
@@ -727,27 +663,24 @@ mod verify_combined_sig {
     fn should_fail_verifying_corrupted_combined_sig() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
-                let corrupted_signature = combiner_crypto_component
-                    .combine_sig_shares(&inputs, &sig_shares)
-                    .expect("Failed to generate signature")
-                    .clone_with_bit_flipped();
-                let verifier_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let corrupted_signature = combiner_crypto_component
+                .combine_sig_shares(&inputs, &sig_shares)
+                .expect("Failed to generate signature")
+                .clone_with_bit_flipped();
+            let verifier_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result =
-                    verifier_crypto_component.verify_combined_sig(&inputs, &corrupted_signature);
+            let result =
+                verifier_crypto_component.verify_combined_sig(&inputs, &corrupted_signature);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
+            );
         }
     }
 
@@ -755,27 +688,24 @@ mod verify_combined_sig {
     fn should_fail_deserializing_signature_with_invalid_length() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
-                let mut corrupted_signature = combiner_crypto_component
-                    .combine_sig_shares(&inputs, &sig_shares)
-                    .expect("Failed to generate signature");
-                corrupted_signature.signature.pop();
-                let verifier_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let mut corrupted_signature = combiner_crypto_component
+                .combine_sig_shares(&inputs, &sig_shares)
+                .expect("Failed to generate signature");
+            corrupted_signature.signature.pop();
+            let verifier_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result =
-                    verifier_crypto_component.verify_combined_sig(&inputs, &corrupted_signature);
+            let result =
+                verifier_crypto_component.verify_combined_sig(&inputs, &corrupted_signature);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifyCombinedSignatureError::SerializationError { .. })
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifyCombinedSignatureError::SerializationError { .. })
+            );
         }
     }
 
@@ -783,46 +713,41 @@ mod verify_combined_sig {
     fn should_fail_when_key_internal_transcript_raw_switched() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, dealers, receivers) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
-                let signature = combiner_crypto_component
-                    .combine_sig_shares(&inputs, &sig_shares)
-                    .expect("Failed to generate signature");
-                let verifier_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, dealers, receivers) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let signature = combiner_crypto_component
+                .combine_sig_shares(&inputs, &sig_shares)
+                .expect("Failed to generate signature");
+            let verifier_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let inputs_with_other_key_internal_transcript_raw = {
-                    let another_key_transcript =
-                        generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                    assert_ne!(inputs.key_transcript(), &another_key_transcript);
-                    let key_transcript_with_other_internal_raw = IDkgTranscript {
-                        internal_transcript_raw: another_key_transcript.internal_transcript_raw,
-                        ..inputs.key_transcript().clone()
-                    };
-                    ThresholdEcdsaSigInputs::new(
-                        inputs.derivation_path(),
-                        inputs.hashed_message(),
-                        *inputs.nonce(),
-                        inputs.presig_quadruple().clone(),
-                        key_transcript_with_other_internal_raw,
-                    )
-                    .expect("invalid ECDSA inputs")
+            let inputs_with_other_key_internal_transcript_raw = {
+                let another_key_transcript =
+                    generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+                assert_ne!(inputs.key_transcript(), &another_key_transcript);
+                let key_transcript_with_other_internal_raw = IDkgTranscript {
+                    internal_transcript_raw: another_key_transcript.internal_transcript_raw,
+                    ..inputs.key_transcript().clone()
                 };
+                ThresholdEcdsaSigInputs::new(
+                    inputs.derivation_path(),
+                    inputs.hashed_message(),
+                    *inputs.nonce(),
+                    inputs.presig_quadruple().clone(),
+                    key_transcript_with_other_internal_raw,
+                )
+                .expect("invalid ECDSA inputs")
+            };
 
-                let result = verifier_crypto_component.verify_combined_sig(
-                    &inputs_with_other_key_internal_transcript_raw,
-                    &signature,
-                );
+            let result = verifier_crypto_component
+                .verify_combined_sig(&inputs_with_other_key_internal_transcript_raw, &signature);
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
+            );
         }
     }
 
@@ -830,28 +755,24 @@ mod verify_combined_sig {
     fn should_fail_verifying_combined_sig_for_inputs_with_wrong_hash() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let combiner =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
-                let signature = combiner
-                    .combine_sig_shares(&inputs, &sig_shares)
-                    .expect("Failed to generate signature");
-                let verifier_crypto_component =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+            let combiner = random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let signature = combiner
+                .combine_sig_shares(&inputs, &sig_shares)
+                .expect("Failed to generate signature");
+            let verifier_crypto_component =
+                random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                let result = verifier_crypto_component.verify_combined_sig(
-                    &inputs.into_builder().corrupt_hashed_message().build(),
-                    &signature,
-                );
+            let result = verifier_crypto_component.verify_combined_sig(
+                &inputs.into_builder().corrupt_hashed_message().build(),
+                &signature,
+            );
 
-                assert_matches!(
-                    result,
-                    Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
-                );
-            }
+            assert_matches!(
+                result,
+                Err(ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature)
+            );
         }
     }
 
@@ -859,15 +780,11 @@ mod verify_combined_sig {
     fn should_run_threshold_ecdsa_protocol_with_single_node() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..=1, alg, use_random_unmasked_kappa, rng);
-                let signature = run_tecdsa_protocol(&env, &inputs, rng);
-                let verifier =
-                    random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..=1, alg, rng);
+            let signature = run_tecdsa_protocol(&env, &inputs, rng);
+            let verifier = random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
-                assert_eq!(verifier.verify_combined_sig(&inputs, &signature), Ok(()));
-            }
+            assert_eq!(verifier.verify_combined_sig(&inputs, &signature), Ok(()));
         }
     }
 
@@ -878,53 +795,47 @@ mod verify_combined_sig {
 
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for use_random_unmasked_kappa in [false, true] {
-                let (env, inputs, _, _) =
-                    environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let combined_sig = run_tecdsa_protocol(&env, &inputs, rng);
-                let master_public_key =
-                    get_master_public_key_from_transcript(inputs.key_transcript())
-                        .expect("Master key extraction failed");
-                let canister_public_key =
-                    derive_threshold_public_key(&master_public_key, inputs.derivation_path())
-                        .expect("Public key derivation failed");
+            let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
+            let combined_sig = run_tecdsa_protocol(&env, &inputs, rng);
+            let master_public_key = get_master_public_key_from_transcript(inputs.key_transcript())
+                .expect("Master key extraction failed");
+            let canister_public_key =
+                derive_threshold_public_key(&master_public_key, inputs.derivation_path())
+                    .expect("Public key derivation failed");
 
-                match alg {
-                    AlgorithmId::ThresholdEcdsaSecp256k1 => {
-                        let ecdsa_sig = ecdsa_secp256k1::types::SignatureBytes(
-                            <[u8; 64]>::try_from(combined_sig.signature)
-                                .expect("Expected 64 bytes"),
-                        );
-                        let ecdsa_pk =
-                            ecdsa_secp256k1::types::PublicKeyBytes(canister_public_key.public_key);
+            match alg {
+                AlgorithmId::ThresholdEcdsaSecp256k1 => {
+                    let ecdsa_sig = ecdsa_secp256k1::types::SignatureBytes(
+                        <[u8; 64]>::try_from(combined_sig.signature).expect("Expected 64 bytes"),
+                    );
+                    let ecdsa_pk =
+                        ecdsa_secp256k1::types::PublicKeyBytes(canister_public_key.public_key);
 
-                        assert_eq!(
-                            ecdsa_secp256k1::api::verify(
-                                &ecdsa_sig,
-                                inputs.hashed_message(),
-                                &ecdsa_pk
-                            ),
-                            Ok(()),
-                            "ECDSA sig verification failed"
-                        );
-                    }
-                    AlgorithmId::ThresholdEcdsaSecp256r1 => {
-                        let ecdsa_sig = ecdsa_secp256r1::types::SignatureBytes(
-                            <[u8; 64]>::try_from(combined_sig.signature)
-                                .expect("Expected 64 bytes"),
-                        );
-                        let ecdsa_pk =
-                            ecdsa_secp256r1::types::PublicKeyBytes(canister_public_key.public_key);
+                    assert_eq!(
+                        ecdsa_secp256k1::api::verify(
+                            &ecdsa_sig,
+                            inputs.hashed_message(),
+                            &ecdsa_pk
+                        ),
+                        Ok(()),
+                        "ECDSA sig verification failed"
+                    );
+                }
+                AlgorithmId::ThresholdEcdsaSecp256r1 => {
+                    let ecdsa_sig = ecdsa_secp256r1::types::SignatureBytes(
+                        <[u8; 64]>::try_from(combined_sig.signature).expect("Expected 64 bytes"),
+                    );
+                    let ecdsa_pk =
+                        ecdsa_secp256r1::types::PublicKeyBytes(canister_public_key.public_key);
 
-                        assert_eq!(
-                            ecdsa_secp256r1::verify(&ecdsa_sig, inputs.hashed_message(), &ecdsa_pk),
-                            Ok(()),
-                            "ECDSA sig verification failed"
-                        );
-                    }
-                    unexpected => {
-                        panic!("Unhandled ECDSA algorithm {}", unexpected)
-                    }
+                    assert_eq!(
+                        ecdsa_secp256r1::verify(&ecdsa_sig, inputs.hashed_message(), &ecdsa_pk),
+                        Ok(()),
+                        "ECDSA sig verification failed"
+                    );
+                }
+                unexpected => {
+                    panic!("Unhandled ECDSA algorithm {}", unexpected)
                 }
             }
         }

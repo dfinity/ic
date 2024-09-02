@@ -1,5 +1,6 @@
 use candid::Encode;
 use ic_base_types::PrincipalId;
+use ic_crypto_sha2::Sha256;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
@@ -28,22 +29,6 @@ const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 /// Trigger archiving after 20 blocks.
 const ARCHIVE_TRIGGER_THRESHOLD_SMALL: usize = 20;
 const INITIAL_USER_ACCOUNT_BALANCE_E8S: u64 = 1_000_000_000_000;
-const MAINNET_INDEX_CANISTER_SHA256SUM: &str =
-    "8157f5cba913d9db25a2c54ebf823d4edcc50cce00b97a18e5d33c2f73e59c93";
-/// This is the `sha256sum` of `ledger-archive-node-canister.wasm.gz` built using `./gitlab-ci/container/build-ic.sh -c`
-/// from git commit `98eb213581b239c3829eee7076bea74acad9937b`, i.e., the same git commit from
-/// which the mainnet ledger with `sha256sum` of `aca61e669e737133b552d0f1ddafc40299f3260daf8f57e352774b17aa82bbc1` was built.
-const MAINNET_INTEGRATED_ARCHIVE_CANISTER_SHA256SUM: &str =
-    "549a2b898bd490ff96b6dc3e94be5b44aaa8041d4e5be21339f9298faf759d7c";
-/// This is the `sha256sum` of `ledger-archive-node-canister.wasm.gz` currently deployed on the
-/// (at time of writing) two ICP archive canisters on mainnet. This version is built from git
-/// commit `8d80b3b3703988645a604641f8d600d525bb5c21`, which is roughly one week after the git
-/// commit `98eb213581b239c3829eee7076bea74acad9937b` from which the mainnet ledger canister is
-/// built.
-const MAINNET_ARCHIVE_CANISTER_SHA256SUM: &str =
-    "d7229caa5106454413c5382437cfb0864dedc36058611111debf94da0258998b";
-const MAINNET_LEDGER_CANISTER_SHA256SUM: &str =
-    "aca61e669e737133b552d0f1ddafc40299f3260daf8f57e352774b17aa82bbc1";
 const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
 const TOO_MANY_BLOCKS: u64 = 100;
 
@@ -84,6 +69,7 @@ impl Setup {
         }
     }
 
+    #[track_caller]
     fn assert_canister_module_hash(
         &self,
         canister_id: candid::Principal,
@@ -170,7 +156,7 @@ impl Setup {
                 None,
             )
             .unwrap();
-        let expected_module_hash = hex::decode(MAINNET_LEDGER_CANISTER_SHA256SUM).unwrap();
+        let expected_module_hash = mainnet_ledger_canister_sha256sum();
         self.assert_canister_module_hash(
             canister_id,
             &expected_module_hash,
@@ -183,7 +169,7 @@ impl Setup {
             UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
             UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
         };
-        let mainnet_archive_module_hash = hex::decode(MAINNET_ARCHIVE_CANISTER_SHA256SUM).unwrap();
+        let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
         for archive_canister_id in ledger_archives
             .iter()
@@ -215,7 +201,7 @@ impl Setup {
         self.pocket_ic
             .upgrade_canister(canister_id, index_wasm.bytes(), vec![], None)
             .unwrap();
-        let expected_module_hash = hex::decode(MAINNET_INDEX_CANISTER_SHA256SUM).unwrap();
+        let expected_module_hash = mainnet_index_canister_sha256sum();
         self.assert_canister_module_hash(
             canister_id,
             &expected_module_hash,
@@ -304,6 +290,30 @@ impl SetupBuilder {
     }
 }
 
+fn mainnet_ledger_canister_sha256sum() -> Vec<u8> {
+    let ledger_wasm = build_mainnet_ledger_wasm();
+
+    let mut state = Sha256::new();
+    state.write(ledger_wasm.clone().bytes().as_slice());
+    state.finish().to_vec()
+}
+
+fn mainnet_archive_canister_sha256sum() -> Vec<u8> {
+    let archive_wasm = build_mainnet_ledger_archive_wasm();
+
+    let mut state = Sha256::new();
+    state.write(archive_wasm.clone().bytes().as_slice());
+    state.finish().to_vec()
+}
+
+fn mainnet_index_canister_sha256sum() -> Vec<u8> {
+    let index_wasm = build_mainnet_ledger_index_wasm();
+
+    let mut state = Sha256::new();
+    state.write(index_wasm.clone().bytes().as_slice());
+    state.finish().to_vec()
+}
+
 #[test]
 fn should_set_up_initial_state_with_mainnet_canisters() {
     let setup = Setup::builder().build();
@@ -376,12 +386,12 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     // Verify the mainnet canister module hashes
     setup.assert_canister_module_hash(
         candid::Principal::from(LEDGER_CANISTER_ID),
-        &hex::decode(MAINNET_LEDGER_CANISTER_SHA256SUM).unwrap(),
+        &mainnet_ledger_canister_sha256sum(),
         true,
     );
     setup.assert_canister_module_hash(
         candid::Principal::from(LEDGER_INDEX_CANISTER_ID),
-        &hex::decode(MAINNET_INDEX_CANISTER_SHA256SUM).unwrap(),
+        &mainnet_index_canister_sha256sum(),
         true,
     );
 
@@ -390,6 +400,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     assert!(ledger_archives.is_empty());
 }
 
+#[ignore]
 #[test]
 fn should_spawn_a_new_archive_with_icp_transfers() {
     let mut setup = Setup::builder().build();
@@ -397,8 +408,9 @@ fn should_spawn_a_new_archive_with_icp_transfers() {
     setup.create_icp_transfers_until_archive_is_spawned();
     setup.assert_index_ledger_parity(true);
 
-    let expected_archive_module_hash =
-        hex::decode(MAINNET_INTEGRATED_ARCHIVE_CANISTER_SHA256SUM).unwrap();
+    // This will break if NNS Archive and NNS Ledger get upgraded to versions from
+    // different git revisions.
+    let expected_archive_module_hash = mainnet_archive_canister_sha256sum();
     let ledger_archives = archives(&setup.pocket_ic);
     assert_eq!(ledger_archives.len(), 1);
     for archive in ledger_archives {

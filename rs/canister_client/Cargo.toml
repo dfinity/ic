@@ -8,25 +8,28 @@ documentation.workspace = true
 
 [dependencies]
 backoff = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
+futures-util = { workspace = true }
+hyper = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
 ic-canister-client-sender = { path = "./sender" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-certification = { path = "../certification" }
+ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-ic-protobuf = { path = "../protobuf" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
-futures-util = { workspace = true }
-hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
-hyper-rustls = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
@@ -37,6 +40,6 @@ ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-validator = { path = "../validator" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 tokio-test = "0.4.0"

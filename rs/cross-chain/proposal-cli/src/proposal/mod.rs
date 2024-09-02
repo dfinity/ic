@@ -12,8 +12,17 @@ pub struct UpgradeProposalTemplate {
     pub to: GitCommitHash,
     pub compressed_wasm_hash: CompressedWasmHash,
     pub canister_id: Principal,
+    pub last_upgrade_proposal_id: Option<u64>,
     pub upgrade_args: UpgradeArgs,
     pub release_notes: ReleaseNotes,
+}
+
+impl UpgradeProposalTemplate {
+    pub fn previous_upgrade_proposal_url(&self) -> String {
+        self.last_upgrade_proposal_id
+            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{}", id))
+            .unwrap_or_else(|| "None".to_string())
+    }
 }
 
 #[derive(Template)]
@@ -58,6 +67,20 @@ impl ProposalTemplate {
             ProposalTemplate::Install(template) => template.render(),
         }
         .expect("failed to render proposal template")
+    }
+
+    pub fn canister_id(&self) -> &Principal {
+        match self {
+            ProposalTemplate::Upgrade(template) => &template.canister_id,
+            ProposalTemplate::Install(template) => &template.canister_id,
+        }
+    }
+
+    pub fn compressed_wasm_hash(&self) -> &CompressedWasmHash {
+        match self {
+            ProposalTemplate::Upgrade(template) => &template.compressed_wasm_hash,
+            ProposalTemplate::Install(template) => &template.compressed_wasm_hash,
+        }
     }
 
     pub fn target_canister(&self) -> &TargetCanister {

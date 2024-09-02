@@ -12,11 +12,12 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    registry::{encode_or_panic, get_value, mutate_registry},
+    registry::{get_value, mutate_registry},
     types::CallCanisterProposal,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
@@ -24,6 +25,7 @@ use ic_protobuf::{
 };
 use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
     let key = make_nns_canister_records_key().into_bytes();
@@ -67,7 +69,7 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
         vec![RegistryMutation {
             mutation_type: Type::Update as i32,
             key: key.clone(),
-            value: encode_or_panic(&nns_canister_records),
+            value: nns_canister_records.encode_to_vec(),
         }],
         vec![Precondition {
             key: key.clone(),
@@ -92,7 +94,7 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
         vec![RegistryMutation {
             mutation_type: Type::Update as i32,
             key: key.clone(),
-            value: encode_or_panic(&nns_canister_records),
+            value: nns_canister_records.encode_to_vec(),
         }],
         vec![Precondition {
             key: key.clone(),
@@ -216,6 +218,30 @@ pub async fn change_canister_controllers(
         Ok(()) => ChangeCanisterControllersResponse::ok(),
         Err((code, description)) => {
             ChangeCanisterControllersResponse::error(Some(code), description)
+        }
+    }
+}
+
+pub async fn update_canister_settings(
+    update_canister_settings_request: UpdateCanisterSettingsRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> UpdateCanisterSettingsResponse {
+    let update_settings_args = UpdateSettings {
+        canister_id: update_canister_settings_request.canister_id,
+        settings: update_canister_settings_request.settings,
+        sender_canister_version: management_canister_client.canister_version(),
+    };
+
+    match management_canister_client
+        .update_settings(update_settings_args)
+        .await
+    {
+        Ok(()) => UpdateCanisterSettingsResponse::Ok(()),
+        Err((code, description)) => {
+            UpdateCanisterSettingsResponse::Err(UpdateCanisterSettingsError {
+                code: Some(code),
+                description,
+            })
         }
     }
 }

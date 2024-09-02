@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -13,14 +13,15 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/neurons_fund",
-    "//rs/nervous_system/runtime",
     "//rs/nervous_system/proto",
-    "//rs/rosetta-api/ledger_core",
+    "//rs/nervous_system/runtime",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
@@ -53,21 +54,25 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
     "@crate_index//:build-info-build",
     "@crate_index//:prost-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
@@ -115,16 +120,6 @@ rust_library(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":swap",
-    ],
-)
-
 rust_canister(
     name = "sns-swap-canister",
     srcs = ["canister/canister.rs"],
@@ -147,12 +142,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-swap-canister",
-    data = ["canister/swap.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/swap",
-    },
-    deps = ["@crate_index//:tokio"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/swap.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
 )
 
 rust_test_suite_with_extra_srcs(
@@ -184,6 +181,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/sns/swap",
     deps = [
+        # Keep sorted.
         "//rs/sns/swap/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

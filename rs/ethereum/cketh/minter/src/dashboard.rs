@@ -125,7 +125,8 @@ impl DashboardPendingDeposit {
             token_symbol: match event {
                 ReceivedEvent::Eth(_) => CkTokenSymbol::cketh_symbol_from_state(state),
                 ReceivedEvent::Erc20(e) => state
-                    .ckerc20_token_symbol(&e.erc20_contract_address)
+                    .ckerc20_tokens
+                    .get_alt(&e.erc20_contract_address)
                     .expect("BUG: unknown ERC-20 token")
                     .clone(),
             },
@@ -150,7 +151,7 @@ pub struct DashboardTemplate {
     pub last_eth_synced_block: BlockNumber,
     pub last_erc20_synced_block: Option<BlockNumber>,
     pub last_observed_block: Option<BlockNumber>,
-    pub ledger_id: Principal,
+    pub cketh_ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
     pub pending_deposits: Vec<DashboardPendingDeposit>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
@@ -159,7 +160,7 @@ pub struct DashboardTemplate {
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<DashboardReimbursedTransaction>,
     pub eth_balance: EthBalance,
-    pub skipped_blocks: BTreeSet<BlockNumber>,
+    pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
 }
 
@@ -204,16 +205,20 @@ impl DashboardTemplate {
                     token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
                     created_at: req.created_at,
                 },
-                WithdrawalRequest::CkErc20(req) => DashboardWithdrawalRequest {
-                    cketh_ledger_burn_index: req.cketh_ledger_burn_index,
-                    destination: req.destination,
-                    value: req.withdrawal_amount.into(),
-                    token_symbol: state
-                        .ckerc20_token_symbol(&req.erc20_contract_address)
-                        .expect("BUG: unknown ERC-20 token")
-                        .clone(),
-                    created_at: Some(req.created_at),
-                },
+                WithdrawalRequest::CkErc20(req) => {
+                    let erc20_contract_address = &req.erc20_contract_address;
+                    DashboardWithdrawalRequest {
+                        cketh_ledger_burn_index: req.cketh_ledger_burn_index,
+                        destination: req.destination,
+                        value: req.withdrawal_amount.into(),
+                        token_symbol: state
+                            .ckerc20_tokens
+                            .get_alt(erc20_contract_address)
+                            .expect("BUG: unknown ERC-20 token")
+                            .clone(),
+                        created_at: Some(req.created_at),
+                    }
+                }
             })
             .collect();
         withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index));
@@ -284,7 +289,8 @@ impl DashboardTemplate {
                     } => (
                         *cketh_ledger_burn_index,
                         state
-                            .ckerc20_token_symbol_for_ledger(ledger_id)
+                            .ckerc20_tokens
+                            .get(ledger_id)
                             .expect("BUG: unknown ERC-20 token")
                             .clone(),
                     ),
@@ -322,7 +328,7 @@ impl DashboardTemplate {
             erc20_helper_contract_address: state
                 .erc20_helper_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
-            ledger_id: state.ledger_id,
+            cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
@@ -339,7 +345,11 @@ impl DashboardTemplate {
             finalized_transactions,
             reimbursed_transactions,
             eth_balance: state.eth_balance.clone(),
-            skipped_blocks: state.skipped_blocks.clone(),
+            skipped_blocks: state
+                .skipped_blocks
+                .iter()
+                .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
+                .collect(),
             supported_ckerc20_tokens,
         }
     }
@@ -357,7 +367,8 @@ fn to_dashboard_transaction<T: AsRef<Eip1559TransactionRequest>>(
         let destination = to;
         let value = value.into();
         let token_symbol = state
-            .ckerc20_token_symbol(&tx.destination)
+            .ckerc20_tokens
+            .get_alt(&tx.destination)
             .expect("BUG: unknown ERC-20 token")
             .clone();
         (destination, value, token_symbol)

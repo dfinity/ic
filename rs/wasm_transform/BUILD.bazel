@@ -3,11 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:wasm-encoder",
     "@crate_index//:wasmparser",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:wasmprinter",
     "@crate_index//:wat",
 ]

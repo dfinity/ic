@@ -12,7 +12,7 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::CallServiceBuilder;
+use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -25,7 +25,7 @@ use libfuzzer_sys::fuzz_target;
 use std::{
     convert::Infallible,
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 use tokio::{
     runtime::Runtime,
@@ -196,25 +196,23 @@ fn new_call_service(
     let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
-
+    let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
+        node_test_id(1),
+        subnet_test_id(1),
+        Arc::clone(&mock_registry_client),
+        sig_verifier,
+        Arc::new(Mutex::new(ingress_filter)),
+        ingress_throttler,
+        ingress_tx,
+    )
+    .build();
     let call_service = BoxCloneService::new(
         ServiceBuilder::new()
             .layer(GlobalConcurrencyLimitLayer::new(
                 config.max_call_concurrent_requests,
             ))
-            .service(
-                CallServiceBuilder::builder(
-                    node_test_id(1),
-                    subnet_test_id(1),
-                    Arc::clone(&mock_registry_client),
-                    sig_verifier,
-                    ingress_filter,
-                    ingress_throttler,
-                    ingress_tx,
-                )
-                .with_logger(log.clone())
-                .build_service(),
-            ),
+            .service(call_v2::new_service(call_handler)),
     );
     (ingress_filter_handle, call_service)
 }

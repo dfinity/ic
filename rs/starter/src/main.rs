@@ -25,10 +25,6 @@ use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     crypto::CryptoConfig,
-    embedders::Config as EmbeddersConfig,
-    embedders::FeatureFlags,
-    execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     metrics::{Config as MetricsConfig, Exporter},
@@ -38,16 +34,16 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_starter::hypervisor_config;
 use ic_types::{Height, ReplicaVersion};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -97,15 +93,26 @@ fn main() -> Result<()> {
             },
         );
 
-        let ecdsa_config = config.ecdsa_keyid.clone().map(|key_id| EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![(&key_id).into()],
-            max_queue_size: 64,
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
-
-        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+        let chain_key_config = if !config.chain_key_ids.is_empty() {
+            Some(
+                ChainKeyConfig {
+                    key_configs: config
+                        .chain_key_ids
+                        .iter()
+                        .map(|key_id| KeyConfig {
+                            key_id: key_id.clone(),
+                            max_queue_size: 64,
+                            pre_signatures_to_create_in_advance: 1,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                }
+                .into(),
+            )
+        } else {
+            None
+        };
 
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
@@ -126,7 +133,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                ecdsa_config,
                 chain_key_config,
                 None,
                 vec![],
@@ -265,10 +271,6 @@ struct CliArgs {
                 ignore_case = true)]
     log_level: Option<String>,
 
-    /// Debug overrides to show debug logs for certain components.
-    #[clap(long = "debug-overrides", multiple_values(true))]
-    debug_overrides: Vec<String>,
-
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
     #[clap(long = "metrics-port")]
     metrics_port: Option<u16>,
@@ -321,6 +323,11 @@ struct CliArgs {
     /// Enable ecdsa signature by assigning the given key id a freshly generated key.
     #[clap(long = "ecdsa-keyid")]
     ecdsa_keyid: Option<String>,
+
+    /// Enable threshold signatures by assigning the given key id a freshly generated key. Key IDs have
+    /// the form `schnorr:[algorithm]:[name]` for tSchnorr, and `ecdsa:[curve]:[name]` for tECDSA
+    #[clap(long = "chain-key-ids")]
+    chain_key_ids: Vec<String>,
 
     /// Subnet type
     #[clap(long = "subnet-type",
@@ -456,12 +463,12 @@ impl CliArgs {
             Some(log_level) => match log_level.to_lowercase().as_str() {
                 // According to the principle of least surprise, accept also a
                 // few alternative log level names
-                "critical" => slog::Level::Critical,
-                "error" => slog::Level::Error,
-                "warning" => slog::Level::Warning,
-                "info" => slog::Level::Info,
-                "debug" => slog::Level::Debug,
-                "trace" => slog::Level::Trace,
+                "critical" => ic_config::logger::Level::Critical,
+                "error" => ic_config::logger::Level::Error,
+                "warning" => ic_config::logger::Level::Warning,
+                "info" => ic_config::logger::Level::Info,
+                "debug" => ic_config::logger::Level::Debug,
+                "trace" => ic_config::logger::Level::Trace,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -469,7 +476,7 @@ impl CliArgs {
                     ))
                 }
             },
-            None => slog::Level::Warning,
+            None => ic_config::logger::Level::Warning,
         };
 
         let artifact_pool_dir = node_dir.join("ic_consensus_pool");
@@ -515,11 +522,25 @@ impl CliArgs {
                 )
             })?;
 
+        let mut chain_key_ids = self
+            .chain_key_ids
+            .iter()
+            .map(|s| MasterPublicKeyId::from_str(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid chain_key_ids: {}", err),
+                )
+            })?;
+        if let Some(ecdsa_key_id) = ecdsa_keyid {
+            chain_key_ids.push(MasterPublicKeyId::Ecdsa(ecdsa_key_id));
+        }
+
         Ok(ValidatedConfig {
             replica_path,
             replica_version,
             log_level,
-            debug_overrides: self.debug_overrides.clone(),
             cargo_bin,
             cargo_opts,
             state_dir,
@@ -537,7 +558,7 @@ impl CliArgs {
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
-            ecdsa_keyid,
+            chain_key_ids,
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             https_outcalls_uds_path: self.canister_http_uds_path,
@@ -560,8 +581,7 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
 struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    log_level: slog::Level,
-    debug_overrides: Vec<String>,
+    log_level: ic_config::logger::Level,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -578,7 +598,7 @@ struct ValidatedConfig {
     dkg_interval_length: Option<Height>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
-    ecdsa_keyid: Option<EcdsaKeyId>,
+    chain_key_ids: Vec<MasterPublicKeyId>,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     https_outcalls_uds_path: Option<PathBuf>,
@@ -604,7 +624,9 @@ impl ValidatedConfig {
         let mut artifact_pool_cfg =
             ArtifactPoolTomlConfig::new(self.artifact_pool_dir.clone(), None);
         // artifact_pool.rs picks "lmdb" if None here
-        artifact_pool_cfg.consensus_pool_backend = self.consensus_pool_backend.clone();
+        artifact_pool_cfg
+            .consensus_pool_backend
+            .clone_from(&self.consensus_pool_backend);
         let artifact_pool = Some(artifact_pool_cfg);
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));
@@ -612,9 +634,7 @@ impl ValidatedConfig {
             local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
-            node_id: NODE_INDEX,
             level: self.log_level,
-            debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()
         };
         let logger = Some(logger_config);
@@ -626,30 +646,7 @@ impl ValidatedConfig {
             ..Default::default()
         });
 
-        let hypervisor_config = HypervisorConfig {
-            canister_sandboxing_flag: if self.subnet_features.canister_sandboxing {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
-            embedders_config: EmbeddersConfig {
-                feature_flags: FeatureFlags {
-                    rate_limiting_of_debug_prints: FlagStatus::Disabled,
-                    canister_logging: FlagStatus::Enabled,
-                    ..FeatureFlags::default()
-                },
-                ..EmbeddersConfig::default()
-            },
-            rate_limiting_of_heap_delta: FlagStatus::Disabled,
-            rate_limiting_of_instructions: FlagStatus::Disabled,
-            composite_queries: FlagStatus::Enabled,
-            wasm_chunk_store: FlagStatus::Enabled,
-            query_stats_aggregation: FlagStatus::Enabled,
-            query_stats_epoch_length: 60,
-            ..HypervisorConfig::default()
-        };
-
-        let hypervisor = Some(hypervisor_config);
+        let hypervisor = Some(hypervisor_config(self.subnet_features.canister_sandboxing));
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),

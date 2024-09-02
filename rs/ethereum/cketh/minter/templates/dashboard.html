@@ -119,9 +119,9 @@
                         <th>ERC20 helper contract address</th>
                         <td>{% call etherscan_address_link(erc20_helper_contract_address) %}</td>
                     </tr>
-                    <tr id="ledger-canister-id">
-                        <th>Ledger canister ID</th>
-                        <td><code>{{ ledger_id }}</code></td>
+                    <tr id="cketh-ledger-canister-id">
+                        <th>ckETH ledger canister ID</th>
+                        <td><code>{{ cketh_ledger_id }}</code></td>
                     </tr>
                     <tr id="tecdsa-key-name">
                         <th>tECDSA key name</th>
@@ -177,12 +177,14 @@
                     </tr>
                     {%- endif %}
                     {% if !skipped_blocks.is_empty() -%}
-                    <tr id="skipped-blocks">
-                        <th>Skipped blocks</th>
-                        <td>{% for block in skipped_blocks -%}
+                    {% for (contract_address, blocks) in skipped_blocks -%}
+                    <tr id="skipped-blocks-{{ contract_address }}">
+                        <th>Skipped blocks ({% call etherscan_address_link(contract_address) %})</th>
+                        <td>{% for block in blocks -%}
                             {% call etherscan_block_link(block) %}{% if !loop.last %}, {% endif %}
                             {%- endfor %}</td>
                     </tr>
+                    {%- endfor %}
                     {%- endif %}
                     <tr id="first-synced-block-number">
                         <th>First synced block number</th>

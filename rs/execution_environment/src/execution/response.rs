@@ -355,6 +355,10 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
+            .canister_log
+            .append(&mut output.canister_log);
+        self.canister
+            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -436,6 +440,10 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        self.canister
+            .system_state
+            .canister_log
+            .append(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -1109,8 +1117,8 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1204,8 +1212,8 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);

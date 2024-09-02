@@ -37,9 +37,7 @@ pub use inter_canister::{
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
-pub use query::{
-    AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, Query, QuerySource,
-};
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};
@@ -360,6 +358,15 @@ impl Display for CanisterMessage {
     }
 }
 
+impl From<RequestOrResponse> for CanisterMessage {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
+            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+        }
+    }
+}
+
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterCall {
@@ -442,6 +449,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 pub enum CanisterTask {
     Heartbeat = 1,
     GlobalTimer = 2,
+    OnLowWasmMemory = 3,
 }
 
 impl From<CanisterTask> for SystemMethod {
@@ -449,6 +457,7 @@ impl From<CanisterTask> for SystemMethod {
         match task {
             CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
             CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+            CanisterTask::OnLowWasmMemory => SystemMethod::CanisterOnLowWasmMemory,
         }
     }
 }
@@ -458,6 +467,7 @@ impl Display for CanisterTask {
         match self {
             Self::Heartbeat => write!(f, "Heartbeat task"),
             Self::GlobalTimer => write!(f, "Global timer task"),
+            Self::OnLowWasmMemory => write!(f, "On low Wasm memory task"),
         }
     }
 }
@@ -467,6 +477,7 @@ impl From<&CanisterTask> for pb::execution_task::CanisterTask {
         match task {
             CanisterTask::Heartbeat => pb::execution_task::CanisterTask::Heartbeat,
             CanisterTask::GlobalTimer => pb::execution_task::CanisterTask::Timer,
+            CanisterTask::OnLowWasmMemory => pb::execution_task::CanisterTask::OnLowWasmMemory,
         }
     }
 }
@@ -484,6 +495,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
             }
             pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
             pb::execution_task::CanisterTask::Timer => Ok(CanisterTask::GlobalTimer),
+            pb::execution_task::CanisterTask::OnLowWasmMemory => Ok(CanisterTask::OnLowWasmMemory),
         }
     }
 }
@@ -834,7 +846,7 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2]
+            [1, 2, 3]
         );
     }
 

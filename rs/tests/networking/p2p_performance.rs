@@ -1,33 +1,43 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::{
+    driver::{group::SystemTestGroup, simulate_network::ProductionSubnetTopology},
+    systest,
+};
 use ic_tests::networking::p2p_performance_workload::{config, test};
-use ic_tests::systest;
 
 // Test parameters
-const RPS: usize = 20;
-const PAYLOAD_SIZE_BYTES: usize = 100_000;
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
-const NNS_SUBNET_MAX_SIZE: usize = 5;
+const RPS: usize = 10;
+const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
+const NNS_SUBNET_MAX_SIZE: usize = 1;
 const APP_SUBNET_MAX_SIZE: usize = 13;
-const LATENCY: Option<Duration> = Some(Duration::from_millis(120));
-const DOWNLOAD_PROMETHEUS_DATA: bool = false;
+const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
+// Network topology
+const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
-    let config = |env| config(env, NNS_SUBNET_MAX_SIZE, APP_SUBNET_MAX_SIZE, None);
+    let config = |env| {
+        config(
+            env,
+            NNS_SUBNET_MAX_SIZE,
+            APP_SUBNET_MAX_SIZE,
+            NETWORK_SIMULATION,
+            None,
+        )
+    };
     let test = |env| {
         test(
             env,
             RPS,
             PAYLOAD_SIZE_BYTES,
             WORKLOAD_RUNTIME,
-            LATENCY,
             DOWNLOAD_PROMETHEUS_DATA,
         )
     };

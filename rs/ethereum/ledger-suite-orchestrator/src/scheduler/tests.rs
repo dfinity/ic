@@ -5,12 +5,12 @@ use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
-    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
-    State, WasmHash, INDEX_BYTECODE, LEDGER_BYTECODE,
+    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, LedgerSuiteVersion,
+    ManagedCanisterStatus, State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
 use candid::Principal;
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 
 const ORCHESTRATOR_PRINCIPAL: Principal = Principal::from_slice(&[0_u8; 29]);
 const LEDGER_PRINCIPAL: Principal = Principal::from_slice(&[1_u8; 29]);
@@ -148,7 +148,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
         })
         .unwrap(),
     );
-    register_embedded_wasms();
+    let _version = register_embedded_wasms();
 
     let mut runtime = MockCanisterRuntime::new();
 
@@ -568,11 +568,13 @@ mod discover_archives {
         dai, dai_metadata, usdc, usdc_metadata, usdt, usdt_metadata,
     };
     use crate::scheduler::tests::mock::MockCanisterRuntime;
-    use crate::scheduler::tests::{expect_call_canister_archives, init_state, LEDGER_PRINCIPAL};
-    use crate::scheduler::{Erc20Token, Task, TaskError, TaskExecution};
+    use crate::scheduler::tests::{
+        expect_call_canister_icrc3_get_archives, init_state, LEDGER_PRINCIPAL,
+    };
+    use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
     use crate::state::{mutate_state, read_state, Ledger};
     use candid::Principal;
-    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
 
     #[tokio::test]
     async fn should_discover_multiple_archives() {
@@ -584,13 +586,13 @@ mod discover_archives {
         });
 
         let first_archive = Principal::from_slice(&[4_u8; 29]);
-        let first_archive_info = ArchiveInfo {
+        let first_archive_info = ICRC3ArchiveInfo {
             canister_id: first_archive,
-            block_range_start: 0_u8.into(),
-            block_range_end: 1_u8.into(),
+            start: 0_u8.into(),
+            end: 1_u8.into(),
         };
         let mut runtime = MockCanisterRuntime::new();
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info.clone()]),
@@ -606,12 +608,12 @@ mod discover_archives {
         runtime.checkpoint();
 
         let second_archive = Principal::from_slice(&[5_u8; 29]);
-        let second_archive_info = ArchiveInfo {
+        let second_archive_info = ICRC3ArchiveInfo {
             canister_id: second_archive,
-            block_range_start: 2_u8.into(),
-            block_range_end: 3_u8.into(),
+            start: 2_u8.into(),
+            end: 3_u8.into(),
         };
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info, second_archive_info]),
@@ -627,9 +629,9 @@ mod discover_archives {
     #[tokio::test]
     async fn should_discover_archive_and_return_first_error() {
         init_state();
-        let (dai, dai_ledger) = (dai(), candid::Principal::from_slice(&[4_u8; 29]));
-        let (usdc, usdc_ledger) = (usdc(), candid::Principal::from_slice(&[5_u8; 29]));
-        let (usdt, usdt_ledger) = (usdt(), candid::Principal::from_slice(&[6_u8; 29]));
+        let (dai, dai_ledger) = (dai(), Principal::from_slice(&[4_u8; 29]));
+        let (usdc, usdc_ledger) = (usdc(), Principal::from_slice(&[5_u8; 29]));
+        let (usdt, usdt_ledger) = (usdt(), Principal::from_slice(&[6_u8; 29]));
         mutate_state(|s| {
             s.record_new_erc20_token(dai.clone(), dai_metadata());
             s.record_created_canister::<Ledger>(&dai, dai_ledger);
@@ -646,18 +648,18 @@ mod discover_archives {
             method: "dai error".to_string(),
             reason: Reason::OutOfCycles,
         };
-        expect_call_canister_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
+        expect_call_canister_icrc3_get_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
         let usdc_archive = Principal::from_slice(&[7_u8; 29]);
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             usdc_ledger,
-            Ok(vec![ArchiveInfo {
+            Ok(vec![ICRC3ArchiveInfo {
                 canister_id: usdc_archive,
-                block_range_start: 0_u8.into(),
-                block_range_end: 1_u8.into(),
+                start: 0_u8.into(),
+                end: 1_u8.into(),
             }]),
         );
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             usdt_ledger,
             Err(CallError {
@@ -672,7 +674,9 @@ mod discover_archives {
         };
         assert_eq!(
             discover_archives_task.execute(&runtime).await,
-            Err(TaskError::InterCanisterCallError(first_error))
+            Err(TaskError::DiscoverArchivesError(
+                DiscoverArchivesError::InterCanisterCallError(first_error)
+            ))
         );
         assert_eq!(archives_from_state(&dai), vec![]);
         assert_eq!(archives_from_state(&usdc), vec![usdc_archive]);
@@ -688,7 +692,8 @@ mod upgrade_ledger_suite {
     use crate::management::CallError;
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::{
-        execute_now, init_state, mock::MockCanisterRuntime, read_index_wasm_hash,
+        execute_now, expect_call_canister_icrc3_get_archives, init_state,
+        mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
         read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
     };
     use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, Erc20TokenNotFound};
@@ -697,11 +702,14 @@ mod upgrade_ledger_suite {
         UpgradeLedgerSuiteSubtask,
     };
     use crate::state::{
-        mutate_state, Index, Ledger, ManagedCanisterStatus, WasmHash, INDEX_BYTECODE,
-        LEDGER_BYTECODE,
+        mutate_state, Index, Ledger, ManagedCanisterStatus, WasmHash, ARCHIVE_NODE_BYTECODE,
+        INDEX_BYTECODE, LEDGER_BYTECODE,
     };
     use candid::Principal;
-    use UpgradeLedgerSuiteSubtask::{UpgradeArchives, UpgradeIndex, UpgradeLedger};
+    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
+    use UpgradeLedgerSuiteSubtask::{
+        DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
+    };
 
     #[test]
     fn should_upgrade_in_the_correct_order() {
@@ -761,10 +769,13 @@ mod upgrade_ledger_suite {
             .collect();
         assert_eq!(
             subtasks,
-            vec![UpgradeArchives {
-                contract: usdc(),
-                compressed_wasm_hash: archive_wasm_hash.clone()
-            }]
+            vec![
+                DiscoverArchives { contract: usdc() },
+                UpgradeArchives {
+                    contract: usdc(),
+                    compressed_wasm_hash: archive_wasm_hash.clone()
+                }
+            ]
         );
 
         let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
@@ -779,6 +790,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -798,6 +810,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: index_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -822,6 +835,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -838,24 +852,17 @@ mod upgrade_ledger_suite {
             .archive_wasm_hash(WasmHash::from([2_u8; 32]))
             .build();
 
-        assert_eq!(subtasks.size_hint(), (3, Some(3)));
-        assert_eq!(subtasks.len(), 3);
+        let mut expected_size: usize = 4;
+        assert_eq!(subtasks.size_hint(), (expected_size, Some(expected_size)));
+        assert_eq!(subtasks.len(), expected_size);
 
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (2, Some(2)));
-        assert_eq!(subtasks.len(), 2);
+        while subtasks.next().is_some() {
+            expected_size -= 1;
+            assert_eq!(subtasks.size_hint(), (expected_size, Some(expected_size)));
+            assert_eq!(subtasks.len(), expected_size);
+        }
 
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (1, Some(1)));
-        assert_eq!(subtasks.len(), 1);
-
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (0, Some(0)));
-        assert_eq!(subtasks.len(), 0);
-
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (0, Some(0)));
-        assert_eq!(subtasks.len(), 0);
+        assert_eq!(expected_size, 0);
     }
 
     #[tokio::test]
@@ -1040,6 +1047,109 @@ mod upgrade_ledger_suite {
         assert_eq!(result, Ok(()));
     }
 
+    #[tokio::test]
+    async fn should_upgrade_ledger_suite_with_archives() {
+        init_state();
+        let usdc = usdc();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+            s.record_installed_canister::<Ledger>(&usdc, WasmHash::default());
+            s.record_created_canister::<Index>(&usdc, INDEX_PRINCIPAL);
+            s.record_installed_canister::<Index>(&usdc, WasmHash::default());
+        });
+        let mut runtime = MockCanisterRuntime::new();
+        let task = Task::UpgradeLedgerSuite(
+            UpgradeLedgerSuite::builder(usdc)
+                .ledger_wasm_hash(read_ledger_wasm_hash())
+                .index_wasm_hash(read_index_wasm_hash())
+                .archive_wasm_hash(read_archive_wasm_hash())
+                .build(),
+        );
+
+        expect_stop_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            INDEX_PRINCIPAL,
+            INDEX_BYTECODE.to_vec(),
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
+
+        runtime.expect_time().times(1).return_const(0_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = execute_now(task.clone(), &runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(1_u64);
+        let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
+        runtime.checkpoint();
+
+        expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            LEDGER_BYTECODE.to_vec(),
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = upgrade_ledger_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(2_u64);
+        let discover_archive_task = pop_if_ready(&runtime).expect("missing discover archives task");
+        runtime.checkpoint();
+
+        let first_archive = Principal::from_slice(&[4_u8; 29]);
+        let first_archive_info = ICRC3ArchiveInfo {
+            canister_id: first_archive,
+            start: 0_u8.into(),
+            end: 1_u8.into(),
+        };
+        let second_archive = Principal::from_slice(&[5_u8; 29]);
+        let second_archive_info = ICRC3ArchiveInfo {
+            canister_id: second_archive,
+            start: 2_u8.into(),
+            end: 3_u8.into(),
+        };
+        expect_call_canister_icrc3_get_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info, second_archive_info]),
+        );
+        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = discover_archive_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(3_u64);
+        let upgrade_archives_task = pop_if_ready(&runtime).expect("missing upgrade archives task");
+        runtime.checkpoint();
+
+        for archive in [first_archive, second_archive] {
+            expect_stop_canister(&mut runtime, archive, Ok(()));
+            expect_upgrade_canister(
+                &mut runtime,
+                archive,
+                ARCHIVE_NODE_BYTECODE.to_vec(),
+                Ok(()),
+            );
+            expect_start_canister(&mut runtime, archive, Ok(()));
+        }
+        let result = upgrade_archives_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_queue_from_state(), vec![]);
+        runtime.checkpoint();
+    }
+
     fn expect_stop_canister(
         runtime: &mut MockCanisterRuntime,
         canister_id: Principal,
@@ -1079,10 +1189,18 @@ mod upgrade_ledger_suite {
 }
 
 mod run_task {
+    use crate::candid::AddCkErc20Token;
     use crate::guard::TimerGuard;
+    use crate::management::{CallError, Reason};
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
-    use crate::scheduler::tests::{init_state, task_deadline_from_state};
+    use crate::scheduler::tests::{
+        expect_call_canister_add_ckerc20_token, init_state, task_deadline_from_state,
+        task_queue_from_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+    };
     use crate::scheduler::{run_task, Task, TaskExecution};
+    use crate::state::{mutate_state, Ledger};
+    use candid::Nat;
     use std::time::Duration;
 
     #[tokio::test]
@@ -1109,6 +1227,144 @@ mod run_task {
             Some(Duration::from_secs(3_600).as_nanos() as u64)
         );
     }
+
+    #[tokio::test]
+    async fn should_reschedule_failed_task_with_recoverable_error() {
+        init_state();
+        record_added_usdc();
+        let task = notify_usdc_added_task();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Err(CallError {
+                method: "error".to_string(),
+                reason: Reason::OutOfCycles,
+            }),
+        );
+
+        run_task(task.clone(), runtime).await;
+
+        assert_eq!(
+            task_queue_from_state(),
+            vec![TaskExecution {
+                execute_at_ns: task.execute_at_ns + (Duration::from_secs(5).as_nanos() as u64),
+                ..task
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_not_reschedule_failed_task_with_irrecoverable_error() {
+        init_state();
+        record_added_usdc();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Err(CallError {
+                method: "error".to_string(),
+                reason: Reason::CanisterError("trap".to_string()),
+            }),
+        );
+
+        run_task(notify_usdc_added_task(), runtime).await;
+
+        assert_eq!(task_queue_from_state(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn should_reschedule_failed_task_in_case_of_unexpected_panic() {
+        use futures::FutureExt;
+
+        init_state();
+        record_added_usdc();
+        let task = notify_usdc_added_task();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        runtime
+            .expect_call_canister::<AddCkErc20Token, ()>()
+            .times(1)
+            .withf(move |_canister_id, method, _args: &AddCkErc20Token| {
+                method == "add_ckerc20_token"
+            })
+            .return_once(|_, _, _| panic!("unexpected panic"));
+
+        let task_cloned = task.clone();
+        let error = async move {
+            std::panic::AssertUnwindSafe(run_task(task_cloned, runtime))
+                .catch_unwind()
+                .await
+        }
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<&str>(),
+            Some("unexpected panic").as_ref()
+        );
+
+        assert_eq!(
+            task_queue_from_state(),
+            vec![TaskExecution {
+                execute_at_ns: task.execute_at_ns + (Duration::from_secs(5).as_nanos() as u64),
+                ..task
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_not_reschedule_successful_task() {
+        init_state();
+        record_added_usdc();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Ok(()),
+        );
+
+        run_task(notify_usdc_added_task(), runtime).await;
+
+        assert_eq!(task_queue_from_state(), vec![]);
+    }
+
+    fn record_added_usdc() {
+        let usdc = usdc();
+        let usdc_metadata = usdc_metadata();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+    }
+
+    fn notify_usdc_added_task() -> TaskExecution {
+        TaskExecution {
+            task_type: Task::NotifyErc20Added {
+                erc20_token: usdc(),
+                minter_id: MINTER_PRINCIPAL,
+            },
+            execute_at_ns: 0,
+        }
+    }
+
+    fn add_ckusdc() -> AddCkErc20Token {
+        AddCkErc20Token {
+            chain_id: Nat::from(1_u8),
+            address: usdc().address().to_string(),
+            ckerc20_token_symbol: usdc_metadata().ckerc20_token_symbol.clone(),
+            ckerc20_ledger_id: LEDGER_PRINCIPAL,
+        }
+    }
 }
 
 fn task_deadline_from_state(task: &Task) -> Option<u64> {
@@ -1127,10 +1383,10 @@ fn task_queue_from_state() -> Vec<TaskExecution> {
 
 fn init_state() {
     crate::state::init_state(new_state());
-    register_embedded_wasms();
+    let _version = register_embedded_wasms();
 }
 
-fn register_embedded_wasms() {
+fn register_embedded_wasms() -> LedgerSuiteVersion {
     mutate_wasm_store(|s| {
         record_icrc1_ledger_suite_wasms(s, 1_620_328_630_000_000_000, GitCommitHash::default())
     })
@@ -1140,6 +1396,7 @@ fn register_embedded_wasms() {
 fn usdc_install_args() -> InstallLedgerSuiteArgs {
     InstallLedgerSuiteArgs {
         contract: usdc(),
+        minter_id: MINTER_PRINCIPAL,
         ledger_init_arg: ledger_init_arg(),
         ledger_compressed_wasm_hash: read_ledger_wasm_hash(),
         index_compressed_wasm_hash: read_index_wasm_hash(),
@@ -1147,24 +1404,12 @@ fn usdc_install_args() -> InstallLedgerSuiteArgs {
 }
 
 fn ledger_init_arg() -> LedgerInitArg {
-    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
     LedgerInitArg {
-        minting_account: LedgerAccount {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        },
-        fee_collector_account: None,
-        initial_balances: vec![],
         transfer_fee: 10_000_u32.into(),
-        decimals: None,
+        decimals: 6,
         token_name: "Chain Key USDC".to_string(),
         token_symbol: "ckUSDC".to_string(),
         token_logo: "".to_string(),
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -1174,6 +1419,10 @@ fn read_index_wasm_hash() -> WasmHash {
 
 fn read_ledger_wasm_hash() -> WasmHash {
     WasmHash::from(ic_crypto_sha2::Sha256::hash(LEDGER_BYTECODE))
+}
+
+fn read_archive_wasm_hash() -> WasmHash {
+    WasmHash::from(ic_crypto_sha2::Sha256::hash(ARCHIVE_NODE_BYTECODE))
 }
 
 fn expect_create_canister_returning(
@@ -1214,15 +1463,17 @@ fn expect_call_canister_add_ckerc20_token(
         .return_const(mocked_result);
 }
 
-fn expect_call_canister_archives(
+fn expect_call_canister_icrc3_get_archives(
     runtime: &mut MockCanisterRuntime,
     expected_canister_id: Principal,
-    mocked_result: Result<Vec<ArchiveInfo>, CallError>,
+    mocked_result: Result<GetArchivesResult, CallError>,
 ) {
     runtime
         .expect_call_canister()
-        .withf(move |&canister_id, method, _args: &()| {
-            canister_id == expected_canister_id && method == "archives"
+        .withf(move |&canister_id, method, args: &GetArchivesArgs| {
+            canister_id == expected_canister_id
+                && method == "icrc3_get_archives"
+                && args == &GetArchivesArgs { from: None }
         })
         .times(1)
         .return_const(mocked_result);
@@ -1408,26 +1659,42 @@ mod mock {
 }
 
 mod install_ledger_suite_args {
-    use crate::candid::{AddErc20Arg, LedgerInitArg};
-    use crate::scheduler::tests::usdc_metadata;
+    use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
+    use crate::scheduler::tests::{usdc_metadata, MINTER_PRINCIPAL};
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
-    use crate::state::test_fixtures::new_state;
-    use crate::state::{GitCommitHash, IndexWasm, LedgerWasm, State};
-    use crate::storage::test_fixtures::empty_task_queue;
-    use crate::storage::test_fixtures::empty_wasm_store;
+    use crate::state::test_fixtures::{expect_panic_with_message, new_state, new_state_from};
+    use crate::state::{GitCommitHash, IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
+    use crate::storage::test_fixtures::{
+        embedded_ledger_suite_version, empty_task_queue, empty_wasm_store,
+    };
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
     use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use candid::Nat;
     use proptest::collection::vec;
     use proptest::{prop_assert_eq, proptest};
 
     const ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
     #[test]
-    fn should_error_if_contract_is_already_managed() {
-        let mut state = new_state();
+    fn should_error_if_minter_id_missing() {
+        let state = new_state();
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
-        let arg = valid_add_erc20_arg(&state, &wasm_store);
+
+        assert_matches!(
+            InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, valid_add_erc20_arg()),
+            Err(InvalidAddErc20ArgError::InternalError( error )) if error.contains("minter principal")
+        );
+    }
+
+    #[test]
+    fn should_error_if_contract_is_already_managed() {
+        let mut state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        state.update_ledger_suite_version(embedded_ledger_suite_version());
+        let arg = valid_add_erc20_arg();
         let contract: Erc20Token = arg.contract.clone().try_into().unwrap();
         state.record_new_erc20_token(contract.clone(), usdc_metadata());
 
@@ -1470,9 +1737,10 @@ mod install_ledger_suite_args {
 
         #[test]
         fn should_error_on_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
-            let state = new_state();
+            let mut state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
-            let mut arg = valid_add_erc20_arg(&state, &wasm_store);
+            state.update_ledger_suite_version(embedded_ledger_suite_version());
+            let mut arg = valid_add_erc20_arg();
             arg.contract.address = invalid_address;
             assert_matches!(
                 InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, arg),
@@ -1482,9 +1750,10 @@ mod install_ledger_suite_args {
 
         #[test]
         fn should_error_on_large_chain_id(offset in 0_u128..=u64::MAX as u128) {
-            let state = new_state();
+            let mut state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
-            let mut arg = valid_add_erc20_arg(&state, &wasm_store);
+            state.update_ledger_suite_version(embedded_ledger_suite_version());
+            let mut arg = valid_add_erc20_arg();
             arg.contract.chain_id = Nat::from((u64::MAX as u128) + offset);
 
             assert_matches!(
@@ -1495,10 +1764,67 @@ mod install_ledger_suite_args {
     }
 
     #[test]
-    fn should_accept_valid_erc20_arg() {
-        let state = new_state();
+    fn should_panic_when_ledger_suite_version_missing() {
+        let state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
-        let arg = valid_add_erc20_arg(&state, &wasm_store);
+        assert_eq!(state.ledger_suite_version(), None);
+
+        expect_panic_with_message(
+            || {
+                InstallLedgerSuiteArgs::validate_add_erc20(
+                    &state,
+                    &wasm_store,
+                    valid_add_erc20_arg(),
+                )
+            },
+            "ledger suite version missing",
+        );
+    }
+
+    #[test]
+    fn should_panic_when_ledger_suite_version_not_in_wasm_store() {
+        for version in [
+            LedgerSuiteVersion {
+                ledger_compressed_wasm_hash: WasmHash::default(),
+                ..embedded_ledger_suite_version()
+            },
+            LedgerSuiteVersion {
+                index_compressed_wasm_hash: WasmHash::default(),
+                ..embedded_ledger_suite_version()
+            },
+        ] {
+            let mut state = new_state_from(InitArg {
+                minter_id: Some(MINTER_PRINCIPAL),
+                ..Default::default()
+            });
+            state.update_ledger_suite_version(version);
+            let wasm_store = wasm_store_with_icrc1_ledger_suite();
+
+            expect_panic_with_message(
+                || {
+                    InstallLedgerSuiteArgs::validate_add_erc20(
+                        &state,
+                        &wasm_store,
+                        valid_add_erc20_arg(),
+                    )
+                },
+                "wasm hash missing",
+            );
+        }
+    }
+
+    #[test]
+    fn should_accept_valid_erc20_arg() {
+        let mut state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        state.update_ledger_suite_version(embedded_ledger_suite_version());
+        let arg = valid_add_erc20_arg();
         let ledger_init_arg = arg.ledger_init_arg.clone();
 
         let result = InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, arg).unwrap();
@@ -1507,6 +1833,7 @@ mod install_ledger_suite_args {
             result,
             InstallLedgerSuiteArgs {
                 contract: Erc20Token(ChainId(1), ERC20_CONTRACT_ADDRESS.parse().unwrap()),
+                minter_id: MINTER_PRINCIPAL,
                 ledger_init_arg,
                 ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
                     .hash()
@@ -1518,46 +1845,20 @@ mod install_ledger_suite_args {
         );
     }
 
-    fn valid_add_erc20_arg(state: &State, wasm_store: &WasmStore) -> AddErc20Arg {
-        use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
-        let arg = AddErc20Arg {
+    fn valid_add_erc20_arg() -> AddErc20Arg {
+        AddErc20Arg {
             contract: crate::candid::Erc20Contract {
                 chain_id: Nat::from(1_u8),
                 address: ERC20_CONTRACT_ADDRESS.to_string(),
             },
             ledger_init_arg: LedgerInitArg {
-                minting_account: LedgerAccount {
-                    owner: Principal::anonymous(),
-                    subaccount: None,
-                },
-                fee_collector_account: None,
-                initial_balances: vec![],
                 transfer_fee: 10_000_u32.into(),
-                decimals: None,
+                decimals: 6,
                 token_name: "USD Coin".to_string(),
                 token_symbol: "USDC".to_string(),
                 token_logo: "".to_string(),
-                max_memo_length: None,
-                feature_flags: None,
-                maximum_number_of_accounts: None,
-                accounts_overflow_trim_quantity: None,
             },
-            git_commit_hash: "6a8e5fca2c6b4e12966638c444e994e204b42989".to_string(),
-            ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
-                .hash()
-                .to_string(),
-            index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE)
-                .hash()
-                .to_string(),
-        };
-        assert_matches!(
-            InstallLedgerSuiteArgs::validate_add_erc20(state, wasm_store, arg.clone()),
-            Ok(_),
-            "BUG: invalid add erc20: {:?}",
-            arg
-        );
-        arg
+        }
     }
 
     fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
@@ -1568,7 +1869,7 @@ mod install_ledger_suite_args {
                 1_620_328_630_000_000_000,
                 GitCommitHash::default(),
             ),
-            Ok(())
+            Ok(embedded_ledger_suite_version())
         );
         store
     }

@@ -9,6 +9,11 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:serde",
     "@crate_index//:tempfile",
+    "@crate_index//:rand",
+    "@crate_index//:slog",
+    "@crate_index//:slog-term",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
     "@crate_index//:wasmparser",
 ]
 

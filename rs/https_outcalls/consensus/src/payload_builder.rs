@@ -44,7 +44,7 @@ use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
     sync::{Arc, RwLock},
 };
@@ -95,12 +95,13 @@ impl CanisterHttpPayloadBuilderImpl {
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        membership: Arc<Membership>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
+        let membership = Arc::new(Membership::new(cache.clone(), registry.clone(), subnet_id));
+
         Self {
             pool,
             cache,
@@ -680,25 +681,10 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             )
         });
 
-        let divergece_responses = messages.divergence_responses.iter().filter_map(|response| {
-            // NOTE: We skip delivering the divergence response, if it has no shares
-            // Such a divergence response should never validate, therefore this should never happen
-            // However, if it where ever to happen, we can ignore it here.
-            // This is sound, since eventually a timeout will end the outstanding callback anyway.
-            response.shares.first().map(|share| {
-                // Map divergence responses to reject response
-                stats.divergence_responses += 1;
-                ConsensusResponse::new(
-                    share.content.id,
-                    Payload::Reject(RejectContext::new(
-                        RejectCode::SysTransient,
-                        "Canister http responses were different across replicas, \
-                          and no consensus was reached"
-                            .to_string(),
-                    )),
-                )
-            })
-        });
+        let divergece_responses = messages
+            .divergence_responses
+            .iter()
+            .filter_map(divergence_response_into_reject);
 
         let responses = responses
             .chain(timeouts)
@@ -707,6 +693,69 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 
         (responses, stats)
     }
+}
+
+/// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.
+///
+/// This function generates a detailed error message.
+/// This will enable a developer to get some insight into the nature of the divergence problems, which they are facing.
+/// It allows to get insight into whether the responses are split among a very small number of possible responses or each replica
+/// got a unique response.
+/// The first issue could point to some issue rate limiting (e.g. some replicas receive 429s) while the later would point to an
+/// issue with the transform function (e.g. some non-deterministic component such as timestamp has not been removed).
+///
+/// The function includes request id and timeout, which are also part of the hashed value.
+fn divergence_response_into_reject(
+    response: &CanisterHttpResponseDivergence,
+) -> Option<ConsensusResponse> {
+    // Get the id and timeout, which need to be reported in the error message as well
+    let Some((id, timeout)) = response
+        .shares
+        .first()
+        .map(|share| (share.content.id, share.content.timeout))
+    else {
+        // NOTE: We skip delivering the divergence response, if it has no shares
+        // Such a divergence response should never validate, therefore this should never happen
+        // However, if it where ever to happen, we can ignore it here.
+        // This is sound, since eventually a timeout will end the outstanding callback anyway.
+        return None;
+    };
+
+    // Count the different content hashes, that we have encountered in the divergence resonse
+    let mut hash_counts = BTreeMap::new();
+    response
+        .shares
+        .iter()
+        .map(|share| share.content.content_hash.clone().get().0)
+        .for_each(|share| {
+            hash_counts
+                .entry(share)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+        });
+
+    // Now convert into a vector
+    let mut hash_counts = hash_counts.into_iter().collect::<Vec<_>>();
+
+    // Sort in ascending order by number of counts
+    hash_counts.sort_by_key(|(_, count)| *count);
+    // Convert them into hex strings
+    let hash_counts = hash_counts
+        .iter()
+        .rev()
+        .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash), count))
+        .collect::<Vec<_>>();
+
+    Some(ConsensusResponse::new(
+        id,
+        Payload::Reject(RejectContext::new(
+            RejectCode::SysTransient,
+            format!(
+                "No consensus could be reached. Replicas had different responses. Details: request_id: {}, timeout: {}, hashes: {}",
+                id, timeout.as_nanos_since_unix_epoch(), hash_counts.join(", ")
+            ),
+        )),
+    ))
 }
 
 fn validation_failed(

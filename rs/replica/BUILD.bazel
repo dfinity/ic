@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_ic_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/async_utils",
     "//rs/bitcoin/client",
@@ -18,13 +19,13 @@ DEPENDENCIES = [
     "//rs/https_outcalls/client",
     "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
-    "//rs/interfaces/state_manager",
     "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
     "//rs/messaging",
     "//rs/monitoring/logger",
-    "//rs/monitoring/tracing",
     "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
+    "//rs/monitoring/tracing",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -38,45 +39,43 @@ DEPENDENCIES = [
     "//rs/xnet/payload_builder",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:hex",
-    "@crate_index//:jemalloc-ctl",
-    "@crate_index//:jemallocator",
     "@crate_index//:libc",
     "@crate_index//:nix",
     "@crate_index//:num_cpus",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry-otlp",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:pprof",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:regex",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
+    "@crate_index//:tikv-jemalloc-ctl",
+    "@crate_index//:tikv-jemallocator",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
-    "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing-opentelemetry",
-    "@crate_index//:opentelemetry_0_21_0",
-    "@crate_index//:opentelemetry-otlp",
-    "@crate_index//:opentelemetry_sdk",
-] + select({
-    "@rules_rust//rust/platform:linux": [
-        "//rs/monitoring/backtrace",
-    ],
-    "//conditions:default": [],
-})
+    "@crate_index//:tracing-subscriber",
+]
 
 MACRO_DEPENDENCIES = []
 
 NONMALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/consensus:consensus",
     "//rs/replica/setup_ic_network:setup_ic_network",
 ]
 
 MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/consensus:malicious_consensus",
     "//rs/replica/setup_ic_network:malicious_setup_ic_network",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/registry/mocks",
     "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
@@ -174,6 +173,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "@crate_index//:criterion",
     ],

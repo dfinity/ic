@@ -1,9 +1,8 @@
 use crate::{
-    neuron::{DecomposedNeuron, DissolveStateAndAge, Neuron, StoredDissolveStateAndAge},
+    neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::DissolveState as NeuronDissolveState, neuron::Followees, AbridgedNeuron,
-        BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -43,6 +42,29 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
     // Singletons
     pub known_neuron_data: Memory,
     pub transfer: Memory,
+}
+
+/// A section of a neuron represents a part of neuron that can potentially be large, and when a
+/// neuron is read, the caller can specify which sections of the neuron they want to read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct NeuronSections {
+    pub hot_keys: bool,
+    pub recent_ballots: bool,
+    pub followees: bool,
+    pub known_neuron_data: bool,
+    pub transfer: bool,
+}
+
+impl NeuronSections {
+    pub fn all() -> Self {
+        Self {
+            hot_keys: true,
+            recent_ballots: true,
+            followees: true,
+            known_neuron_data: true,
+            transfer: true,
+        }
+    }
 }
 
 impl<Memory> StableNeuronStoreBuilder<Memory>
@@ -100,7 +122,7 @@ where
 /// operations via the following methods:
 ///
 ///   create(Neuron)
-///   read(NeuronId)
+///   read(NeuronId, NeuronSections)
 ///   update(Neuron)
 ///   delete(NeuronId)
 ///
@@ -113,6 +135,11 @@ where
 /// Additionally, there is upsert, which updates or inserts, depending on whether
 /// an entry with the same ID already exists. You can think of this as insert,
 /// but clobbering is allowed.
+///
+/// When a Neuron is read, the caller can specify which sections of the Neuron
+/// they want to read. This is done by passing a `NeuronSections` to the read
+/// method. When reading a neuron for modification, all sections should be read by
+/// passing `NeuronSections::all()`.
 ///
 /// Several `Memory`s are used instead of just one, because the size of
 /// serialized Neurons varies significantly, which leads to inefficient use of
@@ -188,15 +215,19 @@ where
         Ok(())
     }
 
-    /// Retrieves an existing entry.
-    pub fn read(&self, neuron_id: NeuronId) -> Result<Neuron, NeuronStoreError> {
+    /// Reads an existing entry given the ID and the sections to read.
+    pub fn read(
+        &self,
+        neuron_id: NeuronId,
+        sections: NeuronSections,
+    ) -> Result<Neuron, NeuronStoreError> {
         let main_neuron_part = self
             .main
             .get(&neuron_id)
             // Deal with no entry by blaming it on the caller.
             .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
 
-        Ok(self.reconstitute_neuron(neuron_id, main_neuron_part))
+        Ok(self.reconstitute_neuron(neuron_id, main_neuron_part, sections))
     }
 
     /// Changes an existing entry.
@@ -315,9 +346,9 @@ where
     where
         R: RangeBounds<NeuronId>,
     {
-        self.main
-            .range(range)
-            .map(|(neuron_id, neuron)| self.reconstitute_neuron(neuron_id, neuron))
+        self.main.range(range).map(|(neuron_id, neuron)| {
+            self.reconstitute_neuron(neuron_id, neuron, NeuronSections::all())
+        })
     }
 
     /// Returns the number of entries for some of the storage sections.
@@ -340,30 +371,40 @@ where
         validate_stable_btree_map(&self.transfer_map);
     }
 
-    /// Returns all neuron ids of the neurons with legacy dissolve state and age.
-    // TODO(NNS1-3068): clean up after the migration is performed.
-    pub fn neuron_ids_with_legacy_dissolve_state_and_age(&self) -> Vec<NeuronId> {
-        self.main
-            .iter()
-            .filter_map(|(id, abridged_neuron)| {
-                if abridged_neuron.has_legacy_dissolve_state_and_age() {
-                    Some(id)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     /// Internal function to take what's in the main map and fill in the remaining data from
     /// the other stable storage maps.
-    fn reconstitute_neuron(&self, neuron_id: NeuronId, main_neuron_part: AbridgedNeuron) -> Neuron {
-        let hot_keys = read_repeated_field(neuron_id, &self.hot_keys_map);
-        let recent_ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
-        let followees = self.read_followees(neuron_id);
+    fn reconstitute_neuron(
+        &self,
+        neuron_id: NeuronId,
+        main_neuron_part: AbridgedNeuron,
+        sections: NeuronSections,
+    ) -> Neuron {
+        let hot_keys = if sections.hot_keys {
+            read_repeated_field(neuron_id, &self.hot_keys_map)
+        } else {
+            Vec::new()
+        };
+        let recent_ballots = if sections.recent_ballots {
+            read_repeated_field(neuron_id, &self.recent_ballots_map)
+        } else {
+            Vec::new()
+        };
+        let followees = if sections.followees {
+            self.read_followees(neuron_id)
+        } else {
+            HashMap::new()
+        };
 
-        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
-        let transfer = self.transfer_map.get(&neuron_id);
+        let known_neuron_data = if sections.known_neuron_data {
+            self.known_neuron_data_map.get(&neuron_id)
+        } else {
+            None
+        };
+        let transfer = if sections.transfer {
+            self.transfer_map.get(&neuron_id)
+        } else {
+            None
+        };
 
         let decomposed = DecomposedNeuron {
             id: neuron_id,
@@ -494,21 +535,6 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
         transfer: VectorMemory::default(),
     }
     .build()
-}
-
-impl AbridgedNeuron {
-    /// Returns true if the neuron has legacy dissolve state and age. We use AbridgedNeuron and
-    /// reconstruct the DissolveStateAndAge instead of converting it to Neuron, so that we can avoid
-    /// reading all the repeated fields from the stable storage.
-    // TODO(NNS1-3068): clean up after the migration is performed.
-    fn has_legacy_dissolve_state_and_age(&self) -> bool {
-        let stored_dissolve_state_and_age = StoredDissolveStateAndAge {
-            dissolve_state: self.dissolve_state.clone().map(NeuronDissolveState::from),
-            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-        };
-        let dissolve_state_and_age = DissolveStateAndAge::from(stored_dissolve_state_and_age);
-        dissolve_state_and_age.is_legacy()
-    }
 }
 
 // impl Storable for $ProtoMessage

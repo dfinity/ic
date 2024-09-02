@@ -7,26 +7,27 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-logger = { path = "../monitoring/logger" }
-ic-types = { path = "../types/types" }
 ic-recovery = { path = "../recovery" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
-rand = "0.8"
+ic-types = { path = "../types/types" }
+rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-term = "2.6.0"
+slog-async = { workspace = true }
+slog-term = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/constants",
     "//rs/cycles_account_manager",
@@ -20,7 +21,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/system_api",
     "//rs/test_utilities",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/error_types",
@@ -32,10 +32,12 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 

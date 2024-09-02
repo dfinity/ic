@@ -123,18 +123,17 @@ pub enum InvertError {
     },
 }
 
-impl ToString for InvertError {
-    fn to_string(&self) -> String {
-        let prefix = "Cannot invert ";
-        match self {
+impl std::fmt::Display for InvertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let invert_error_cause = match self {
             Self::ValueIsNegative(value) => {
-                format!("{}negative value {}.", prefix, value)
+                format!("negative value {}.", value)
             }
             Self::MaxArgumentValueError(error) => {
-                format!("{}due to maximum argument error: {}", prefix, error)
+                format!("due to maximum argument error: {}", error)
             }
             Self::FunctionApplicationError(error) => {
-                format!("{}due to function application error: {}", prefix, error)
+                format!("due to function application error: {}", error)
             }
             Self::MonotonicityAssumptionViolation {
                 left,
@@ -142,23 +141,25 @@ impl ToString for InvertError {
                 right,
             } => {
                 format!(
-                    "{}at target_y={}, as function is decreasing between {} and {}.",
-                    prefix, target_y, left, right,
+                    "at target_y={}, as function is decreasing between {} and {}.",
+                    target_y, left, right,
                 )
             }
             Self::InvertValueAboveU64Range { lower, target_y } => {
                 format!(
-                    "{}at target_y={}, as function's inverse appears to be above {}.",
-                    prefix, target_y, lower,
+                    "at target_y={}, as function's inverse appears to be above {}.",
+                    target_y, lower,
                 )
             }
             Self::InvertValueBelowU64Range { target_y, upper } => {
                 format!(
-                    "{}at target_y={}, as function's inverse appears to be below {}.",
-                    prefix, target_y, upper,
+                    "at target_y={}, as function's inverse appears to be below {}.",
+                    target_y, upper,
                 )
             }
-        }
+        };
+
+        write!(f, "Cannot invert {}", invert_error_cause)
     }
 }
 
@@ -317,7 +318,7 @@ struct Atom {
 }
 
 /// Unoptimized yet simple implementation, avoiding the `decimal::maths` dependency.
-/// The main reason why the `decimal::maths` implementation is not ideal is becasue it defines
+/// The main reason why the `decimal::maths` implementation is not ideal is because it defines
 /// `0^0`, while this may cause confusion and is thus better treated as an error case.
 /// More concretely, this function will return an error in the following cases:
 /// * If `x` and `exp` are both zero.
@@ -437,7 +438,7 @@ impl BinomialFormula {
             .enumerate()
             .map(|(i, coefficient)| {
                 let coefficient = Decimal::from(coefficient);
-                // Casting `i` to `u8` and computing `degree - i` is safe becasue we checked above
+                // Casting `i` to `u8` and computing `degree - i` is safe because we checked above
                 // that `coefficients.len() == degree + 1`, so `i <= degree: u8`.
                 let i = i as u8;
                 let left = Atom::new(left_param, degree - i);

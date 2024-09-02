@@ -12,49 +12,52 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  ORG: ${{ vars.ORG }}
+  CI_PIPELINE_SOURCE: ${{ github.event_name }}
+  CI_PROJECT_DIR: ${{ github.workspace }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
+  ORG: ${{ github.repository_owner }}
 
 anchors:
   image: &image
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
-  bazel-small-setup: &bazel-small-setup
+    image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+  dind-small-setup: &dind-small-setup
+    timeout-minutes: 30
     runs-on:
-      labels: bazel-runner-small
+      labels: dind-small
     container:
       <<: *image
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
-  default-setup: &default-setup
+      options: >-
+        -e NODE_NAME
+  dind-large-setup: &dind-large-setup
+    timeout-minutes: 90
     runs-on:
-      labels: default-runner
+      labels: dind-large
     container:
       <<: *image
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
+      options: >-
+        -e NODE_NAME
+  before-script: &before-script
+    name: Before script
+    id: before-script
+    shell: bash
+    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    env:
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  before-script: &before-script
-    name: Before script
-    if: always()
-    id: before-script
-    shell: bash
-    run: |
-      if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-  bazel-clean: &bazel-clean
-    name: Bazel Clean
-    if: always()
-    run: bazel clean
 
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
-    <<: *bazel-small-setup
-    timeout-minutes: 60
+    <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
-      - uses: dorny/paths-filter@v3
+      - <<: *before-script
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: |
@@ -70,18 +73,30 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
-      - name: No run
-        if: steps.filter.outputs.fuzzers == 'false'
-        run: echo "No changes in fuzzers, skipping build"
-      - <<: *bazel-clean
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   lock-generate:
     name: Lock Generate
-    <<: *bazel-small-setup
+    <<: *dind-small-setup
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
       - <<: *before-script
-      - <<: *checkout
-      - uses: dorny/paths-filter@v3
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: |
@@ -98,25 +113,11 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
-      - name: No run
-        if: steps.filter.outputs.lock-generate == 'false'
-        run: echo "No changes in lock-generate, skipping run"
-
-  commit-lint:
-    name: Commit Lint
-    <<: *default-setup
-    steps:
-      - <<: *before-script
-      - <<: *checkout
-      - name: Commit Lint
-        id: commit-lint
-        run: ./gitlab-ci/src/ci-scripts/commit-lint.sh
 
   pre-commit:
     name: Pre Commit Test
-    <<: *bazel-small-setup
+    <<: *dind-small-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
         with:
           fetch-depth: 256
@@ -124,3 +125,38 @@ jobs:
         id: pre-commit
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
+
+  dependencies-check:
+    name: Dependency Scan for PR
+    <<: *dind-small-setup
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      CI_COMMIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+    steps:
+      - <<: *checkout
+        with:
+          fetch-depth: 256
+      - <<: *before-script
+      - name: Setup python deps
+        id: setup-python-deps
+        shell: bash
+        run: |
+          pip3 install --ignore-installed -r requirements.txt
+      - name: Dependency Scan for Pull Request
+        id: dependencies-check
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py

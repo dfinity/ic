@@ -51,7 +51,7 @@ impl LedgerClient {
             token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
             client: ICRC1Client {
                 runtime: CdkRuntime,
-                ledger_canister_id: state.ledger_id,
+                ledger_canister_id: state.cketh_ledger_id,
             },
         }
     }

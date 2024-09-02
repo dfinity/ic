@@ -22,9 +22,10 @@ pub enum State {
     Available,
 }
 
-impl ToString for State {
-    fn to_string(&self) -> String {
-        serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into())
+impl std::fmt::Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into());
+        write!(f, "{}", string)
     }
 }
 

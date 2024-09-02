@@ -140,6 +140,10 @@ pub struct QueryStatsAggregatorMetrics {
     pub(crate) query_stats_aggregator_num_records: IntGauge,
     /// Sum of statistics delivered to the canisters
     pub(crate) query_stats_delivered: QueryStatsMetricsSet,
+    /// Number of empty stats that were part of the aggregation
+    pub(crate) query_stats_empty_stats_aggregated: IntGauge,
+    /// Total number of stats (including empty) that were part of the aggregation
+    pub(crate) query_stats_total_aggregated: IntGauge,
     /// Critical error occuring in aggregator
     pub(crate) query_stats_critical_error_aggregator_failure: IntCounter,
 }
@@ -160,6 +164,14 @@ impl QueryStatsAggregatorMetrics {
                 "The number of records stored in the unaggregateed state",
             ),
             query_stats_delivered: QueryStatsMetricsSet::new(metrics_registry, "delivered"),
+            query_stats_empty_stats_aggregated: metrics_registry.int_gauge(
+                "query_stats_empty_stats_aggregated",
+                "Number of empty stats that where part of the aggregation",
+            ),
+            query_stats_total_aggregated: metrics_registry.int_gauge(
+                "query_stats_total_aggregated",
+                "Number of total stats that where part of the aggregation",
+            ),
             query_stats_critical_error_aggregator_failure: metrics_registry
                 .error_counter(CRITICAL_ERROR_AGGREGATION_FAILURE),
         }

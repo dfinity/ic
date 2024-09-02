@@ -11,4 +11,4 @@ ic-certification-test-utils = { path = "../../../../../../certification/test-uti
 ic-crypto-sha2 = { path = "../../../../../sha2" }
 ic-crypto-tree-hash = { path = "../../../../../tree_hash" }
 ic-types = { path = "../../../../../../types/types" }
-rand = "0.8.3"
+rand = { workspace = true }

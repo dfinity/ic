@@ -8,10 +8,12 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_canister_threshold_sigs",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
         "//rs/crypto/temp_crypto",
         "//rs/interfaces",

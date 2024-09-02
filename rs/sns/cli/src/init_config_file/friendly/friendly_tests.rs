@@ -23,28 +23,7 @@ fn test_parse() {
         logo: PathBuf::from("test.png"),
         url: "https://some-link-to-a-project.org".to_string(),
 
-        principals: vec![
-            PrincipalAlias {
-                id: "5zxxw-63ouu-faaaa-aaaap-4ai".to_string(),
-                name: Some("Bruce Wayne".to_string()),
-                email: Some("batman@superherosinc.com".to_string()),
-            },
-            PrincipalAlias {
-                id: PrincipalId::new_user_test_id(746890).to_string(),
-                name: Some("Alfred Pennyworth".to_string()),
-                email: None,
-            },
-            PrincipalAlias {
-                id: "c2n4r-wni5m-dqaaa-aaaap-4ai".to_string(),
-                name: Some("employees (canister)".to_string()),
-                email: None,
-            },
-            PrincipalAlias {
-                id: "ucm27-3lxwy-faaaa-aaaap-4ai".to_string(),
-                name: Some("departments (canister)".to_string()),
-                email: None,
-            },
-        ],
+        principals: vec![],
 
         fallback_controller_principals: vec!["5zxxw-63ouu-faaaa-aaaap-4ai".to_string()],
         dapp_canisters: vec![
@@ -166,7 +145,7 @@ fn test_parse() {
             restricted_countries: Some(vec!["US".to_string(), "CH".to_string()]),
 
             vesting_schedule: VestingSchedule {
-                events: 83,
+                events: 9,
                 interval: parse_duration("17 days").unwrap(),
             },
 
@@ -451,7 +430,7 @@ fn test_convert_to_create_service_nervous_system() {
 
             neuron_basket_construction_parameters: Some(
                 nns_governance_pb::NeuronBasketConstructionParameters {
-                    count: Some(83),
+                    count: Some(9),
                     dissolve_delay_interval: Some(parse_duration("17 days").unwrap()),
                 }
             ),

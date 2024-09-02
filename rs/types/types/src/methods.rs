@@ -147,6 +147,8 @@ pub enum SystemMethod {
     CanisterHeartbeat = 6,
     /// A system method that is run after a specified time.
     CanisterGlobalTimer = 7,
+    /// A system method that runs when the available Wasm memory is below threshold.
+    CanisterOnLowWasmMemory = 8,
 }
 
 impl TryFrom<&str> for SystemMethod {
@@ -161,6 +163,7 @@ impl TryFrom<&str> for SystemMethod {
             "canister_inspect_message" => Ok(SystemMethod::CanisterInspectMessage),
             "canister_heartbeat" => Ok(SystemMethod::CanisterHeartbeat),
             "canister_global_timer" => Ok(SystemMethod::CanisterGlobalTimer),
+            "canister_on_low_wasm_memory" => Ok(SystemMethod::CanisterOnLowWasmMemory),
             _ => Err(format!("Cannot convert {} to SystemMethod.", value)),
         }
     }
@@ -176,6 +179,7 @@ impl fmt::Display for SystemMethod {
             Self::CanisterInspectMessage => write!(f, "canister_inspect_message"),
             Self::CanisterHeartbeat => write!(f, "canister_heartbeat"),
             Self::CanisterGlobalTimer => write!(f, "canister_global_timer"),
+            Self::CanisterOnLowWasmMemory => write!(f, "canister_on_low_wasm_memory"),
         }
     }
 }
@@ -192,6 +196,7 @@ impl From<&SystemMethod> for pb::wasm_method::SystemMethod {
             SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
             SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
             SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
+            SystemMethod::CanisterOnLowWasmMemory => PbSystemMethod::CanisterOnLowWasmMemory,
         }
     }
 }
@@ -214,19 +219,25 @@ impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
             PbSystemMethod::CanisterInspectMessage => Ok(SystemMethod::CanisterInspectMessage),
             PbSystemMethod::CanisterHeartbeat => Ok(SystemMethod::CanisterHeartbeat),
             PbSystemMethod::CanisterGlobalTimer => Ok(SystemMethod::CanisterGlobalTimer),
+            PbSystemMethod::CanisterOnLowWasmMemory => Ok(SystemMethod::CanisterOnLowWasmMemory),
         }
     }
 }
 
 /// A Wasm closure pointing to the Wasm function table.
+///
+/// Wasm closures must be created and consumed either as 32- or 64-bit.
+/// If the canister migrates from `wasm32` to `wasm64` or back having some
+/// outstanding calls, we will try to convert the stored values into
+/// the required type and call the function.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WasmClosure {
     pub func_idx: u32,
-    pub env: u32,
+    pub env: u64,
 }
 
 impl WasmClosure {
-    pub fn new(func_idx: u32, env: u32) -> Self {
+    pub fn new(func_idx: u32, env: u64) -> Self {
         Self { func_idx, env }
     }
 }
@@ -369,7 +380,7 @@ impl TryFrom<pb::Callback> for Callback {
 }
 
 /// A reference to a callable function/method in a Wasm module, which can be:
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum FuncRef {
     /// A method that a canister can export.
     Method(WasmMethod),
@@ -406,7 +417,7 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             SystemMethod::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5, 6, 7]
+            [1, 2, 3, 4, 5, 6, 7, 8]
         );
     }
 

@@ -27,21 +27,14 @@ message SubnetTopology {
   bytes public_key = 2;
   registry.subnet.v1.SubnetType subnet_type = 3;
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated registry.crypto.v1.EcdsaKeyId ecdsa_keys_held = 5;
+  reserved 5;
+  reserved "ecdsa_keys_held";
   repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
 }
 
 message SubnetsEntry {
   types.v1.SubnetId subnet_id = 1;
   SubnetTopology subnet_topology = 2;
-}
-
-// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-message EcdsaKeyEntry {
-  reserved 1;
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
-  repeated types.v1.SubnetId subnet_ids = 2;
 }
 
 message IDkgKeyEntry {
@@ -54,8 +47,8 @@ message NetworkTopology {
   registry.routing_table.v1.RoutingTable routing_table = 2;
   types.v1.SubnetId nns_subnet_id = 3;
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
+  reserved 5;
+  reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated IDkgKeyEntry idkg_signing_subnets = 8;
@@ -76,23 +69,37 @@ message SetupInitialDkgContextTree {
   SetupInitialDkgContext context = 2;
 }
 
-message SignWithEcdsaContext {
-  state.queues.v1.Request request = 1;
-  bytes pseudo_random_id = 2;
-  bytes message_hash = 3;
-  reserved 4;
-  reserved "derivation_path";
-  uint64 batch_time = 5;
-  repeated bytes derivation_path_vec = 6;
-  registry.crypto.v1.EcdsaKeyId key_id = 7;
-  optional uint64 height = 8;
-  optional uint64 pre_signature_id = 9;
-  optional bytes nonce = 10;
+message EcdsaArguments {
+  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  bytes message_hash = 2;
 }
 
-message SignWithEcdsaContextTree {
+message SchnorrArguments {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  bytes message = 2;
+}
+
+message ThresholdArguments {
+  oneof threshold_scheme {
+    EcdsaArguments ecdsa = 1;
+    SchnorrArguments schnorr = 2;
+  }
+}
+
+message SignWithThresholdContext {
+  state.queues.v1.Request request = 1;
+  ThresholdArguments args = 2;
+  repeated bytes derivation_path_vec = 3;
+  bytes pseudo_random_id = 4;
+  uint64 batch_time = 5;
+  optional uint64 pre_signature_id = 6;
+  optional uint64 height = 7;
+  optional bytes nonce = 8;
+}
+
+message SignWithThresholdContextTree {
   uint64 callback_id = 1;
-  SignWithEcdsaContext context = 2;
+  SignWithThresholdContext context = 2;
 }
 
 enum HttpMethod {
@@ -123,22 +130,6 @@ message CanisterHttpRequestContext {
 message CanisterHttpRequestContextTree {
   uint64 callback_id = 1;
   CanisterHttpRequestContext context = 2;
-}
-
-// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-message EcdsaDealingsContext {
-  state.queues.v1.Request request = 1;
-  reserved 2;
-  repeated types.v1.NodeId nodes = 3;
-  uint64 registry_version = 4;
-  registry.crypto.v1.EcdsaKeyId key_id = 5;
-  Time time = 6;
-}
-
-// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-message EcdsaDealingsContextTree {
-  uint64 callback_id = 1;
-  EcdsaDealingsContext context = 2;
 }
 
 message IDkgDealingsContext {
@@ -228,12 +219,13 @@ message SubnetCallContextManager {
   reserved 2;
   reserved "contexts";
   repeated SetupInitialDkgContextTree setup_initial_dkg_contexts = 3;
-  repeated SignWithEcdsaContextTree sign_with_ecdsa_contexts = 4;
+  reserved 4;
+  reserved "sign_with_ecdsa_contexts";
   reserved 5;
   reserved "sign_with_mock_ecdsa_contexts";
   repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
-  // TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-  repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
+  reserved 7;
+  reserved "ecdsa_dealings_contexts";
   repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
   repeated BitcoinSendTransactionInternalContextTree bitcoin_send_transaction_internal_contexts = 9;
   reserved 10;
@@ -246,13 +238,15 @@ message SubnetCallContextManager {
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
   repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
 }
 
 message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
   types.v1.NominalCycles consumed_cycles_http_outcalls = 2;
   types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
-  optional uint64 ecdsa_signature_agreements = 4;
+  reserved 4;
+  reserved "ecdsa_signature_agreements";
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case = 5;
   optional uint64 num_canisters = 6;
   reserved 7;
@@ -261,6 +255,7 @@ message SubnetMetrics {
   reserved "num_update_transactions";
   optional uint64 canister_state_bytes = 9;
   optional uint64 update_transactions_total = 10;
+  repeated ThresholdSignatureAgreementsEntry threshold_signature_agreements = 11;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {
@@ -279,6 +274,11 @@ message ApiBoundaryNodeEntry {
   optional string ipv4_address = 3;
   string ipv6_address = 4;
   optional bytes pubkey = 5;
+}
+
+message ThresholdSignatureAgreementsEntry {
+  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  uint64 count = 2;
 }
 
 message NodeBlockmakerStats {

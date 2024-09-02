@@ -122,11 +122,19 @@
 
 use crate::{
     governance::{Governance, TimeWarp},
-    pb::v1::{governance::GovernanceCachedMetrics, ProposalStatus},
+    pb::v1::{
+        governance::{
+            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
+            GovernanceCachedMetrics,
+        },
+        ProposalStatus,
+    },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
 };
@@ -149,14 +157,15 @@ mod garbage_collection;
 pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
-pub mod init;
 mod known_neuron_index;
 mod migrations;
 mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
+mod node_provider_rewards;
 pub mod pb;
+mod proposal_data_neurons_fund_migration;
 pub mod proposals;
 mod reward;
 pub mod storage;
@@ -165,6 +174,49 @@ mod subaccount_index;
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+// TODO(NNS1-3248): Delete this once the feature has made it through the
+// probation period. At that point, we will not need this "kill switch". We can
+// leave this here indefinitely, but it will just be clutter after a modest
+// amount of time.
+thread_local! {
+    // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
+    // delete. That way, if we need to recall the feature, we can do that via a
+    // 1-line change (by replacing true with `cfg!(feature = "test")`). After
+    // the feature has been released, it will go through its "probation" period.
+    // If that goes well, then, this can be deleted.
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+}
+
+pub fn is_private_neuron_enforcement_enabled() -> bool {
+    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+}
+
+pub fn are_set_visibility_proposals_enabled() -> bool {
+    ARE_SET_VISIBILITY_PROPOSALS_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
+}
 
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
@@ -487,6 +539,12 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+
+            // Non-self-authenticating neurons.
+            total_voting_power_non_self_authenticating_controller: _,
+            total_staked_e8s_non_self_authenticating_controller: _,
+            non_self_authenticating_controller_neuron_subset_metrics,
+            public_neuron_subset_metrics,
         } = metrics;
 
         w.encode_gauge(
@@ -700,7 +758,195 @@ pub fn encode_metrics(
                 .unwrap(),
             not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
         );
+
+        if let Some(non_self_authenticating_controller_neuron_subset_metrics) =
+            non_self_authenticating_controller_neuron_subset_metrics
+        {
+            non_self_authenticating_controller_neuron_subset_metrics.encode(
+                "non_self_authenticating_controller",
+                "have a controller that is not self-authenticating with \
+                 one exception: neurons controlled by the genesis token \
+                 canister are not counted here",
+                w,
+            )?;
+        }
+
+        if let Some(public_neuron_subset_metrics) = public_neuron_subset_metrics {
+            public_neuron_subset_metrics.encode(
+                "public",
+                "that have visibility set to public",
+                w,
+            )?;
+        }
     }
 
     Ok(())
 }
+
+impl NeuronSubsetMetricsPb {
+    /// Writes metrics to `w`, each corresponding to a field in self.
+    ///
+    /// All metric names begin with "governance_", just like the other metrics in this canister.
+    ///
+    /// # Arguments
+    /// * `neuron_subset_name` - Describes the subset of neurons that these
+    ///   statistics are about. Must be separated_by_underscores, because this
+    ///   is used in the name of metrics. For example,
+    ///   "non_self_authenticating_controller".
+    /// * `neuron_subset_description` - Prose describing the subset of neurons
+    ///   that these statistics are about. Must make sense when inserted into
+    ///   "neurons that {}". For example, "have a controller that is not
+    ///   self-authenticating". This is used in the documentation of each
+    ///   metric.
+    /// * `w` - Where the output is written to.
+    fn encode(
+        &self,
+        neuron_subset_name: &str,
+        neuron_subset_description: &str,
+        w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+    ) -> std::io::Result<()> {
+        let Self {
+            count,
+            total_staked_e8s,
+            total_staked_maturity_e8s_equivalent,
+            total_maturity_e8s_equivalent,
+            total_voting_power,
+
+            count_buckets,
+            staked_e8s_buckets,
+            staked_maturity_e8s_equivalent_buckets,
+            maturity_e8s_equivalent_buckets,
+            voting_power_buckets,
+        } = self;
+
+        w.encode_gauge(
+            &format!("governance_{}_neurons_count", neuron_subset_name),
+            count.unwrap_or_default() as f64,
+            &format!("The number of neurons that {}.", neuron_subset_description,),
+        )?;
+
+        w.encode_gauge(
+            &format!("governance_total_staked_e8s_{}", neuron_subset_name),
+            total_staked_e8s.unwrap_or_default() as f64,
+            &format!(
+                "The total amount of staked ICP (in e8s) in neurons that {}.",
+                neuron_subset_description,
+            ),
+        )?;
+        w.encode_gauge(
+            &format!(
+                "governance_total_staked_maturity_e8s_equivalent_{}",
+                neuron_subset_name
+            ),
+            total_staked_maturity_e8s_equivalent.unwrap_or_default() as f64,
+            &format!(
+                "The total amount of staked maturity (in e8s equivalent) in neurons that {}.",
+                neuron_subset_description,
+            ),
+        )?;
+        w.encode_gauge(
+            &format!(
+                "governance_total_maturity_e8s_equivalent_{}",
+                neuron_subset_name
+            ),
+            total_maturity_e8s_equivalent.unwrap_or_default() as f64,
+            &format!(
+                "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}.",
+                neuron_subset_description,
+            ),
+        )?;
+
+        w.encode_gauge(
+            &format!("governance_total_voting_power_{}", neuron_subset_name),
+            total_voting_power.unwrap_or_default() as f64,
+            &format!(
+                "The total amount of voting power of all neurons that {}.",
+                neuron_subset_description,
+            ),
+        )?;
+
+        // Metrics broken out by floor(dissolve delay / 6 months).
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                &format!("governance_{}_neurons_count_buckets", neuron_subset_name),
+                &format!(
+                    "Number of neurons that {}, grouped by dissolve delay.",
+                    neuron_subset_description,
+                ),
+            )
+            .unwrap(),
+            count_buckets,
+        );
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                // Yes, the name here does not match the field in self (the name of the metric
+                // does not contain "staked"). This is to maintain consistency with existing
+                // metrics. Whereas, the name of the field is consistent with the analogous
+                // singular field, total_staked_e8s.
+                &format!("governance_{}_neurons_e8s_buckets", neuron_subset_name),
+                &format!(
+                    "The total amount of staked ICP (in e8s) in neurons that {}, \
+                         grouped by dissolve delay.",
+                    neuron_subset_description,
+                ),
+            )
+            .unwrap(),
+            staked_e8s_buckets,
+        );
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                &format!(
+                    "governance_{}_neurons_staked_maturity_e8s_equivalent_buckets",
+                    neuron_subset_name
+                ),
+                &format!(
+                    "The total amount of staked maturity (in e8s equivalent) in neurons that {}, \
+                         grouped by dissolve delay.",
+                    neuron_subset_description,
+                ),
+            )
+            .unwrap(),
+            staked_maturity_e8s_equivalent_buckets,
+        );
+        encode_dissolve_delay_buckets(
+            w
+                .gauge_vec(
+                    &format!("governance_{}_neurons_maturity_e8s_equivalent_buckets", neuron_subset_name),
+                    &format!(
+                        "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}, \
+                         grouped by dissolve delay.",
+                        neuron_subset_description,
+                    ),
+                )
+                .unwrap(),
+            maturity_e8s_equivalent_buckets,
+        );
+
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                &format!(
+                    "governance_{}_neurons_voting_power_buckets",
+                    neuron_subset_name
+                ),
+                &format!(
+                    "The total amount of voting power in neurons that {}, \
+                         grouped by dissolve delay.",
+                    neuron_subset_description,
+                ),
+            )
+            .unwrap(),
+            voting_power_buckets,
+        );
+
+        Ok(())
+    }
+}
+
+fn enable_new_canister_management_topics() -> bool {
+    true
+}
+
+#[cfg(test)]
+mod tests;

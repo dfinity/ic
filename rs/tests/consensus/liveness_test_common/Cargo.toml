@@ -1,0 +1,19 @@
+[package]
+name = "ic_consensus_system_test_liveness_test_common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }

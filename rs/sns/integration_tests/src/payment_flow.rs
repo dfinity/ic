@@ -62,7 +62,6 @@ pub struct PaymentProtocolTestSetup {
     pub state_machine: StateMachine,
     pub sns_sale_canister_id: CanisterId,
     pub icp_ledger_canister_id: CanisterId,
-    pub sns_ledger_canister_id: CanisterId,
     pub icp_ledger_minting_account: Account,
 }
 
@@ -122,7 +121,6 @@ impl PaymentProtocolTestSetup {
             state_machine,
             sns_sale_canister_id: swap_id,
             icp_ledger_canister_id: icp_ledger_id,
-            sns_ledger_canister_id: sns_ledger_id,
             icp_ledger_minting_account: *DEFAULT_MINTING_ACCOUNT,
         }
     }
@@ -188,7 +186,6 @@ impl PaymentProtocolTestSetup {
             should_auto_finalize: Some(true),
             max_icp_e8s: None,
             min_icp_e8s: None,
-            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }

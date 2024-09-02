@@ -16,8 +16,8 @@ ic-crypto-tree-hash = { path = ".." }
 ic-crypto-tree-hash-fuzz-check-witness-equality-utils = { path = "check_witness_equality_utils" }
 ic-protobuf = { path = "../../../protobuf" }
 libfuzzer-sys = "0.4"
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 
 # Prevent this from interfering with workspaces
 [workspace]

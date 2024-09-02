@@ -11,6 +11,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
@@ -20,23 +21,26 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
-    approvals::Approvals,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use icp_ledger::{
-    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob, AccountIdentifier, ArchiveInfo,
-    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
-    IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
+    max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
+    AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
+    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags,
+    GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation,
+    PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol,
+    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, MEMO_SIZE_BYTES,
 };
+use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc21::lib::ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS, icrc3::archive::QueryArchiveFn,
+    icrc21::lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
     icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
@@ -44,32 +48,14 @@ use icrc_ledger_types::{
 };
 use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
-    icrc21::{
-        errors::Icrc21Error,
-        lib::{
-            consent_msg_text_pages, ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE,
-            ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE,
-        },
-        requests::ConsentMessageRequest,
-        responses::{ConsentInfo, ConsentMessage},
-    },
-};
-use icrc_ledger_types::{
-    icrc1::transfer::TransferError as Icrc1TransferError, icrc21::errors::ErrorInfo,
-};
-use icrc_ledger_types::{
-    icrc2::allowance::{Allowance, AllowanceArgs},
-    icrc21::requests::{ConsentMessageMetadata, DisplayMessageType},
-};
-use icrc_ledger_types::{
-    icrc2::approve::{ApproveArgs, ApproveError},
-    icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES,
+    icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
 use std::cell::RefCell;
+use std::io::{Read, Write};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
@@ -375,6 +361,8 @@ async fn icrc1_send(
 
 thread_local! {
     static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
+    static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
+    static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -613,6 +601,13 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
         });
     }
+    standards.push(
+        StandardRecord {
+            name: "ICRC-21".to_string(),
+            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
+        }
+    );
+
     standards
 }
 
@@ -751,9 +746,10 @@ fn main() {
 }
 
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
+    let start = dfn_core::api::performance_counter(0);
+    let mut stable_reader = stable::StableReader::new();
     let mut ledger = LEDGER.write().unwrap();
-    *ledger = ciborium::de::from_reader(stable::StableReader::new())
-        .expect("Decoding stable memory failed");
+    *ledger = ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
 
     if let Some(args) = args {
         match args {
@@ -772,6 +768,21 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             .map(|h| h.into_bytes())
             .unwrap_or([0u8; 32]),
     );
+    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+    let pre_upgrade_instructions_consumed =
+        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+            Err(_) => {
+                // If upgrading from a version that didn't write the instructions counter to stable memory
+                0u64
+            }
+        };
+    PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
+
+    let end = dfn_core::api::performance_counter(0);
+    let post_upgrade_instructions_consumed = end - start;
+    POST_UPGRADE_INSTRUCTIONS_CONSUMED
+        .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -781,6 +792,7 @@ fn post_upgrade_() {
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
+    let start = dfn_core::api::performance_counter(0);
     setup::START.call_once(|| {
         printer::hook();
     });
@@ -789,8 +801,15 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    ciborium::ser::into_writer(&*ledger, stable::StableWriter::new())
+    let mut stable_writer = stable::StableWriter::new();
+    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
         .expect("failed to write ledger state to stable memory");
+    let end = dfn_core::api::performance_counter(0);
+    let instructions_consumed = end - start;
+    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+    stable_writer
+        .write_all(&counter_bytes)
+        .expect("failed to write instructions consumed to stable memory");
 }
 
 struct Access;
@@ -1154,6 +1173,7 @@ fn icrc1_total_supply_candid() {
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let blocks = &LEDGER.read().unwrap().blockchain.blocks;
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
         icp_ledger::iter_blocks(blocks, start, length)
     });
 }
@@ -1163,6 +1183,7 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
         icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
@@ -1179,7 +1200,8 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length);
 
-    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
+    let local_blocks =
+        range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
 
     let blocks: Vec<CandidBlock> = ledger
         .blockchain
@@ -1294,6 +1316,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(
+        "ledger_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+    )?;
+    w.encode_gauge(
         "ledger_transactions_by_hash_cache_entries",
         ledger.transactions_by_hash_len() as f64,
         "Total number of entries in the transactions_by_hash cache.",
@@ -1347,6 +1374,28 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         num_archives as f64,
         "Total number of archives.",
     )?;
+    w.encode_gauge(
+        "ledger_num_approvals",
+        ledger.approvals.get_num_approvals() as f64,
+        "Total number of approvals.",
+    )?;
+    let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    w.encode_gauge(
+        "ledger_pre_upgrade_instructions_consumed",
+        pre_upgrade_instructions as f64,
+        "Number of instructions consumed during the last pre-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_post_upgrade_instructions_consumed",
+        post_upgrade_instructions as f64,
+        "Number of instructions consumed during the last post-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_total_upgrade_instructions_consumed",
+        pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
+        "Total number of instructions consumed during the last upgrade.",
+    )?;
     Ok(())
 }
 
@@ -1362,7 +1411,8 @@ fn query_encoded_blocks(
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length);
 
-    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
+    let local_blocks =
+        range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
 
     let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
 
@@ -1526,117 +1576,18 @@ fn icrc2_allowance_candid() {
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
-        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-            description: format!(
-                "The argument size is too large. The maximum allowed size is {} bytes.",
-                MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES
-            ),
-        }));
-    }
-    match consent_msg_request.method.as_str() {
-        "icrc1_transfer" => {
-            match Decode!(&consent_msg_request.arg, TransferArg) {
-                Ok(TransferArg {
-                    from_subaccount,
-                    to,
-                    fee,
-                    created_at_time,
-                    memo,
-                    amount,
-                }) => {
-                    // only English supported
-                    let metadata = ConsentMessageMetadata {
-                        language: "en".to_string(),
-                    };
-                    let caller_principal = caller().0;
-                    let sender_account = Account {
-                        owner: caller_principal,
-                        subaccount: from_subaccount,
-                    };
-                    let transfer_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
-                    let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let caller_principal = caller().0;
+    let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
+    let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
-                    match consent_msg_request.user_preferences.device_spec {
-                        Some(DisplayMessageType::LineDisplay {
-                            characters_per_line,
-                            lines_per_page,
-                        }) => {
-                            if characters_per_line == 0 || lines_per_page == 0 {
-                                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                                    description: "Invalid display message specification."
-                                        .to_string(),
-                                }));
-                            }
-
-                            Ok(ConsentInfo {
-                                metadata,
-                                consent_message: ConsentMessage::LineDisplayMessage {
-                                    pages: consent_msg_text_pages(
-                                        &ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE
-                                            .replace("{AMOUNT}", &amount.to_string())
-                                            .replace(
-                                                "{SENDER_ACCOUNT}",
-                                                &sender_account.to_string(),
-                                            )
-                                            .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                            .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                            .replace(
-                                                "{MEMO}",
-                                                &format!("{:?}", memo).replace(' ', ""),
-                                            )
-                                            .replace("{TOKEN_SYMBOL}", &token_symbol),
-                                        characters_per_line,
-                                        lines_per_page,
-                                    ),
-                                },
-                            })
-                        }
-                        Some(DisplayMessageType::GenericDisplay) => Ok(ConsentInfo {
-                            metadata,
-                            consent_message: ConsentMessage::GenericDisplayMessage(
-                                format!(
-                                    "{}\n{}\n{}",
-                                    ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE,
-                                    "-".repeat(3),
-                                    ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS
-                                )
-                                .replace("{AMOUNT}", &amount.to_string())
-                                .replace("{SENDER_ACCOUNT}", &sender_account.to_string())
-                                .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                .replace("{TOKEN_SYMBOL}", &token_symbol.to_string())
-                                .replace("{MEMO}", &format!("{:?}", memo).replace(' ', ""))
-                                .replace("{FEE_SET}", &format!("{:?}", fee))
-                                .replace("{CREATED_AT_TIME}", &format!("{:?}", created_at_time)),
-                            ),
-                        }),
-
-                        None => Ok(ConsentInfo {
-                            metadata,
-                            consent_message: ConsentMessage::GenericDisplayMessage(
-                                ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE
-                                    .replace("{AMOUNT}", &amount.to_string())
-                                    .replace("{SENDER_ACCOUNT}", &sender_account.to_string())
-                                    .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                    .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                    .replace("{TOKEN_SYMBOL}", &token_symbol.to_string()),
-                            ),
-                        }),
-                    }
-                }
-                Err(err) => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode the argument: {}", err),
-                })),
-            }
-        }
-        method => Err(Icrc21Error::ConsentMessageUnavailable(ErrorInfo {
-            description: format!(
-                "Function method {} is not supported by the ICP ledger.",
-                method
-            ),
-        })),
-    }
+    build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+        consent_msg_request,
+        caller_principal,
+        ledger_fee,
+        token_symbol,
+        decimals,
+    )
 }
 
 #[export_name = "canister_query icrc21_canister_call_consent_message"]

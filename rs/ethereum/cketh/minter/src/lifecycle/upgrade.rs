@@ -24,6 +24,8 @@ pub struct UpgradeArg {
     pub erc20_helper_contract_address: Option<String>,
     #[cbor(n(6), with = "crate::cbor::nat::option")]
     pub last_erc20_scraped_block_number: Option<Nat>,
+    #[cbor(n(7), with = "crate::cbor::principal::option")]
+    pub evm_rpc_id: Option<Principal>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {

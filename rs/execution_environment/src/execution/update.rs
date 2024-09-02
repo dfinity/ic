@@ -149,6 +149,12 @@ pub fn execute_update(
             time,
             helper.call_context_id(),
         ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
+            time,
+            helper.call_context_id(),
+        ),
     };
 
     let memory_usage = helper.canister().memory_usage();
@@ -308,7 +314,8 @@ impl UpdateHelper {
                 });
 
             if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
-                if wasm_memory_usage > wasm_memory_limit {
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     let err = HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,
@@ -332,7 +339,9 @@ impl UpdateHelper {
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
-            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Call(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
                 canister.system_state.global_timer = CanisterTimer::Inactive;
@@ -595,17 +604,19 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                let instructions_consumed = self
+                    .original
+                    .execution_parameters
+                    .instruction_limits
+                    .message()
+                    - output.num_instructions_left;
                 info!(
                     round.log,
                     "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
                     self.original.method,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    self.original
-                        .execution_parameters
-                        .instruction_limits
-                        .message()
-                        - output.num_instructions_left,
+                    slice.executed_instructions.display(),
+                    instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
                 helper.finish(

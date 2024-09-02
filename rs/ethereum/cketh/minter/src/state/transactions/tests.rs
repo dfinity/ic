@@ -11,9 +11,9 @@ use crate::state::transactions::{
 };
 use crate::tx::{
     AccessList, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-    SignedEip1559TransactionRequest, TransactionPrice,
+    SignedEip1559TransactionRequest,
 };
-use crate::withdraw::{estimate_gas_limit, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT};
+use crate::withdraw::estimate_gas_limit;
 use ic_ethereum_types::Address;
 use rand::Rng;
 
@@ -24,6 +24,8 @@ const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944d
 const DEFAULT_CREATED_AT: u64 = 1699527697000000000;
 
 const DEFAULT_MAX_TRANSACTION_FEE: u128 = 30_000_000_000_000_000;
+const DEFAULT_CKERC20_MAX_FEE_PER_GAS: WeiPerGas =
+    WeiPerGas::new(DEFAULT_MAX_TRANSACTION_FEE / 65_000_u128);
 const DEFAULT_ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const DEFAULT_CKERC20_LEDGER_ID: &str = "sa4so-piaaa-aaaar-qacnq-cai";
 
@@ -296,8 +298,8 @@ mod eth_transactions {
         use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
         use crate::state::transactions::tests::{
             ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            cketh_withdrawal_tx_fee, create_and_record_ck_withdrawal_requests,
-            create_and_record_transaction, create_ck_withdrawal_requests, gas_fee_estimate,
+            create_and_record_ck_withdrawal_requests, create_and_record_transaction,
+            create_ck_withdrawal_requests, gas_fee_estimate, DEFAULT_CKERC20_MAX_FEE_PER_GAS,
         };
         use crate::state::transactions::Erc20Value;
         use crate::state::transactions::{create_transaction, EthTransactions};
@@ -320,7 +322,8 @@ mod eth_transactions {
             let tx = create_transaction(
                 &withdrawal_request.clone(),
                 TransactionNonce::ZERO,
-                gas_fee_estimate().to_price(estimate_gas_limit(&withdrawal_request)),
+                gas_fee_estimate(),
+                estimate_gas_limit(&withdrawal_request),
                 EthereumNetwork::Sepolia,
             )
             .unwrap();
@@ -340,7 +343,8 @@ mod eth_transactions {
             let correct_tx = create_transaction(
                 &withdrawal_request.clone().into(),
                 TransactionNonce::ZERO,
-                gas_fee_estimate().to_price(estimate_gas_limit(&withdrawal_request.clone().into())),
+                gas_fee_estimate(),
+                estimate_gas_limit(&withdrawal_request.clone().into()),
                 EthereumNetwork::Sepolia,
             )
             .unwrap();
@@ -390,7 +394,8 @@ mod eth_transactions {
             let correct_tx = create_transaction(
                 &withdrawal_request.clone().into(),
                 TransactionNonce::ZERO,
-                gas_fee_estimate().to_price(estimate_gas_limit(&withdrawal_request.clone().into())),
+                gas_fee_estimate(),
+                estimate_gas_limit(&withdrawal_request.clone().into()),
                 EthereumNetwork::Sepolia,
             )
             .unwrap();
@@ -437,7 +442,8 @@ mod eth_transactions {
                 let tx_with_wrong_nonce = create_transaction(
                     &withdrawal_request.clone(),
                     wrong_nonce,
-                    cketh_withdrawal_tx_fee(),
+                    gas_fee_estimate(),
+                    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
                     EthereumNetwork::Sepolia,
                 )
                 .unwrap();
@@ -515,7 +521,7 @@ mod eth_transactions {
                         chain_id: EthereumNetwork::Sepolia.chain_id(),
                         nonce: TransactionNonce::from(i),
                         max_priority_fee_per_gas: gas_fee_estimate.max_priority_fee_per_gas,
-                        max_fee_per_gas: gas_fee_estimate.estimate_max_fee_per_gas(),
+                        max_fee_per_gas: DEFAULT_CKERC20_MAX_FEE_PER_GAS,
                         gas_limit: CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
                         destination: withdrawal_request.erc20_contract_address,
                         amount: Wei::ZERO,
@@ -684,11 +690,15 @@ mod eth_transactions {
     mod create_resubmit_transactions {
         use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas};
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
+            cketh_withdrawal_request_with_index, create_and_record_ck_withdrawal_requests,
+            create_and_record_ckerc20_withdrawal_requests,
+            create_and_record_cketh_withdrawal_requests, create_and_record_signed_transaction,
             create_and_record_transaction, double_and_increment, gas_fee_estimate,
+            DEFAULT_CKERC20_MAX_FEE_PER_GAS, DEFAULT_MAX_TRANSACTION_FEE,
         };
-        use crate::state::transactions::{EthTransactions, WithdrawalRequest};
+        use crate::state::transactions::{
+            EthTransactions, ResubmitTransactionError, WithdrawalRequest,
+        };
         use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -780,7 +790,7 @@ mod eth_transactions {
         }
 
         #[test]
-        fn should_resubmit_transaction_with_updated_price() {
+        fn should_resubmit_cketh_transaction_with_updated_price() {
             let price_at_tx_creation = GasFeeEstimate {
                 base_fee_per_gas: WeiPerGas::from(10_u8),
                 max_priority_fee_per_gas: WeiPerGas::from(2_u8),
@@ -814,10 +824,10 @@ mod eth_transactions {
                             .unwrap(),
                         ..price_at_tx_creation.clone()
                     },
-                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(45_u8), //2 * (2 * 10 + 1) + 3
+                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(24_u8), // (2 * 10 + 1) + 3
                     resubmitted_tx_max_priority_fee_per_gas: WeiPerGas::from(3_u8), //10% increase of 2 rounded up
                     resubmitted_cketh_tx_amount_deduction: Wei::from(
-                        (45 - max_fee_per_gas_at_tx_creation) * 21_000_u32,
+                        (24 - max_fee_per_gas_at_tx_creation) * 21_000_u32,
                     ),
                 },
                 // max_priority_fee_per_gas and base_fee_per_gas_next_block increased
@@ -834,10 +844,10 @@ mod eth_transactions {
                             .checked_mul(2_u8)
                             .unwrap(),
                     },
-                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(46_u8), //2 * (2 * 10 + 1) + 4
+                    resubmitted_tx_max_fee_per_gas: WeiPerGas::from(25_u8), //(2 * 10 + 1) + 4
                     resubmitted_tx_max_priority_fee_per_gas: WeiPerGas::from(4_u8), //max_priority_fee_per_gas at tx_resubmission because higher than 10% bump of max_priority_fee_per_gas at tx_creation
                     resubmitted_cketh_tx_amount_deduction: Wei::from(
-                        (46 - max_fee_per_gas_at_tx_creation) * 21_000_u32,
+                        (25 - max_fee_per_gas_at_tx_creation) * 21_000_u32,
                     ),
                 },
             ];
@@ -883,27 +893,18 @@ mod eth_transactions {
 
             for test in &tests {
                 let cketh_ledger_burn_index = LedgerBurnIndex::new(15);
-                let ckerc20_ledger_burn_index = LedgerBurnIndex::new(7);
                 check_resubmit_tx(
                     test,
                     cketh_withdrawal_request_with_index(cketh_ledger_burn_index),
-                );
-                check_resubmit_tx(
-                    test,
-                    ckerc20_withdrawal_request_with_index(
-                        cketh_ledger_burn_index,
-                        ckerc20_ledger_burn_index,
-                    ),
                 );
             }
         }
 
         #[test]
-        fn should_resubmit_multiple_transactions() {
+        fn should_resubmit_multiple_cketh_transactions() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let mut rng = reproducible_rng();
             let withdrawal_requests: [WithdrawalRequest; 100] =
-                create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
+                create_and_record_cketh_withdrawal_requests(&mut transactions);
             let initial_price = GasFeeEstimate {
                 base_fee_per_gas: WeiPerGas::from(10_u8),
                 max_priority_fee_per_gas: WeiPerGas::from(2_u8),
@@ -933,24 +934,99 @@ mod eth_transactions {
                 let initial_transaction = transactions.sent_tx.get_alt(&withdrawal_id).unwrap()[0]
                     .as_ref()
                     .transaction();
-                let expected_amount = match withdrawal_requests[30 + i] {
-                    WithdrawalRequest::CkEth(_) => initial_transaction
-                        .amount
-                        .checked_sub(Wei::from(23 * 21_000_u32))
-                        .unwrap(),
-                    WithdrawalRequest::CkErc20(_) => initial_transaction.amount,
-                };
+                let expected_amount = initial_transaction
+                    .amount
+                    .checked_sub(Wei::from(2 * 21_000_u32))
+                    .unwrap();
                 assert_eq!(
                     resubmitted_tx,
                     Eip1559TransactionRequest {
                         nonce: TransactionNonce::from(30_u8 + i as u8),
-                        max_fee_per_gas: WeiPerGas::from(45_u8),
+                        max_fee_per_gas: WeiPerGas::from(24_u8), // (2 * 10 + 1) + 3
                         max_priority_fee_per_gas: WeiPerGas::from(3_u8),
                         amount: expected_amount,
                         ..initial_transaction.clone()
                     }
                 );
             }
+        }
+
+        #[test]
+        fn should_not_resubmit_ckerc20_transactions_unless_max_priority_fee_increases() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let withdrawal_requests: [WithdrawalRequest; 100] =
+                create_and_record_ckerc20_withdrawal_requests(&mut transactions);
+            let initial_price = GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(10_u8),
+                max_priority_fee_per_gas: WeiPerGas::from(2_u8),
+            };
+            for withdrawal_request in &withdrawal_requests {
+                let created_tx = create_and_record_transaction(
+                    &mut transactions,
+                    withdrawal_request.clone(),
+                    initial_price.clone(),
+                );
+                let _signed_tx =
+                    create_and_record_signed_transaction(&mut transactions, created_tx);
+            }
+
+            let higher_base_fee_per_gas_price = GasFeeEstimate {
+                base_fee_per_gas: double_and_increment(initial_price.base_fee_per_gas),
+                ..initial_price
+            };
+            let resubmitted_txs = transactions.create_resubmit_transactions(
+                TransactionCount::from(30_u8),
+                higher_base_fee_per_gas_price.clone(),
+            );
+            assert_eq!(resubmitted_txs, vec![]);
+
+            let higher_max_priority_fee_per_gas_price = GasFeeEstimate {
+                max_priority_fee_per_gas: initial_price
+                    .max_priority_fee_per_gas
+                    .checked_increment()
+                    .unwrap(),
+                ..initial_price
+            };
+            let resubmitted_txs = transactions.create_resubmit_transactions(
+                TransactionCount::from(30_u8),
+                higher_max_priority_fee_per_gas_price.clone(),
+            );
+            assert_eq!(resubmitted_txs.len(), 70);
+            for (i, (withdrawal_id, resubmitted_tx)) in resubmitted_txs
+                .into_iter()
+                .map(|res| res.unwrap())
+                .enumerate()
+            {
+                let initial_transaction = transactions.sent_tx.get_alt(&withdrawal_id).unwrap()[0]
+                    .as_ref()
+                    .transaction();
+                assert_eq!(
+                    resubmitted_tx,
+                    Eip1559TransactionRequest {
+                        nonce: TransactionNonce::from(30_u8 + i as u8),
+                        max_priority_fee_per_gas: WeiPerGas::from(3_u8),
+                        ..initial_transaction.clone()
+                    }
+                );
+            }
+
+            let too_high_price = GasFeeEstimate {
+                base_fee_per_gas: DEFAULT_CKERC20_MAX_FEE_PER_GAS,
+                max_priority_fee_per_gas: WeiPerGas::ONE,
+            };
+            let resubmitted_txs = transactions.create_resubmit_transactions(
+                TransactionCount::from(30_u8),
+                too_high_price.clone(),
+            );
+            assert_eq!(
+                resubmitted_txs,
+                vec![Err(ResubmitTransactionError::InsufficientTransactionFee {
+                    ledger_burn_index: 93_u64.into(),
+                    transaction_nonce: 30_u8.into(),
+                    allowed_max_transaction_fee: DEFAULT_MAX_TRANSACTION_FEE.into(),
+                    max_transaction_fee: 30_000_000_000_165_000_u128.into(),
+                })]
+            );
         }
 
         struct ParameterizedTest {
@@ -1139,7 +1215,7 @@ mod eth_transactions {
                 let resubmitted_txs_1 = transactions
                     .create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_1.clone());
                 let resubmitted_tx1 = Eip1559TransactionRequest {
-                    max_fee_per_gas: initial_price.estimate_max_fee_per_gas(),
+                    max_fee_per_gas: created_tx.max_fee_per_gas,
                     max_priority_fee_per_gas: WeiPerGas::from(3_u8),
                     ..created_tx.clone()
                 };
@@ -1168,7 +1244,7 @@ mod eth_transactions {
                 let resubmitted_txs_2 = transactions
                     .create_resubmit_transactions(TransactionCount::ZERO, resubmit_price_2.clone());
                 let resubmitted_tx2 = Eip1559TransactionRequest {
-                    max_fee_per_gas: initial_price.estimate_max_fee_per_gas(),
+                    max_fee_per_gas: created_tx.max_fee_per_gas,
                     max_priority_fee_per_gas: resubmit_price_2.max_priority_fee_per_gas,
                     ..created_tx
                 };
@@ -2179,23 +2255,25 @@ mod create_transaction {
     use crate::state::transactions::tests::arbitrary::{arb_address, arb_checked_amount_of};
     use crate::state::transactions::tests::{
         ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-        cketh_withdrawal_tx_fee,
+        gas_fee_estimate,
     };
     use crate::state::transactions::{
         create_transaction, CreateTransactionError, Erc20WithdrawalRequest, EthWithdrawalRequest,
         TransactionCallData,
     };
-    use crate::tx::TransactionPrice;
+    use crate::tx::GasFeeEstimate;
     use crate::tx::{AccessList, Eip1559TransactionRequest};
     use crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
     use proptest::collection::vec as pvec;
     use proptest::prelude::any;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{prop_assert, prop_assert_eq, proptest};
 
     proptest! {
         #[test]
         fn should_fail_when_amount_does_not_cover_transaction_fees(withdrawal_amount in any::<u64>()) {
-            let transaction_price = cketh_withdrawal_tx_fee();
+            let gas_fee = gas_fee_estimate();
+            let gas_limit = CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
+            let transaction_price = gas_fee.clone().to_price(gas_limit);
             let actual_max_transaction_fee = transaction_price.max_transaction_fee();
             let insufficient_amount = Wei::from(withdrawal_amount % (actual_max_transaction_fee.as_f64() as u64));
             let cketh_ledger_burn_index = LedgerBurnIndex::new(15);
@@ -2207,7 +2285,8 @@ mod create_transaction {
             let result = create_transaction(
                 &cketh_withdrawal_request.clone().into(),
                 TransactionNonce::TWO,
-                transaction_price.clone(),
+                gas_fee.clone(),
+                gas_limit,
                 EthereumNetwork::Sepolia,
             );
             prop_assert_eq!(
@@ -2219,6 +2298,8 @@ mod create_transaction {
                 })
             );
 
+            let actual_min_max_transaction_fee = gas_fee.min_max_fee_per_gas().transaction_cost(gas_limit).unwrap();
+            let insufficient_amount = Wei::from(withdrawal_amount % (actual_min_max_transaction_fee.as_f64() as u64));
             let ckerc20_withdrawal_request = Erc20WithdrawalRequest {
                 max_transaction_fee: insufficient_amount,
                 ..ckerc20_withdrawal_request_with_index(cketh_ledger_burn_index, LedgerBurnIndex::new(2))
@@ -2226,7 +2307,8 @@ mod create_transaction {
             let result = create_transaction(
                 &ckerc20_withdrawal_request.clone().into(),
                 TransactionNonce::TWO,
-                transaction_price,
+                gas_fee,
+                gas_limit,
                 EthereumNetwork::Sepolia,
             );
             prop_assert_eq!(
@@ -2234,7 +2316,7 @@ mod create_transaction {
                 Err(CreateTransactionError::InsufficientTransactionFee {
                     cketh_ledger_burn_index,
                     allowed_max_transaction_fee: ckerc20_withdrawal_request.max_transaction_fee,
-                    actual_max_transaction_fee,
+                    actual_max_transaction_fee: actual_min_max_transaction_fee,
                 })
             )
         }
@@ -2243,7 +2325,9 @@ mod create_transaction {
     proptest! {
         #[test]
         fn should_create_transaction(withdrawal_amount in 31_500_001_050_000_u64..=u64::MAX) {
-            let transaction_price = cketh_withdrawal_tx_fee();
+            let gas_fee = gas_fee_estimate();
+            let gas_limit = CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
+            let transaction_price = gas_fee.clone().to_price(gas_limit);
             let max_transaction_fee = transaction_price.max_transaction_fee();
             let ledger_burn_index = LedgerBurnIndex::new(15);
             let withdrawal_amount = Wei::from(withdrawal_amount);
@@ -2259,7 +2343,8 @@ mod create_transaction {
             let result = create_transaction(
                 &withdrawal_request.clone().into(),
                 TransactionNonce::TWO,
-                transaction_price.clone(),
+                gas_fee,
+                gas_limit,
                 EthereumNetwork::Sepolia,
             );
 
@@ -2279,17 +2364,18 @@ mod create_transaction {
 
     proptest! {
         #[test]
-        fn should_create_ckerc20_withdrawal_transaction(max_transaction_fee in 4_938_808_337_538_008_808_u128..=u128::MAX) {
+        fn should_create_ckerc20_withdrawal_transaction(max_transaction_fee in 4_652_229_101_896_296_u128..=u128::MAX) {
             // Example of a USDC transfer
             // https://etherscan.io/tx/0x295846b122356aebb2d426ffdc2510c2f5eecbf5fc359fb24bba8a7ab5fa8616
-            let transaction_price = TransactionPrice {
-                gas_limit: GasAmount::from(0x93348_u64),
-                max_fee_per_gas: WeiPerGas::from(0x77320769855_u64),
-                max_priority_fee_per_gas: WeiPerGas::from(0x50000000_u64),
+            let gas_fee = GasFeeEstimate {
+                base_fee_per_gas: WeiPerGas::from(0xb9790a88a_u64),
+                max_priority_fee_per_gas:  WeiPerGas::from(0x2faf080_u64)
             };
+            let gas_limit = GasAmount::from(0x16ca4_u64);
+            let min_tx_fee = gas_fee.min_max_fee_per_gas().transaction_cost(gas_limit).unwrap();
             prop_assert_eq!(
-                transaction_price.max_transaction_fee(),
-                Wei::from(4_938_808_337_538_008_808_u128)
+                min_tx_fee,
+                Wei::from(4_652_229_101_896_296_u128)
             );
             let cketh_ledger_burn_index = LedgerBurnIndex::new(15);
             let ckerc20_ledger_burn_index = LedgerBurnIndex::new(2);
@@ -2311,21 +2397,26 @@ mod create_transaction {
             let result = create_transaction(
                 &withdrawal_request.clone().into(),
                 TransactionNonce::from(0x57_u32),
-                transaction_price.clone(),
+                gas_fee.clone(),
+                gas_limit,
                 EthereumNetwork::Mainnet,
-            );
+            ).unwrap();
+            let tx_max_fee_per_gas = result.max_fee_per_gas;
+            let max_tx_fee = tx_max_fee_per_gas.transaction_cost(gas_limit).unwrap();
 
-            prop_assert_eq!(result, Ok(Eip1559TransactionRequest {
+            prop_assert!(min_tx_fee <= max_tx_fee && max_tx_fee <= withdrawal_request.max_transaction_fee);
+
+            prop_assert_eq!(result, Eip1559TransactionRequest {
                     chain_id: EthereumNetwork::Mainnet.chain_id(),
                     nonce: TransactionNonce::from(0x57_u32),
-                    max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-                    max_fee_per_gas: transaction_price.max_fee_per_gas,
-                    gas_limit: transaction_price.gas_limit,
+                    max_priority_fee_per_gas: gas_fee.max_priority_fee_per_gas,
+                    max_fee_per_gas: tx_max_fee_per_gas,
+                    gas_limit,
                     destination: withdrawal_request.erc20_contract_address,
                     amount: Wei::ZERO,
                     data: hex::decode("a9059cbb0000000000000000000000006b9353bf4f90abdb218979b7596fafc3c6c6ac64000000000000000000000000000000000000000000000000000000000204123f").unwrap(),
                     access_list: AccessList::new()
-                }))
+            })
         }
     }
 
@@ -2377,7 +2468,8 @@ mod withdrawal_flow {
                 if let Ok(created_tx) = create_transaction(
                     &request,
                     nonce,
-                    gas_fee_estimate.clone().to_price(estimate_gas_limit(&request)),
+                    gas_fee_estimate.clone(),
+                    estimate_gas_limit(&request),
                     EthereumNetwork::Sepolia,
                 ){
                     wrapped_txs.borrow_mut().record_created_transaction(request.cketh_ledger_burn_index(), created_tx);
@@ -2666,16 +2758,34 @@ fn gas_fee_estimate() -> GasFeeEstimate {
     }
 }
 
-fn cketh_withdrawal_tx_fee() -> TransactionPrice {
-    gas_fee_estimate().to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
-}
-
 /// Create a mix of ckETH and ckERC20 withdrawal requests and record them.
 fn create_and_record_ck_withdrawal_requests<const N: usize, R: Rng>(
     transactions: &mut EthTransactions,
     rng: &mut R,
 ) -> [WithdrawalRequest; N] {
     let requests = create_ck_withdrawal_requests(rng);
+    for request in &requests {
+        transactions.record_withdrawal_request(request.clone());
+    }
+    requests
+}
+
+/// Create ckETH withdrawal requests and record them.
+fn create_and_record_cketh_withdrawal_requests<const N: usize>(
+    transactions: &mut EthTransactions,
+) -> [WithdrawalRequest; N] {
+    let requests = create_cketh_withdrawal_requests();
+    for request in &requests {
+        transactions.record_withdrawal_request(request.clone());
+    }
+    requests
+}
+
+/// Create ckERC20 withdrawal requests and record them.
+fn create_and_record_ckerc20_withdrawal_requests<const N: usize>(
+    transactions: &mut EthTransactions,
+) -> [WithdrawalRequest; N] {
+    let requests = create_ckerc20_withdrawal_requests();
     for request in &requests {
         transactions.record_withdrawal_request(request.clone());
     }
@@ -2704,6 +2814,33 @@ fn create_ck_withdrawal_requests<const N: usize, R: Rng>(rng: &mut R) -> [Withdr
     requests.try_into().unwrap()
 }
 
+/// Create ckETH withdrawal requests.
+fn create_cketh_withdrawal_requests<const N: usize>() -> [WithdrawalRequest; N] {
+    let mut requests = Vec::with_capacity(N);
+    for i in 1..=N as u64 {
+        let cketh_ledger_burn_index = LedgerBurnIndex::from(3 * i);
+        let request = cketh_withdrawal_request_with_index(cketh_ledger_burn_index).into();
+        requests.push(request);
+    }
+    requests.try_into().unwrap()
+}
+
+/// Create ckERC20 withdrawal requests.
+fn create_ckerc20_withdrawal_requests<const N: usize>() -> [WithdrawalRequest; N] {
+    let mut requests = Vec::with_capacity(N);
+    for i in 1..=N as u64 {
+        let cketh_ledger_burn_index = LedgerBurnIndex::from(3 * i);
+        let ckerc20_ledger_burn_index = LedgerBurnIndex::from(7 * i);
+        let request = ckerc20_withdrawal_request_with_index(
+            cketh_ledger_burn_index,
+            ckerc20_ledger_burn_index,
+        )
+        .into();
+        requests.push(request);
+    }
+    requests.try_into().unwrap()
+}
+
 fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
     transactions: &mut EthTransactions,
     withdrawal_request: R,
@@ -2714,7 +2851,8 @@ fn create_and_record_transaction<R: Into<WithdrawalRequest>>(
     let tx = create_transaction(
         &withdrawal_request,
         transactions.next_transaction_nonce(),
-        gas_fee_estimate.to_price(estimate_gas_limit(&withdrawal_request)),
+        gas_fee_estimate,
+        estimate_gas_limit(&withdrawal_request),
         EthereumNetwork::Sepolia,
     )
     .expect("failed to create transaction");
@@ -2740,11 +2878,11 @@ fn resubmit_transaction_with_bumped_price(
     transactions: &mut EthTransactions,
     created_tx: Eip1559TransactionRequest,
 ) -> SignedEip1559TransactionRequest {
-    let bumped_price = created_tx.transaction_price().increase_by_10_percent();
+    let initial_price = created_tx.transaction_price();
     let new_tx = Eip1559TransactionRequest {
-        max_fee_per_gas: bumped_price.max_fee_per_gas,
-        max_priority_fee_per_gas: bumped_price.max_priority_fee_per_gas,
-        gas_limit: bumped_price.gas_limit,
+        max_fee_per_gas: increase_by_10_percent(initial_price.max_fee_per_gas),
+        max_priority_fee_per_gas: increase_by_10_percent(initial_price.max_priority_fee_per_gas),
+        gas_limit: initial_price.gas_limit,
         ..created_tx
     };
     transactions.record_resubmit_transaction(new_tx.clone());
@@ -2788,4 +2926,14 @@ fn double_and_increment<T>(amount: CheckedAmountOf<T>) -> CheckedAmountOf<T> {
         .checked_mul(2_u8)
         .and_then(|f| f.checked_increment())
         .unwrap()
+}
+
+pub fn increase_by_10_percent<T>(amount: CheckedAmountOf<T>) -> CheckedAmountOf<T> {
+    amount
+        .checked_add(
+            amount
+                .checked_div_ceil(10_u8)
+                .expect("BUG: must be Some() because divisor is non-zero"),
+        )
+        .unwrap_or(CheckedAmountOf::MAX)
 }

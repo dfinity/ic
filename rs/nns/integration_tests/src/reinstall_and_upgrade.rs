@@ -4,16 +4,12 @@ use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::{
-    init::TEST_NEURON_2_ID,
-    pb::v1::{Governance as GovernanceProto, NnsFunction},
-};
+use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
-    der_encode,
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
 };
@@ -394,7 +390,7 @@ async fn make_changes_to_state(nns_canisters: &NnsCanisters<'_>) {
     // GTC change: have TEST_IDENTITY_1 donate their neurons
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
     let donate_account_response: Result<Result<(), String>, String> = nns_canisters
@@ -413,7 +409,7 @@ async fn check_changes_to_state(nns_canisters: &NnsCanisters<'_>) -> bool {
     // GTC change: Assert that TEST_IDENTITY_1 has donated their neurons
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
     let get_account_response: Result<Result<AccountState, String>, String> = nns_canisters

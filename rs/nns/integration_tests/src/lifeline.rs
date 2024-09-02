@@ -4,16 +4,16 @@ use ic_base_types::CanisterId;
 use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+use ic_nns_governance_api::{
     pb::v1::{
         manage_neuron_response::Command as CommandResponse, NnsFunction, ProposalStatus, Vote,
     },
-    proposals::proposal_submission::create_external_update_proposal_candid,
+    proposal_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -29,7 +29,7 @@ use std::time::Duration;
 
 #[test]
 fn test_submit_and_accept_root_canister_upgrade_proposal() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
@@ -87,7 +87,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
         id: TEST_NEURON_2_ID,
     };
     let proposal_submission_response = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
         &proposal,
@@ -104,12 +104,12 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     };
 
     // Should have 1 pending proposals
-    let pending_proposals = get_pending_proposals(&mut state_machine);
+    let pending_proposals = get_pending_proposals(&state_machine);
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
     nns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {
             id: TEST_NEURON_1_ID,
@@ -119,9 +119,9 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     );
 
     // Wait for the proposal to be accepted and executed.
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
     let proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&mut state_machine, proposal_id.id);
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
         proposal_info.status(),
         ProposalStatus::Executed,
@@ -130,7 +130,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     );
 
     // No proposals should be pending now.
-    let pending_proposals = get_pending_proposals(&mut state_machine);
+    let pending_proposals = get_pending_proposals(&state_machine);
     assert_eq!(pending_proposals, vec![]);
     // check root status again
     let root_status = get_root_canister_status(&state_machine).unwrap();
@@ -156,7 +156,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
 
 #[test]
 fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
@@ -187,7 +187,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         id: TEST_NEURON_2_ID,
     };
     let proposal_submission_response = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
         &proposal,
@@ -205,12 +205,12 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     };
 
     // Should have 1 pending proposals
-    let pending_proposals = get_pending_proposals(&mut state_machine);
+    let pending_proposals = get_pending_proposals(&state_machine);
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
     nns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {
             id: TEST_NEURON_1_ID,
@@ -219,9 +219,9 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         Vote::Yes,
     );
     // Wait for the proposal to be accepted and executed.
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
     let proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&mut state_machine, proposal_id.id);
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
         proposal_info.status(),
         ProposalStatus::Executed,
@@ -230,7 +230,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     );
 
     // No proposals should be pending now.
-    let pending_proposals = get_pending_proposals(&mut state_machine);
+    let pending_proposals = get_pending_proposals(&state_machine);
     assert_eq!(pending_proposals, vec![]);
 
     // check root status again
@@ -243,7 +243,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
 
 #[test]
 fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
@@ -287,7 +287,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         id: TEST_NEURON_1_ID,
     };
     nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_id,
         &proposal,

@@ -14,6 +14,7 @@ tla_module(
     name = "dsm",
     src = "DSM.tla",
     deps = [
+        # Keep sorted.
         ":consensus",
     ],
 )

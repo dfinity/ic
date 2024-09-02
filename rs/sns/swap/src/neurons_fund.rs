@@ -28,31 +28,33 @@ pub enum LinearScalingCoefficientValidationError {
     },
 }
 
-impl ToString for LinearScalingCoefficientValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for LinearScalingCoefficientValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "LinearScalingCoefficientValidationError: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{prefix}Field `{}` must be specified.", field_name)
+                write!(f, "{prefix}Field `{}` must be specified.", field_name)
             }
             Self::EmptyInterval {
                 from_direct_participation_icp_e8s,
                 to_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{prefix}from_direct_participation_icp_e8s ({}) must be strictly less that \
                     to_direct_participation_icp_e8s ({})).",
                     from_direct_participation_icp_e8s, to_direct_participation_icp_e8s,
                 )
             }
             Self::DenominatorIsZero => {
-                format!("{prefix}slope_denominator must not equal zero.")
+                write!(f, "{prefix}slope_denominator must not equal zero.")
             }
             Self::NumeratorGreaterThanDenominator {
                 slope_numerator,
                 slope_denominator,
             } => {
-                format!(
+                write!(
+                    f,
                     "{prefix}slope_numerator ({}) must be less than or equal \
                     slope_denominator ({})",
                     slope_numerator, slope_denominator,
@@ -123,32 +125,33 @@ pub enum LinearScalingCoefficientVecValidationError {
     LinearScalingCoefficientValidationError(LinearScalingCoefficientValidationError),
 }
 
-impl ToString for LinearScalingCoefficientVecValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for LinearScalingCoefficientVecValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "LinearScalingCoefficientVecValidationError: ";
         match self {
             Self::LinearScalingCoefficientsOutOfRange(num_elements) => {
-                format!(
+                write!(
+                    f,
                     "{}coefficient_intervals (len={}) must contain at least 1 and at most {} elements.",
-                    prefix,
-                    num_elements,
-                    MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
+                    prefix, num_elements, MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
                 )
             }
             Self::LinearScalingCoefficientsUnordered(left, right) => {
-                format!(
+                write!(
+                    f,
                     "{}The intervals {:?} and {:?} are ordered incorrectly.",
                     prefix, left, right
                 )
             }
             Self::IrregularLinearScalingCoefficients(interval) => {
-                format!(
+                write!(
+                    f,
                     "{}The first interval {:?} does not start from 0.",
                     prefix, interval,
                 )
             }
             Self::LinearScalingCoefficientValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
         }
     }
@@ -241,18 +244,20 @@ pub enum IdealMatchedParticipationFunctionValidationError {
     },
 }
 
-impl ToString for IdealMatchedParticipationFunctionValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for IdealMatchedParticipationFunctionValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "IdealMatchedParticipationFunctionValidationError: ";
         match self {
             Self::TooManyBytes(num_bytes) => {
-                format!(
+                write!(
+                    f,
                     "{prefix} serialized representation has {} bytes; the maximum is {} bytes.",
                     num_bytes, MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
                 )
             }
             Self::DeserializationError { input, err } => {
-                format!(
+                write!(
+                    f,
                     "{prefix} deserialization failed: {}; input: `{}`.",
                     err, input
                 )
@@ -270,18 +275,18 @@ pub enum NeuronsFundParticipationConstraintsValidationError {
     ),
 }
 
-impl ToString for NeuronsFundParticipationConstraintsValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationConstraintsValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
             Self::RelatedFieldUnspecified(related_field_name) => {
-                format!("{}{} must be specified.", prefix, related_field_name,)
+                write!(f, "{}{} must be specified.", prefix, related_field_name,)
             }
             Self::LinearScalingCoefficientVecValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::IdealMatchedParticipationFunctionValidationError(error) => {
-                format!("{prefix}{}", error.to_string())
+                write!(f, "{prefix}{}", error)
             }
         }
     }

@@ -1,9 +1,6 @@
 use crate::{
-    governance::{
-        combine_aged_stakes,
-        ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    },
-    neuron::{DissolveStateAndAge, Neuron},
+    governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
+    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
         governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
@@ -348,11 +345,12 @@ pub fn build_merge_neurons_response(
     source: &Neuron,
     target: &Neuron,
     now_seconds: u64,
+    requester: PrincipalId,
 ) -> MergeResponse {
     let source_neuron = Some(NeuronProto::from(source.clone()));
     let target_neuron = Some(NeuronProto::from(target.clone()));
-    let source_neuron_info = Some(source.get_neuron_info(now_seconds));
-    let target_neuron_info = Some(target.get_neuron_info(now_seconds));
+    let source_neuron_info = Some(source.get_neuron_info(now_seconds, requester));
+    let target_neuron_info = Some(target.get_neuron_info(now_seconds, requester));
     MergeResponse {
         source_neuron,
         target_neuron,
@@ -817,20 +815,6 @@ mod tests {
             },
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
             },
         ];
 

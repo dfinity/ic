@@ -8,14 +8,14 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-bls12-381-type = { path = "../type" }
-zeroize = { version = "1", features = ["zeroize_derive"] }
-rand = "0.8"
 ic-crypto-sha3 = { path = "../../../../sha3" }
+rand = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+criterion = { workspace = true }
 hex = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 
 [[bench]]
 name = "vetkd"

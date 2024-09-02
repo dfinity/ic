@@ -104,7 +104,7 @@ pub trait PublicKeyStore: Send + Sync {
     ///
     /// # Errors
     /// * [`PublicKeyRetainError::OldestPublicKeyNotFound`] if the given `oldest_public_key_to_keep` was not found.
-    /// No keys are deleted in that case.
+    ///   No keys are deleted in that case.
     /// * [`PublicKeyRetainError::Io`] if an I/O error occurred while writing the retained keys back to disk.
     fn retain_idkg_public_keys_since(
         &mut self,

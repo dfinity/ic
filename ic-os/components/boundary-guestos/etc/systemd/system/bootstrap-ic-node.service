@@ -1,0 +1,14 @@
+[Unit]
+Description=Bootstrap the IC node
+Requires=var-log.mount
+After=var-log.mount
+Before=setup-ssh-account-keys.service
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=setup-ssh-account-keys.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/bootstrap-ic-node.sh

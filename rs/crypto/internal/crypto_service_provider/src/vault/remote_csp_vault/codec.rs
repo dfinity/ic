@@ -312,7 +312,7 @@ enum CspVaultMethod {
     IdkgRetainActiveKeys,
     IdkgGenDealingEncryptionKeyPair,
     IdkgOpenDealing,
-    EcdsaSignShare,
+    CreateEcdsaSigShare,
     CreateSchnorrSigShare,
     NewPublicSeed,
 }
@@ -383,7 +383,9 @@ impl CspVaultMethod {
                 "idkg_gen_dealing_encryption_key_pair",
             ),
             CspVaultMethod::IdkgOpenDealing => (MetricsDomain::IdkgProtocol, "idkg_open_dealing"),
-            CspVaultMethod::EcdsaSignShare => (MetricsDomain::ThresholdEcdsa, "ecdsa_sign_share"),
+            CspVaultMethod::CreateEcdsaSigShare => {
+                (MetricsDomain::ThresholdEcdsa, "create_ecdsa_sig_share")
+            }
             CspVaultMethod::CreateSchnorrSigShare => {
                 (MetricsDomain::ThresholdSchnorr, "create_schnorr_sig_share")
             }
@@ -424,7 +426,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,
             Req::IdkgGenDealingEncryptionKeyPair { .. } => Method::IdkgGenDealingEncryptionKeyPair,
             Req::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
-            Req::EcdsaSignShare { .. } => Method::EcdsaSignShare,
+            Req::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Req::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
             Req::NewPublicSeed { .. } => Method::NewPublicSeed,
         }
@@ -463,7 +465,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,
             Resp::IdkgGenDealingEncryptionKeyPair { .. } => Method::IdkgGenDealingEncryptionKeyPair,
             Resp::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
-            Resp::EcdsaSignShare { .. } => Method::EcdsaSignShare,
+            Resp::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Resp::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
             Resp::NewPublicSeed { .. } => Method::NewPublicSeed,
         }

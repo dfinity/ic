@@ -20,10 +20,12 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-ledger-test-utils = { path = "../test_utils" }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
+serde_bytes = { workspace = true }

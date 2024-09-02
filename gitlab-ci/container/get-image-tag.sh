@@ -7,7 +7,7 @@ cd "$(git rev-parse --show-toplevel)"
 INPUT_FILES=(
     .bazelversion
     rust-toolchain.toml
-    gitlab-ci/container/Dockerfile*
+    gitlab-ci/container/Dockerfile
     gitlab-ci/container/files/*
 )
 

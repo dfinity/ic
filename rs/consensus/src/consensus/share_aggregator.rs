@@ -3,23 +3,22 @@
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
 use ic_consensus_utils::{
-    active_high_threshold_transcript, active_low_threshold_transcript, aggregate,
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
     registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
-use ic_types::consensus::{
-    CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
-    RandomTapeContent,
+use ic_types::{
+    consensus::{
+        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+        RandomTapeContent,
+    },
+    crypto::Signed,
+    Height,
 };
-use ic_types::crypto::Signed;
-use ic_types::Height;
-use std::cmp::min;
-use std::sync::Arc;
+use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
@@ -62,8 +61,7 @@ impl ShareAggregator {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
-        let dkg_id = active_low_threshold_transcript(state_reader, height)
-            .map(|transcript| transcript.dkg_id);
+        let dkg_id = active_low_threshold_nidkg_id(state_reader, height);
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
@@ -92,8 +90,7 @@ impl ShareAggregator {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
-                active_low_threshold_transcript(state_reader, content.height())
-                    .map(|transcript| transcript.dkg_id)
+                active_low_threshold_nidkg_id(state_reader, content.height())
             }),
             shares,
         ))
@@ -151,8 +148,7 @@ impl ShareAggregator {
                 }
             });
             let state_reader = pool.as_cache();
-            let dkg_id = active_high_threshold_transcript(state_reader, height)
-                .map(|transcript| transcript.dkg_id);
+            let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
             let result = aggregate(
                 &self.log,
                 self.membership.as_ref(),

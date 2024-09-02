@@ -1,4 +1,6 @@
+import random
 import re
+import string
 from unittest.mock import Mock
 
 import pytest
@@ -32,7 +34,11 @@ def jira_lib_mock():
 
 @pytest.fixture
 def jira_ds(jira_lib_mock):
-    return JiraFindingDataSource([], jira_lib_mock)
+    return JiraFindingDataSource([], custom_jira=jira_lib_mock)
+
+
+def random_string(n):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(n))
 
 
 def test_get_risk_assessor_return_single_user(jira_ds, jira_lib_mock):
@@ -181,16 +187,16 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_id")[0]: "https://crates.io/crates/chrono",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "0.4.19",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
-        "|https://crates.io/crates/chrono|chrono|0.4.19|\n"
-        "|https://crates.io/crates/syn|syn|1.0|\n",
+                                                             "|https://crates.io/crates/chrono|chrono|0.4.19|\n"
+                                                             "|https://crates.io/crates/syn|syn|1.0|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
-        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]|\n",
+                                                                "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
+                                                                "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
-        "||*chrono*|0.4.20;>=0.5.0||\n"
-        "||*syn*||>=1.9.4|\n",
+           "||*chrono*|0.4.20;>=0.5.0||\n"
+           "||*syn*||>=1.9.4|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* project A\n" "* project B\n" "* project C\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [user1, user2],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: risk,
@@ -216,8 +222,8 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.vulnerable_dependency.version == "0.4.19"
     assert len(res1.vulnerable_dependency.fix_version_for_vulnerability) == 1
     assert res1.vulnerable_dependency.fix_version_for_vulnerability[
-        "https://rustsec.org/advisories/RUSTSEC-2020-0159"
-    ] == ["0.4.20", ">=0.5.0"]
+               "https://rustsec.org/advisories/RUSTSEC-2020-0159"
+           ] == ["0.4.20", ">=0.5.0"]
     assert len(res1.vulnerabilities) == 2
     assert res1.vulnerabilities[0].id == "https://rustsec.org/advisories/RUSTSEC-2020-0159"
     assert res1.vulnerabilities[0].name == "RUSTSEC-2020-0159"
@@ -235,8 +241,8 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.first_level_dependencies[0].version == "1.0"
     assert len(res1.first_level_dependencies[0].fix_version_for_vulnerability) == 1
     assert res1.first_level_dependencies[0].fix_version_for_vulnerability[
-        "https://rustsec.org/advisories/RUSTSEC-2022-0051"
-    ] == [">=1.9.4"]
+               "https://rustsec.org/advisories/RUSTSEC-2022-0051"
+           ] == [">=1.9.4"]
     assert res1.projects == ["project A", "project B", "project C"]
     assert res1.risk_assessor == [User(user1.accountId), User(user2.accountId, user2.displayName, user2.emailAddress)]
     assert res1.risk == SecurityRisk.CRITICAL
@@ -267,9 +273,9 @@ def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_d
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "vers",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n" "|id|chrono|vers|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|desc|-1|\n",
+                                                                "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|desc|-1|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]: "||*dep / vuln*||RUSTSEC-2020-0159||\n"
-        "||*chrono*|0.4.20;>=0.5.0||\n",
+                                                               "||*chrono*|0.4.20;>=0.5.0||\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* project A",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [user1],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
@@ -301,9 +307,9 @@ def test_get_finding_return_none_if_primary_key_of_finding_not_matching(jira_ds,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "0.4.19",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
-        "|https://crates.io/crates/chrono|chrono|0.4.19|\n",
+                                                             "|https://crates.io/crates/chrono|chrono|0.4.19|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1|\n",
+                                                                "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: None,
@@ -419,7 +425,7 @@ def test_create_query_update_finding():
     jira_lib_mock = Mock()
     sub1 = Mock()
     sub2 = Mock()
-    jira_ds = JiraFindingDataSource([sub1, sub2], jira_lib_mock)
+    jira_ds = JiraFindingDataSource([sub1, sub2], custom_jira=jira_lib_mock)
     InMemoryJira(jira_lib_mock)
     finding_in = Finding(
         "repo1",
@@ -505,19 +511,89 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
     )
 
 
+def test_dont_create_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    mem = InMemoryJira(jira_lib_mock)
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        ["project"],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10), name=random_string(10), description=random_string(10), risk_note=random_string(10)))
+    jira_lib_mock.search_issues.return_value = []
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    assert len(mem.store) == 0
+
+
+def test_dont_update_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    issue_data = {
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_id")[0]: "dep_id",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "dep_vers",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
+                                                             "|dep_id|dep_name|dep_vers|\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
+                                                                "|vuln_id|vuln_name|vuln_version|-1| |\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
+    }
+    issue = Mock()
+    issue.get_field.side_effect = lambda x: issue_data[x]
+    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SCAVM-4"
+    jira_lib_mock.search_issues.return_value = [issue]
+
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10), name=random_string(10), description=random_string(10), risk_note=random_string(10)))
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    issue.update.assert_not_called()
+
+
 def test_delete_finding():
     jira_lib_mock = Mock()
     sub = Mock()
-    jira_ds = JiraFindingDataSource([sub], jira_lib_mock)
+    jira_ds = JiraFindingDataSource([sub], custom_jira=jira_lib_mock)
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_id")[0]: "https://crates.io/crates/chrono",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "0.4.19",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
-        "|https://crates.io/crates/chrono|chrono|0.4.19|\n",
+                                                             "|https://crates.io/crates/chrono|chrono|0.4.19|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||\n"
-        "|vuln_id|vuln_name|vuln_desc|-1|\n",
+                                                                "|vuln_id|vuln_name|vuln_desc|-1|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n",
@@ -554,15 +630,15 @@ def test_delete_finding():
     jira_lib_mock.transition_issue.assert_called_once_with(issue.id, "41")
     sub.on_finding_deleted.assert_called_once()
 
+
 def test_owning_team_mapping_complete(jira_ds, jira_lib_mock):
     for team in Team:
         assert team in JIRA_OWNER_GROUP_BY_TEAM
 
 
 class InMemoryJira:
-    store = {}
-
     def __init__(self, jira_lib_mock):
+        self.store = {}
         jira_lib_mock.create_issue.side_effect = lambda x: self.create_issue(x)
         # jira_lib_mock.search_issues.side_effect = lambda x: self.query_issue(x)
 

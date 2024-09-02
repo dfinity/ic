@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/consensus",
@@ -16,7 +17,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/test_utilities",
     "//rs/test_utilities/consensus",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/types",
 ]

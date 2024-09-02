@@ -10,18 +10,18 @@ documentation.workspace = true
 ic-crypto-internal-basic-sig-ed25519 = { path = "../basic_sig/ed25519" }
 ic-crypto-secrets-containers = { path = "../../../secrets_containers" }
 ic-types = { path = "../../../../types/types" }
-rand = "0.8"
+rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }
-time = "0.3.20"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+time = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+hex = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../../protobuf" }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 serde_cbor = { workspace = true }
-hex = { workspace = true }
 x509-parser = { workspace = true }

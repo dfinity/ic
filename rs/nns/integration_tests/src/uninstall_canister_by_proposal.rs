@@ -2,10 +2,9 @@ use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
-    proposal::Action,
-    ExecuteNnsFunction, NnsFunction, Proposal,
+    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -42,7 +41,7 @@ fn setup_state_machine_with_nns_canisters() -> StateMachine {
 
 #[test]
 fn uninstall_canister_by_proposal() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
     // Pick some installed nns canister for testing
     let canister_id = CanisterId::from_u64(LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET);
     // Confirm that canister exists and has some code installed (module_hash is Some)
@@ -50,21 +49,23 @@ fn uninstall_canister_by_proposal() {
     let status = get_canister_status_from_root(&state_machine, canister_id);
     assert!(status.module_hash.is_some());
     // Prepare a proposal to uninstall canister code
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("<proposal to uninstall an NNS canister>".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::UninstallCode as i32,
-            payload: Encode!(&CanisterIdRecord { canister_id })
-                .expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UninstallCode as i32,
+                payload: Encode!(&CanisterIdRecord { canister_id })
+                    .expect("Error encoding proposal payload"),
+            },
+        )),
     };
     // To make a proposal we need a neuron
     let n1 = get_neuron_1();
     // Execute a proposal
     let response =
-        nns_governance_make_proposal(&mut state_machine, n1.principal_id, n1.neuron_id, &proposal)
+        nns_governance_make_proposal(&state_machine, n1.principal_id, n1.neuron_id, &proposal)
             .command
             .expect("Making NNS proposal failed");
     let _proposal_id = match response {

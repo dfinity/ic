@@ -1,12 +1,18 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryDirtyPageLimit};
+use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
-    subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
+    embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
+    execution_environment::Config,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::{compile, decoding::decode_wasm},
+    WasmtimeEmbedder,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
@@ -15,14 +21,15 @@ use ic_execution_environment::{
     RoundInstructions, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+    ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -43,18 +50,18 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
-use ic_test_utilities::crypto::mock_random_number_generator;
+use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query,
-        QuerySource, RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
+        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -133,8 +140,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
     RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
-        max_ecdsa_queue_size: 20,
-        quadruples_to_create_in_advance: 5,
+        chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
@@ -195,7 +201,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -684,7 +690,7 @@ impl ExecutionTest {
     pub fn set_log_visibility(
         &mut self,
         canister_id: CanisterId,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
@@ -998,6 +1004,12 @@ impl ExecutionTest {
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
             }
+            CanisterTask::OnLowWasmMemory => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::OnLowWasmMemory);
+            }
         }
         let result = execute_canister(
             &self.exec_env,
@@ -1026,18 +1038,21 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
+        data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = AnonymousQuery {
+        let query = Query {
+            source: QuerySource::Anonymous,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.exec_env.execute_anonymous_query(
+
+        let result = self.query_handler.query(
             query,
-            state.clone(),
-            self.instruction_limit_without_dts,
+            Labeled::new(Height::from(0), Arc::clone(&state)),
+            data_certificate,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1180,12 +1195,13 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
+
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.ecdsa_subnet_public_keys,
+            &self.idkg_subnet_public_keys,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -1594,8 +1610,8 @@ pub struct ExecutionTestBuilder {
     log: ReplicaLogger,
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
-    ecdsa_key: Option<EcdsaKeyId>,
-    ecdsa_signing_enabled: bool,
+    schnorr_signature_fee: Option<Cycles>,
+    idkg_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1610,6 +1626,7 @@ pub struct ExecutionTestBuilder {
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1631,8 +1648,8 @@ impl Default for ExecutionTestBuilder {
             log: no_op_logger(),
             caller_canister_id: None,
             ecdsa_signature_fee: None,
-            ecdsa_key: None,
-            ecdsa_signing_enabled: false,
+            schnorr_signature_fee: None,
+            idkg_keys_with_signing_enabled: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1649,6 +1666,8 @@ impl Default for ExecutionTestBuilder {
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
+            canister_snapshot_baseline_instructions: scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }
@@ -1708,20 +1727,21 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
+    pub fn with_schnorr_signature_fee(self, schnorr_signature_fee: u128) -> Self {
         Self {
-            ecdsa_key: Some(ecdsa_key),
-            ecdsa_signing_enabled: true,
+            schnorr_signature_fee: Some(Cycles::new(schnorr_signature_fee)),
             ..self
         }
     }
 
-    pub fn with_disabled_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
-        Self {
-            ecdsa_key: Some(ecdsa_key),
-            ecdsa_signing_enabled: false,
-            ..self
-        }
+    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled.insert(key_id, true);
+        self
+    }
+
+    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled.insert(key_id, false);
+        self
     }
 
     pub fn with_instruction_limit(self, limit: u64) -> Self {
@@ -1922,16 +1942,32 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit_message: NumOsPages,
-        stable_memory_dirty_page_limit_upgrade: NumOsPages,
+        stable_memory_dirty_page_limit: StableMemoryPageLimit,
     ) -> Self {
         self.execution_config
             .embedders_config
-            .stable_memory_dirty_page_limit = StableMemoryDirtyPageLimit {
-            message: stable_memory_dirty_page_limit_message,
-            upgrade: stable_memory_dirty_page_limit_upgrade,
-        };
+            .stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
 
+        self
+    }
+
+    pub fn with_stable_memory_access_limit(
+        mut self,
+        stable_memory_access_limit: StableMemoryPageLimit,
+    ) -> Self {
+        self.execution_config
+            .embedders_config
+            .stable_memory_accessed_page_limit = stable_memory_access_limit;
+
+        self
+    }
+
+    pub fn with_max_canister_http_requests_in_flight(
+        mut self,
+        max_canister_http_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config.max_canister_http_requests_in_flight =
+            max_canister_http_requests_in_flight;
         self
     }
 
@@ -1942,11 +1978,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
-        self
-    }
-
-    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
-        self.execution_config.wasm_chunk_store = status;
         self
     }
 
@@ -1963,19 +1994,26 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .canister_logging = status;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
         self.execution_config
             .embedders_config
             .feature_flags
             .best_effort_responses = status;
+        self
+    }
+
+    pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
+        self
+    }
+
+    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_schnorr_public_key = status;
+        self
+    }
+
+    pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_sign_with_schnorr = status;
         self
     }
 
@@ -2020,7 +2058,7 @@ impl ExecutionTestBuilder {
         self.build_common(routing_table)
     }
 
-    fn build_common(self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
+    fn build_common(mut self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
@@ -2050,12 +2088,25 @@ impl ExecutionTestBuilder {
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
-        if let Some(ecdsa_key) = &self.ecdsa_key {
-            if self.ecdsa_signing_enabled {
-                state.metadata.network_topology.idkg_signing_subnets.insert(
-                    MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
-                    vec![self.own_subnet_id],
-                );
+        if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
+            config.schnorr_signature_fee = schnorr_signature_fee;
+        }
+        for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
+            // Populate hte chain key settings
+            self.registry_settings.chain_key_settings.insert(
+                key_id.clone(),
+                ChainKeySettings {
+                    max_queue_size: 20,
+                    pre_signatures_to_create_in_advance: 5,
+                },
+            );
+
+            if *is_signing_enabled {
+                state
+                    .metadata
+                    .network_topology
+                    .idkg_signing_subnets
+                    .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state
                 .metadata
@@ -2064,7 +2115,7 @@ impl ExecutionTestBuilder {
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .idkg_keys_held
-                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
+                .insert(key_id.clone());
         }
 
         state.metadata.network_topology.bitcoin_mainnet_canister_id =
@@ -2073,19 +2124,27 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.bitcoin_testnet_canister_id =
             self.execution_config.bitcoin.testnet_canister_id;
 
-        let ecdsa_subnet_public_keys = self
-            .ecdsa_key
-            .into_iter()
-            .map(|key| {
-                (
-                    key,
+        let idkg_subnet_public_keys = self
+            .idkg_keys_with_signing_enabled
+            .into_keys()
+            .map(|key_id| match key_id {
+                MasterPublicKeyId::Ecdsa(_) => (
+                    key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },
-                )
+                ),
+                MasterPublicKeyId::Schnorr(_) => (
+                    key_id,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::SchnorrSecp256k1,
+                        public_key: b"cdcdcdcd".to_vec(),
+                    },
+                ),
             })
             .collect();
+
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             self.instruction_limit,
             self.subnet_type,
@@ -2118,8 +2177,15 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironment::new(
@@ -2138,6 +2204,7 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
+            self.canister_snapshot_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);
@@ -2191,7 +2258,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
         }
@@ -2251,9 +2318,8 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
-    for (queue_id, msg) in output_iter {
-        let canister_id = CanisterId::try_from(queue_id.dst_canister.get()).unwrap();
-        output.push((canister_id, msg));
+    for msg in output_iter {
+        output.push((msg.receiver(), msg));
     }
     output
 }
@@ -2283,7 +2349,7 @@ pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
-    let wasm = BinaryEncodedWasm::new(wasm.to_vec());
+    let wasm = decode_wasm(WASM_MAX_SIZE, Arc::new(wasm.to_vec())).unwrap();
     let config = EmbeddersConfig::default();
     let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
         .1

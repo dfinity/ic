@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:candid",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
@@ -80,7 +82,8 @@ DEV_ENV = {
     "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
 }
 
-DEPENDENCIES_TEST = [
+DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/test_utils",
     "//rs/rosetta-api/tvl",
     "//rs/rosetta-api/tvl/xrc_mock",
@@ -117,5 +120,5 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
-    deps = DEPENDENCIES_TEST,
+    deps = DEV_DEPENDENCIES,
 )

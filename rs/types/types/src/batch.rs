@@ -25,10 +25,10 @@ use crate::{
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
 use ic_base_types::NodeId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -42,15 +42,9 @@ use std::{
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
-    /// The next start height is always set by the consensus,
-    /// see `deliver_batches()`. But the tests and the `PocketIC`
-    /// might set it to `None`, i.e. "unknown".
-    ///
-    /// In a case of a subnet recovery, the DSM will observe an instant
-    /// jump for the `batch_number` and `next_checkpoint_height` values.
-    /// The `next_checkpoint_height`, if set, should be always greater
-    /// than the `batch_number`.
-    pub next_checkpoint_height: Option<Height>,
+    /// The batch summary is always set by the consensus, see `deliver_batches()`.
+    /// The tests and the `PocketIC` might set it to `None`, i.e. "unknown".
+    pub batch_summary: Option<BatchSummary>,
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
@@ -58,10 +52,10 @@ pub struct Batch {
     pub messages: BatchMessages,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The ECDSA public keys of the subnet.
-    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-    /// The ECDSA quadruple Ids available to be matched with signature requests.
-    pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+    /// The Master public keys of the subnet.
+    pub idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    /// The pre-signature Ids available to be matched with signature requests.
+    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
@@ -116,6 +110,22 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
+}
+
+/// Batch properties collected form the last DKG summary block.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BatchSummary {
+    /// The next checkpoint height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_height: Height,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: Height,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
@@ -235,7 +245,6 @@ mod tests {
     fn default_batch_payload_is_empty() {
         assert_eq!(IngressPayload::default().count_bytes(), 0);
         assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
-        assert_eq!(CanisterHttpPayload::default().count_bytes(), 0);
     }
 
     #[test]

@@ -5,13 +5,15 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
-    "//rs/artifact_manager",
+    # Keep sorted.
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
     "//rs/interfaces/mocks",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/p2p/artifact_downloader",
+    "//rs/p2p/artifact_manager",
     "//rs/p2p/consensus_manager",
     "//rs/p2p/peer_manager",
     "//rs/p2p/quic_transport",
@@ -24,7 +26,6 @@ DEPENDENCIES = [
     "//rs/registry/local_store/artifacts",
     "//rs/registry/proto_data_provider",
     "//rs/state_manager",
-    "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
@@ -33,10 +34,11 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
-    "@crate_index//:either",
     "@crate_index//:futures",
     "@crate_index//:mockall",
+    "@crate_index//:pin-project-lite",
     "@crate_index//:quinn",
+    "@crate_index//:quinn-udp",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
@@ -45,6 +47,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

@@ -3,12 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/ni-dkg",
-    "//rs/types/base_types",
     "//rs/interfaces",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/test_utilities/types",
+    "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:bincode",
     "@crate_index//:mockall",

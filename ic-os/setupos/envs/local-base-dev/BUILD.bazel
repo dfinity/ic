@@ -1,8 +1,6 @@
 load("//ic-os:defs.bzl", "icos_build")
-load("//ic-os/scripts/bare_metal_deployment:tools.bzl", "launch_bare_metal")
+load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
-
-exports_files(["build_container_filesystem_config.txt"])
 
 # The macro contains several targets.
 # Check
@@ -16,7 +14,7 @@ icos_build(
     tags = ["manual"],
     upgrades = False,
     upload_prefix = None,  # Do not upload locally built base images
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
     vuln_scan = False,
 )
 

@@ -30,12 +30,13 @@ ic-types = { path = "../../types/types" }
 ic-xnet-hyper = { path = "../hyper" }
 ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+axum = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
@@ -54,8 +55,7 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 nix = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 reqwest = { workspace = true }
-tempfile = "3.1.0"
-axum = { workspace = true }
-url = "2.1.1"
+tempfile = { workspace = true }
+url = { workspace = true }

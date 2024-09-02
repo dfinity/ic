@@ -201,13 +201,21 @@ if [ -n "$proposal_id" ]; then
         error "Could not fetch $proposal_id, please make sure you have a valid internet connection or that the proposal #$proposal_id exists"
     fi
     log_debug "Extract the package_url"
-    proposal_package_guestos_url=$(extract_field_json ".payload.release_package_urls[0]" "$proposal_body")
+    proposal_package_url=$(extract_field_json ".payload.release_package_urls[0]" "$proposal_body")
 
     log_debug "Extract the sha256 sums hex for the artifacts from the proposal"
-    proposal_package_guestos_sha256_hex=$(extract_field_json ".payload.release_package_sha256_hex" "$proposal_body")
+    proposal_package_sha256_hex=$(extract_field_json ".payload.release_package_sha256_hex" "$proposal_body")
 
     log_debug "Extract git_hash out of the proposal"
-    git_hash=$(extract_field_json ".payload.replica_version_to_elect" "$proposal_body")
+    if grep -q "replica_version_to_elect" "$proposal_body"; then
+        guestos_proposal=true
+        git_hash=$(extract_field_json ".payload.replica_version_to_elect" "$proposal_body")
+    elif grep -q "hostos_version_to_elect" "$proposal_body"; then
+        hostos_proposal=true
+        git_hash=$(extract_field_json ".payload.hostos_version_to_elect" "$proposal_body")
+    else
+        error "Proposal #$proposal_id is missing replica_version_to_elect or hostos_version_to_elect"
+    fi
 else
     log_debug "Extract git_hash from CLI arguments or directory's HEAD"
     git_hash=${git_commit:-$(git rev-parse HEAD)}
@@ -240,19 +248,24 @@ mkdir -p "$proposal_out"
 if [ -n "$proposal_id" ]; then
 
     log "Check the proposal url is correctly formatted"
-    expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz"
-    if [ "$proposal_package_guestos_url" != "$expected_url" ]; then
-        error "The artifact's URL is wrongly formatted, please report this to DFINITY\n\t\tcurrent  = $proposal_package_guestos_url\n\t\texpected = $expected_url"
+    if [ "${guestos_proposal:-}" == "true" ]; then
+        expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.zst"
+    else
+        expected_url="https://download.dfinity.systems/ic/$git_hash/host-os/update-img/update-img.tar.zst"
+    fi
+
+    if [ "$proposal_package_url" != "$expected_url" ]; then
+        error "The artifact's URL is wrongly formatted, please report this to DFINITY\n\t\tcurrent  = $proposal_package_url\n\t\texpected = $expected_url"
     fi
 
     log "Download the proposal artifacts"
     curl --silent --show-error --location --retry 5 --retry-delay 10 \
-        --remote-name --output-dir "$proposal_out" "$proposal_package_guestos_url"
+        --remote-name --output-dir "$proposal_out" "$proposal_package_url"
 
     pushd "$proposal_out"
 
     log "Check the hash of the artifacts is the correct one"
-    echo "$proposal_package_guestos_sha256_hex  update-img.tar.gz" | shasum -a256 -c- >/dev/null
+    echo "$proposal_package_sha256_hex  update-img.tar.zst" | shasum -a256 -c- >/dev/null
 
     log_success "The proposal's artifacts and hash match"
     popd
@@ -265,7 +278,7 @@ download_ci_files() {
     local os_type="$1"
     local output_dir="$2"
 
-    local os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.gz"
+    local os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.zst"
     local sha_url="${BASE_URL}/${os_type}/update-img/SHA256SUMS"
 
     if [ "$os_type" == "host-os" ]; then
@@ -274,7 +287,7 @@ download_ci_files() {
     fi
 
     if [ "$os_type" == "setup-os" ]; then
-        os_url="${BASE_URL}/${os_type}/disk-img/disk-img.tar.gz"
+        os_url="${BASE_URL}/${os_type}/disk-img/disk-img.tar.zst"
         sha_url="${BASE_URL}/${os_type}/disk-img/SHA256SUMS"
     fi
 
@@ -308,19 +321,28 @@ check_ci_hash() {
 
 log "Validating that uploaded image hashes match the provided proposal hashes"
 
-check_ci_hash "guestos" "update-img.tar.gz" "ci_package_guestos_sha256_hex"
+check_ci_hash "guestos" "update-img.tar.zst" "ci_package_guestos_sha256_hex"
 check_ci_hash "hostos" "update-img.tar.zst" "ci_package_hostos_sha256_hex"
-check_ci_hash "setupos" "disk-img.tar.gz" "ci_package_setupos_sha256_hex"
+check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
 
 log_success "The CI's artifacts and hash match"
 
 #################### Verify Proposal Image == CI Image
 log "Check the shasum that was set in the proposal matches the one we download from CDN"
 if [ -n "$proposal_id" ]; then
-    if [ "$proposal_package_guestos_sha256_hex" != "$ci_package_guestos_sha256_hex" ]; then
-        error "The sha256 sum from the proposal does not match the one from the CDN storage for guestOS update-img.tar.gz. The guestos sha256 sum from the proposal: $proposal_package_guestos_sha256_hex The guestos sha256 sum from the CDN storage: $ci_package_guestos_sha256_hex."
+    if [ "${guestos_proposal:-}" == "true" ]; then
+        if [ "$proposal_package_sha256_hex" != "$ci_package_guestos_sha256_hex" ]; then
+            error "The sha256 sum from the proposal does not match the one from the CDN storage for guestOS update-img.tar.zst. The guestos sha256 sum from the proposal: $proposal_package_sha256_hex The guestos sha256 sum from the CDN storage: $ci_package_guestos_sha256_hex."
+        else
+            log_success "The guestos shasum from the proposal and CDN match"
+        fi
     else
-        log_success "The guestos shasum from the proposal and CDN match"
+        if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
+            error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
+        else
+            log_success "The guestos shasum from the proposal and CDN match"
+        fi
+
     fi
 fi
 
@@ -355,9 +377,9 @@ log "Build IC-OS"
 ./gitlab-ci/container/build-ic.sh --icos
 log_success "Built IC-OS successfully"
 
-mv artifacts/icos/guestos/update-img.tar.gz "$dev_out/guestos"
+mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
 mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
-mv artifacts/icos/setupos/disk-img.tar.gz "$dev_out/setupos"
+mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
 
 compute_dev_hash() {
     local os_dir="$1"
@@ -371,9 +393,9 @@ compute_dev_hash() {
     declare -g "$output_var_name=$computed_hash"
 }
 
-compute_dev_hash "guestos" "update-img.tar.gz" "dev_package_guestos_sha256_hex"
+compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
 compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
-compute_dev_hash "setupos" "disk-img.tar.gz" "dev_package_setupos_sha256_hex"
+compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
 
 compare_hashes() {
     local local_hash_var="$1"

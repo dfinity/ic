@@ -43,8 +43,9 @@ message CallContextEntry {
 }
 
 message WasmClosure {
+  // The number of functions will never exceed 2^32.
   uint32 func_idx = 1;
-  uint32 env = 2;
+  uint64 env = 2;
 }
 
 message Callback {
@@ -101,6 +102,7 @@ message WasmMethod {
     SYSTEM_METHOD_CANISTER_HEARTBEAT = 6;
     reserved 7; // deprecated SYSTEM_METHOD_EMPTY
     SYSTEM_METHOD_CANISTER_GLOBAL_TIMER = 8;
+    SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY = 9;
   }
   oneof wasm_method {
     string update = 1;
@@ -182,6 +184,7 @@ message ExecutionTask {
     CANISTER_TASK_UNSPECIFIED = 0;
     CANISTER_TASK_HEARTBEAT = 1;
     CANISTER_TASK_TIMER = 2;
+    CANISTER_TASK_ON_LOW_WASM_MEMORY = 3;
   }
 
   message AbortedExecution {
@@ -228,6 +231,7 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
   CYCLES_USE_CASE_NON_CONSUMED = 11;
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
+  CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
 }
 
 message ConsumedCyclesByUseCase {
@@ -259,6 +263,12 @@ message CanisterControllersChange {
   repeated types.v1.PrincipalId controllers = 1;
 }
 
+message CanisterLoadSnapshot {
+  uint64 canister_version = 1;
+  uint64 taken_at_timestamp = 2;
+  bytes snapshot_id = 3;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -271,6 +281,7 @@ message CanisterChange {
     CanisterCodeUninstall canister_code_uninstall = 6;
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
+    CanisterLoadSnapshot canister_load_snapshot = 9;
   }
 }
 
@@ -301,10 +312,16 @@ message WasmChunkStoreMetadata {
   uint64 size = 2;
 }
 
-enum LogVisibility {
-  LOG_VISIBILITY_UNSPECIFIED = 0;
-  LOG_VISIBILITY_CONTROLLERS = 1;
-  LOG_VISIBILITY_PUBLIC = 2;
+message LogVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message LogVisibilityV2 {
+  oneof log_visibility_v2 {
+    int32 controllers = 1;
+    int32 public = 2;
+    LogVisibilityAllowedViewers allowed_viewers = 3;
+  }
 }
 
 message CanisterLogRecord {
@@ -315,6 +332,12 @@ message CanisterLogRecord {
 
 message SnapshotId {
   bytes content = 1;
+}
+
+enum LongExecutionMode {
+  LONG_EXECUTION_MODE_UNSPECIFIED = 0;
+  LONG_EXECUTION_MODE_OPPORTUNISTIC = 1;
+  LONG_EXECUTION_MODE_PRIORITIZED = 2;
 }
 
 message CanisterStateBits {
@@ -349,7 +372,7 @@ message CanisterStateBits {
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
-  types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
+  types.v1.NominalCycles consumed_cycles = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
   reserved "stable_memory_size";
@@ -375,7 +398,7 @@ message CanisterStateBits {
   // Canister version.
   uint64 canister_version = 34;
   reserved 35;
-  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
@@ -385,8 +408,10 @@ message CanisterStateBits {
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
+  reserved 42;
+  reserved "log_visibility";
   // Log visibility for the canister.
-  LogVisibility log_visibility = 42;
+  LogVisibilityV2 log_visibility_v2 = 51;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
@@ -398,5 +423,10 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
+  // Captures the memory usage of all snapshots associated with a canister.
+  uint64 snapshots_memory_usage = 52;
   reserved 47;
+  int64 priority_credit = 48;
+  LongExecutionMode long_execution_mode = 49;
+  optional uint64 wasm_memory_threshold = 50;
 }

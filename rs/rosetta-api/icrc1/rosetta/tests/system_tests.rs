@@ -9,6 +9,7 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
     DEFAULT_TRANSFER_FEE,
@@ -22,6 +23,7 @@ use ic_icrc_rosetta::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
 };
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
+use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
 use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
@@ -46,6 +48,7 @@ use rosetta_core::identifiers::*;
 use rosetta_core::miscellaneous::OperationStatus;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
+pub use rosetta_core::models::Secp256k1KeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
@@ -195,6 +198,7 @@ struct RosettaTestingEnvironmentBuilder {
     transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     offline: bool,
     port: u16,
+    icrc1_symbol: Option<String>,
 }
 
 impl RosettaTestingEnvironmentBuilder {
@@ -205,6 +209,7 @@ impl RosettaTestingEnvironmentBuilder {
             transfer_args_for_block_generating: None,
             offline: false,
             port: setup.port,
+            icrc1_symbol: None,
         }
     }
 
@@ -215,6 +220,11 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub fn with_offline_rosetta(mut self, offline: bool) -> Self {
         self.offline = offline;
+        self
+    }
+
+    pub fn with_icrc1_symbol(mut self, symbol: String) -> Self {
+        self.icrc1_symbol = Some(symbol);
         self
     }
 
@@ -264,6 +274,11 @@ impl RosettaTestingEnvironmentBuilder {
                 ledger_id: self.icrc1_ledger_canister_id,
                 network_url: Some(replica_url),
                 offline: self.offline,
+                symbol: Some(
+                    self.icrc1_symbol
+                        .clone()
+                        .unwrap_or(DEFAULT_TOKEN_SYMBOL.to_string()),
+                ),
                 ..RosettaOptions::default()
             },
         )
@@ -348,6 +363,26 @@ async fn assert_rosetta_balance(
         .clone()
         .value;
     assert_eq!(rosetta_balance, balance.to_string());
+}
+
+#[test]
+fn test_ledger_symbol_check() {
+    let result = std::panic::catch_unwind(|| {
+        let rt = Runtime::new().unwrap();
+        let setup = Setup::builder().build();
+        rt.block_on(async {
+            RosettaTestingEnvironmentBuilder::new(&setup)
+                .with_icrc1_symbol("WRONG_SYMBOL".to_string())
+                .build()
+                .await;
+        });
+    });
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .downcast_ref::<String>()
+        .unwrap()
+        .contains("Provided symbol does not match symbol retrieved in online mode."));
 }
 
 #[test]
@@ -701,7 +736,7 @@ fn test_construction_derive() {
         let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
         wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
 
-        let key_pair = EdKeypair::generate_from_u64(10);
+        let key_pair = EdKeypair::generate(10);
         let principal_id = key_pair.generate_principal_id().unwrap();
         let public_key = ic_rosetta_test_utils::to_public_key(&key_pair);
         let account = Account {
@@ -1075,7 +1110,6 @@ fn test_construction_submit() {
                             )
                             .await
                             .unwrap();
-                        println!("Transaction submitted and confirmed");
                         for (account, expected_balance) in expected_balances.into_iter() {
                             let actual_balance = env
                                 .icrc1_agent
@@ -1094,8 +1128,8 @@ fn test_construction_submit() {
 
 #[test]
 fn test_rosetta_client_construction_api_flow() {
-    let sender_keypair = EdKeypair::generate_from_u64(0);
-    let receiver_keypair = EdKeypair::generate_from_u64(1);
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let receiver_keypair = Secp256k1KeyPair::generate(1);
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
         .with_initial_balance(
@@ -1213,8 +1247,8 @@ fn test_rosetta_client_construction_api_flow() {
 
 #[test]
 fn test_rosetta_client_binary() {
-    let sender_keypair = EdKeypair::generate_from_u64(0);
-    let receiver_keypair = EdKeypair::generate_from_u64(1);
+    let sender_keypair = EdKeypair::generate(0);
+    let receiver_keypair = EdKeypair::generate(1);
 
     let sender_account = Account {
         owner: sender_keypair.generate_principal_id().unwrap().0,
@@ -1304,9 +1338,9 @@ fn test_rosetta_client_binary() {
 
 #[test]
 fn test_rosetta_transfer_from() {
-    let from_keypair = EdKeypair::generate_from_u64(0);
-    let to_keypair = EdKeypair::generate_from_u64(1);
-    let spender_keypair = EdKeypair::generate_from_u64(2);
+    let from_keypair = EdKeypair::generate(0);
+    let to_keypair = EdKeypair::generate(1);
+    let spender_keypair = EdKeypair::generate(2);
 
     let spender_account = Account {
         owner: spender_keypair.generate_principal_id().unwrap().0,
@@ -1586,7 +1620,7 @@ fn test_cli_construction() {
                     // Fund the accounts from rosetta-cli_construction_test.json
                     // The accounts are created from seed 1-7.
                     for seed in 1..NUM_ACCOUNTS + 1 {
-                        let key_pair = EdKeypair::generate_from_u64(seed);
+                        let key_pair = EdKeypair::generate(seed);
                         let account: Account = key_pair
                             .generate_principal_id()
                             .expect("failed to get principal")
@@ -1640,4 +1674,73 @@ fn test_cli_construction() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_query_blocks_range() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let setup = Setup::builder().build();
+
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new(&setup)
+                        .with_args_with_caller(args_with_caller.clone())
+                        .build()
+                        .await;
+                    wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0)
+                        .await;
+
+                    if !args_with_caller.is_empty() {
+                        let rosetta_blocks = get_rosetta_blocks_from_icrc1_ledger(
+                            env.icrc1_agent,
+                            0,
+                            *MAX_BLOCKS_PER_REQUEST,
+                        )
+                        .await;
+
+                        let highest_block_index = rosetta_blocks.last().unwrap().index;
+                        let num_blocks = rosetta_blocks.len();
+                        let query_blocks_request = QueryBlockRangeRequest {
+                            highest_block_index,
+                            number_of_blocks: num_blocks as u64,
+                        };
+                        let query_block_range_response: QueryBlockRangeResponse = env
+                            .rosetta_client
+                            .call(
+                                env.network_identifier.clone(),
+                                "query_block_range".to_owned(),
+                                query_blocks_request.try_into().unwrap(),
+                            )
+                            .await
+                            .unwrap()
+                            .result
+                            .try_into()
+                            .unwrap();
+                        assert!(query_block_range_response.blocks.len() == num_blocks);
+                        assert!(query_block_range_response
+                            .blocks
+                            .iter()
+                            .all(|block| block.block_identifier.index <= highest_block_index));
+                    }
+                });
+
+                Ok(())
+            },
+        )
+        .unwrap()
 }

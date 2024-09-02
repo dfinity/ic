@@ -1,8 +1,6 @@
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusUnknown {}
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusProcessing {
@@ -13,7 +11,6 @@ pub struct IngressStatusProcessing {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusReceived {
@@ -24,7 +21,6 @@ pub struct IngressStatusReceived {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusCompleted {
@@ -39,7 +35,6 @@ pub struct IngressStatusCompleted {
 }
 /// Nested message and enum types in `IngressStatusCompleted`.
 pub mod ingress_status_completed {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum WasmResult {
@@ -49,7 +44,6 @@ pub mod ingress_status_completed {
         Reject(::prost::alloc::string::String),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusFailed {
@@ -64,7 +58,6 @@ pub struct IngressStatusFailed {
     #[prost(enumeration = "ErrorCode", tag = "6")]
     pub err_code: i32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusDone {
@@ -75,7 +68,6 @@ pub struct IngressStatusDone {
     #[prost(message, optional, tag = "3")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PruningEntry {
@@ -84,7 +76,6 @@ pub struct PruningEntry {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub messages: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatus {
@@ -93,7 +84,6 @@ pub struct IngressStatus {
 }
 /// Nested message and enum types in `IngressStatus`.
 pub mod ingress_status {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Status {
@@ -111,7 +101,6 @@ pub mod ingress_status {
         Done(super::IngressStatusDone),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressStatusEntry {
@@ -120,7 +109,6 @@ pub struct IngressStatusEntry {
     #[prost(message, optional, tag = "2")]
     pub status: ::core::option::Option<IngressStatus>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressHistoryState {
@@ -133,7 +121,6 @@ pub struct IngressHistoryState {
     #[prost(uint64, tag = "3")]
     pub next_terminal_time: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ingress {
@@ -154,19 +141,7 @@ pub struct Ingress {
     #[prost(message, optional, tag = "7")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ErrorCode {
     Unspecified = 0,
@@ -228,6 +203,7 @@ pub enum ErrorCode {
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
 }
 impl ErrorCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -319,6 +295,7 @@ impl ErrorCode {
             ErrorCode::CanisterWasmMemoryLimitExceeded => {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
+            ErrorCode::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -406,6 +383,9 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_ALREADY_INSTALLED" => Some(Self::CanisterAlreadyInstalled),
             "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED" => {
                 Some(Self::CanisterWasmMemoryLimitExceeded)
+            }
+            "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW" => {
+                Some(Self::ReservedCyclesLimitIsTooLow)
             }
             _ => None,
         }

@@ -75,7 +75,7 @@ pub struct DrunOptions {
     pub subnet_type: SubnetType,
 }
 
-pub fn run_drun(uo: DrunOptions) {
+pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     let DrunOptions {
         msg_filename,
         log_file,
@@ -83,10 +83,8 @@ pub fn run_drun(uo: DrunOptions) {
         cycles_used_file,
     } = uo;
 
-    let msg_stream = msg_stream_from_file(&msg_filename)
-        .unwrap_or_else(|e| panic!("Could not read messages from file: {}", e));
+    let msg_stream = msg_stream_from_file(&msg_filename)?;
 
-    let pid = std::process::id();
     let server_url = start_or_reuse_server_with_redirects(
         Some(
             log_file
@@ -98,7 +96,6 @@ pub fn run_drun(uo: DrunOptions) {
                 .unwrap_or(std::process::Stdio::null()),
         ),
         Some(std::io::stdout().into()),
-        pid,
     );
     let mut config = ExtendedSubnetConfigSet::default();
     match subnet_type {
@@ -109,13 +106,13 @@ pub fn run_drun(uo: DrunOptions) {
             config.system.push(SubnetSpec::default());
         }
     }
-    let pocket_ic = PocketIc::from_config_and_server_url_and_pid(config, server_url, pid);
+    let pocket_ic = PocketIc::from_config_and_server_url(config, server_url);
 
     let mut canister_ids = vec![];
 
     for parse_result in msg_stream {
-        match parse_result {
-            Ok(Message::Install(msg)) => {
+        match parse_result? {
+            Message::Install(msg) => {
                 let arg = InstallCodeArgument {
                     mode: msg.mode,
                     canister_id: msg.canister_id,
@@ -140,12 +137,12 @@ pub fn run_drun(uo: DrunOptions) {
                 }
             }
 
-            Ok(Message::Query(q)) => {
+            Message::Query(q) => {
                 let res = pocket_ic.query_call(q.canister_id, q.sender, &q.method_name, q.arg);
                 print_query_result(res);
             }
 
-            Ok(Message::Ingress(msg)) => {
+            Message::Ingress(msg) => {
                 let res = pocket_ic.update_call(
                     msg.canister_id,
                     msg.sender,
@@ -155,15 +152,11 @@ pub fn run_drun(uo: DrunOptions) {
                 print_ingress_result(res);
             }
 
-            Ok(Message::Create) => {
+            Message::Create => {
                 let canister_id = pocket_ic.create_canister();
                 pocket_ic.add_cycles(canister_id, DEFAULT_CYCLES_PER_CANISTER);
                 canister_ids.push(canister_id);
                 println!("Canister created: {}", canister_id);
-            }
-
-            Err(e) => {
-                panic!("Could not parse message: {}", e);
             }
         }
     }
@@ -183,6 +176,8 @@ pub fn run_drun(uo: DrunOptions) {
             .unwrap();
         }
     }
+
+    Ok(())
 }
 
 fn print_query_result(res: Result<WasmResult, UserError>) {

@@ -48,7 +48,7 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub enum LineIteratorError {
     IoError(io::Error),
-    BufferLengthExceeded(Vec<u8>),
+    BufferLengthExceeded,
     FromUtf8Error(FromUtf8Error),
 }
 
@@ -58,7 +58,7 @@ impl fmt::Display for LineIteratorError {
 
         match self {
             IoError(e) => write!(f, "IO error: {}", e),
-            BufferLengthExceeded(_) => write!(f, "Line length exceeds buffer length"),
+            BufferLengthExceeded => write!(f, "Line length exceeds buffer length"),
             FromUtf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
         }
     }
@@ -132,9 +132,8 @@ impl<R: Read> Iterator for LineIterator<R> {
                 Ok(_) => match self.split_line() {
                     Some(line) => return Some(line),
                     None if self.buffer.len() == LINE_ITERATOR_BUFFER_SIZE => {
-                        let bytes = self.buffer.clone();
                         self.buffer.clear();
-                        return Some(Err(LineIteratorError::BufferLengthExceeded(bytes)));
+                        return Some(Err(LineIteratorError::BufferLengthExceeded));
                     }
                     None => continue,
                 },

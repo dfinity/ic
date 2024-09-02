@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ed25519-consensus = "2.0.1"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-rand = "0.8"
+rand = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 serde_cbor = { workspace = true }

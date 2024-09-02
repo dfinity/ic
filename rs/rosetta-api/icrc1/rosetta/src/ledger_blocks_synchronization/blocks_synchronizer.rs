@@ -245,7 +245,7 @@ async fn sync_blocks_interval(
             );
         }
 
-        leading_block_hash = fetched_blocks[0].get_parent_hash().clone();
+        leading_block_hash.clone_from(&fetched_blocks[0].get_parent_hash());
         let number_of_blocks_fetched = fetched_blocks.len();
         if let Some(ref pb) = pb {
             pb.inc(number_of_blocks_fetched as u64);

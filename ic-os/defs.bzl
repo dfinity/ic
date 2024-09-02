@@ -7,7 +7,8 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//ic-os/rootfs:boundary-guestos.bzl", boundary_rootfs_files = "rootfs_files")
+load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
+load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
@@ -44,6 +45,19 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
+    # -------------------- Pre-check --------------------
+
+    # Verify that all the referenced components exist
+    native.genrule(
+        name = name + "_pre_check",
+        srcs = [k for k, v in image_deps["component_files"].items()],
+        outs = [name + "_pre_check_result.txt"],
+        cmd = """
+            echo "Running pre_check for {name}"
+            echo "All paths exist" > $@
+        """,
+    )
+
     # -------------------- Version management --------------------
 
     copy_file(
@@ -70,8 +84,6 @@ def icos_build(
 
     # -------------------- Build the container image --------------------
 
-    build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
-
     if build_local_base_image:
         base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
         package_files_arg = "PACKAGE_FILES=packages.common"
@@ -91,8 +103,10 @@ def icos_build(
         build_container_filesystem(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
-            rootfs_files = image_deps["rootfs_files"],
-            config_file = build_container_filesystem_config_file,
+            component_files = image_deps["component_files"],
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             base_image_tar_file = ":base_image.tar",
             base_image_tar_file_tag = base_image_tag,
             target_compatible_with = ["@platforms//os:linux"],
@@ -102,12 +116,15 @@ def icos_build(
         build_container_filesystem(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
-            rootfs_files = image_deps["rootfs_files"],
-            config_file = build_container_filesystem_config_file,
+            component_files = image_deps["component_files"],
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
 
+    # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(
         name = "file_contexts",
         src = "rootfs-tree.tar",
@@ -118,31 +135,6 @@ def icos_build(
         tags = ["manual"],
     )
 
-    # Helpful tool to print a hash of all input rootfs files
-    tree_hash(
-        name = "root-files-hash",
-        src = image_deps["rootfs_files"],
-        tags = ["manual"],
-    )
-
-    native.genrule(
-        name = "echo-root-files-hash",
-        srcs = [
-            ":root-files-hash",
-        ],
-        outs = ["root-files-hash-script"],
-        cmd = """
-        HASH="$(location :root-files-hash)"
-        cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cat $$HASH
-EOF
-        """,
-        executable = True,
-        tags = ["manual"],
-    )
-
     # -------------------- Extract root partition --------------------
 
     ext4_image(
@@ -150,10 +142,14 @@ EOF
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
+        # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
+        # there are only two in our build.
         strip_paths = [
             "/run",
             "/boot",
             "/var",
+            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt",
         ],
         target_compatible_with = [
             "@platforms//os:linux",
@@ -168,7 +164,7 @@ EOF
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
-        subdir = "boot/",
+        subdir = "boot",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -188,6 +184,12 @@ EOF
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
         },
         tags = ["manual"],
+    )
+
+    component_file_references_test(
+        name = name + "_component_file_references_test",
+        image = ":partition-root-unsigned.tzst",
+        component_files = image_deps["component_files"].keys(),
     )
 
     if upgrades:
@@ -219,9 +221,9 @@ EOF
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
             tags = ["manual"],
         )
 
@@ -242,8 +244,8 @@ EOF
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) -d $(location //rs/ic_os/dflate)",
-                tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
+                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
                 tags = ["manual"],
             )
 
@@ -293,13 +295,15 @@ EOF
             tags = ["manual"],
         )
 
-    # -------------------- Assemble disk image --------------------
+    # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
     if "custom_partitions" not in image_deps:
         custom_partitions = []
     else:
         custom_partitions = image_deps["custom_partitions"]()
+
+    # -------------------- Assemble disk image --------------------
 
     disk_image(
         name = "disk-img.tar",
@@ -334,20 +338,6 @@ EOF
     sha256sum2url(
         name = "disk-img.tar.zst.cas-url",
         src = ":disk-img.tar.zst.sha256",
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    gzip_compress(
-        name = "disk-img.tar.gz",
-        srcs = [":disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.gz.sha256",
-        srcs = [":disk-img.tar.gz"],
         visibility = visibility,
         tags = ["manual"],
     )
@@ -460,7 +450,6 @@ EOF
             name = "upload_disk-img",
             inputs = [
                 ":disk-img.tar.zst",
-                ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
             visibility = visibility,
@@ -470,14 +459,6 @@ EOF
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        output_files(
-            name = "disk-img-url-gz",
-            target = ":upload_disk-img",
-            basenames = ["upload_disk-img_disk-img.tar.gz.url"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -505,7 +486,7 @@ EOF
 
     # end if upload_prefix != None
 
-    # -------------------- Vulnerability scanning --------------------
+    # -------------------- Vulnerability Scanning Tool ------------
 
     if vuln_scan:
         native.sh_binary(
@@ -524,6 +505,33 @@ EOF
             tags = ["manual"],
         )
 
+    # -------------------- Tree Hash Tool -------------------------
+
+    # Helpful tool to print a hash of all input component files
+    tree_hash(
+        name = "component-files-hash",
+        src = image_deps["component_files"],
+        tags = ["manual"],
+    )
+
+    native.genrule(
+        name = "echo-component-files-hash",
+        srcs = [
+            ":component-files-hash",
+        ],
+        outs = ["component-files-hash-script"],
+        cmd = """
+        HASH="$(location :component-files-hash)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cat $$HASH
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
     # -------------------- VM Developer Tools --------------------
 
     native.genrule(
@@ -532,7 +540,7 @@ EOF
             "//rs/ic_os/launch-single-vm",
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
-            "//ic-os:scripts/build-bootstrap-config-image.sh",
+            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":version.txt",
         ],
         outs = ["launch_remote_vm_script"],
@@ -541,16 +549,22 @@ EOF
         VERSION="$$(cat $(location :version.txt))"
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
-        SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
+        SCRIPT="$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT"
+# Hack to switch nested for SetupOS
+nested=""
+if [[ "$@" =~ "setupos" ]]; then
+    nested="--nested"
+fi
+$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" \\$${nested}
 EOF
         """,
         executable = True,
         tags = ["manual"],
+        testonly = True,
     )
 
     native.genrule(
@@ -570,7 +584,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -596,7 +610,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -611,8 +625,8 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
+            name + "_pre_check_result.txt",
             ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
         ] + ([
             ":update-img.tar.zst",
             ":update-img.tar.gz",
@@ -664,32 +678,32 @@ def boundary_node_icos_build(
 
     build_grub_partition("partition-grub.tzst", tags = ["manual"])
 
-    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
-
     build_container_filesystem(
         name = "rootfs-tree.tar",
         context_files = ["//ic-os/boundary-guestos/context:context-files"],
-        rootfs_files = boundary_rootfs_files,
-        config_file = build_container_filesystem_config_file,
+        component_files = boundary_component_files,
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
-    # Helpful tool to print a hash of all input rootfs files
+    # Helpful tool to print a hash of all input component files
     tree_hash(
-        name = "root-files-hash",
-        src = boundary_rootfs_files,
+        name = "component-files-hash",
+        src = boundary_component_files,
         tags = ["manual"],
     )
 
     native.genrule(
-        name = "echo-root-files-hash",
+        name = "echo-component-files-hash",
         srcs = [
-            ":root-files-hash",
+            ":component-files-hash",
         ],
-        outs = ["root-files-hash-script"],
+        outs = ["component-files-hash-script"],
         cmd = """
-        HASH="$(location :root-files-hash)"
+        HASH="$(location :component-files-hash)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
@@ -772,9 +786,9 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
         tags = ["manual"],
     )
 

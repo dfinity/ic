@@ -1,3 +1,4 @@
+use hex_literal::hex;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{Rng, RngCore};
@@ -22,6 +23,109 @@ fn not_affected_by_point_serialization_bug() -> CanisterThresholdResult<()> {
     }
 
     Ok(())
+}
+
+#[test]
+fn ed25519_rejects_non_canonical_points() {
+    /// The 26 non-canonical points of Ed25519
+    ///
+    /// Ed25519 has a set of points which are considered valid but are not
+    /// the canonical encoding of the point. That is, implementations should
+    /// never generate them, but are expected to parse them.
+    ///
+    /// We expect that all peers in the protocol behave correctly and do not
+    /// ever produce a non-canonical point encoding. Given this, we reject
+    /// such points immediately.
+    ///
+    /// See <https://hdevalence.ca/blog/2020-10-04-its-25519am> and
+    /// <https://eprint.iacr.org/2020/1244.pdf> for more background
+    /// on non-canonical points in Ed25519.
+    ///
+    /// This list of point encodings was generated using a test in ed25519-zebra
+    /// <https://github.com/ZcashFoundation/ed25519-zebra/blob/main/tests/util/mod.rs#L81-L155>
+    const NON_CANONICAL_POINTS: [[u8; 32]; 26] = [
+        hex!("0100000000000000000000000000000000000000000000000000000000000080"),
+        hex!("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f1ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f1ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f2ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f2ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f6ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f6ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("fbffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("fbffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("fcffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("fcffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("fdffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("fdffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+    ];
+
+    for pt in NON_CANONICAL_POINTS {
+        assert!(EccPoint::deserialize(EccCurveType::Ed25519, &pt).is_err());
+    }
+}
+
+#[test]
+fn ed25519_rejects_non_canonical_points_search() {
+    /*
+    Due to the structure of Ed25519 point encoding, all non-canonical points
+    are of the form
+
+    XX00...00YY (exactly 1 of these)
+
+    or
+
+    XXFF...FFYY (exactly 25 of these)
+
+    To test our check, we simply enumerate all such possible point encodings,
+    then verify that either the encoding is rejected, or else that the encoding
+    is canonical (ie that re-encoding the point results in the originally provided input)
+     */
+
+    fn is_rejected_or_canonical(bytes: &[u8; 32]) -> bool {
+        if let Ok(pt) = EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
+            pt.serialize() == bytes
+        } else {
+            true
+        }
+    }
+
+    let mut pt_00 = [0u8; 32];
+    let mut pt_ff = [0xFFu8; 32];
+
+    for x in 0u8..=255 {
+        for y in 0u8..=255 {
+            pt_00[0] = x;
+            pt_00[31] = y;
+
+            assert!(
+                is_rejected_or_canonical(&pt_00),
+                "Accepted non-canonical {}",
+                hex::encode(pt_00)
+            );
+
+            pt_ff[0] = x;
+            pt_ff[31] = y;
+
+            assert!(
+                is_rejected_or_canonical(&pt_ff),
+                "Accepted non-canonical {}",
+                hex::encode(pt_ff)
+            );
+        }
+    }
 }
 
 #[test]
@@ -198,7 +302,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
             assert_eq!(
                 EccScalar::deserialize(curve, &bytes[..]),
                 Err(CanisterThresholdSerializationError(
-                    "Unexpected length".to_string()
+                    "failed to deserialize EccScalar: unexpected length".to_string()
                 ))
             );
         }
@@ -212,7 +316,7 @@ fn scalar_deserializaion_errors_is_over_the_order() {
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
             Err(CanisterThresholdSerializationError(
-                "Invalid scalar encoding".to_string()
+                "failed to deserialize EccScalar: invalid encoding".to_string()
             ))
         );
     }
@@ -533,10 +637,6 @@ fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
                 }
 
                 // create refs of pairs
-
-                // False positive `map_identity` warning.
-                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                #[allow(clippy::map_identity)]
                 let refs_of_pairs: Vec<_> = pairs.iter().map(|(p, s)| (p, s)).collect();
 
                 // compute the result using an optimized algorithm, which is to be tested

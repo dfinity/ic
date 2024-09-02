@@ -12,15 +12,14 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPPING_ETH_LOGS_INTERVAL};
+use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
     double_and_increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
-    all_eth_get_logs_response_size_estimates, block_response, decode_transaction,
-    default_signed_eip_1559_transaction, empty_logs, hash_transaction,
-    multi_logs_for_single_transaction,
+    block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
+    hash_transaction, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
     CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT,
@@ -28,8 +27,7 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
     EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
-    RECEIVED_ETH_EVENT_TOPIC,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -41,7 +39,7 @@ use std::str::FromStr;
 
 #[test]
 fn should_deposit_and_withdraw() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
@@ -101,55 +99,55 @@ fn should_deposit_and_withdraw() {
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
     cketh.assert_has_unique_events_in_order(&vec![
-        EventPayload::AcceptedEthWithdrawalRequest {
-            withdrawal_amount: withdrawal_amount.clone(),
-            destination: destination.clone(),
-            ledger_burn_index: withdrawal_id.clone(),
-            from: caller,
-            from_subaccount: None,
-            created_at: Some(time),
-        },
-        EventPayload::CreatedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            transaction: UnsignedTransaction {
-                chain_id: Nat::from(1_u8),
-                nonce: Nat::from(0_u8),
-                max_priority_fee_per_gas,
-                max_fee_per_gas: max_fee_per_gas.clone(),
-                gas_limit: gas_limit.clone(),
-                destination,
-                value: withdrawal_amount - max_fee_per_gas * gas_limit,
-                data: Default::default(),
-                access_list: vec![],
+            EventPayload::AcceptedEthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.clone(),
+                destination: destination.clone(),
+                ledger_burn_index: withdrawal_id.clone(),
+                from: caller,
+                from_subaccount: None,
+                created_at: Some(time),
             },
-        },
-        EventPayload::SignedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
-        },
-        EventPayload::FinalizedTransaction {
-            withdrawal_id,
-            transaction_receipt: TransactionReceipt {
-                block_hash: DEFAULT_BLOCK_HASH.to_string(),
-                block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000_u32),
-                status: TransactionStatus::Success,
-                transaction_hash:
-                "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            EventPayload::CreatedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                transaction: UnsignedTransaction {
+                    chain_id: Nat::from(1_u8),
+                    nonce: Nat::from(0_u8),
+                    max_priority_fee_per_gas,
+                    max_fee_per_gas: max_fee_per_gas.clone(),
+                    gas_limit: gas_limit.clone(),
+                    destination,
+                    value: withdrawal_amount - max_fee_per_gas * gas_limit,
+                    data: Default::default(),
+                    access_list: vec![],
+                },
             },
-        },
-    ]);
+            EventPayload::SignedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+            },
+            EventPayload::FinalizedTransaction {
+                withdrawal_id,
+                transaction_receipt: TransactionReceipt {
+                    block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                    block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                    effective_gas_price: Nat::from(4277923390u64),
+                    gas_used: Nat::from(21_000_u32),
+                    status: TransactionStatus::Success,
+                    transaction_hash:
+                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                },
+            },
+        ]);
 }
 
 #[test]
 fn should_retrieve_cache_transaction_price() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
-    let result = cketh.eip_1559_transaction_price();
+    let result = cketh.eip_1559_transaction_price(None);
     assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
@@ -171,19 +169,23 @@ fn should_retrieve_cache_transaction_price() {
         })
         .expect("missing CreatedTransaction event");
 
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
     assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
     assert_eq!(price.gas_limit, tx.gas_limit);
 
     cketh.env.tick();
-    let second_price = cketh.eip_1559_transaction_price_expecting_ok();
+    let second_price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price, second_price);
+
+    let price_using_ledger_id =
+        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id.into()));
+    assert_eq!(price, price_using_ledger_id);
 }
 
 #[test]
 fn should_block_deposit_from_blocked_address() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
         .parse()
         .unwrap();
@@ -217,7 +219,7 @@ fn should_not_mint_when_logs_inconsistent() {
     };
     assert_ne!(ankr_logs, public_node_logs);
 
-    CkEthSetup::default()
+    CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
@@ -228,7 +230,7 @@ fn should_not_mint_when_logs_inconsistent() {
 
 #[test]
 fn should_block_withdrawal_to_blocked_address() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
@@ -246,7 +248,7 @@ fn should_block_withdrawal_to_blocked_address() {
 
 #[test]
 fn should_fail_to_withdraw_without_approval() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
 
     cketh
@@ -264,7 +266,7 @@ fn should_fail_to_withdraw_without_approval() {
 
 #[test]
 fn should_fail_to_withdraw_when_insufficient_funds() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let deposit_amount = CKETH_MINIMUM_WITHDRAWAL_AMOUNT + CKETH_TRANSFER_FEE;
     let amount_after_approval = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
@@ -290,7 +292,7 @@ fn should_fail_to_withdraw_when_insufficient_funds() {
 
 #[test]
 fn should_fail_to_withdraw_too_small_amount() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     cketh
         .deposit(DepositParams::default())
@@ -309,7 +311,7 @@ fn should_fail_to_withdraw_too_small_amount() {
 
 #[test]
 fn should_not_finalize_transaction_when_receipts_do_not_match() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
@@ -334,7 +336,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
 
 #[test]
 fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
@@ -375,7 +377,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 
 #[test]
 fn should_reimburse() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
@@ -538,7 +540,7 @@ fn should_reimburse() {
 
 #[test]
 fn should_resubmit_transaction_as_is_when_price_still_actual() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
@@ -562,21 +564,21 @@ fn should_resubmit_transaction_as_is_when_price_still_actual() {
 
 #[test]
 fn should_resubmit_new_transaction_when_price_increased() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f87301808462590080850f0de1e14682520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088015e728d945289c680c001a0537665ebe010409f026674776c6273ef7af3a79bca42492a263ec405c3869c2ca00a238d29dbf894e7cf85b70d5ecd62fc99e375b754c112bcbe1199fc9f00dff2";
+    let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a03d58ee49c9dce3b3c646eeb18317b46cc852a5384be9026cb0aa3d59f9b16292a007276dfb5e003bd7f527675e15c8512f1324e6434c62e7ffa4c68971d726fa0b";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
         resubmitted_tx,
         expected_tx
             .clone()
-            .value(98_642_194_253_121_990_u64)
+            .value(99_303_772_126_560_990_u64)
             .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(64_657_416_518_u64)
+            .max_fee_per_gas(33_153_708_259_u64)
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -599,7 +601,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
             expected_tx,
             expected_sig,
             &mut double_and_increment_base_fee_per_gas,
-            resubmitted_tx,
+            resubmitted_tx.clone(),
             resubmitted_tx_sig,
         )
         .assert_has_unique_events_in_order(&vec![
@@ -608,11 +610,13 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction: UnsignedTransaction {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
-                    max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                    max_fee_per_gas: Nat::from(64_657_416_518_u64),
+                    max_priority_fee_per_gas: Nat::from(
+                        resubmitted_tx.max_priority_fee_per_gas.unwrap().as_u128(),
+                    ),
+                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas.unwrap().as_u128()),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(98_642_194_253_121_990_u64),
+                    value: Nat::from(resubmitted_tx.value.unwrap().as_u128()),
                     data: Default::default(),
                     access_list: vec![],
                 },
@@ -637,9 +641,10 @@ fn should_resubmit_new_transaction_when_price_increased() {
 
 #[test]
 fn should_not_overlap_when_scrapping_logs() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -647,14 +652,14 @@ fn should_not_overlap_when_scrapping_logs() {
 
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -664,14 +669,14 @@ fn should_not_overlap_when_scrapping_logs() {
         .checked_add(BlockNumber::from(1_u64))
         .unwrap();
     let second_to_block = second_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -686,23 +691,25 @@ fn should_not_overlap_when_scrapping_logs() {
 
 #[test]
 fn should_retry_from_same_block_when_scrapping_fails() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
+    let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
         .expect_rpc_calls(&cketh);
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .respond_with(JsonRpcProvider::PublicNode, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
@@ -711,11 +718,13 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     let cketh = cketh
         .check_audit_logs_and_upgrade(Default::default())
+        .check_events()
+        .skip(prev_events_len)
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER))
         .build()
@@ -725,7 +734,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "fromBlock": from_block,
             "toBlock": to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -740,9 +749,9 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
 #[test]
 fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1))
         .build()
@@ -753,7 +762,7 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
             "fromBlock": from_block,
             "toBlock": from_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -762,9 +771,10 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 
 #[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let prev_events_len = cketh.get_all_events().len();
 
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL - 1))
         .build()
@@ -772,12 +782,14 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     let cketh = cketh
         .check_audit_logs_and_upgrade(Default::default())
+        .check_events()
+        .skip(prev_events_len)
         .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
     let last_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 10;
-    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(last_finalized_block))
         .build()
@@ -790,7 +802,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -807,10 +819,11 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
     let safe_block_number = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 100;
     let finalized_block_number = safe_block_number - 32;
-    let cketh = CkEthSetup::default().check_audit_logs_and_upgrade(UpgradeArg {
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc().check_audit_logs_and_upgrade(UpgradeArg {
         ethereum_block_height: Some(CandidBlockTag::Safe),
         ..Default::default()
     });
+    let received_eth_event_topic = cketh.received_eth_event_topic();
     cketh.env.tick();
 
     let cketh = cketh
@@ -825,7 +838,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
                         "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                         "toBlock": BlockNumber::from(safe_block_number),
                         "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                        "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                        "topics": [received_eth_event_topic]
                     }]))
                 }),
         )
@@ -858,7 +871,8 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
 
 #[test]
 fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -867,10 +881,10 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
     let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     let half_to_block = from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE / 2))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range / 2))
         .unwrap();
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -878,13 +892,13 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": from_block,
                 "toBlock": to_block,
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -897,9 +911,9 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
             "fromBlock": from_block,
             "toBlock": half_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
-        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .with_max_response_bytes(cketh.all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
@@ -914,7 +928,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
 #[test]
 fn should_skip_single_block_containing_too_many_events() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -926,13 +940,13 @@ fn should_skip_single_block_containing_too_many_events() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -940,13 +954,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&cketh);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -954,13 +968,13 @@ fn should_skip_single_block_containing_too_many_events() {
             .expect_rpc_calls(&cketh);
     }
 
-    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+    for max_response_bytes in cketh.all_eth_get_logs_response_size_estimates() {
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [cketh.received_eth_event_topic()]
             }]))
             .with_max_response_bytes(max_response_bytes)
             .respond_for_all_with(large_amount_of_logs.clone())
@@ -973,9 +987,9 @@ fn should_skip_single_block_containing_too_many_events() {
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [cketh.received_eth_event_topic()]
         }]))
-        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .with_max_response_bytes(cketh.all_eth_get_logs_response_size_estimates()[0])
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
@@ -984,6 +998,12 @@ fn should_skip_single_block_containing_too_many_events() {
         .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![
             EventPayload::SkippedBlock {
+                contract_address: Some(
+                    ETH_HELPER_CONTRACT_ADDRESS
+                        .parse::<Address>()
+                        .unwrap()
+                        .to_string(),
+                ),
                 block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1).into(),
             },
             EventPayload::SyncedToBlock {
@@ -995,7 +1015,8 @@ fn should_skip_single_block_containing_too_many_events() {
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
-    let cketh = CkEthSetup::default();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let max_eth_logs_block_range = cketh.max_logs_block_range();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
@@ -1021,13 +1042,14 @@ fn should_retrieve_minter_info() {
             erc20_balances: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            cketh_ledger_id: Some(cketh.ledger_id.into()),
         }
     );
 
     let cketh = cketh.deposit(DepositParams::default()).expect_mint();
     let info_after_deposit = cketh.get_minter_info();
     let new_eth_scraped_block_number =
-        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE + 1;
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range + 1;
     assert_eq!(
         info_after_deposit,
         MinterInfo {
@@ -1046,7 +1068,9 @@ fn should_retrieve_minter_info() {
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .setup;
     let info_after_withdrawal = cketh.get_minter_info();
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
+    let debited_amount =
+        withdrawal_amount - (price.max_transaction_fee - GAS_USED * EFFECTIVE_GAS_PRICE);
     assert_eq!(
         info_after_withdrawal,
         MinterInfo {
@@ -1055,6 +1079,9 @@ fn should_retrieve_minter_info() {
                 max_priority_fee_per_gas: price.max_priority_fee_per_gas,
                 timestamp: price.timestamp.unwrap(),
             }),
+            eth_balance: info_after_deposit
+                .eth_balance
+                .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
     );
@@ -1062,4 +1089,19 @@ fn should_retrieve_minter_info() {
 
 fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
+}
+
+/// Tests with the EVM RPC canister
+mod cketh_evm_rpc {
+    use super::*;
+
+    #[test]
+    fn should_retrieve_block_number() {
+        let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+            .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
+            .build()
+            .expect_rpc_calls(&cketh);
+    }
 }

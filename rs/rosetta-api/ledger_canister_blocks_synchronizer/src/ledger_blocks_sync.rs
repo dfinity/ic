@@ -40,14 +40,6 @@ pub trait LedgerBlocksSynchronizerMetrics {
     fn set_verified_height(&self, height: u64);
 }
 
-struct NopMetrics {}
-
-impl LedgerBlocksSynchronizerMetrics for NopMetrics {
-    fn set_target_height(&self, _height: u64) {}
-    fn set_synced_height(&self, _height: u64) {}
-    fn set_verified_height(&self, _height: u64) {}
-}
-
 /// Downloads the blocks of the Ledger to either an in-memory store or to
 /// a local sqlite store
 pub struct LedgerBlocksSynchronizer<B>
@@ -69,10 +61,11 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
+        enable_rosetta_blocks: bool,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc)?,
-            None => Blocks::new_in_memory()?,
+            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
+            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -301,6 +294,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip.index
         );
 
+        let tip_index = tip.index;
+
         self.sync_range_of_blocks(
             Range {
                 start: next_block_index,
@@ -312,6 +307,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             &mut blockchain,
         )
         .await?;
+
+        blockchain.make_rosetta_blocks_if_enabled(tip_index)?;
 
         info!(
             "You are all caught up to block {}",
@@ -441,7 +438,15 @@ mod test {
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
 
-    use super::NopMetrics;
+    use super::LedgerBlocksSynchronizerMetrics;
+
+    struct NopMetrics {}
+
+    impl LedgerBlocksSynchronizerMetrics for NopMetrics {
+        fn set_target_height(&self, _height: u64) {}
+        fn set_synced_height(&self, _height: u64) {}
+        fn set_verified_height(&self, _height: u64) {}
+    }
 
     struct RangeOfBlocks {
         pub blocks: Vec<EncodedBlock>,
@@ -490,6 +495,7 @@ mod test {
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
             Box::new(NopMetrics {}),
+            false,
         )
         .await
         .unwrap()

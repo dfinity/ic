@@ -24,29 +24,11 @@ message IPv4InterfaceConfig {
 
 // A node: one machine running a replica instance.
 message NodeRecord {
-  // the node_id is redundant as it is already contained in the key for this
-  // value.
-  reserved 1, 2, 3, 4;
-  reserved "node_id";
-  reserved "gossip_advert";
-  reserved "gossip_request";
-  reserved "gossip_artifact";
-
   // The endpoint where this node receives xnet messages.
   ConnectionEndpoint xnet = 5;
 
-  // The endpoint where this node receives http requests.
+  // The endpoint where this node receives https requests.
   ConnectionEndpoint http = 6;
-
-  reserved 7, 8, 9, 10, 11, 12, 13, 14;
-  reserved "dcop_principal_id";
-  reserved "p2p_flow_endpoints";
-  reserved "prometheus_metrics_http";
-  reserved "public_api";
-  reserved "private_api";
-  reserved "prometheus_metrics";
-  reserved "transport_tls_certificate";
-  reserved "xnet_api";
 
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;
@@ -58,9 +40,23 @@ message NodeRecord {
   optional string hostos_version_id = 17;
 
   // IPv4 interface configuration
-  optional IPv4InterfaceConfig public_ipv4_config = 18;
+  IPv4InterfaceConfig public_ipv4_config = 18;
 
   // Domain name, which resolves into Node's IPv4 and IPv6.
   // If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
   optional string domain = 19;
+
+  reserved 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14;
+  reserved "node_id";
+  reserved "gossip_advert";
+  reserved "gossip_request";
+  reserved "gossip_artifact";
+  reserved "dcop_principal_id";
+  reserved "p2p_flow_endpoints";
+  reserved "prometheus_metrics_http";
+  reserved "public_api";
+  reserved "private_api";
+  reserved "prometheus_metrics";
+  reserved "transport_tls_certificate";
+  reserved "xnet_api";
 }

@@ -7,6 +7,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc_rosetta_runner",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
@@ -34,6 +35,7 @@ rust_test(
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     },
     deps = [
+        # Keep sorted.
         ":ic-icrc-rosetta-runner",
         "//packages/pocket-ic",
         "@crate_index//:candid",

@@ -16,12 +16,14 @@ pub use types::{
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
@@ -56,18 +58,19 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let registry_version = RegistryVersion::from(initial_version);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
-    let ecdsa_key_id = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: "test_key".to_string(),
-    };
+
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(19)
-        .with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 4,
-            key_ids: vec![ecdsa_key_id.clone()],
-            max_queue_size: Some(40),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
+        .with_chain_key_config(ChainKeyConfig {
+            key_configs: test_threshold_key_ids()
+                .iter()
+                .map(|key_id| KeyConfig {
+                    key_id: key_id.clone(),
+                    pre_signatures_to_create_in_advance: 4,
+                    max_queue_size: 40,
+                })
+                .collect(),
+            ..ChainKeyConfig::default()
         })
         .build();
     data_provider
@@ -175,17 +178,20 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         )
         .expect("Could not add node record.");
 
-    // Add ECDSA signing subnet to registry
-    data_provider
-        .add(
-            &ic_registry_keys::make_ecdsa_signing_subnet_list_key(&ecdsa_key_id),
-            registry_version,
-            Some(ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList {
-                subnets: vec![subnet_id_into_protobuf(subnet_id)],
-            }),
-        )
-        .expect("Could not add ECDSA signing subnet list");
-
+    // Add threshold signing subnet to registry
+    for key_id in test_threshold_key_ids() {
+        data_provider
+            .add(
+                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                registry_version,
+                Some(
+                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(subnet_id)],
+                    },
+                ),
+            )
+            .expect("Could not add chain key signing subnet list");
+    }
     registry_client.reload();
     registry_client.update_to_latest_version();
 
@@ -197,4 +203,21 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     .with_current_transcripts(ni_transcripts);
     let cup = make_genesis(summary);
     (registry_client, cup, cryptos)
+}
+
+pub(crate) fn test_threshold_key_ids() -> Vec<MasterPublicKeyId> {
+    vec![
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "ecdsa_test_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "ed25519_test_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "bip340_test_key".to_string(),
+        }),
+    ]
 }

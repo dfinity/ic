@@ -11,8 +11,8 @@ LIB_DEPENDENCIES = [
 ]
 
 DEPENDENCIES = [
-    ":lib",
     # Keep sorted.
+    ":lib",
     "@crate_index//:lazy_static",
     "@crate_index//:wee_alloc",
 ]

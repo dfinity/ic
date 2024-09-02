@@ -14,6 +14,7 @@ cddl = "0.9.4"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-ledger = { path = ".." }
@@ -22,6 +23,7 @@ ic-icrc1-tokens-u64 = { path = "../../tokens_u64" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../../packages/ic-ledger-hash-of" }
+ic-rosetta-test-utils = { path = "../../../test_utils" }
 ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-types = { path = "../../../../types/types" }
@@ -30,7 +32,7 @@ icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 num-traits = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 serde = { workspace = true }
 
 [features]

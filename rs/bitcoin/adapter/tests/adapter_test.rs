@@ -7,7 +7,7 @@ use ic_btc_adapter::{
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     SendTransactionRequest,
 };
@@ -241,7 +241,7 @@ fn sync_until_end_block(
                     headers.extend(new_headers);
 
                     blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
-                    anchor = headers.last().unwrap().clone();
+                    anchor.clone_from(headers.last().unwrap());
                 }
             }
             Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_))

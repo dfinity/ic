@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
+comparable = { version = "0.5", features = ["derive"] }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
@@ -22,16 +23,15 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-sha2 = "0.9.1"
-comparable = { version = "0.5", features = ["derive"] }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

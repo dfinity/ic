@@ -11,7 +11,7 @@ use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, PrincipalId,
+    Cycles, NumBytes, PrincipalId,
 };
 use ic_wasm_transform::Module;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
@@ -47,7 +47,7 @@ fn test_instrument_module_rename_memory_table() {
                 r#"
                         (module
                             (memory (export "mem") 1 2)
-                            (table (export "tab") 2 2 anyfunc)
+                            (table (export "tab") 2 2 funcref)
                             (func $run (export "run")
                                 (drop (i32.const 123))
                             )
@@ -79,7 +79,7 @@ fn test_instrument_module_export_memory_table() {
                 r#"
                         (module
                             (memory 1 2)
-                            (table 2 2 anyfunc)
+                            (table 2 2 funcref)
                             (func $run (export "run")
                                 (drop (i32.const 123))
                             )
@@ -135,8 +135,11 @@ fn compressed_test_contents(name: &str) -> Vec<u8> {
     std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {}: {}", path, e))
 }
 
+fn default_max_size() -> NumBytes {
+    EmbeddersConfig::default().wasm_max_size
+}
+
 #[test]
-#[should_panic(expected = "too large")]
 fn test_decode_large_compressed_module() {
     // Try decoding 101MB of zeros
     //
@@ -148,7 +151,12 @@ fn test_decode_large_compressed_module() {
     // dd if=/dev/zero bs=1024 count=$((500 * 1024)) | gzip -9 > zeroes.gz
     //
     // and replace the zeroes.gz file used in the test.
-    decode_wasm(Arc::new(compressed_test_contents("zeros.gz"))).unwrap();
+    let err = decode_wasm(
+        default_max_size(),
+        Arc::new(compressed_test_contents("zeros.gz")),
+    )
+    .unwrap_err();
+    assert_matches::assert_matches!(err, WasmValidationError::ModuleTooLarge { .. });
 }
 
 #[test]
@@ -157,7 +165,7 @@ fn test_decode_large_compressed_module_with_tweaked_size() {
     let mut contents = compressed_test_contents("zeros.gz");
     let n = contents.len();
     contents[n - 4..n].copy_from_slice(&100u32.to_le_bytes());
-    decode_wasm(Arc::new(contents)).unwrap();
+    decode_wasm(default_max_size(), Arc::new(contents)).unwrap();
 }
 
 fn run_go_export(wat: &str) -> Result<(), HypervisorError> {

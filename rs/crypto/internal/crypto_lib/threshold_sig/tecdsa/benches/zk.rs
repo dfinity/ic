@@ -4,7 +4,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 fn zk_proofs(c: &mut Criterion) {
-    let alg = CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1;
+    let alg = IdkgProtocolAlgorithm::EcdsaSecp256k1;
     let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();

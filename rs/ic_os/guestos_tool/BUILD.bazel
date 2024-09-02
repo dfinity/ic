@@ -1,6 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/ic_os/config",
     "//rs/ic_os/network",
     "//rs/ic_os/utils",
@@ -11,6 +14,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:indoc",
 ]
 
@@ -26,7 +30,6 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    visibility = ["//visibility:public"],
     deps = DEPENDENCIES,
 )
 

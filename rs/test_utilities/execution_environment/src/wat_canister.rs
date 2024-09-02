@@ -283,7 +283,12 @@ pub fn wat_canister() -> WatCanisterBuilder {
     WatCanisterBuilder::new()
 }
 
-/// WAT canister builder, allows to create a WAT canister with multiple functions with different content.
+/// The WAT canister builder creates a WAT canister with multiple functions of varying content.
+///
+/// A WAT canister allows for modifiable behavior within tests.
+/// It is similar to the `universal_canister` but addresses specific cases the UC can't.
+/// It modifies methods that occur right after start and before any update call,
+/// covering `init()`, `start()`, and `post_upgrade()` methods.
 pub struct WatCanisterBuilder {
     functions: Vec<WatFunc>,
     memory_offset: i32,
@@ -379,11 +384,11 @@ impl WatCanisterBuilder {
             (func $_wait (param $instructions i64)
                 ;; Calculate the instruction limit
                 (local $limit i64)
-                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (get_local $instructions)))
+                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (local.get $instructions)))
                 (loop $loop
                     (if (i64.lt_s
                             (call $ic0_performance_counter (i32.const 0))
-                            (get_local $limit))
+                            (local.get $limit))
                         (then
                             ;; Placeholder instruction for simulating work
                             (memory.fill (i32.const 0) (i32.const 0) (i32.const {MEMORY_FILL_MAX}))
@@ -402,6 +407,11 @@ impl WatCanisterBuilder {
             {data}
         )"#
         )
+    }
+
+    /// Build the Wasm for the WAT canister.
+    pub fn build_wasm(&self) -> Vec<u8> {
+        wat::parse_str(self.build()).unwrap()
     }
 
     fn get_memory_offset(&mut self, message: &[u8]) -> i32 {
@@ -742,11 +752,11 @@ mod tests {
             (func $_wait (param $instructions i64)
                 ;; Calculate the instruction limit
                 (local $limit i64)
-                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (get_local $instructions)))
+                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (local.get $instructions)))
                 (loop $loop
                     (if (i64.lt_s
                             (call $ic0_performance_counter (i32.const 0))
-                            (get_local $limit))
+                            (local.get $limit))
                         (then
                             ;; Placeholder instruction for simulating work
                             (memory.fill (i32.const 0) (i32.const 0) (i32.const 100))

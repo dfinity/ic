@@ -54,18 +54,6 @@ type AddOrRemoveDataCentersProposalPayload = record {
   data_centers_to_remove : vec text;
 };
 
-type BlessReplicaVersionPayload = record {
-  release_package_urls : opt vec text;
-  node_manager_sha256_hex : text;
-  release_package_url : text;
-  sha256_hex : text;
-  guest_launch_measurement_sha256_hex : opt text;
-  replica_version_id : text;
-  release_package_sha256_hex : text;
-  node_manager_binary_url : text;
-  binary_url : text;
-};
-
 type CanisterIdRange = record { end : principal; start : principal };
 
 type ChangeSubnetMembershipPayload = record {
@@ -81,20 +69,18 @@ type CompleteCanisterMigrationPayload = record {
 
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
-  max_instructions_per_round : nat64;
   features : SubnetFeatures;
-  max_instructions_per_message : nat64;
   gossip_registry_poll_period_ms : nat32;
   max_ingress_bytes_per_message : nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
-  max_instructions_per_install_code : nat64;
   start_as_nns : bool;
   is_halted : bool;
   gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
   gossip_max_duplicity : nat32;
@@ -119,8 +105,6 @@ type DataCenterRecord = record {
   owner : text;
 };
 
-type DeleteSubnetPayload = record { subnet_id : opt principal };
-
 type DeployGuestosToAllSubnetNodesPayload = record {
   subnet_id : principal;
   replica_version_id : text;
@@ -129,6 +113,29 @@ type DeployGuestosToAllSubnetNodesPayload = record {
 type DeployGuestosToAllUnassignedNodesPayload = record {
   elected_replica_version : text;
 };
+
+type InitialChainKeyConfig = record {
+  key_configs : vec KeyConfigRequest;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
+};
+
+type KeyConfigRequest = record {
+  key_config : opt KeyConfig;
+  subnet_id : opt principal;
+};
+
+type KeyConfig = record {
+  key_id : opt MasterPublicKeyId;
+  pre_signatures_to_create_in_advance : opt nat32;
+  max_queue_size : opt nat32;
+};
+
+type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId };
+
+type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+
+type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
 type EcdsaConfig = record {
   quadruples_to_create_in_advance : nat32;
@@ -173,9 +180,22 @@ type FirewallRulesScope = variant {
   Global;
 };
 
+type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
+  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
+  Err : text;
+};
+
+type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
+  Ok : NodeProvidersMonthlyXdrRewards;
+  Err : text;
+};
+
 type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 
-type GetSubnetForCanisterResponse = record { subnet_id : opt principal };
+type GetSubnetForCanisterResponse = variant {
+  Ok : record { subnet_id : opt principal };
+  Err : text;
+};
 
 type Gps = record { latitude : float32; longitude : float32 };
 
@@ -196,6 +216,7 @@ type NodeOperatorRecord = record {
 
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
+  registry_version : opt nat64;
 };
 
 type NodeRewardRate = record {
@@ -217,6 +238,7 @@ type RecoverSubnetPayload = record {
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
   time_ns : nat64;
 };
@@ -245,21 +267,6 @@ type RerouteCanisterRangesPayload = record {
   destination_subnet : principal;
 };
 
-type Result = variant { Ok : principal; Err : text };
-
-type Result_1 = variant { Ok; Err : text };
-
-type Result_2 = variant {
-  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
-  Err : text;
-};
-
-type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
-
-type Result_4 = variant { Ok : GetSubnetForCanisterResponse; Err : text };
-
-type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
-
 type ReviseElectedGuestosVersionsPayload = record {
   release_package_urls : vec text;
   replica_versions_to_unelect : vec text;
@@ -287,7 +294,19 @@ type UpdateApiBoundaryNodesVersionPayload = record {
   node_ids : vec principal;
 };
 
+type DeployGuestosToSomeApiBoundaryNodes = record {
+  version : text;
+  node_ids : vec principal;
+};
+
 type UpdateElectedHostosVersionsPayload = record {
+  release_package_urls : vec text;
+  hostos_version_to_elect : opt text;
+  hostos_versions_to_unelect : vec text;
+  release_package_sha256_hex : opt text;
+};
+
+type ReviseElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
   hostos_versions_to_unelect : vec text;
@@ -310,10 +329,14 @@ type UpdateNodeDomainDirectlyPayload = record {
   domain : opt text;
 };
 
+type UpdateNodeDomainDirectlyResponse = variant { Ok; Err : text };
+
 type UpdateNodeIPv4ConfigDirectlyPayload = record {
   ipv4_config : opt IPv4Config;
   node_id : principal;
 };
+
+type UpdateNodeIpv4ConfigDirectlyResponse = variant { Ok; Err : text };
 
 type UpdateNodeOperatorConfigDirectlyPayload = record {
   node_operator_id : opt principal;
@@ -339,6 +362,11 @@ type UpdateNodesHostosVersionPayload = record {
   node_ids : vec principal;
 };
 
+type DeployHostosToSomeNodes = record {
+  hostos_version_id : opt text;
+  node_ids : vec principal;
+};
+
 type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
   ssh_readonly_keys : vec text;
 };
@@ -346,35 +374,41 @@ type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
 type UpdateSubnetPayload = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
-  max_instructions_per_round : opt nat64;
   features : opt SubnetFeatures;
   set_gossip_config_to_default : bool;
-  max_instructions_per_message : opt nat64;
   halt_at_cup_height : opt bool;
   pfn_evaluation_period_ms : opt nat32;
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
   dkg_dealings_per_block : opt nat64;
-  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
   max_block_payload_size : opt nat64;
-  max_instructions_per_install_code : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_number_of_canisters : opt nat64;
-  ecdsa_config : opt EcdsaConfig;
   retransmission_request_ms : opt nat32;
   dkg_interval_length : opt nat64;
   registry_poll_period_ms : opt nat32;
   max_chunk_wait_ms : opt nat32;
   receive_check_cache_size : opt nat32;
-  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
   ssh_backup_access : opt vec text;
   max_chunk_size : opt nat32;
   initial_notary_delay_millis : opt nat64;
   max_artifact_streams_per_peer : opt nat32;
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
+  chain_key_config : opt ChainKeyConfig;
+  chain_key_signing_enable : opt vec MasterPublicKeyId;
+  chain_key_signing_disable : opt vec MasterPublicKeyId;
+  ecdsa_config : opt EcdsaConfig;
+  ecdsa_key_signing_enable : opt vec EcdsaKeyId;
+  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
+};
+
+type ChainKeyConfig = record {
+  key_configs : vec KeyConfig;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {
@@ -385,59 +419,56 @@ type UpdateUnassignedNodesConfigPayload = record {
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
-  add_node : (AddNodePayload) -> (Result);
+  add_node : (AddNodePayload) -> (principal);
   add_node_operator : (AddNodeOperatorPayload) -> ();
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
   add_or_remove_data_centers : (AddOrRemoveDataCentersProposalPayload) -> ();
-  bless_replica_version : (BlessReplicaVersionPayload) -> ();
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
-  complete_canister_migration : (CompleteCanisterMigrationPayload) -> (
-      Result_1,
-    );
+  complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
   create_subnet : (CreateSubnetPayload) -> ();
-  delete_subnet : (DeleteSubnetPayload) -> ();
   deploy_guestos_to_all_subnet_nodes : (
-      DeployGuestosToAllSubnetNodesPayload,
-    ) -> ();
+    DeployGuestosToAllSubnetNodesPayload
+  ) -> ();
   deploy_guestos_to_all_unassigned_nodes : (
-      DeployGuestosToAllUnassignedNodesPayload,
-    ) -> ();
+    DeployGuestosToAllUnassignedNodesPayload
+  ) -> ();
+  deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
+  deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_build_metadata : () -> (text) query;
-  get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_2) query;
-  get_node_providers_monthly_xdr_rewards : () -> (Result_3) query;
-  get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (Result_4) query;
-  prepare_canister_migration : (PrepareCanisterMigrationPayload) -> (Result_1);
+  get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
+  get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
+  prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_api_boundary_nodes : (RemoveApiBoundaryNodesPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
-  remove_nodes_from_subnet : (RemoveNodesFromSubnetPayload) -> ();
-  reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
-  retire_replica_version : (RetireReplicaVersionPayload) -> ();
+  remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
+  reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
+  revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
-  update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
+  revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();
   update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
-  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
-  update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (Result_1);
+  update_node_directly : (UpdateNodeDirectlyPayload) -> ();
+  update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (
-      Result_1,
-    );
+    UpdateNodeIpv4ConfigDirectlyResponse
+  );
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
-      UpdateNodeOperatorConfigDirectlyPayload,
-    ) -> ();
+    UpdateNodeOperatorConfigDirectlyPayload
+  ) -> ();
   update_node_rewards_table : (UpdateNodeRewardsTableProposalPayload) -> ();
   update_nodes_hostos_version : (UpdateNodesHostosVersionPayload) -> ();
   update_ssh_readonly_access_for_all_unassigned_nodes : (
-      UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
-    ) -> ();
+    UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
+  ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
-  update_subnet_replica_version : (DeployGuestosToAllSubnetNodesPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
-}
+};

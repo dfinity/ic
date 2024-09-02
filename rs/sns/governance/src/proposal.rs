@@ -1,4 +1,4 @@
-use crate::sns_upgrade::{get_wasm, SnsWasm};
+use crate::sns_upgrade::get_proposal_id_that_added_wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -1056,21 +1056,33 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    let mut state = Sha256::new();
-    state.write(new_canister_wasm);
-    let sha = state.finish();
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(new_canister_wasm);
+        let sha = state.finish();
+        hex::encode(sha)
+    };
+
+    let upgrade_args_sha_256 = canister_upgrade_arg
+        .as_ref()
+        .map(|arg| {
+            let mut state = Sha256::new();
+            state.write(arg);
+            let sha = state.finish();
+            format!("Upgrade arg sha256: {}", hex::encode(sha))
+        })
+        .unwrap_or_else(|| "No upgrade arg".to_string());
 
     Ok(format!(
         r"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: {:?}
+## Canister id: {canister_id:?}
 
-## Canister wasm sha256: {}
+## Canister wasm sha256: {canister_wasm_sha256}
 
-## Mode: {:?}",
-        canister_id,
-        hex::encode(sha),
-        mode
+## Mode: {mode:?}
+
+## {upgrade_args_sha_256}",
     ))
 }
 
@@ -1113,10 +1125,12 @@ async fn validate_and_render_upgrade_sns_to_next_version(
             )
         })?;
 
-    let proposal_id_message = get_wasm(env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
+    let proposal_id_message = get_proposal_id_that_added_wasm(env, new_wasm_hash.to_vec())
         .await
         .ok()
-        .and_then(|SnsWasm { proposal_id, .. }| proposal_id)
+        // TODO(NNS1-3152): If there was an error, surface it in some way so the
+        // community can talk about it.
+        .flatten()
         .map(|id| {
             format!(
                 "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
@@ -1127,7 +1141,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 
     // TODO display the hashes for current version and new version
     Ok(format!(
-        r"# Proposal to upgrade SNS to next version:
+        r"# Proposal to upgrade SNS {canister_type_to_upgrade:?} to next version:
 
 ## SNS Current Version:
 {}
@@ -2031,6 +2045,7 @@ impl ProposalData {
     /// - 'no': Amount of voting power voting 'no'.
     /// - 'total': Total voting power.
     /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    ///
     /// The function returns a `Vote`:
     /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
     /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
@@ -2418,8 +2433,8 @@ mod tests {
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+            GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, SnsVersion,
         },
         tests::{assert_is_err, assert_is_ok},
         types::test_helpers::NativeEnvironment,
@@ -2644,7 +2659,34 @@ mod tests {
 
 ## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 
-## Mode: Upgrade"#
+## Mode: Upgrade
+
+## No upgrade arg"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
                 .to_string()
         );
     }
@@ -3062,6 +3104,7 @@ mod tests {
             Some(0),
             0,
             0,
+            0,
         )
     }
 
@@ -3077,8 +3120,6 @@ mod tests {
     /// It also is set to only upgrade root.
     fn setup_for_upgrade_sns_to_next_version_validation_tests(
     ) -> (NativeEnvironment, GovernanceProto) {
-        let expected_canister_to_be_upgraded = SnsCanisterType::Root;
-
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -3187,17 +3228,13 @@ mod tests {
         );
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
-            "get_wasm",
-            Encode!(&GetWasmRequest {
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest {
                 hash: expected_wasm_hash_requested
             })
             .unwrap(),
-            Ok(Encode!(&GetWasmResponse {
-                wasm: Some(SnsWasm {
-                    wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
-                    proposal_id: Some(2),
-                })
+            Ok(Encode!(&GetProposalIdThatAddedWasmResponse {
+                proposal_id: Some(2),
             })
             .unwrap()),
         );
@@ -3224,7 +3261,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let expected_text = r"# Proposal to upgrade SNS to next version:
+        let expected_text = r"# Proposal to upgrade SNS Root to next version:
 
 ## SNS Current Version:
 Version {

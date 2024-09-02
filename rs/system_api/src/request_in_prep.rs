@@ -16,14 +16,14 @@ use std::{convert::TryFrom, time::Duration};
 /// The main differences from a `Request` are:
 ///
 /// 1. The `callee` is stored as a `PrincipalId` instead of a `CanisterId`. If
-/// the request is targeted to the management canister, then converting to
-/// `CanisterId` requires the entire payload to be present which we are only
-/// guaranteed to have available when `ic0_call_perform` is invoked.
+///    the request is targeted to the management canister, then converting to
+///    `CanisterId` requires the entire payload to be present which we are only
+///    guaranteed to have available when `ic0_call_perform` is invoked.
 ///
 /// 2. The `on_reply` and `on_reject` callbacks are stored as `WasmClosure`s so
-/// we can register them when `ic0_call_perform` is invoked. Eagerly registering
-/// them would require us to perform clean up in case the canister does not
-/// actually call `ic0_call_perform`.
+///    we can register them when `ic0_call_perform` is invoked. Eagerly registering
+///    them would require us to perform clean up in case the canister does not
+///    actually call `ic0_call_perform`.
 ///
 /// This is marked "serializable" because ApiType must be serializable. This
 /// does not make much sense, actually -- it never needs to be transferred
@@ -180,6 +180,10 @@ impl RequestInPrep {
 
     pub(crate) fn add_cycles(&mut self, cycles: Cycles) {
         self.cycles += cycles;
+    }
+
+    pub(crate) fn current_payload_size(&self) -> NumBytes {
+        ((self.method_payload.len() + self.method_name.len()) as u64).into()
     }
 }
 

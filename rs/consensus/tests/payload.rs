@@ -1,9 +1,10 @@
+#[cfg(test)]
 mod framework;
 
 use crate::framework::ConsensusDriver;
-use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
+use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg, ecdsa};
+use ic_consensus::{certification::CertifierImpl, dkg, idkg};
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
@@ -17,7 +18,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
+use ic_test_utilities_consensus::{make_genesis, IDkgStatsNoOp};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -31,6 +32,7 @@ use ic_types::{
 };
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
 /// numbers and payloads
@@ -97,11 +99,11 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         )));
-        let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool::EcdsaPoolImpl::new(
+        let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
-            Box::new(EcdsaStatsNoOp {}),
+            Box::new(IDkgStatsNoOp {}),
         )));
 
         let registry_client = setup_registry(
@@ -137,6 +139,8 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
 
+        let (dummy_watcher, _) = watch::channel(Height::from(0));
+
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
@@ -148,7 +152,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
-            Arc::clone(&ecdsa_pool) as Arc<_>,
+            Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
@@ -166,7 +170,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let ecdsa = ecdsa::EcdsaImpl::new(
+        let idkg = idkg::IDkgImpl::new(
             replica_config.node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -177,12 +181,13 @@ fn consensus_produces_expected_batches() {
         );
         let certifier = CertifierImpl::new(
             replica_config.clone(),
-            Arc::clone(&membership) as Arc<_>,
+            Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
+            dummy_watcher,
         );
 
         let driver = ConsensusDriver::new(
@@ -191,11 +196,11 @@ fn consensus_produces_expected_batches() {
             Box::new(consensus),
             consensus_gossip,
             dkg,
-            Box::new(ecdsa),
+            Box::new(idkg),
             Box::new(certifier),
             consensus_pool,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             no_op_logger(),
             metrics_registry,
         );
@@ -215,31 +220,43 @@ fn consensus_produces_expected_batches() {
         // Plus 2 initial driver steps.
         assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
+        let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(
-            batches[0].next_checkpoint_height.unwrap(),
+            first_batch_summary.next_checkpoint_height,
             batches[0].batch_number + DKG_INTERVAL_LENGTH.into()
         );
-        // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
         for b in &batches {
-            assert!(b.next_checkpoint_height.unwrap() > b.batch_number);
+            let batch_summary = b.batch_summary.clone().unwrap();
+            // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
+            assert!(batch_summary.next_checkpoint_height > b.batch_number);
+            assert_eq!(
+                batch_summary.current_interval_length,
+                DKG_INTERVAL_LENGTH.into()
+            );
+            // Assert the `batch_number` plus `current_interval_length` is greater
+            // or equal than the `next_checkpoint_height`.
+            assert!(
+                // The +1 is because the "normal" `current_interval_length` is 499, not 500.
+                b.batch_number + batch_summary.current_interval_length + 1.into()
+                    >= batch_summary.next_checkpoint_height
+            );
         }
         // Assert the summary batch numbers.
         let last_batch = &batches[DKG_INTERVAL_LENGTH as usize - 1];
         assert_eq!(last_batch.batch_number.get(), DKG_INTERVAL_LENGTH);
+        let last_batch_summary = last_batch.batch_summary.clone().unwrap();
         assert_eq!(
-            last_batch.next_checkpoint_height.unwrap().get(),
+            last_batch_summary.next_checkpoint_height.get(),
             DKG_INTERVAL_LENGTH + 1
         );
         let summary_batch = &batches[DKG_INTERVAL_LENGTH as usize];
         assert_eq!(summary_batch.batch_number.get(), DKG_INTERVAL_LENGTH + 1);
+        let summary_batch_summary = summary_batch.batch_summary.clone().unwrap();
         assert_eq!(
-            summary_batch.next_checkpoint_height.unwrap().get(),
+            summary_batch_summary.next_checkpoint_height.get(),
             (DKG_INTERVAL_LENGTH + 1) * 2
         );
-        assert_eq!(
-            batches[0].next_checkpoint_height,
-            batches[1].next_checkpoint_height
-        );
+        assert_eq!(batches[0].batch_summary, batches[1].batch_summary);
         let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress0));
         let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();

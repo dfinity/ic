@@ -311,3 +311,112 @@ def rust_ic_bench(env = {}, data = [], **kwargs):
         data = data + _SANDBOX_DATA,
         **kwargs
     )
+
+def _symlink_dir_test(ctx):
+    """
+    Create a symlink to have a stable location for Rust (and maybe other) test binaries
+
+    `rust_test` creates a binary as an output, so you can use that binary in
+    other targets, including Rust tests, e.g., as a `data` dependency. But for a
+    `rust_test` target `tgt`, the location of the binary in RUNFILES_DIR is
+    unpredictable (Bazel will put it in a dir called something like
+    `tgt_451223`). This rule creates a symlink to the binary in a stable location.
+    """
+
+    # Use the no-op script as the executable
+    no_op_output = ctx.actions.declare_file("no_op")
+    ctx.actions.write(output = no_op_output, content = ":")
+
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns), executable = no_op_output)]
+
+symlink_dir_test = rule(
+    implementation = _symlink_dir_test,
+    test = True,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)
+
+def rust_test_with_binary(name, binary_name, **kwargs):
+    """
+    A `rust_test` with a stable link to its produced test binary.
+
+    Plain `rust_test` is problematic when one wants to use the produced test binary in
+    other Bazel targets (e.g., upgrade/downgrade compatibility tests), as Bazel does not
+    provide a stable way to refer to the binary produced by a test. This rule is a thin
+    wrapper around `rust_test` that symlinks the test binary to a stable location provided
+    by `binary_name`, which can then be used in other tests.
+
+    Usage example:
+    ```
+    rust_test(
+        name = "my_test",
+        binary_name = "my_test_binary",
+        crate = ":my_crate",
+        deps = ["@crate_index//:proptest"]
+    )
+    ```
+
+    This will generate a rust_test target named `my_test` whose corresponding binary
+    will be available as the `my_test_binary` target.
+    """
+    symlink_dir_test(
+        name = binary_name,
+        targets = {
+            name: binary_name,
+        },
+    )
+    rust_test(
+        name = name,
+        **kwargs
+    )
+
+def _symlink_dir(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dir = rule(
+    implementation = _symlink_dir,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)
+
+def _symlink_dirs(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, childdirname in ctx.attr.targets.items():
+        for file in target[DefaultInfo].files.to_list():
+            ln = ctx.actions.declare_file(dirname + "/" + childdirname + "/" + file.basename)
+            ctx.actions.symlink(
+                output = ln,
+                target_file = file,
+            )
+            lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dirs = rule(
+    implementation = _symlink_dirs,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)

@@ -1,8 +1,8 @@
 use crate::CountBytes;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -48,12 +48,12 @@ impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
 }
 
 impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
 
     fn try_from(value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
         let mut responses = vec![];
         for r in value.bitcoin_testnet_payload.into_iter() {
-            responses.push(BitcoinAdapterResponse::try_from(r).map_err(|err| err.to_string())?);
+            responses.push(BitcoinAdapterResponse::try_from(r)?);
         }
         Ok(Self(responses))
     }

@@ -39,12 +39,11 @@ impl UpgradeArgs {
 }
 
 pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F) -> UpgradeArgs {
-    let (env, constructor_types) = parse_constructor_args(candid_file);
     let upgrade_args: String = upgrade_args.into();
-    let upgrade_types = if upgrade_args != EMPTY_UPGRADE_ARGS {
-        constructor_types.clone()
+    let (env, upgrade_types) = if upgrade_args != EMPTY_UPGRADE_ARGS {
+        parse_constructor_args(candid_file)
     } else {
-        vec![]
+        (TypeEnv::new(), vec![])
     };
     let encoded_upgrade_args = candid_parser::parse_idl_args(&upgrade_args)
         .expect("fail to parse upgrade args")

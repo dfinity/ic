@@ -91,6 +91,8 @@ message RegistryCanisterStableStorage {
 // rewarded for providing nodes to the Internet Computer for the month.
 message NodeProvidersMonthlyXdrRewards {
     map<string, uint64> rewards = 1;
+    // Registry version at which rewards were calculated
+    optional uint64 registry_version = 2;
 }
 
 // Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
@@ -99,7 +101,7 @@ message GetSubnetForCanisterRequest {
     ic_base_types.pb.v1.PrincipalId principal = 1;
 }
 
-// Response if the supplied PrincipalId is assigned to a subnet.
-message GetSubnetForCanisterResponse {
+// The subnet id of a canister.
+message SubnetForCanister {
     ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }

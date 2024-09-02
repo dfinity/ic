@@ -1,18 +1,15 @@
 use anyhow::Result;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
-        RetrieveIpv4Addr,
-    },
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
 };
+use ic_system_test_driver::systest;
 use ic_tests::nns_dapp::nns_dapp_customizations;
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::systest;
 use sdk_system_tests::{
     asset::get_asset_as_string,
     config::configure_local_network,
@@ -49,7 +46,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 
@@ -89,11 +85,9 @@ fn test(env: TestEnv) {
 
     dfx.ping();
 
-    dfx.new_project("hello", FrontendType::None, BackendType::Motoko);
+    dfx.new_project("hello", FrontendType::SimpleAssets, BackendType::Motoko);
 
     let project_dir = fs::canonicalize(env.base_path()).unwrap().join("hello");
-
-    project::add_frontend_canister(&log, &project_dir, "hello");
 
     let dfx = dfx.with_working_dir(&project_dir);
 

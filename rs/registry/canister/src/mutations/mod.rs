@@ -9,7 +9,6 @@ pub mod do_bless_replica_version;
 pub mod do_change_subnet_membership;
 pub mod do_clear_provisional_whitelist;
 pub mod do_create_subnet;
-pub mod do_delete_subnet;
 pub mod do_deploy_guestos_to_all_subnet_nodes;
 pub mod do_deploy_guestos_to_all_unassigned_nodes;
 pub mod do_recover_subnet;

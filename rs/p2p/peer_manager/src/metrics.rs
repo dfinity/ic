@@ -4,7 +4,6 @@ use prometheus::{Histogram, IntCounter};
 #[derive(Debug, Clone)]
 pub struct PeerManagerMetrics {
     pub topology_updates: IntCounter,
-    pub topology_update_errors: IntCounter,
     pub topology_watcher_update_duration: Histogram,
     pub topology_update_duration: Histogram,
 }
@@ -16,10 +15,6 @@ impl PeerManagerMetrics {
             topology_updates: metrics_registry.int_counter(
                 "peer_manager_topology_updates_total",
                 "Number of times registry is checked for topology updates.",
-            ),
-            topology_update_errors: metrics_registry.int_counter(
-                "peer_manager_topology_update_errors_total",
-                "Number of times toplogy update failed.",
             ),
             topology_watcher_update_duration: metrics_registry.histogram(
                 "peer_manager_topology_watcher_update_duration_seconds",

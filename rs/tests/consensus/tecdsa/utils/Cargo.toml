@@ -1,0 +1,37 @@
+[package]
+name = "ic_consensus_threshold_sig_system_test_utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+canister-test = { path = "../../../../rust_canisters/canister_test" }
+ed25519-dalek = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../../types/base_types" }
+ic-canister-client = { path = "../../../../canister_client" }
+ic-config = { path = "../../../../config" }
+ic-constants = { path = "../../../../constants" }
+ic-management-canister-types = { path = "../../../../types/management_canister_types" }
+ic-message = { path = "../../../test_canisters/message" }
+ic-nervous-system-common-test-keys = { path = "../../../../nervous_system/common/test_keys" }
+ic-nns-common = { path = "../../../../nns/common" }
+ic-nns-governance-api = { path = "../../../../nns/governance/api" }
+ic-nns-test-utils = { path = "../../../../nns/test_utils" }
+ic-prep = { path = "../../../../prep" }
+ic-registry-subnet-features = { path = "../../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../../driver" }
+ic-types = { path = "../../../../types/types" }
+ic-types-test-utils = { path = "../../../../types/types_test_utils" }
+k256 = { workspace = true }
+registry-canister = { path = "../../../../registry/canister" }
+schnorr_fun = "0.10"
+serde = { workspace = true }
+sha2 = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }

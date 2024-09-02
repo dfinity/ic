@@ -27,10 +27,9 @@ mod jemalloc_metrics;
 
 // On mac jemalloc causes lmdb to segfault
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 #[global_allocator]
-#[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
@@ -65,11 +64,6 @@ fn main() -> io::Result<()> {
     compile_error!("compilation is only allowed for 64-bit targets");
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-
-    // Produce a thread dump and exit if this is a child process created for this
-    // purpose.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    ic_backtrace::init();
 
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
@@ -239,34 +233,39 @@ fn main() -> io::Result<()> {
     // Set up tracing
     let mut tracing_layers = vec![];
 
-    if let Some(ref jaeger_collector_addr) = config.tracing.jaeger_addr {
-        let _rt_guard = rt_main.enter();
-        let jaeger_collector_addr = jaeger_collector_addr.trim().to_string();
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    match config.tracing.jaeger_addr.as_ref() {
+        Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
+            let _rt_guard = rt_main.enter();
 
-        let span_exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint(jaeger_collector_addr)
-            .with_protocol(opentelemetry_otlp::Protocol::Grpc);
+            let span_exporter = opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(jaeger_collector_addr)
+                .with_protocol(opentelemetry_otlp::Protocol::Grpc);
 
-        match opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(span_exporter)
-            .with_trace_config(
-                trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "Replica Jaeger Service",
-                )])),
-            )
-            .install_simple()
-        {
-            Ok(tracer) => {
-                let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
-                tracing_layers.push(otel_layer.boxed());
-            }
-            Err(err) => {
-                tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+            match opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_trace_config(
+                    trace::config()
+                        .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
+                        .with_resource(Resource::new(vec![KeyValue::new(
+                            "service.name",
+                            "replica",
+                        )])),
+                )
+                .with_exporter(span_exporter)
+                .install_batch(opentelemetry_sdk::runtime::Tokio)
+            {
+                Ok(tracer) => {
+                    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                    tracing_layers.push(otel_layer.boxed());
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+                }
             }
         }
+        _ => {}
     }
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);

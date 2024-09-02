@@ -1,3 +1,24 @@
 {
-    "idx": "eng-idx-bots"
+    "boundary-node": "eng-boundary-nodes",
+    "Consensus": "eng-consensus",
+    "cross-chain-team": "eng-cross-chain",
+    "crypto-team": "eng-crypto-mr",
+    "DRE": "eng-release-bots",
+    "execution": "eng-execution-mrs",
+    "FinInt": "eng-fi-mrs",
+    "ic-support": "ic-support-notifications",
+    "ic-interface-owners": "interface-owners",
+    "ic-message-routing-owners": "eng-message-routing-mr",
+    "ic-owners-owners": "owners-owners",
+    "InfraSec": "eng-infrasec",
+    "languages": "eng-motoko",
+    "networking": "eng-networking",
+    "nns-team": "eng-nns-prs",
+    "node": "eng-node-prs",
+    "Platform Operations": "eng-platform-ops",
+    "pocket-ic": "pocket-ic",
+    "Product Security": "eng-prodsec",
+    "runtime": "runtime-code-reviews",
+    "sdk": "sdk",
+    "utopia": "eng-utopia"
 }

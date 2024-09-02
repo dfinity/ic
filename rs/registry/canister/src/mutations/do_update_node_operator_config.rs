@@ -1,8 +1,4 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{check_ipv6_format, decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::check_ipv6_format, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -41,7 +37,7 @@ impl Registry {
             });
 
         let mut node_operator_record =
-            decode_registry_value::<NodeOperatorRecord>(node_operator_record_vec.clone());
+            NodeOperatorRecord::decode(node_operator_record_vec.as_slice()).unwrap();
 
         if let Some(new_allowance) = payload.node_allowance {
             node_operator_record.node_allowance = new_allowance;
@@ -84,7 +80,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: node_operator_record_key,
-            value: encode_or_panic(&node_operator_record),
+            value: node_operator_record.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations

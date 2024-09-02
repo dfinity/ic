@@ -1,4 +1,4 @@
-use crate::{state_reader_executor::StateReaderExecutor, HttpError};
+use crate::HttpError;
 use axum::{body::Body, extract::FromRequest, response::IntoResponse};
 use bytes::Bytes;
 use http::{
@@ -7,27 +7,41 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{header, Response, StatusCode};
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::crypto::{
+    root_of_trust::RegistryRootOfTrustProvider, CryptoRegistry,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    malicious_flags::MaliciousFlags,
+    messages::{HttpRequest, HttpRequestContent, MessageId},
+    RegistryVersion, SubnetId, Time,
 };
-use ic_validator::RequestValidationError;
+use ic_validator::{
+    CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
+};
 use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value as CBOR;
-use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::{collections::BTreeMap, time::Duration};
+use tokio::time::timeout;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 use tower_http::cors::{CorsLayer, Vary};
 
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
-pub const CONTENT_TYPE_TEXT: &str = "text/plain";
+pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
+/// If the request body is not received/parsed within
+/// `max_request_receive_seconds`, then the request will be rejected and
+/// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
+pub(crate) const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -171,6 +185,31 @@ where
     }
 }
 
+pub(crate) struct WithTimeout<E>(pub E);
+
+#[async_trait::async_trait]
+impl<S, E> FromRequest<S> for WithTimeout<E>
+where
+    S: Send + Sync,
+    E: FromRequest<S>,
+{
+    type Rejection = axum::response::Response;
+    async fn from_request(req: axum::extract::Request, s: &S) -> Result<Self, Self::Rejection> {
+        match timeout(MAX_REQUEST_RECEIVE_TIMEOUT, E::from_request(req, s)).await {
+            Ok(Ok(bytes)) => Ok(WithTimeout(bytes)),
+            Ok(Err(err)) => Err(err.into_response()),
+            Err(_) => Err((
+                StatusCode::REQUEST_TIMEOUT,
+                format!(
+                    "receiving request took longer than {}s",
+                    MAX_REQUEST_RECEIVE_TIMEOUT.as_secs()
+                ),
+            )
+                .into_response()),
+        }
+    }
+}
+
 /// Converts a user error into an HTTP response.
 ///
 /// We need this conversion because we validate user requests twice:
@@ -234,20 +273,48 @@ pub(crate) fn validation_error_to_http_error(
 }
 
 pub(crate) async fn get_latest_certified_state(
-    state_reader_executor: &StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Option<Arc<ReplicatedState>> {
-    let paths = &mut [Path::from(Label::from("time"))];
-    let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
-        Ok(labeled_tree) => labeled_tree,
-        // This error is not recoverable and should never happen, because the
-        // path is valid and required to start the HTTP endpoint.
-        Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
-    };
-    state_reader_executor
-        .read_certified_state(labeled_tree)
-        .await
-        .ok()?
-        .map(|r| r.0)
+    tokio::task::spawn_blocking(move || {
+        let paths = &mut [Path::from(Label::from("time"))];
+        let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
+            Ok(labeled_tree) => labeled_tree,
+            // This error is not recoverable and should never happen, because the
+            // path is valid and required to start the HTTP endpoint.
+            Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
+        };
+        let state = state_reader.read_certified_state(&labeled_tree);
+        state.map(|r| r.0)
+    })
+    .await
+    .ok()?
+}
+
+pub(crate) fn build_validator<T: HttpRequestContent>(
+    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    malicious_flags: Option<MaliciousFlags>,
+) -> Arc<dyn HttpRequestVerifier<T, RegistryRootOfTrustProvider>>
+where
+    HttpRequestVerifierImpl: HttpRequestVerifier<T, RegistryRootOfTrustProvider>,
+{
+    if malicious_flags.is_some_and(|f| f.maliciously_disable_ingress_validation) {
+        pub struct DisabledHttpRequestVerifier;
+
+        impl<C: HttpRequestContent, R> HttpRequestVerifier<C, R> for DisabledHttpRequestVerifier {
+            fn validate_request(
+                &self,
+                _request: &HttpRequest<C>,
+                _current_time: Time,
+                _root_of_trust_provider: &R,
+            ) -> Result<CanisterIdSet, RequestValidationError> {
+                Ok(CanisterIdSet::all())
+            }
+        }
+
+        Arc::new(DisabledHttpRequestVerifier) as Arc<_>
+    } else {
+        Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
+    }
 }
 
 // A few test helpers, improving readability in the tests

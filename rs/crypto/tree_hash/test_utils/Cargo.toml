@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 ic-crypto-tree-hash = { path = ".." }
-proptest = "1.0"
-rand = "0.8.4"
+proptest = { workspace = true }
+rand = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

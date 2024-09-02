@@ -1,25 +1,18 @@
-use ic_config::logger::{Config as LoggerConfig, LogFormat, LogTarget};
+use ic_config::logger::{Config as LoggerConfig, LogDestination, LogFormat};
 use slog::{o, Drain, Logger};
 use slog_async::{AsyncGuard, OverflowStrategy};
 use slog_scope::GlobalLoggerGuard;
 use std::io;
 use std::sync::{Arc, Mutex};
 
+pub mod context_logger;
 pub mod replica_logger;
-pub use ic_context_logger::{
-    debug, error, fatal, info, info_sample, log, log_metadata, new_logger, trace, warn,
-};
-use replica_logger::LogEntryLogger;
-pub use replica_logger::ReplicaLogger;
+
+pub use crate::replica_logger::{no_op_logger, ReplicaLogger};
 
 pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLogger {
-    let log_entry_logger = LogEntryLogger::new(
-        log,
-        config.level,
-        config.debug_overrides.clone(),
-        config.sampling_rates.clone(),
-        config.enabled_tags.clone(),
-    );
+    use crate::replica_logger::LogEntryLogger;
+    let log_entry_logger = LogEntryLogger::new(log, config.level);
     ReplicaLogger::new(log_entry_logger)
 }
 
@@ -39,10 +32,10 @@ pub struct LoggerImpl {
 
 impl LoggerImpl {
     pub fn new(config: &LoggerConfig, thread_name: String) -> Self {
-        match config.target.clone() {
-            LogTarget::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
-            LogTarget::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
-            LogTarget::File(f) => Self::new_internal(
+        match config.log_destination.clone() {
+            LogDestination::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
+            LogDestination::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
+            LogDestination::File(f) => Self::new_internal(
                 std::fs::File::create(f).expect("Couldn't open/create log file"),
                 config,
                 thread_name,

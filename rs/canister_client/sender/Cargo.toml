@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-ecdsa-secp256k1 = { path = "../../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-types = { path = "../../types/types" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }

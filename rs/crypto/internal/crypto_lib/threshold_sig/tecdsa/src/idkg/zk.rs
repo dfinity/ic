@@ -1,6 +1,6 @@
 use crate::{
-    CanisterThresholdError, CanisterThresholdResult, CanisterThresholdSignatureAlgorithm,
-    DomainSep, EccCurveType, EccPoint, EccScalar, RandomOracle, Seed,
+    CanisterThresholdError, CanisterThresholdResult, DomainSep, EccCurveType, EccPoint, EccScalar,
+    IdkgProtocolAlgorithm, RandomOracle, Seed,
 };
 use serde::{Deserialize, Serialize};
 
@@ -76,7 +76,7 @@ impl ProofOfEqualOpeningsInstance {
 
     fn hash_to_challenge(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         commitment: &EccPoint,
         associated_data: &[u8],
     ) -> CanisterThresholdResult<EccScalar> {
@@ -94,7 +94,7 @@ impl ProofOfEqualOpeningsInstance {
 impl ProofOfEqualOpenings {
     pub fn create(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         secret: &EccScalar,
         masking: &EccScalar,
         associated_data: &[u8],
@@ -120,7 +120,7 @@ impl ProofOfEqualOpenings {
 
     pub fn verify(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         pedersen: &EccPoint,
         simple: &EccPoint,
         associated_data: &[u8],
@@ -233,7 +233,7 @@ impl ProofOfProductInstance {
 
     fn hash_to_challenge(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
@@ -254,7 +254,7 @@ impl ProofOfProductInstance {
 impl ProofOfProduct {
     pub fn create(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         lhs: &EccScalar,
         rhs: &EccScalar,
         rhs_masking: &EccScalar,
@@ -293,7 +293,7 @@ impl ProofOfProduct {
 
     pub fn verify(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         lhs_com: &EccPoint,
         rhs_com: &EccPoint,
         product_com: &EccPoint,
@@ -377,7 +377,7 @@ impl ProofOfDLogEquivalenceInstance {
 
     fn hash_to_challenge(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
@@ -398,7 +398,7 @@ impl ProofOfDLogEquivalence {
     /// Create a dlog equivalence proof
     pub fn create(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         x: &EccScalar,
         g: &EccPoint,
         h: &EccPoint,
@@ -427,7 +427,7 @@ impl ProofOfDLogEquivalence {
     /// Verify a dlog equivalence proof
     pub fn verify(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         g: &EccPoint,
         h: &EccPoint,
         g_x: &EccPoint,

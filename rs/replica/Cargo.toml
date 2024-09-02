@@ -19,6 +19,7 @@ ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
@@ -28,7 +29,6 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-pprof = { path = "../monitoring/pprof" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
@@ -43,42 +43,35 @@ ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-jemalloc-ctl = "0.3.3"
-jemallocator = "0.3.2"
-libc = "0.2.91"
+libc = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"
-pprof = { version = "0.13", default-features = false, features = [
-    "flamegraph",
-    "prost-codec",
-], optional = true }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
-rand = "0.8"
-regex = "1.3.9"
+rand = { workspace = true }
+regex = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
+tikv-jemalloc-ctl = "0.5"
+tikv-jemallocator = "0.5"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-flame = "0.2.0"
+tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
-opentelemetry = { version = "^0.21.0", features = ["trace"] }
-opentelemetry-otlp = { version = "^0.14.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "^0.21.2", features = ["trace"] }
-tracing-opentelemetry = "^0.22.0"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# this library uses libunwind, which is only applicable to Linux
-ic-backtrace = { path = "../monitoring/backtrace" }
 
 [dev-dependencies]
 assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
-criterion = "0.5"
-ic-management-canister-types = { path = "../types/management_canister_types" }
+criterion = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "3.0.4"
-wat = "1.0.52"
+wat = { workspace = true }
 
 [[bench]]
 name = "calls"

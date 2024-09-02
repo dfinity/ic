@@ -4,7 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
@@ -17,7 +19,10 @@ BASE_DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap",
+    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:itertools",
     "@crate_index//:json-patch",
     "@crate_index//:pretty_assertions",
     "@crate_index//:serde",
@@ -25,6 +30,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:tokio",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
@@ -46,6 +52,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:lazy_static",
 ]
 

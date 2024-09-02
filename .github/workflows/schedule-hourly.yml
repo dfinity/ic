@@ -15,92 +15,103 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
     runs-on:
-      labels: bazel-runner-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Before script
-        if: always()
         id: before-script
         shell: bash
-        run: |
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Docker RO SA login
-        id: docker-ro-login
-        shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_COMMAND: "build"
           BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
-      - name: Bazel Clean
+      - name: Upload bazel-bep
         if: always()
-        run: bazel clean
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: bazel-bep.pb
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
-    runs-on:
-      labels: bazel-runner-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Before script
-        if: always()
         id: before-script
         shell: bash
-        run: |
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v3
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//... --deleted_packages=gitlab-ci/src/gitlab_config"
+          BAZEL_TARGETS: "//..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures --test_tag_filters=system_test_hourly"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hourly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Bazel Clean
+      - name: Upload bazel-bep
         if: always()
-        run: bazel clean
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-test-coverage:
     name: Bazel Test Coverage
     runs-on:
-      labels: bazel-runner-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Before script
-        if: always()
         id: before-script
         shell: bash
-        run: |
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v3
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
@@ -129,6 +140,3 @@ jobs:
             cov_targets.txt
             cov_report.dat
             cov_html/
-      - name: Bazel Clean
-        if: always()
-        run: bazel clean

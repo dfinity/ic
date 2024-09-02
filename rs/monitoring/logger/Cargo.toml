@@ -9,12 +9,11 @@ documentation.workspace = true
 [dependencies]
 chrono = { workspace = true }
 ic-config = { path = "../../config" }
-ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 serde = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-slog-json = { version = "2.3", features = ["nested-values"] }
-slog-scope = "4.1.2"
-slog-term = "2.6.0"
+slog-async = { workspace = true }
+slog-json = { version = "2.6.1", features = ["nested-values"] }
+slog-scope = { workspace = true }
+slog-term = { workspace = true }

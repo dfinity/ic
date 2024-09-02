@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_test_utilities_load_wasm",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:cargo_metadata",
         "@crate_index//:escargot",
     ],

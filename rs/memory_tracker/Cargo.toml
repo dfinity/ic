@@ -13,20 +13,20 @@ bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-libc = "0.2.91"
+lazy_static = { workspace = true }
+libc = { workspace = true }
 nix = { workspace = true }
 slog = { workspace = true }
-lazy_static = "1.4.0"
 
 [features]
 default = []
 sigsegv_handler_checksum = []
 
 [dev-dependencies]
+criterion = { workspace = true }
 ic-types = { path = "../types/types" }
-tempfile = "3.1.0"
-criterion = "0.5"
-proptest = "1.0"
+proptest = { workspace = true }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "traps"

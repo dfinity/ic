@@ -306,6 +306,7 @@ impl Player {
             None,
             MaliciousFlags::default(),
         ));
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
@@ -316,6 +317,7 @@ impl Player {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),
@@ -585,7 +587,8 @@ impl Player {
                 .is_ok()
         };
 
-        let malicious_nodes = find_malicious_nodes(certification_pool, &verify);
+        let malicious_nodes =
+            find_malicious_nodes(certification_pool, self.get_latest_cup().height(), &verify);
 
         // Get heights and local state hashes without a full certification
         let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
@@ -754,16 +757,15 @@ impl Player {
                 )
             }
         };
-        let batch_number = message_routing.expected_batch_height();
         let mut extra_batch = Batch {
-            batch_number,
-            next_checkpoint_height: None,
-            requires_full_state_hash: true,
+            batch_number: message_routing.expected_batch_height(),
+            batch_summary: None,
+            requires_full_state_hash: false,
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            ecdsa_subnet_public_keys: BTreeMap::new(),
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            idkg_subnet_public_keys: BTreeMap::new(),
+            idkg_pre_signature_ids: BTreeMap::new(),
             registry_version,
             time,
             consensus_responses: Vec::new(),
@@ -781,16 +783,44 @@ impl Player {
                 .collect::<Vec<_>>();
             println!("extra_batch created with new ingress");
         }
-        let batch_number = extra_batch.batch_number;
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
-                    println!("Delivered batch {}", batch_number);
-                    break;
+                    println!("Delivered batch {}", extra_batch.batch_number);
+                    self.wait_for_state(extra_batch.batch_number);
+
+                    // We are done once we delivered a batch for a new checkpoint
+                    if extra_batch.requires_full_state_hash {
+                        break;
+                    }
+
+                    // If we have messages that could not be completed, we need to keep delivering
+                    // empty batches. If all messages could be completed, we need to deliver one
+                    // more batch triggering checkpoint creation.
+                    let msg_status = self.ingress_history_reader.get_latest_status();
+                    let incomplete_msgs_exists =
+                        extra_msgs
+                            .iter()
+                            .any(|msg| match msg_status(&msg.ingress.id()) {
+                                IngressStatus::Unknown => true,
+                                IngressStatus::Known { state, .. } => !state.is_terminal(),
+                            });
+
+                    extra_batch = extra_batch.clone();
+                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.batch_number = message_routing.expected_batch_height();
+                    extra_batch.time += Duration::from_nanos(1);
+
+                    if !incomplete_msgs_exists {
+                        extra_batch.requires_full_state_hash = true;
+                    }
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
-                    unreachable!("Unexpected error on a valid batch number {}", batch_number);
+                    unreachable!(
+                        "Unexpected error on a valid batch number {}",
+                        extra_batch.batch_number
+                    );
                 }
             }
         }
@@ -1222,6 +1252,7 @@ impl Player {
 /// Return the set of signers that created multiple valid certification shares for the same height
 fn find_malicious_nodes(
     certification_pool: &CertificationPoolImpl,
+    latest_cup_height: Height,
     verify: &dyn Fn(&CertificationShare) -> bool,
 ) -> HashSet<NodeId> {
     let mut malicious = HashSet::new();
@@ -1230,7 +1261,11 @@ fn find_malicious_nodes(
         .certification_shares()
         .height_range()
     {
-        for h in range.min.get()..=range.max.get() {
+        // Do not try to verify shares below the CUP height
+        // They are not needed and we may not have the key material to do so
+        let min = std::cmp::max(range.min.get(), latest_cup_height.get());
+
+        for h in min..=range.max.get() {
             let shares = certification_pool
                 .shares_at_height(Height::from(h))
                 .filter(verify)
@@ -1482,7 +1517,7 @@ mod tests {
             .into_iter()
             .for_each(|s| pool.persistent_pool.insert(s));
 
-        let malicious = find_malicious_nodes(&pool, &verify);
+        let malicious = find_malicious_nodes(&pool, Height::new(0), &verify);
         assert_eq!(malicious.len(), 1);
         assert_eq!(*malicious.iter().next().unwrap(), node_test_id(7));
 

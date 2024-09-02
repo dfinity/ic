@@ -1,12 +1,12 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::make_user;
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
-use crate::util::block_on;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_rosetta_api::convert::to_model_account_identifier;
 use ic_rosetta_api::models::ConstructionDeriveResponse;
 use ic_rosetta_api::models::Error as RosettaError;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use slog::{info, Logger};
 

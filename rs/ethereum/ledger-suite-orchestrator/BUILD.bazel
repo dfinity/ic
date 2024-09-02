@@ -23,6 +23,7 @@ package(default_visibility = ["//visibility:public"])
         ],
         crate_name = "ic_ledger_suite_orchestrator",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:async-trait",
             "@crate_index//:ic-cdk-macros",
         ],
@@ -33,6 +34,7 @@ package(default_visibility = ["//visibility:public"])
         },
         version = "0.1.0",
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/sha2",
             "//rs/ethereum/types",
@@ -51,6 +53,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-stable-structures",
             "@crate_index//:ic0",
             "@crate_index//:num-traits",
+            "@crate_index//:scopeguard",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
@@ -71,6 +74,7 @@ rust_test(
     name = "lib_unit_tests",
     crate = ":ledger_suite_orchestrator",
     deps = [
+        # Keep sorted.
         ":ledger_suite_orchestrator",
         "@crate_index//:assert_matches",
         "@crate_index//:mockall",
@@ -87,6 +91,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
     },
     deps = [
+        # Keep sorted.
         ":ledger_suite_orchestrator",
         "@crate_index//:candid_parser",
         "@crate_index//:ic-stable-structures",
@@ -109,10 +114,12 @@ rust_test(
         crate_name = "ic_ledger_suite_orchestrator_canister" + name_suffix,
         opt = "z",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         service_file = "ledger_suite_orchestrator.did",
         deps = [
+            # Keep sorted.
             ":ledger_suite_orchestrator" + name_suffix,
             "//rs/rust_canisters/http_types",
             "@crate_index//:askama",
@@ -132,6 +139,7 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
+    timeout = "long",
     testonly = True,
     srcs = ["tests/tests.rs"],
     data = [
@@ -153,6 +161,7 @@ rust_ic_test(
     },
     proc_macro_deps = [],
     deps = [
+        # Keep sorted.
         ":ledger_suite_orchestrator",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/test_utils/reproducible_rng",

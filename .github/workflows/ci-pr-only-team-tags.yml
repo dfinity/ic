@@ -1,0 +1,74 @@
+name: Tag Team Reviewers
+
+on:
+  pull_request:
+    # Only tag PRs on the branches for which we have protection rules / rulesets
+    branches:
+      - master
+      - 'rc--*'
+      - 'hotfix-*'
+      - 'follow-*'
+    types:
+      - ready_for_review
+      - synchronize
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  REPO: "${{ github.repository }}"
+  PR_NUMBER: "${{ github.event.pull_request.number }}"
+
+jobs:
+  set-team-tags:
+    name: Set Team Tags
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Requested Reviewers
+        id: requested_reviewers
+        shell: bash
+        run: |
+          set -exuo pipefail
+          REVIEWERS=$(curl -s -H "Authorization: token $GH_TOKEN" \
+                        -H "Accept: application/vnd.github.v3+json" \
+                        "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/requested_reviewers" \
+                        | jq -r '.teams[].slug' | sed 's/^/@/' | tr '\n' ' ')
+          if [ -z "$REVIEWERS" ]; then
+            echo "No teams requested for review."
+            REVIEWERS="none"
+          fi
+          echo "requested_teams=$REVIEWERS" >> $GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check or Create Labels
+        if: env.requested_teams != 'none'
+        shell: bash
+        run: |
+          set -exuo pipefail
+          for TEAM in ${{ env.requested_teams }}; do
+            if ! gh label list --limit 100 | grep -w "$TEAM"; then
+              echo "Creating label: $TEAM"
+              gh label create "$TEAM" --color "d4af37"
+            else
+              echo "Label $TEAM already exists."
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag PR with Teams
+        if: env.requested_teams != 'none'
+        shell: bash
+        run: |
+          set -exuo pipefail
+          for TEAM in ${{ env.requested_teams }}; do
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "$TEAM"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

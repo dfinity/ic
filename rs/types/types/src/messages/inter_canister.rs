@@ -5,8 +5,9 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -14,7 +15,9 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize, str::StrTruncate};
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -87,7 +90,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -96,6 +99,7 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub metadata: Option<RequestMetadata>,
     /// If non-zero, this is a best-effort call.
@@ -162,7 +166,6 @@ impl Request {
                     Err(_) => None,
                 }
             }
-            Ok(Method::FetchCanisterLogs) => None, // TODO(IC-272).
             Ok(Method::UploadChunk) => match UploadChunkArgs::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
@@ -177,21 +180,42 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::DeleteChunks)
-            | Ok(Method::TakeCanisterSnapshot)
-            | Ok(Method::LoadCanisterSnapshot)
-            | Ok(Method::ListCanisterSnapshots)
-            | Ok(Method::DeleteCanisterSnapshot) => None,
+            Ok(Method::TakeCanisterSnapshot) => {
+                match TakeCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::LoadCanisterSnapshot) => {
+                match LoadCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ListCanisterSnapshots) => {
+                match ListCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::DeleteCanisterSnapshot) => {
+                match DeleteCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
-            | Ok(Method::ComputeInitialEcdsaDealings)
             | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::SchnorrPublicKey)
+            | Ok(Method::SignWithSchnorr)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
+            | Ok(Method::BitcoinGetBlockHeaders)
             | Ok(Method::BitcoinSendTransaction)
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
@@ -200,6 +224,10 @@ impl Request {
                 // No effective canister id.
                 None
             }
+            // `FetchCanisterLogs` method is only allowed for messages sent by
+            // end users in non-replicated mode, so we should never reach this point.
+            // If we do, we return `None` (which should be no-op) to avoid panicking.
+            Ok(Method::FetchCanisterLogs) => None,
             Err(_) => None,
         }
     }
@@ -207,30 +235,26 @@ impl Request {
 
 impl std::fmt::Debug for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ receiver: {:?}, ", self.receiver)?;
-        write!(f, "sender: {:?}, ", self.sender)?;
-        write!(
-            f,
-            "sender_reply_callback: {:?}, ",
-            self.sender_reply_callback
-        )?;
-        write!(f, "payment: {:?}, ", self.payment)?;
-        if self.method_name.len() <= 103 {
-            write!(f, "method_name: {:?}, ", self.method_name)?;
-        } else {
-            write!(
-                f,
-                "method_name: {:?}..., ",
-                self.method_name.safe_truncate(100)
-            )?;
-        }
-        write!(
-            f,
-            "method_payload: [{}], ",
-            truncate_and_format(&self.method_payload, 1024)
-        )?;
-        write!(f, "metadata: {:?} }}", self.metadata)?;
-        Ok(())
+        let Request {
+            receiver,
+            sender,
+            sender_reply_callback,
+            payment,
+            method_name,
+            method_payload,
+            metadata,
+            deadline,
+        } = self;
+        f.debug_struct("Request")
+            .field("receiver", receiver)
+            .field("sender", sender)
+            .field("sender_reply_callback", sender_reply_callback)
+            .field("payment", payment)
+            .field("method_name", &method_name.ellipsize(100, 75))
+            .field("method_payload", &truncate_and_format(method_payload, 1024))
+            .field("metadata", metadata)
+            .field("deadline", deadline)
+            .finish()
     }
 }
 
@@ -335,14 +359,11 @@ impl std::fmt::Debug for Payload {
             }
             Self::Reject(context) => {
                 const KB: usize = 1024;
-                write!(f, "Reject({{ ")?;
-                write!(f, "code: {:?}, ", context.code)?;
-                if context.message.len() <= 8 * KB {
-                    write!(f, "message: {:?} ", context.message)?;
-                } else {
-                    write!(f, "message: {:?} ", context.message.ellipsize(8 * KB, 75))?;
-                }
-                write!(f, "}})")
+                let RejectContext { code, message } = context;
+                f.debug_struct("Reject")
+                    .field("code", code)
+                    .field("message", &message.ellipsize(8 * KB, 75))
+                    .finish()
             }
         }
     }
@@ -391,13 +412,14 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
@@ -447,6 +469,20 @@ impl Hash for Response {
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
+}
+
+impl ValidateEq for RequestOrResponse {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
+                l.validate_eq(r)
+            }
+            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
+                l.validate_eq(r)
+            }
+            _ => Err("RequestOrResponse enum mismatch".to_string()),
+        }
+    }
 }
 
 impl RequestOrResponse {

@@ -13,5 +13,5 @@ ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-xnet-uri = { path = "../uri" }
 socket2 = { workspace = true }
-tokio-rustls = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }

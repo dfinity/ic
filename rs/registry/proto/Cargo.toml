@@ -13,4 +13,4 @@ prost = { workspace = true }
 [dev-dependencies]
 ic-registry-common-proto-generator = { path = "./generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

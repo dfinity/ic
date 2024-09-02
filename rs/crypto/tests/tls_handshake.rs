@@ -3,11 +3,11 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::registry::TlsRegistry;
 use ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys;
-use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder};
-use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder};
+use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder, TlsTestClientRunError};
+use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder, TlsTestServerRunError};
 use ic_crypto_test_utils_tls::CipherSuite;
 use ic_crypto_test_utils_tls::TlsVersion;
-use ic_crypto_tls_interfaces::{AuthenticatedPeer, TlsConfigError};
+use ic_crypto_tls_interfaces::AuthenticatedPeer;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -459,10 +459,7 @@ mod server {
         let (_, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_handshake_server_error_containing(
-            &server_result,
-            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
-        )
+        assert_handshake_server_error_containing(&server_result, "peer sent no certificates")
     }
 
     #[test]
@@ -991,7 +988,9 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("TlsAcceptor::accept failed: received fatal alert: HandshakeFailure")
+            .expect_error(
+                "TlsAcceptor::accept failed: peer is incompatible: NoSignatureSchemesInCommon",
+            )
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1007,7 +1006,7 @@ mod client {
 
         assert_handshake_client_error_containing(
             &client_result,
-            "signature algorithm is not Ed25519 (OID 1.3.101.112)",
+            "received fatal alert: HandshakeFailure",
         )
     }
 
@@ -1313,24 +1312,22 @@ fn malformed_cert() -> X509PublicKeyCert {
 }
 
 fn assert_handshake_server_error_containing(
-    server_result: &Result<AuthenticatedPeer, TlsConfigError>,
+    server_result: &Result<AuthenticatedPeer, TlsTestServerRunError>,
     error_substring: &str,
 ) {
     assert_matches!(
         server_result,
-        Err(TlsConfigError::MalformedSelfCertificate { internal_error })
-            if internal_error.contains(error_substring)
+        Err(TlsTestServerRunError(error)) if error.contains(error_substring)
     );
 }
 
 fn assert_handshake_client_error_containing(
-    client_result: &Result<(), TlsConfigError>,
+    client_result: &Result<(), TlsTestClientRunError>,
     error_substring: &str,
 ) {
     assert_matches!(
         client_result,
-        Err(TlsConfigError::MalformedSelfCertificate { internal_error })
-            if internal_error.contains(error_substring)
+        Err(TlsTestClientRunError(error)) if error.contains(error_substring)
     );
 }
 

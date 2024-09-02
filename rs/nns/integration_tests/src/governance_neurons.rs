@@ -6,28 +6,27 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-        manage_neuron_response::{
-            Command as CommandResponse, {self},
-        },
-        neuron::DissolveState,
-        GovernanceError, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+use ic_nns_governance_api::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron_response::{
+        Command as CommandResponse, {self},
     },
+    neuron::DissolveState,
+    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
-        list_neurons, nns_add_hot_key, nns_claim_or_refresh_neuron, nns_governance_get_full_neuron,
-        nns_governance_get_neuron_info, nns_join_community_fund, nns_leave_community_fund,
-        nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
+        list_neurons, list_neurons_by_principal, nns_add_hot_key, nns_claim_or_refresh_neuron,
+        nns_disburse_neuron, nns_governance_get_full_neuron, nns_governance_get_neuron_info,
+        nns_join_community_fund, nns_leave_community_fund, nns_remove_hot_key,
+        nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
@@ -284,11 +283,12 @@ fn test_spawn_neuron() {
 /// to list_neurons).
 #[test]
 fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    let list_neurons_response =
+        list_neurons_by_principal(&state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
     assert_eq!(list_neurons_response.full_neurons.len(), 1);
 
     let neuron_id = NeuronIdProto {
@@ -296,7 +296,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
     };
 
     let response = nns_add_hot_key(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -307,11 +307,12 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
         _ => panic!("Failed to add hot key: {:#?}", response),
     };
 
-    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    let list_neurons_response =
+        list_neurons_by_principal(&state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
     assert_eq!(list_neurons_response.full_neurons.len(), 1);
 
     let response = nns_remove_hot_key(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -322,7 +323,8 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
         _ => panic!("Failed to remove hot key: {:#?}", response),
     };
 
-    let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
+    let list_neurons_response =
+        list_neurons_by_principal(&state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
     assert_eq!(list_neurons_response.full_neurons.len(), 1);
 }
 
@@ -330,7 +332,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
 fn test_hotkey_can_join_and_leave_community_fund() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -340,14 +342,14 @@ fn test_hotkey_can_join_and_leave_community_fund() {
     let hotkey = PrincipalId::new_user_test_id(622_907);
 
     nns_add_hot_key(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_1_id,
         hotkey,
     );
 
     // Step 2a: Call the code under test (indirectly). To wit, is_authorized_to_configure_or_err.
-    let join_response = nns_join_community_fund(&mut state_machine, hotkey, neuron_1_id);
+    let join_response = nns_join_community_fund(&state_machine, hotkey, neuron_1_id);
 
     // Step 3a: Inspect result. Expect success.
     fn assert_ok(manage_neuron_response: &ManageNeuronResponse) {
@@ -364,7 +366,7 @@ fn test_hotkey_can_join_and_leave_community_fund() {
     assert_ok(&join_response);
 
     // Step 2b: Instead of joining NF, leave it.
-    let leave_response = nns_leave_community_fund(&mut state_machine, hotkey, neuron_1_id);
+    let leave_response = nns_leave_community_fund(&state_machine, hotkey, neuron_1_id);
 
     // Step 3b: Again, expect success.
     assert_ok(&leave_response);
@@ -373,7 +375,7 @@ fn test_hotkey_can_join_and_leave_community_fund() {
     // configure operations (besides Neuron Fund membership changes) by hotkey
     // are verboten.
     let add_hot_key_response = nns_add_hot_key(
-        &mut state_machine,
+        &state_machine,
         hotkey,
         neuron_1_id,
         PrincipalId::new_user_test_id(289_896),
@@ -402,17 +404,17 @@ fn test_hotkey_can_join_and_leave_community_fund() {
 
     // Steps 2d, 3d: Controller can perform any neuron configure operation.
     assert_ok(&nns_join_community_fund(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_1_id,
     ));
     assert_ok(&nns_leave_community_fund(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_1_id,
     ));
     assert_ok(&nns_add_hot_key(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_1_id,
         PrincipalId::new_user_test_id(331_685),
@@ -423,7 +425,7 @@ fn test_hotkey_can_join_and_leave_community_fund() {
 fn test_claim_neuron() {
     // Step 1: Prepare the world by setting up NNS canisters and transfer 1 ICP to a Governance
     // canister subaccount.
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let nonce = 123_456;
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
@@ -441,12 +443,11 @@ fn test_claim_neuron() {
     );
 
     // Step 2: Call the code under test - claim a neuron.
-    let neuron_id = nns_claim_or_refresh_neuron(&mut state_machine, test_user_principal, nonce);
+    let neuron_id = nns_claim_or_refresh_neuron(&state_machine, test_user_principal, nonce);
 
     // Step 3.1: Inspect the claimed neuron as a full neuron.
     let full_neuron =
-        nns_governance_get_full_neuron(&mut state_machine, test_user_principal, neuron_id.id)
-            .unwrap();
+        nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id).unwrap();
     assert_eq!(full_neuron.controller, Some(test_user_principal));
     let created_timestamp_seconds = full_neuron.created_timestamp_seconds;
     assert!(created_timestamp_seconds > 0);
@@ -460,14 +461,115 @@ fn test_claim_neuron() {
     assert_eq!(full_neuron.cached_neuron_stake_e8s, 1_000_000_000);
 
     // Step 3.2: Inspect the claimed neuron as neuron info.
-    let neuron_info = nns_governance_get_neuron_info(
-        &mut state_machine,
-        PrincipalId::new_anonymous(),
-        neuron_id.id,
-    )
-    .unwrap();
+    let neuron_info =
+        nns_governance_get_neuron_info(&state_machine, PrincipalId::new_anonymous(), neuron_id.id)
+            .unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolved as i32);
     assert_eq!(neuron_info.dissolve_delay_seconds, 0);
     assert_eq!(neuron_info.age_seconds, 0);
     assert_eq!(neuron_info.stake_e8s, 1_000_000_000);
+}
+
+#[test]
+fn test_list_neurons() {
+    // Step 1.1: Prepare the world by setting up NNS canisters with 2 princials both with 10 ICP.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let principal_1 = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let principal_2 = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_accounts(vec![
+            (
+                AccountIdentifier::new(principal_1, None),
+                Tokens::from_e8s(1_000_000_000),
+            ),
+            (
+                AccountIdentifier::new(principal_2, None),
+                Tokens::from_e8s(1_000_000_000),
+            ),
+        ])
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 1.2: Claim 3 neurons - principal 1 has 2 neurons, principal 2 has 1 neuron. All with 2 ICPs.
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_1,
+        Tokens::from_e8s(200_000_000),
+        1,
+    );
+    let neuron_id_1 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 1);
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_1,
+        Tokens::from_e8s(200_000_000),
+        2,
+    );
+    let neuron_id_2 = nns_claim_or_refresh_neuron(&state_machine, principal_1, 2);
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        principal_2,
+        Tokens::from_e8s(200_000_000),
+        3,
+    );
+    let neuron_id_3 = nns_claim_or_refresh_neuron(&state_machine, principal_2, 3);
+
+    // Step 1.3: disburse neuron 2 so that it's empty.
+    nns_disburse_neuron(&state_machine, principal_1, neuron_id_2, 200_000_000, None);
+
+    // Step 2: test listing neurons by ids with an anonymous principal.
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        PrincipalId::new_anonymous(),
+        ListNeurons {
+            neuron_ids: vec![neuron_id_1.id, neuron_id_2.id, neuron_id_3.id],
+            include_neurons_readable_by_caller: false,
+            include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
+    assert_eq!(list_neurons_response.full_neurons.len(), 0);
+
+    // Step 3: test listing neurons by ids with principal 1 including empty neurons.
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 2);
+    assert_eq!(list_neurons_response.full_neurons.len(), 2);
+
+    // Step 4: test listing neurons by ids with principal 1 not including empty neurons.
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 1);
+    assert_eq!(list_neurons_response.full_neurons.len(), 1);
+
+    // Step 5: test listing neurons by ids with principal 1 without specifying whether to include
+    // empty neurons, also specifying neuron 3 which the caller does not control.
+    let list_neurons_response = list_neurons(
+        &state_machine,
+        principal_1,
+        ListNeurons {
+            neuron_ids: vec![neuron_id_3.id],
+            include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
+        },
+    );
+    assert_eq!(list_neurons_response.neuron_infos.len(), 3);
+    assert_eq!(list_neurons_response.full_neurons.len(), 2);
 }

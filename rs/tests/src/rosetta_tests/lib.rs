@@ -1,62 +1,67 @@
 use super::governance_client::GovernanceClient;
-use crate::driver::test_env::TestEnv;
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
-use crate::rosetta_tests::lib::convert::neuron_subaccount_bytes_from_public_key;
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::convert::{neuron_account_from_public_key, neuron_subaccount_bytes_from_public_key},
+    rosetta_client::RosettaApiClient,
+};
 use candid::Principal;
-use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::Tokens;
+use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_ledger_core::{block::BlockIndex, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::Neuron;
-use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, operations_to_requests, to_hex,
-    to_model_account_identifier,
+use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_rosetta_api::{
+    convert,
+    convert::{
+        from_hex, from_model_account_identifier, operations_to_requests, to_hex,
+        to_model_account_identifier,
+    },
+    errors,
+    errors::ApiError,
+    models::{
+        amount::{signed_amount, tokens_to_amount},
+        operation::OperationType,
+        ConstructionCombineResponse, ConstructionParseResponse,
+        ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
+        ConstructionSubmitResponse, CurveType, Error, Error as RosettaError, PublicKey, Signature,
+        SignatureType, SignedTransaction,
+    },
+    request::{
+        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
+        transaction_results::TransactionResults, Request,
+    },
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity,
+        StartDissolve, StopDissolve,
+    },
+    transaction_id::TransactionIdentifier,
+    DEFAULT_TOKEN_SYMBOL,
 };
-use ic_rosetta_api::errors::ApiError;
-use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
-use ic_rosetta_api::models::operation::OperationType;
-use ic_rosetta_api::models::SignedTransaction;
-use ic_rosetta_api::models::{
-    ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, Error, PublicKey, Signature, SignatureType,
-};
-use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
-use ic_rosetta_api::request::transaction_results::TransactionResults;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::ChangeAutoStakeMaturity;
-use ic_rosetta_api::request_types::RegisterVote;
-use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo, RemoveHotKey,
-    SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
-};
-use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{convert, errors, DEFAULT_TOKEN_SYMBOL};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_types::{time, PrincipalId};
 use icp_ledger::{AccountIdentifier, Operation};
-use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::{thread_rng, SeedableRng};
-use rosetta_core::convert::principal_id_from_public_key;
-use rosetta_core::models::{RosettaSupportedKeyPair, Secp256k1KeyPair};
-use rosetta_core::objects::ObjectMap;
+use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
+use rosetta_core::{
+    convert::principal_id_from_public_key,
+    models::{RosettaSupportedKeyPair, Secp256k1KeyPair},
+    objects::ObjectMap,
+};
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
 }
 
 pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
-    let kp = EdKeypair::generate_from_u64(seed);
+    let kp = EdKeypair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
@@ -66,7 +71,7 @@ pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey,
 pub fn make_user_ecdsa_secp256k1(
     seed: u64,
 ) -> (AccountIdentifier, Secp256k1KeyPair, PublicKey, PrincipalId) {
-    let kp = Secp256k1KeyPair::generate_from_u64(seed);
+    let kp = Secp256k1KeyPair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
@@ -624,7 +629,7 @@ pub fn create_custom_neuron(
             .to_vec(),
         controller: Some(pid),
         created_timestamp_seconds,
-        aging_since_timestamp_seconds: created_timestamp_seconds + 10,
+        aging_since_timestamp_seconds: u64::MAX,
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
         cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
         kyc_verified: true,
@@ -673,7 +678,7 @@ pub fn create_neuron(
             .to_vec(),
         controller: Some(principal_id),
         created_timestamp_seconds,
-        aging_since_timestamp_seconds: created_timestamp_seconds + 10,
+        aging_since_timestamp_seconds: u64::MAX,
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
         cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
         kyc_verified: true,

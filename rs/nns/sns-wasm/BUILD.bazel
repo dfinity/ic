@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -12,6 +12,7 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
@@ -29,6 +30,7 @@ BASE_DEPENDENCIES = [
     "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-wasm",
@@ -36,7 +38,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:hex",
     "@crate_index//:serde_json",
 ]
 
@@ -55,16 +56,19 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/sns-wasm/protobuf_generator:lib",
     "//rs/nns/test_utils",
     "//rs/registry/helpers",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_test",
     "//rs/sns/swap",  # FIXME
     "//rs/state_machine_tests",
@@ -72,7 +76,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "@crate_index//:candid_parser",
-    "@crate_index//:libflate",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -116,14 +119,6 @@ rust_library(
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/sns-wasm.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":sns-wasm"],
-)
-
 rust_canister(
     name = "sns-wasm-canister",
     srcs = ["canister/canister.rs"],
@@ -136,9 +131,11 @@ rust_canister(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-wasm-canister",
-    data = ["canister/sns-wasm.did"],
-    env = {"CARGO_MANIFEST_DIR": "rs/nns/sns-wasm"},
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/sns-wasm.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":sns-wasm"],
 )
 
 rust_test(
@@ -185,6 +182,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/sns/governance:sns-governance-canister",
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
+        "@mainnet_nns_sns-wasm-canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/sns-wasm",
@@ -193,6 +191,7 @@ rust_ic_test_suite_with_extra_srcs(
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath :sns-wasm-canister)",
+        "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_sns-wasm-canister//file)",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
         "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
@@ -222,6 +221,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nns/sns-wasm",
     deps = [
+        # Keep sorted.
         "//rs/nns/sns-wasm/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

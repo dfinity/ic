@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::execution::canister_lifecycle::config_compute_allocation;
 use ic_tests::execution::canister_lifecycle::total_compute_allocation_cannot_be_exceeded;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

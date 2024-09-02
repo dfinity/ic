@@ -373,8 +373,8 @@ pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
     pb::MetaManifest::proxy_encode(meta_manifest.clone())
 }
 
-pub fn decode_meta_manifest(bytes: &[u8]) -> Result<MetaManifest, String> {
-    pb::MetaManifest::proxy_decode(bytes).map_err(|err| {
+pub fn decode_meta_manifest(bytes: Chunk) -> Result<MetaManifest, String> {
+    pb::MetaManifest::proxy_decode(bytes.as_bytes()).map_err(|err| {
         format!(
             "failed to convert MetaManifest proto into an object: {}",
             err
@@ -548,7 +548,7 @@ impl StateSyncMessage {
                 }
             }
 
-            Some(payload)
+            Some(payload.into())
         }
     }
 }

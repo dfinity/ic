@@ -191,12 +191,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup.
     // ===================================
     logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -211,32 +205,18 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the orchestrator.
     // ===================================
     orchestrator_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -251,32 +231,18 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the CSP vault.
     // ===================================
     csp_vault_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -291,21 +257,13 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_crypto_internal_csp::vault"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // =================================
     // Configuration of Message Routing.
@@ -331,7 +289,7 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_disable_execution: false,
          maliciously_corrupt_own_state_at_heights: [],
          maliciously_disable_ingress_validation: false,
-         maliciously_corrupt_ecdsa_dealings: false,
+         maliciously_corrupt_idkg_dealings: false,
          maliciously_alter_certified_hash: false,
          maliciously_alter_state_sync_chunk_sending_side: false,
        },

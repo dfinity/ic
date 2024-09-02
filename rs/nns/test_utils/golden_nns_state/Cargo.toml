@@ -1,0 +1,12 @@
+[package]
+name = "ic-nns-test-utils-golden-nns-state"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-config = { path = "../../../config" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
+tempfile = { workspace = true }

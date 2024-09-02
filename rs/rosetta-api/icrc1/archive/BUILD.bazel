@@ -13,6 +13,7 @@ package(default_visibility = ["//visibility:public"])
         crate_name = "ic_icrc1_archive" + name_suffix,
         opt = "z",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
@@ -21,8 +22,10 @@ package(default_visibility = ["//visibility:public"])
         service_file = ":archive.did",
         version = "0.9.0",
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
             "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
@@ -73,9 +76,11 @@ rust_test(
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath :archive_canister" + name_suffix + ".wasm.gz)",
         },
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/ledger_core",
+            "//rs/rosetta-api/test_utils",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",

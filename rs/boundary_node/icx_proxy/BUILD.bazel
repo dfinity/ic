@@ -3,29 +3,30 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:axum",
-    "@crate_index//:axum_server_0_6_0",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:form_urlencoded",
     "@crate_index//:futures",
-    "@crate_index//:http_1_0_0",
-    "@crate_index//:http_body_1_0_0",
+    "@crate_index//:http",
+    "@crate_index//:http-body",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper_rustls_0_27_x",
+    "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-util",
     "@crate_index//:hyperlocal-next",
-    "@crate_index//:itertools",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-http-certification",
+    "@crate_index//:ic-response-verification",
     "@crate_index//:ic-utils",
-    "@crate_index//:jemallocator",
+    "@crate_index//:itertools",
     "@crate_index//:maxminddb",
-    "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_0_20_0",
+    "@crate_index//:opentelemetry_prometheus_0_13_0",
     "@crate_index//:prometheus",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
@@ -34,23 +35,24 @@ DEPENDENCIES = [
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:thiserror",
+    "@crate_index//:tikv-jemallocator",
+    "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
-    "@crate_index//:tokio",
-    "@crate_index//:ic-response-verification",
-    "@crate_index//:ic-http-certification",
-    "@crate_index//:thiserror",
     "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:httptest",
     "@crate_index//:tokio-test",
 ]

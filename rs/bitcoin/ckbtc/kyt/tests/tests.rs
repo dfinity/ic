@@ -6,7 +6,7 @@ use ic_ckbtc_kyt::{
 };
 use ic_state_machine_tests::{
     CanisterHttpRequestContext, CanisterHttpResponsePayload, Cycles, IngressState, IngressStatus,
-    PayloadBuilder, StateMachine, WasmResult,
+    StateMachine, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 
@@ -17,21 +17,6 @@ fn assert_has_header(req: &CanisterHttpRequestContext, name: &str, value: &str) 
         .headers
         .iter()
         .any(|h| h.name == name && h.value == value));
-}
-
-fn handle_http_call(
-    name: &str,
-    env: &StateMachine,
-    mut f: impl FnMut(&CanisterHttpRequestContext) -> CanisterHttpResponsePayload,
-) {
-    let mut payload = PayloadBuilder::new();
-    let contexts = env.canister_http_request_contexts();
-    assert!(!contexts.is_empty(), "expected '{}' HTTP request", name);
-    for (id, context) in &contexts {
-        let response = f(context);
-        payload = payload.http_response(*id, &response);
-    }
-    env.execute_payload(payload);
 }
 
 fn tick_until_next_request(env: &StateMachine) {
@@ -121,7 +106,7 @@ fn test_key_recovery() {
 
     env.tick();
 
-    handle_http_call("transfer with expired key", &env, |req| {
+    env.handle_http_call("transfer with expired key", |req| {
         assert_has_header(req, "Token", "Key1");
         assert!(
             req.url.ends_with("/transfers"),
@@ -145,7 +130,7 @@ fn test_key_recovery() {
         }
     );
 
-    handle_http_call("retry transfer with another key", &env, |req| {
+    env.handle_http_call("retry transfer with another key", |req| {
         assert_has_header(req, "Token", "Key2");
         assert!(
             req.url.ends_with("/transfers"),
@@ -161,7 +146,7 @@ fn test_key_recovery() {
 
     tick_until_next_request(&env);
 
-    handle_http_call("fetch alerts", &env, |req| {
+    env.handle_http_call("fetch alerts", |req| {
         assert_has_header(req, "Token", "Key2");
         assert!(
             req.url.ends_with("/v2/transfers/12356-abcde/alerts"),

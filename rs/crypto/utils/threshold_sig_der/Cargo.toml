@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-simple_asn1 = { workspace = true }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types/" }
 ic-types = { path = "../../../types/types" }
+simple_asn1 = { workspace = true }
 
 # Note: keep this crate as light-weight as possible. In particular, do not add
 # dependencies that make this crate (e.g., transitively) dependent on
@@ -18,4 +18,4 @@ ic-types = { path = "../../../types/types" }
 
 [dev-dependencies]
 hex = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

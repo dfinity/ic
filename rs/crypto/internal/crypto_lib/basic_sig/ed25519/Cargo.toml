@@ -9,27 +9,27 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 curve25519-dalek = { workspace = true }
-ed25519-consensus = "2.0.1"
 hex = { workspace = true }
-ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+ic-crypto-ed25519 = { path = "../../../../ed25519" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = "0.8.5"
-rand_chacha = "0.3.1"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-num-bigint = "0.4.3"
-proptest = "1.0"
-proptest-derive = "0.3.0"
+num-bigint = { workspace = true }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
-wycheproof = "0.5"
+wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

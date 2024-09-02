@@ -64,7 +64,6 @@
 // the sum of all compute allocations with the multiplier.
 
 pub mod artifact;
-pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
 pub mod canister_log;
@@ -78,7 +77,6 @@ pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
 pub mod nominal_cycles;
-pub mod p2p;
 pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
@@ -101,12 +99,15 @@ pub use ic_base_types::{
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
+use strum::EnumIter;
+use thousands::Separable;
 
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
@@ -159,11 +160,9 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// use `impl TryFrom<Option<pb::NodeId>> for NodeId` here however we cannot
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
-    let value: pb::NodeId = try_from_option_field(value, "NodeId missing")?;
-    let inner: pb::PrincipalId = try_from_option_field(value.principal_id, "PrincipalId missing")?;
-
-    let principal_id = PrincipalId::try_from(inner)
-        .map_err(|e| ProxyDecodeError::InvalidPrincipalId(Box::new(e)))?;
+    let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
 }
 
@@ -172,6 +171,12 @@ pub struct NumInstructionsTag;
 /// execution cutoff point for messages. This amount can be used to charge the
 /// respective amount of `Cycles` on a canister's balance for message execution.
 pub type NumInstructions = AmountOf<NumInstructionsTag, u64>;
+
+impl DisplayerOf<NumInstructions> for NumInstructionsTag {
+    fn display(amount: &NumInstructions, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", amount.get().separate_with_underscores())
+    }
+}
 
 pub struct NumMessagesTag;
 /// Represents the number of messages.
@@ -364,13 +369,30 @@ impl CanisterTimer {
     }
 }
 
+impl From<pb_state_bits::LongExecutionMode> for LongExecutionMode {
+    fn from(val: pb_state_bits::LongExecutionMode) -> Self {
+        match val {
+            pb_state_bits::LongExecutionMode::Unspecified
+            | pb_state_bits::LongExecutionMode::Opportunistic => LongExecutionMode::Opportunistic,
+            pb_state_bits::LongExecutionMode::Prioritized => LongExecutionMode::Prioritized,
+        }
+    }
+}
+
+impl From<LongExecutionMode> for pb_state_bits::LongExecutionMode {
+    fn from(val: LongExecutionMode) -> Self {
+        match val {
+            LongExecutionMode::Opportunistic => pb_state_bits::LongExecutionMode::Opportunistic,
+            LongExecutionMode::Prioritized => pb_state_bits::LongExecutionMode::Prioritized,
+        }
+    }
+}
+
 /// Represents scheduling strategy for Canisters with long execution in progress.
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash, Default,
-)]
+#[derive(Clone, Copy, Debug, EnumIter, Eq, PartialEq, PartialOrd, Ord, Default)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.

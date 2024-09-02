@@ -41,17 +41,17 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
-    /// Metric `consumed_cycles_since_replica_started` is not
-    /// monotonically increasing. Cycles consumed are increasing the
-    /// value of the metric while refunding cycles are decreasing it.
+    /// Metric `consumed_cycles` is not monotonically increasing. Cycles
+    /// consumed are increasing the value of the metric while refunding
+    /// cycles are decreasing it.
     ///
     /// `f64` gauge because cycles values are `u128`: converting them
     /// into `u64` would result in truncation when the value overflows
     /// 64 bits (which would be indistinguishable from a huge refund);
     /// whereas conversion to `f64` merely results in loss of precision
     /// when dealing with values > 2^53.
-    pub(super) consumed_cycles_since_replica_started: Gauge,
-    pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
+    pub(super) consumed_cycles: Gauge,
+    pub(super) consumed_cycles_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
@@ -73,7 +73,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
-    pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
+    pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
@@ -106,9 +106,9 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
-    pub(super) ecdsa_signature_agreements: IntGauge,
-    pub(super) ecdsa_delivered_quadruples: HistogramVec,
-    pub(super) ecdsa_completed_contexts: IntCounterVec,
+    pub(super) threshold_signature_agreements: IntGaugeVec,
+    pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
@@ -215,28 +215,29 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            consumed_cycles_since_replica_started: metrics_registry.gauge(
+            consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed since replica started",
+                "Number of cycles consumed",
             ),
-            consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
+            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
-                "Number of cycles consumed since replica started by use cases.",
+                "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_gauge(
-                "replicated_state_ecdsa_signature_agreements_total",
-                "Total number of ECDSA signature agreements created",
+            threshold_signature_agreements: metrics_registry.int_gauge_vec(
+                "replicated_state_threshold_signature_agreements_total",
+                "Total number of threshold signature agreements created by key Id",
+                &["key_id"],
             ),
-            ecdsa_delivered_quadruples: metrics_registry.histogram_vec(
-                "execution_ecdsa_delivered_quadruples",
-                "Number of ECDSA quadruples delivered to execution by key ID",
+            delivered_pre_signatures: metrics_registry.histogram_vec(
+                "execution_idkg_delivered_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
-            ecdsa_completed_contexts: metrics_registry.int_counter_vec(
-                "execution_completed_sign_with_ecdsa_contexts_total",
-                "Total number of completed sign with ECDSA contexts by key ID",
+            completed_signature_request_contexts: metrics_registry.int_counter_vec(
+                "execution_completed_signature_request_contexts_total",
+                "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
@@ -442,9 +443,9 @@ impl SchedulerMetrics {
                 "The duration of execution round scheduling in seconds.",
                 metrics_registry,
             ),
-            round_update_sign_with_ecdsa_contexts_duration: duration_histogram(
-                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
-                "The duration of updating sign with ecdsa contexts in seconds.",
+            round_update_signature_request_contexts_duration: duration_histogram(
+                "execution_round_update_signature_request_contexts_duration_seconds",
+                "The duration of updating signature request contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {
@@ -678,8 +679,7 @@ impl SchedulerMetrics {
     }
 
     pub(super) fn observe_consumed_cycles(&self, consumed_cycles: NominalCycles) {
-        self.consumed_cycles_since_replica_started
-            .set(consumed_cycles.get() as f64);
+        self.consumed_cycles.set(consumed_cycles.get() as f64);
     }
 
     pub(super) fn observe_consumed_cycles_by_use_case(
@@ -687,7 +687,7 @@ impl SchedulerMetrics {
         consumed_cycles_by_use_case: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
         for (use_case, cycles) in consumed_cycles_by_use_case.iter() {
-            self.consumed_cycles_since_replica_started_by_use_case
+            self.consumed_cycles_by_use_case
                 .with_label_values(&[use_case.as_str()])
                 .set(cycles.get() as f64);
         }

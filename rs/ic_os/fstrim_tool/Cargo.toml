@@ -8,7 +8,7 @@ name = "fstrim_tool"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = { version = "1.0.75" }
+anyhow = { workspace = true }
 clap = { workspace = true }
 ic-sys = { path = "../../sys" }
 maplit = "1.0.2"
@@ -18,5 +18,5 @@ assert_cmd = "2.0.12"
 assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 predicates = "3.0.3"
-rand = "0.8"
-tempfile = "3.3.0"
+rand = { workspace = true }
+tempfile = { workspace = true }

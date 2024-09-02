@@ -15,16 +15,19 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
             .expect("Error decoding from stable"),
     );
 
-    // TODO[NNS1-2986]: Remove data migration and set mutation_batches_due_to_data_migrations to 0.
-    let mutation_batches_due_to_data_migrations = {
-        let mutations = registry.subnet_record_mutations_from_ecdsa_to_chain_key();
-        if mutations.is_empty() {
-            0 // No mutations required for this data migration.
-        } else {
-            registry.maybe_apply_mutation_internal(mutations);
-            1 // Single batch of mutations due to this data migration.
-        }
-    };
+    // Registry data migrations should be implemented as follows:
+    // let mutation_batches_due_to_data_migrations = {
+    //     let mutations = registry.compute_mutations_from_my_data_migration();
+    //     if mutations.is_empty() {
+    //         0 // No mutations required for this data migration.
+    //     } else {
+    //         registry.maybe_apply_mutation_internal(mutations);
+    //         1 // Single batch of mutations due to this data migration.
+    //     }
+    // };
+    //
+    // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
+    let mutation_batches_due_to_data_migrations = 0;
 
     registry.check_global_state_invariants(&[]);
     // Registry::from_serializable_from guarantees this always passes in this function

@@ -2,12 +2,12 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::systest;
 use ic_tests::execution::call_on_cleanup::*;
 use ic_tests::execution::config_system_verified_subnets;
 use ic_tests::execution::inter_canister_queries::*;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

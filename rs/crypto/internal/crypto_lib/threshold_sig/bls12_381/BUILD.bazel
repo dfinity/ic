@@ -8,6 +8,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/types",
@@ -29,10 +30,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:proptest",
@@ -40,6 +43,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -72,6 +76,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/bls.rs"],
     deps = [
+        # Keep sorted.
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
@@ -86,6 +91,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/dlog.rs"],
     deps = [
+        # Keep sorted.
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",
@@ -99,6 +105,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/fs_nidkg.rs"],
     deps = [
+        # Keep sorted.
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/seed",
@@ -111,6 +118,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/zk.rs"],
     deps = [
+        # Keep sorted.
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/test_utils/reproducible_rng",

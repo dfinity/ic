@@ -4,7 +4,7 @@ This document describes the contents of the GuestOS *config* partition (*/dev/vd
 
 Currently, all contents in the config partition are stored as plain-text without integrity protection.
 
-These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../rootfs/opt/ic/bin/bootstrap-ic-node.sh[bootstrap-ic-node.sh]
+These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../../components/init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh[bootstrap-ic-node]
 
 == Production configuration files
 
@@ -105,20 +105,6 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 - elasticsearch_tags: Space-separated list of tags to apply to exported log records.
 
 If left unspecified, filebeat will be left unconfigured and no logs are exported.
-
-=== log.conf
-
-Detailed configuration for the IC logger.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- replica_log_debug_overrides: A list of fully qualified Rust module paths. For each of the listed modules, at least DEBUG logs will be produced by the node software. Primarily intended for testing.
-
-The list must be provided as a serialized JSON-array. The value is inserted into the configuration file as is. E.g.:
-
-'["ic_consensus::consensus::finalizer",\
-
-"ic_consensus::consensus::catchup_package_maker"]'
 
 === socks_proxy.conf
 

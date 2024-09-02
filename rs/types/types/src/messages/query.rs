@@ -1,4 +1,3 @@
-use crate::messages::Blob;
 use crate::{
     messages::{
         http::{representation_independent_hash_call_or_query, CallOrQuery},
@@ -6,9 +5,7 @@ use crate::{
     },
     CanisterId, PrincipalId, UserId,
 };
-use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 /// Represents the source of a query that is sent to a canister.
@@ -102,33 +99,6 @@ impl HasCanisterId for Query {
     fn canister_id(&self) -> CanisterId {
         self.receiver
     }
-}
-
-/// Represents a Query that is sent by the IC.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct AnonymousQuery {
-    pub receiver: CanisterId,
-    pub method_name: String,
-    pub method_payload: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "status")]
-pub enum AnonymousQueryResponse {
-    Replied {
-        reply: AnonymousQueryResponseReply,
-    },
-    Rejected {
-        reject_code: RejectCode,
-        reject_message: String,
-    },
-}
-
-/// The body of the `AnonymousQueryResponse`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AnonymousQueryResponseReply {
-    pub arg: Blob,
 }
 
 #[cfg(test)]

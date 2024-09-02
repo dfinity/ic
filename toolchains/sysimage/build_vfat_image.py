@@ -8,12 +8,10 @@
 #   build_vfat_image -s 10M -o partition.img.tzst -p boot/efi -i dockerimg.tar
 #
 import argparse
-import atexit
 import os
 import subprocess
 import sys
 import tarfile
-import tempfile
 
 
 def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
@@ -104,7 +102,7 @@ def main():
         nargs="*",
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
-    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -114,8 +112,9 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
@@ -138,6 +137,7 @@ def main():
 
     install_extra_files(image_file, extra_files, path_transform)
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     temp_tar = os.path.join(tmpdir, "partition.tar")

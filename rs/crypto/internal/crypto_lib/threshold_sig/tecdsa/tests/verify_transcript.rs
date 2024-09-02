@@ -1,9 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-mod test_utils;
-
-use crate::test_utils::*;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 fn remove_dealing_and_verify(
     node_index: NodeIndex,

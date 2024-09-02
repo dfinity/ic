@@ -24,7 +24,7 @@ mod test_utils;
 
 impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -63,7 +63,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
         dealer: NodeId,
         dealing: &NiDkgDealing,
     ) -> Result<(), DkgVerifyDealingError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -103,7 +103,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
         config: &NiDkgConfig,
         verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -150,7 +150,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
         &self,
         transcript: &NiDkgTranscript,
     ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -201,7 +201,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
         }
         let transcripts = TranscriptsToRetain::new(transcripts)
             .map_err(DkgKeyRemovalError::InputValidationError)?;
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",

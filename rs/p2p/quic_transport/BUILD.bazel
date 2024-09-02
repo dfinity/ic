@@ -16,21 +16,19 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
+    "//rs/protobuf",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:axum",
-    "@crate_index//:bincode",
     "@crate_index//:bytes",
-    "@crate_index//:either",
     "@crate_index//:futures",
-    "@crate_index//:http-serde",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:quinn",
-    "@crate_index//:rustls_0_21_12",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
+    "@crate_index//:rustls",
     "@crate_index//:slog",
     "@crate_index//:socket2",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-util",
@@ -39,6 +37,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
@@ -49,6 +48,7 @@ DEV_DEPENDENCIES = [
 ALIASES = {}
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

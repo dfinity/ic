@@ -8,7 +8,9 @@ use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
     OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator::state::{ArchiveWasm, IndexWasm, LedgerWasm, Wasm, WasmHash};
+use ic_ledger_suite_orchestrator::state::{
+    ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
+};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
 };
@@ -29,8 +31,11 @@ const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 pub const GIT_COMMIT_HASH_UPGRADE: &str = "b7fef0f57ca246b18deda3efd34a24bb605c8199";
 pub const CKERC20_TRANSFER_FEE: u64 = 4_000; //0.004 USD for ckUSDC/ckUSDT
+pub const DECIMALS: u8 = 6;
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
+pub const MINTER_PRINCIPAL: Principal =
+    Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 156, 1, 1]);
 
 pub struct LedgerSuiteOrchestrator {
     pub env: Arc<StateMachine>,
@@ -43,7 +48,7 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new(Arc::new(new_state_machine()), default_init_arg())
+        Self::new(Arc::new(new_state_machine()), default_init_arg()).register_embedded_wasms()
     }
 }
 
@@ -101,10 +106,33 @@ impl LedgerSuiteOrchestrator {
         self
     }
 
-    fn upgrade_ledger_suite_orchestrator_expecting_ok(self, upgrade_arg: &OrchestratorArg) -> Self {
+    pub fn upgrade_ledger_suite_orchestrator_expecting_ok(
+        self,
+        upgrade_arg: &OrchestratorArg,
+    ) -> Self {
         self.upgrade_ledger_suite_orchestrator_with_same_wasm(upgrade_arg)
             .expect("Failed to upgrade ledger suite orchestrator");
         self
+    }
+
+    pub fn register_embedded_wasms(self) -> Self {
+        self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH.to_string()),
+                ledger_compressed_wasm_hash: None,
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+            },
+        ))
+    }
+
+    pub fn embedded_ledger_suite_version(&self) -> LedgerSuiteVersion {
+        LedgerSuiteVersion {
+            ledger_compressed_wasm_hash: self.embedded_ledger_wasm_hash.clone(),
+            index_compressed_wasm_hash: self.embedded_index_wasm_hash.clone(),
+            archive_compressed_wasm_hash: self.embedded_archive_wasm_hash.clone(),
+        }
     }
 
     pub fn upgrade_ledger_suite_orchestrator_with_same_wasm(
@@ -215,7 +243,7 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn advance_time_for_cycles_top_up(&self) {
+    pub fn advance_time_for_periodic_tasks(&self) {
         self.env
             .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
         self.env.tick();
@@ -227,6 +255,7 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn advance_time_for_upgrade(&self) {
+        self.env.tick();
         self.env.tick();
         self.env.tick();
         self.env.tick();
@@ -269,13 +298,14 @@ impl LedgerSuiteOrchestrator {
 pub fn default_init_arg() -> InitArg {
     InitArg {
         more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
-        minter_id: None,
+        minter_id: Some(MINTER_PRINCIPAL),
         cycles_management: None,
     }
 }
 
 pub fn new_state_machine() -> StateMachine {
     StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
         .with_default_canister_range()
         .build()
 }
@@ -354,36 +384,14 @@ pub fn tweak_ledger_suite_wasms() -> (LedgerWasm, IndexWasm, ArchiveWasm) {
     )
 }
 
-pub fn supported_erc20_tokens(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> Vec<AddErc20Arg> {
-    vec![
-        usdc(
-            minter,
-            ledger_compressed_wasm_hash.clone(),
-            index_compressed_wasm_hash.clone(),
-        ),
-        usdt(
-            minter,
-            ledger_compressed_wasm_hash,
-            index_compressed_wasm_hash,
-        ),
-    ]
+pub fn supported_erc20_tokens() -> Vec<AddErc20Arg> {
+    vec![usdc(), usdt()]
 }
 
-pub fn usdc(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> AddErc20Arg {
+pub fn usdc() -> AddErc20Arg {
     AddErc20Arg {
         contract: usdc_erc20_contract(),
-        ledger_init_arg: ledger_init_arg(minter, "Chain-Key USD Coin", "ckUSDC"),
-        git_commit_hash: GIT_COMMIT_HASH.to_string(),
-        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
-        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
+        ledger_init_arg: ledger_init_arg("Chain-Key USD Coin", "ckUSDC"),
     }
 }
 
@@ -394,17 +402,10 @@ pub fn usdc_erc20_contract() -> Erc20Contract {
     }
 }
 
-pub fn usdt(
-    minter: Principal,
-    ledger_compressed_wasm_hash: WasmHash,
-    index_compressed_wasm_hash: WasmHash,
-) -> AddErc20Arg {
+pub fn usdt() -> AddErc20Arg {
     AddErc20Arg {
         contract: usdt_erc20_contract(),
-        ledger_init_arg: ledger_init_arg(minter, "Chain-Key Tether USD", "ckUSDT"),
-        git_commit_hash: GIT_COMMIT_HASH.to_string(),
-        ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
-        index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
+        ledger_init_arg: ledger_init_arg("Chain-Key Tether USD", "ckUSDT"),
     }
 }
 
@@ -416,26 +417,15 @@ pub fn usdt_erc20_contract() -> Erc20Contract {
 }
 
 fn ledger_init_arg<U: Into<String>, V: Into<String>>(
-    minter: Principal,
     token_name: U,
     token_symbol: V,
 ) -> LedgerInitArg {
     LedgerInitArg {
-        minting_account: LedgerAccount {
-            owner: minter,
-            subaccount: None,
-        },
-        fee_collector_account: None,
-        initial_balances: vec![],
         transfer_fee: CKERC20_TRANSFER_FEE.into(),
-        decimals: None,
+        decimals: DECIMALS,
         token_name: token_name.into(),
         token_symbol: token_symbol.into(),
         token_logo: "".to_string(),
-        max_memo_length: Some(80),
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 

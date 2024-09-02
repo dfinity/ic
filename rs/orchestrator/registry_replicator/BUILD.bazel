@@ -3,12 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/metrics",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/http_endpoints/metrics",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",

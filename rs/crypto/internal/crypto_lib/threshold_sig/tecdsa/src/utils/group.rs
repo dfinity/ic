@@ -282,14 +282,14 @@ impl EccScalar {
     pub fn deserialize_tagged(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         if bytes.is_empty() {
             return Err(CanisterThresholdSerializationError(
-                "Empty bytestring".to_string(),
+                "failed to deserialize tagged EccScalar: empty bytestring".to_string(),
             ));
         }
 
         match EccCurveType::from_tag(bytes[0]) {
             Some(curve) => Self::deserialize(curve, &bytes[1..]),
             None => Err(CanisterThresholdSerializationError(
-                "Unknown curve tag".to_string(),
+                "failed to deserialize tagged EccScalar: unknown curve tag".to_string(),
             )),
         }
     }
@@ -301,27 +301,26 @@ impl EccScalar {
     ) -> CanisterThresholdSerializationResult<Self> {
         if bytes.len() != curve.scalar_bytes() {
             return Err(CanisterThresholdSerializationError(
-                "Unexpected length".to_string(),
+                "failed to deserialize EccScalar: unexpected length".to_string(),
             ));
         }
 
+        let deser_err_msg_fn = || {
+            CanisterThresholdSerializationError(
+                "failed to deserialize EccScalar: invalid encoding".to_string(),
+            )
+        };
         match curve {
             EccCurveType::K256 => {
-                let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
-                let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::P256(s))
             }
             EccCurveType::Ed25519 => {
-                let s = ed25519::Scalar::deserialize(bytes).ok_or_else(|| {
-                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
-                })?;
+                let s = ed25519::Scalar::deserialize(bytes).ok_or_else(deser_err_msg_fn)?;
                 Ok(Self::Ed25519(s))
             }
         }
@@ -942,14 +941,15 @@ impl EccPoint {
 
     /// Constant-time multiscalar multiplication using Pippenger's algorithm
     ///
-    /// Return point_scalar_pairs[1].0 * point_scalar_pairs[1].1 + ...
-    /// + point_scalar_pairs[n].0 * point_scalar_pairs[n].1
+    /// Return
+    /// point_scalar_pairs[0].0 * point_scalar_pairs[1].1 + ...
+    /// \+ point_scalar_pairs[n].0 * point_scalar_pairs[n].1
     /// where .0 is a point and .1 is a scalar
     ///
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
     /// * `CanisterThresholdError::InvalidArguments` if `point_scalar_pairs`
-    /// is empty because we cannot infer a curve type from the input arguments.
+    ///   is empty because we cannot infer a curve type from the input arguments.
     pub fn mul_n_points_pippenger(
         point_scalar_pairs: &[(&EccPoint, &EccScalar)],
     ) -> CanisterThresholdResult<Self> {
@@ -1454,7 +1454,7 @@ impl Naf {
     /// * The callee is responsible to guarantee that the invariant holds.
     /// * `bit_len` MUST be greater than 0 and less than 8.
     /// * Input arguments MUST be in bounds, i.e.
-    /// `(pos + bit_len) <= self.bit_len()` must hold.
+    ///   `(pos + bit_len) <= self.bit_len()` must hold.
     ///
     /// # Panics
     /// * If the invariant doesn't hold.
@@ -1638,7 +1638,7 @@ impl NafLut {
     ///
     /// # Errors
     /// * CurveMismatch in case of inconsistent points. However, this should generally not happen
-    /// because the curve type of all computed points is derived from `point`.
+    ///   because the curve type of all computed points is derived from `point`.
     fn compute_table(
         point: &EccPoint,
         window_size: usize,

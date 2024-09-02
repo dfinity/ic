@@ -343,7 +343,7 @@ impl BackupManager {
                     }
                     if !old_state_dir.join("checkpoints").exists() {
                         println!(
-                            "Error: directory {:?} doesn't have checkpints!",
+                            "Error: directory {:?} doesn't have checkpoints!",
                             old_state_dir
                         );
                         continue;
@@ -404,7 +404,7 @@ impl BackupManager {
                 backup_helper
                     .notification_client
                     .push_metrics_restored_height(last_cp);
-                let _ = backup_helper.log_disk_stats();
+                let _ = backup_helper.log_disk_stats(false);
             }
             info!(self.log, "Replay/Sync - {}", progress.join(", "));
 

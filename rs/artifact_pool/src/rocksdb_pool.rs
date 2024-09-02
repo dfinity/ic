@@ -21,8 +21,9 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg::Dealings,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
-        ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight, Notarization,
-        NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
+        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare,
     },
     crypto::CryptoHashable,
     Height, Time,
@@ -431,7 +432,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                     BlockPayload::Data(DataPayload {
                                         batch: BatchPayload::default(),
                                         dealings: Dealings::new_empty(start_height),
-                                        ecdsa: None,
+                                        idkg: None,
                                     })
                                 }),
                             );
@@ -644,6 +645,10 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self
     }
 
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
+        self
+    }
+
     fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
         let height_opt = self.max_height::<CatchUpPackage>().unwrap();
         let min_height_key = make_min_key(height_opt.get());
@@ -803,8 +808,9 @@ const RANDOM_TAPE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("RT");
 const RANDOM_TAPE_SHARE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("RTS");
 const CATCH_UP_PACKAGE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("CUP");
 const CATCH_UP_PACKAGE_SHARE_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("CUS");
+const EQUIVOCATION_PROOF_CF_INFO: ArtifactCFInfo = ArtifactCFInfo::new("EQ");
 
-const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 12] = [
+const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 13] = [
     RANDOM_BEACON_CF_INFO,
     FINALIZATION_CF_INFO,
     NOTARIZATION_CF_INFO,
@@ -817,6 +823,7 @@ const CONSENSUS_CF_INFOS: [ArtifactCFInfo; 12] = [
     RANDOM_TAPE_SHARE_CF_INFO,
     CATCH_UP_PACKAGE_CF_INFO,
     CATCH_UP_PACKAGE_SHARE_CF_INFO,
+    EQUIVOCATION_PROOF_CF_INFO,
 ];
 
 impl HasCFInfos for ConsensusMessage {
@@ -842,6 +849,7 @@ fn info_and_height_for_msg(msg: &ConsensusMessage) -> (&'static ArtifactCFInfo, 
         ConsensusMessage::CatchUpPackageShare(msg) => {
             (&CATCH_UP_PACKAGE_SHARE_CF_INFO, msg.height())
         }
+        ConsensusMessage::EquivocationProof(msg) => (&EQUIVOCATION_PROOF_CF_INFO, msg.height()),
     }
 }
 
@@ -859,6 +867,7 @@ fn info_for_msg_id(msg_id: &ConsensusMessageId) -> &ArtifactCFInfo {
         ConsensusMessageHash::RandomTapeShare(_) => &RANDOM_TAPE_SHARE_CF_INFO,
         ConsensusMessageHash::CatchUpPackage(_) => &CATCH_UP_PACKAGE_CF_INFO,
         ConsensusMessageHash::CatchUpPackageShare(_) => &CATCH_UP_PACKAGE_SHARE_CF_INFO,
+        ConsensusMessageHash::EquivocationProof(_) => &EQUIVOCATION_PROOF_CF_INFO,
     }
 }
 
@@ -925,6 +934,12 @@ impl PerTypeCFInfo for CatchUpPackage {
 impl PerTypeCFInfo for CatchUpPackageShare {
     fn info() -> ArtifactCFInfo {
         CATCH_UP_PACKAGE_SHARE_CF_INFO
+    }
+}
+
+impl PerTypeCFInfo for EquivocationProof {
+    fn info() -> ArtifactCFInfo {
+        EQUIVOCATION_PROOF_CF_INFO
     }
 }
 

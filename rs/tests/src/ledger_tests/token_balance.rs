@@ -28,29 +28,30 @@ Coverage::
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
-use crate::util::{
-    block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
-    UniversalCanister,
-};
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use futures::future::join_all;
 use ic_canister_client::Sender;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron},
-};
+use ic_nns_governance_api::pb::v1::{governance_error::ErrorType, GovernanceError, Neuron};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
+    util::{
+        block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
+        UniversalCanister,
+    },
+};
 use ic_types::CanisterId;
 use icp_ledger::{Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
 use slog::info;

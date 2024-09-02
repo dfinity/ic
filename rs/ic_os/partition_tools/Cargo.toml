@@ -7,8 +7,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-tempfile = "3.8.0"
-tokio = { workspace = true }
-indoc = "1.0.9"
 async-trait = { workspace = true }
+indoc = "1.0.9"
+itertools = { workspace = true }
 pcre2 = "0.2.6"
+tempfile = { workspace = true }
+tokio = { workspace = true }

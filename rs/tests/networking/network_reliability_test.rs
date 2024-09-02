@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::networking::network_reliability::{setup, test, Config};
-use ic_tests::systest;
 
 // Test parameters
 const CONFIG: Config = Config {

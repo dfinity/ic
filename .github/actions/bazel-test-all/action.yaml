@@ -1,4 +1,5 @@
 name: 'Bazel-Test-All'
+description: 'Run Bazel Test'
 inputs:
   BAZEL_COMMAND:
     required: true
@@ -23,6 +24,8 @@ inputs:
     default: "false"
   HONEYCOMB_API_TOKEN:
     required: false
+  SSH_PRIVATE_KEY:
+    required: false
 
 runs:
   using: "composite"
@@ -33,9 +36,20 @@ runs:
         run: |
           set -x +e
 
-          # Todo: remove once fully migtrated to github
-          sudo chown -R 1001:1001 /cache
-          
+          # temporarily set permissions again until we can figure out issue
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
+
+          if [ -n "$SSH_PRIVATE_KEY" ]; then
+            # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+            test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
+            rm -rf ~/.ssh
+            mkdir -p ~/.ssh
+            chmod 0700 ~/.ssh
+            echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+          fi
+
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"
 
@@ -52,3 +66,4 @@ runs:
           BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
           RUN_ON_DIFF_ONLY: ${{ inputs.RUN_ON_DIFF_ONLY }}
           HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}

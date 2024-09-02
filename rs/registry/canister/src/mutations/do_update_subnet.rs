@@ -1,27 +1,21 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{encode_or_panic, has_duplicates},
-    registry::Registry,
-};
-use std::collections::HashSet;
-
+use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{
-    make_chain_key_signing_subnet_list_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_record_key,
+use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_subnet_features::{
+    ChainKeyConfig as ChainKeyConfigInternal, EcdsaConfig, KeyConfig as KeyConfigInternal,
+    SubnetFeatures,
 };
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
-use ic_types::p2p::build_default_gossip_config;
+use prost::Message;
+use serde::Serialize;
+use std::collections::HashSet;
 
 /// Updates the subnet's configuration in the registry.
 ///
@@ -31,7 +25,7 @@ impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
 
-        self.validate_update_payload_ecdsa_config(&payload);
+        self.validate_update_payload_chain_key_config(&payload);
         self.validate_update_sev_feature(&payload);
 
         let subnet_id = payload.subnet_id;
@@ -41,74 +35,174 @@ impl Registry {
 
         let subnet_record_mutation = upsert(
             make_subnet_record_key(subnet_id).into_bytes(),
-            encode_or_panic(&new_subnet_record),
+            new_subnet_record.encode_to_vec(),
         );
 
         let mut mutations = vec![subnet_record_mutation];
 
-        if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
+        let chain_key_signing_enable =
+            if let Some(chain_key_signing_enable) = payload.chain_key_signing_enable {
+                Some(chain_key_signing_enable)
+            } else if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
+                // TODO[NNS1-3022]: Remove ths branch.
+                let chain_key_signing_enable = ecdsa_key_signing_enable
+                    .iter()
+                    .cloned()
+                    .map(MasterPublicKeyId::Ecdsa)
+                    .collect();
+                Some(chain_key_signing_enable)
+            } else {
+                None
+            };
+        if let Some(chain_key_signing_enable) = chain_key_signing_enable {
             mutations.append(
-                &mut self.mutations_to_enable_subnet_signing(subnet_id, &ecdsa_key_signing_enable),
+                &mut self.mutations_to_enable_subnet_signing(subnet_id, &chain_key_signing_enable),
             );
         }
 
-        if let Some(ecdsa_key_signing_disable) = payload.ecdsa_key_signing_disable {
+        let chain_key_signing_disable =
+            if let Some(chain_key_signing_disable) = payload.chain_key_signing_disable {
+                Some(chain_key_signing_disable)
+            } else if let Some(ecdsa_key_signing_disable) = payload.ecdsa_key_signing_disable {
+                // TODO[NNS1-3022]: Remove ths branch.
+                let chain_key_signing_disable = ecdsa_key_signing_disable
+                    .iter()
+                    .cloned()
+                    .map(MasterPublicKeyId::Ecdsa)
+                    .collect();
+                Some(chain_key_signing_disable)
+            } else {
+                None
+            };
+        if let Some(chain_key_signing_disable) = chain_key_signing_disable {
             mutations.append(
                 &mut self
-                    .mutations_to_disable_subnet_signing(subnet_id, &ecdsa_key_signing_disable),
-            )
+                    .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
+            );
         }
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    /// Validates that EcdsaKeyId's are globally unique across all subnets
-    /// Panics if they are not
-    fn validate_update_payload_ecdsa_config(&self, payload: &UpdateSubnetPayload) {
-        if payload.ecdsa_config.is_none() {
-            return;
-        }
+    /// Validates that the chain key IDs are globally unique across all subnets.
+    ///
+    /// Panics if they are not.
+    fn validate_update_payload_chain_key_config(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
-        let payload_ecdsa_config = payload.ecdsa_config.as_ref().unwrap();
 
-        if has_duplicates(&payload_ecdsa_config.key_ids) {
-            panic!(
-                "{}The requested ECDSA key ids {:?} have duplicates",
-                LOG_PREFIX, payload_ecdsa_config.key_ids
-            );
-        }
+        let chain_key_config_from_old_source = payload
+            .ecdsa_config
+            .clone()
+            .map(ChainKeyConfigInternal::from);
+        let chain_key_config_from_new_source =
+            payload.chain_key_config.clone().map(|chain_key_config| {
+                ChainKeyConfigInternal::try_from(chain_key_config).unwrap_or_else(|err| {
+                    panic!(
+                        "{}Invalid UpdateSubnetPayload.chain_key_config: {}",
+                        LOG_PREFIX, err
+                    );
+                })
+            });
 
-        // Ensure that if keys are held by the subnet, they cannot be changed.
-        let keys_held_currently = self.get_ecdsa_keys_held_by_subnet(subnet_id);
-        if !keys_held_currently.is_empty() && payload_ecdsa_config.key_ids != keys_held_currently {
-            panic!(
-                "{}ECDSA Keys cannot be changed once set for a subnet. Attempted to update ECDSA \
-                   keys for subnet: '{}'",
-                LOG_PREFIX, subnet_id
-            );
-        }
-
-        // Validate that any new keys do not exist in another subnet, as that would trigger
-        // creating another key with the same EcdsaKeyId, which would break ECDSA signing.
-        let new_keys = self
-            .get_keys_that_will_be_added_to_subnet(subnet_id, payload_ecdsa_config.key_ids.clone());
-
-        let ecdsa_subnet_map = self.get_ecdsa_keys_to_subnets_map();
-        new_keys.iter().for_each(|key_id| {
-            if ecdsa_subnet_map.contains_key(key_id) {
+        let payload_chain_key_config = match (
+            chain_key_config_from_old_source,
+            chain_key_config_from_new_source,
+        ) {
+            (Some(_), Some(_)) => {
                 panic!(
-                    "{}ECDSA key with id '{}' already exists.  ID must be globally unique.",
-                    LOG_PREFIX, key_id
+                    "{}Deprecated field ecdsa_config cannot be specified with chain_key_config.",
+                    LOG_PREFIX
                 );
             }
-        });
+            (Some(chain_key_config), None) => {
+                // Old API is used; check that nothing weird is being mixed in from the new API.
+                assert_eq!(payload.chain_key_signing_enable, None, "{}Deprecated field ecdsa_config cannot be specified with chain_key_signing_enable.", LOG_PREFIX);
+                assert_eq!(payload.chain_key_signing_disable, None, "{}Deprecated field ecdsa_config cannot be specified with chain_key_signing_disable.", LOG_PREFIX);
+                Some(chain_key_config)
+            }
+            (None, Some(chain_key_config)) => {
+                // New API is used; check that nothing weird is being mixed in from the old API.
+                assert_eq!(payload.ecdsa_key_signing_enable, None, "{}Field chain_key_config cannot be specified with deprecated ecdsa_key_signing_enable.", LOG_PREFIX);
+                assert_eq!(payload.ecdsa_key_signing_disable, None, "{}Field chain_key_config cannot be specified with deprecated ecdsa_key_signing_disable.", LOG_PREFIX);
+                Some(chain_key_config)
+            }
+            (None, None) => {
+                let has_ecdsa_key_signing_fields = payload.ecdsa_key_signing_enable.is_some()
+                    || payload.ecdsa_key_signing_disable.is_some();
+                let has_chain_key_signing_fields = payload.chain_key_signing_enable.is_some()
+                    || payload.chain_key_signing_disable.is_some();
+                if has_ecdsa_key_signing_fields && has_chain_key_signing_fields {
+                    panic!("Deprecated fields ecdsa_key_signing_{{en,dis}}able should not be used together with chain_key_signing_{{en,dis}}able.");
+                }
+                None
+            }
+        };
+
+        if let Some(payload_chain_key_config) = payload_chain_key_config {
+            let payload_key_ids = payload_chain_key_config.key_ids();
+
+            if has_duplicates(&payload_key_ids) {
+                panic!(
+                    "{}The requested chain key IDs {:?} have duplicates.",
+                    LOG_PREFIX, payload_key_ids
+                );
+            }
+
+            // Ensure that the keys held by the subnet cannot be deleted.
+            let keys_held_currently: HashSet<MasterPublicKeyId> =
+                HashSet::from_iter(self.get_master_public_keys_held_by_subnet(subnet_id));
+            let payload_key_ids_set = HashSet::from_iter(payload_key_ids.clone());
+
+            let deleted_keys: HashSet<_> = keys_held_currently
+                .difference(&payload_key_ids_set)
+                .collect();
+
+            if !deleted_keys.is_empty() {
+                panic!(
+                    "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
+                    for subnet: '{}'",
+                    LOG_PREFIX, deleted_keys, subnet_id
+                );
+            }
+
+            // Validate that any new keys do not exist in another subnet, as that would trigger
+            // creating another key with the same MasterPublicKeyId, which would break chain key signing.
+            let new_keys =
+                self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids.clone());
+
+            let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
+            new_keys.iter().for_each(|key_id| {
+                if keys_to_subnet_map.contains_key(key_id) {
+                    panic!(
+                        "{}Chain key with id '{}' already exists. IDs must be globally unique.",
+                        LOG_PREFIX, key_id,
+                    );
+                }
+            });
+        }
 
         // Signing cannot be enabled unless the key was previously held by the subnet.
-        if let Some(ref ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
-            let current_keys = self.get_ecdsa_keys_held_by_subnet(subnet_id);
-            for key_id in ecdsa_key_signing_enable {
+        if let Some(ref chain_key_signing_enable) = payload.chain_key_signing_enable {
+            let current_keys = self.get_master_public_keys_held_by_subnet(subnet_id);
+            for key_id in chain_key_signing_enable {
                 if !current_keys.contains(key_id) {
+                    panic!(
+                        "{}Proposal attempts to enable signing for chain key '{}' on Subnet '{}', \
+                        but the subnet does not hold the given key. A proposal to add that key to \
+                        the subnet must first be separately submitted.",
+                        LOG_PREFIX, key_id, subnet_id
+                    );
+                }
+            }
+        }
+
+        // TODO[NNS1-3022]: Remove this code.
+        if let Some(ref ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
+            let current_keys = self.get_master_public_keys_held_by_subnet(subnet_id);
+            for key_id in ecdsa_key_signing_enable {
+                let key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+                if !current_keys.contains(&key_id) {
                     panic!(
                         "{}Proposal attempts to enable signing for ECDSA key '{}' on Subnet '{}', \
                         but the subnet does not hold the given key. A proposal to add that key to \
@@ -121,6 +215,23 @@ impl Registry {
 
         // Validate that proposal is not attempting to disable and enable signing for the same key
         // in the same proposal
+        if let (Some(chain_key_signing_enable), Some(chain_key_signing_disable)) = (
+            &payload.chain_key_signing_enable,
+            &payload.chain_key_signing_disable,
+        ) {
+            let enable_set = chain_key_signing_enable.iter().collect::<HashSet<_>>();
+            let disable_set = chain_key_signing_disable.iter().collect::<HashSet<_>>();
+            let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
+            if !intersection.is_empty() {
+                panic!(
+                    "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
+                    the same chain keys: {:?}",
+                    LOG_PREFIX, intersection,
+                )
+            }
+        }
+
+        // TODO[NNS1-3022]: Remove this code.
         if let (Some(ecdsa_signing_enable), Some(ecdsa_signging_disable)) = (
             &payload.ecdsa_key_signing_enable,
             &payload.ecdsa_key_signing_disable,
@@ -129,9 +240,11 @@ impl Registry {
             let disable_set = ecdsa_signging_disable.iter().collect::<HashSet<_>>();
             let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
             if !intersection.is_empty() {
-                panic!("{}update_subnet aborted: Proposal attempts to enable and disable signing for same ECDSA keys: {:?}",
-                    LOG_PREFIX, intersection
-                    )
+                panic!(
+                    "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
+                    the same ECDSA keys: {:?}",
+                    LOG_PREFIX, intersection,
+                )
             }
         }
     }
@@ -160,31 +273,20 @@ impl Registry {
         );
     }
 
-    // TODO(NNS1-2986): Migrate the function to work over MasterPublicKeyId without replicating to EcdsaKeyId
+    /// Create the mutations that enable subnet signing for a single subnet and set of EcdsaKeyId's.
     fn mutations_to_enable_subnet_signing(
         &self,
         subnet_id: SubnetId,
-        ecdsa_key_signing_enable: &Vec<EcdsaKeyId>,
+        chain_key_signing_enable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for ecdsa_key_id in ecdsa_key_signing_enable {
-            let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-
-            let mut ecdsa_signing_list_for_key = self
-                .get_ecdsa_signing_subnet_list(ecdsa_key_id)
-                .unwrap_or_default();
-            let mut ck_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(&ck_key_id)
+        for master_public_key_id in chain_key_signing_enable {
+            let mut chain_key_signing_list_for_key = self
+                .get_chain_key_signing_subnet_list(master_public_key_id)
                 .unwrap_or_default();
 
             // If this subnet already signs for this key, do nothing.
-            if ecdsa_signing_list_for_key
-                .subnets
-                .contains(&subnet_id_into_protobuf(subnet_id))
-            {
-                continue;
-            }
-            if ck_signing_list_for_key
+            if chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
@@ -192,20 +294,13 @@ impl Registry {
             }
 
             // Preconditions are okay, so we add the subnet to our list of signing subnets.
-            ecdsa_signing_list_for_key
-                .subnets
-                .push(subnet_id_into_protobuf(subnet_id));
-            ck_signing_list_for_key
+            chain_key_signing_list_for_key
                 .subnets
                 .push(subnet_id_into_protobuf(subnet_id));
 
             mutations.push(upsert(
-                make_ecdsa_signing_subnet_list_key(ecdsa_key_id).into_bytes(),
-                encode_or_panic(&ecdsa_signing_list_for_key),
-            ));
-            mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(&ck_key_id).into_bytes(),
-                encode_or_panic(&ck_signing_list_for_key),
+                make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations
@@ -236,17 +331,6 @@ pub struct UpdateSubnetPayload {
     pub dkg_interval_length: Option<u64>,
     pub dkg_dealings_per_block: Option<u64>,
 
-    pub max_artifact_streams_per_peer: Option<u32>,
-    pub max_chunk_wait_ms: Option<u32>,
-    pub max_duplicity: Option<u32>,
-    pub max_chunk_size: Option<u32>,
-    pub receive_check_cache_size: Option<u32>,
-    pub pfn_evaluation_period_ms: Option<u32>,
-    pub registry_poll_period_ms: Option<u32>,
-    pub retransmission_request_ms: Option<u32>,
-
-    pub set_gossip_config_to_default: bool,
-
     pub start_as_nns: Option<bool>,
 
     pub subnet_type: Option<SubnetType>,
@@ -254,9 +338,6 @@ pub struct UpdateSubnetPayload {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
-    pub max_instructions_per_message: Option<u64>,
-    pub max_instructions_per_round: Option<u64>,
-    pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeaturesPb>,
 
     /// The following three ecdsa_* fields will soon be deprecated and replaced with chain_* fields.
@@ -267,10 +348,153 @@ pub struct UpdateSubnetPayload {
     /// This disables signing for keys the subnet holds, which is not held in the SubnetRecord
     pub ecdsa_key_signing_disable: Option<Vec<EcdsaKeyId>>,
 
+    pub chain_key_config: Option<ChainKeyConfig>,
+    pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
+    pub chain_key_signing_disable: Option<Vec<MasterPublicKeyId>>,
+
     pub max_number_of_canisters: Option<u64>,
 
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_backup_access: Option<Vec<String>>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub max_artifact_streams_per_peer: Option<u32>,
+    pub max_chunk_wait_ms: Option<u32>,
+    pub max_duplicity: Option<u32>,
+    pub max_chunk_size: Option<u32>,
+    pub receive_check_cache_size: Option<u32>,
+    pub pfn_evaluation_period_ms: Option<u32>,
+    pub registry_poll_period_ms: Option<u32>,
+    pub retransmission_request_ms: Option<u32>,
+    pub set_gossip_config_to_default: bool,
+}
+
+#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub struct ChainKeyConfig {
+    pub key_configs: Vec<KeyConfig>,
+    pub signature_request_timeout_ns: Option<u64>,
+    pub idkg_key_rotation_period_ms: Option<u64>,
+}
+
+impl From<ChainKeyConfigInternal> for ChainKeyConfig {
+    fn from(src: ChainKeyConfigInternal) -> Self {
+        let ChainKeyConfigInternal {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        } = src;
+
+        let key_configs = key_configs
+            .into_iter()
+            .map(
+                |KeyConfigInternal {
+                     key_id,
+                     pre_signatures_to_create_in_advance,
+                     max_queue_size,
+                 }| KeyConfig {
+                    key_id: Some(key_id),
+                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    max_queue_size: Some(max_queue_size),
+                },
+            )
+            .collect();
+
+        Self {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        }
+    }
+}
+
+impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
+    type Error = String;
+
+    fn try_from(src: ChainKeyConfig) -> Result<Self, Self::Error> {
+        let ChainKeyConfig {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        } = src;
+
+        let mut errors = vec![];
+        let key_configs = key_configs
+            .into_iter()
+            .filter_map(|key_config| {
+                KeyConfigInternal::try_from(key_config)
+                    .map_err(|err| {
+                        errors.push(err);
+                    })
+                    .ok()
+            })
+            .collect();
+
+        if !errors.is_empty() {
+            return Err(format!(
+                "Invalid ChainKeyConfig.key_configs: {}",
+                errors.join(", ")
+            ));
+        }
+
+        Ok(Self {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        })
+    }
+}
+
+#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub struct KeyConfig {
+    pub key_id: Option<MasterPublicKeyId>,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
+    pub max_queue_size: Option<u32>,
+}
+
+impl From<KeyConfigInternal> for KeyConfig {
+    fn from(src: KeyConfigInternal) -> Self {
+        let KeyConfigInternal {
+            key_id,
+            pre_signatures_to_create_in_advance,
+            max_queue_size,
+        } = src;
+
+        Self {
+            key_id: Some(key_id),
+            pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+            max_queue_size: Some(max_queue_size),
+        }
+    }
+}
+
+impl TryFrom<KeyConfig> for KeyConfigInternal {
+    type Error = String;
+
+    fn try_from(src: KeyConfig) -> Result<Self, Self::Error> {
+        let KeyConfig {
+            key_id,
+            pre_signatures_to_create_in_advance,
+            max_queue_size,
+        } = src;
+
+        let Some(key_id) = key_id else {
+            return Err("KeyConfig.key_id must be specified.".to_string());
+        };
+        let Some(pre_signatures_to_create_in_advance) = pre_signatures_to_create_in_advance else {
+            return Err(
+                "KeyConfig.pre_signatures_to_create_in_advance must be specified.".to_string(),
+            );
+        };
+        let Some(max_queue_size) = max_queue_size else {
+            return Err("KeyConfig.max_queue_size must be specified.".to_string());
+        };
+
+        Ok(Self {
+            key_id,
+            pre_signatures_to_create_in_advance,
+            max_queue_size,
+        })
+    }
 }
 
 // Sets the value of a field in record `a` if the provided value `b` is not
@@ -293,39 +517,16 @@ macro_rules! maybe_set_option {
     };
 }
 
-// Returns true if any gossip related field is set for an override in the
-// provided payload or false otherwise.
-fn is_any_gossip_field_set(payload: &UpdateSubnetPayload) -> bool {
-    payload.max_artifact_streams_per_peer.is_some()
-        || payload.max_chunk_wait_ms.is_some()
-        || payload.max_duplicity.is_some()
-        || payload.max_chunk_size.is_some()
-        || payload.receive_check_cache_size.is_some()
-        || payload.pfn_evaluation_period_ms.is_some()
-        || payload.registry_poll_period_ms.is_some()
-        || payload.retransmission_request_ms.is_some()
-}
-
 // Merges the changes included in the `UpdateSubnetPayload` to the given
 // `SubnetRecord`. If any value in the provided payload is None, then it is
 // skipped, otherwise it overwrites the corresponding value in the
 // `SubnetRecord`.
 #[allow(clippy::cognitive_complexity)]
+#[allow(unused_variables)]
 fn merge_subnet_record(
     mut subnet_record: SubnetRecordPb,
     payload: UpdateSubnetPayload,
 ) -> SubnetRecordPb {
-    if subnet_record.gossip_config.is_none()
-        && !payload.set_gossip_config_to_default
-        && is_any_gossip_field_set(&payload)
-    {
-        panic!(
-            "Attempt to update gossip config params when the subnet record does not have any gossip \
-            config set and a default one was not requested. Use `set_gossip_config_to_default=true` \
-            and try again."
-        );
-    }
-
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
@@ -335,29 +536,30 @@ fn merge_subnet_record(
         initial_notary_delay_millis,
         dkg_interval_length,
         dkg_dealings_per_block,
-        max_artifact_streams_per_peer,
-        max_chunk_wait_ms,
-        max_duplicity,
-        max_chunk_size,
-        receive_check_cache_size,
-        pfn_evaluation_period_ms,
-        registry_poll_period_ms,
-        retransmission_request_ms,
-        set_gossip_config_to_default,
         start_as_nns,
         subnet_type,
         is_halted,
         halt_at_cup_height,
-        max_instructions_per_message,
-        max_instructions_per_round,
-        max_instructions_per_install_code,
         features,
         ecdsa_config,
+        chain_key_config,
         ecdsa_key_signing_enable: _,
         ecdsa_key_signing_disable: _,
+        chain_key_signing_enable: _,
+        chain_key_signing_disable: _,
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: _,
+        max_chunk_wait_ms: _,
+        max_duplicity: _,
+        max_chunk_size: _,
+        receive_check_cache_size: _,
+        pfn_evaluation_period_ms: _,
+        registry_poll_period_ms: _,
+        retransmission_request_ms: _,
+        set_gossip_config_to_default: _,
     } = payload;
 
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
@@ -370,23 +572,6 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, dkg_interval_length);
     maybe_set!(subnet_record, dkg_dealings_per_block);
 
-    // Set a default gossip config if it was requested...
-    if set_gossip_config_to_default {
-        subnet_record.gossip_config = Some(build_default_gossip_config());
-    }
-
-    // and overwrite fields provided by the user as necessary.
-    let mut gossip_config = subnet_record.gossip_config.take().unwrap();
-    maybe_set!(gossip_config, max_artifact_streams_per_peer);
-    maybe_set!(gossip_config, max_chunk_wait_ms);
-    maybe_set!(gossip_config, max_duplicity);
-    maybe_set!(gossip_config, max_chunk_size);
-    maybe_set!(gossip_config, receive_check_cache_size);
-    maybe_set!(gossip_config, pfn_evaluation_period_ms);
-    maybe_set!(gossip_config, registry_poll_period_ms);
-    maybe_set!(gossip_config, retransmission_request_ms);
-    subnet_record.gossip_config = Some(gossip_config);
-
     maybe_set!(subnet_record, start_as_nns);
 
     // See EXC-408: changing of the subnet type is disabled.
@@ -397,19 +582,19 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
 
-    maybe_set!(subnet_record, max_instructions_per_message);
-    maybe_set!(subnet_record, max_instructions_per_round);
-    maybe_set!(subnet_record, max_instructions_per_install_code);
-
     maybe_set_option!(subnet_record, features);
 
-    // TODO[NNS1-2988]: Take value directly from `UpdateSubnetPayload.chain_key_config`.
+    // TODO[NNS1-3022]: Stop reading from `UpdateSubnetPayload.ecdsa_config`.
     {
-        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+        let chain_key_config_from_old_source = ecdsa_config.map(ChainKeyConfigInternal::from);
+        let chain_key_config_from_new_source = chain_key_config.map(|chain_key_config| {
+            ChainKeyConfigInternal::try_from(chain_key_config)
+                .expect("Invalid UpdateSubnetPayload.chain_key_config")
+        });
+        let chain_key_config =
+            chain_key_config_from_new_source.or(chain_key_config_from_old_source);
         maybe_set_option!(subnet_record, chain_key_config);
     }
-    // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
-    maybe_set_option!(subnet_record, ecdsa_config);
 
     maybe_set!(subnet_record, max_number_of_canisters);
 
@@ -426,23 +611,19 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_protobuf::registry::subnet::v1::{
-        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-        GossipConfig as GossipConfigPb, SubnetRecord as SubnetRecordPb,
+    use ic_protobuf::registry::{
+        crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb,
+        subnet::v1::{
+            ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
+            KeyConfig as KeyConfigPb, SubnetRecord as SubnetRecordPb,
+        },
     };
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{
-        p2p::{
-            MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
-            PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
-            RETRANSMISSION_REQUEST_MS,
-        },
-        PrincipalId, ReplicaVersion, SubnetId,
-    };
+    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -450,61 +631,6 @@ mod tests {
         EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: name.to_string(),
-        }
-    }
-
-    fn make_default_update_subnet_payload_for_merge_subnet_tests() -> UpdateSubnetPayload {
-        let legacy_ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![make_ecdsa_key("key_id_1")],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        };
-        UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: Some(256),
-            max_ingress_messages_per_block: Some(256),
-            max_block_payload_size: Some(200),
-            unit_delay_millis: Some(300),
-            initial_notary_delay_millis: Some(200),
-            dkg_interval_length: Some(8),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(200),
-            max_duplicity: Some(5),
-            max_chunk_size: Some(1024),
-            receive_check_cache_size: Some(500),
-            pfn_evaluation_period_ms: Some(5000),
-            registry_poll_period_ms: Some(4000),
-            retransmission_request_ms: Some(7000),
-            set_gossip_config_to_default: false,
-            start_as_nns: Some(true),
-            subnet_type: None,
-            is_halted: Some(true),
-            halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
-            features: Some(
-                SubnetFeatures {
-                    canister_sandboxing: false,
-                    http_requests: false,
-                    sev_enabled: false,
-                }
-                .into(),
-            ),
-            ecdsa_config: Some(legacy_ecdsa_config),
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: Some(10),
-            ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
-            ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
         }
     }
 
@@ -518,6 +644,21 @@ mod tests {
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
+            start_as_nns: None,
+            subnet_type: None,
+            is_halted: None,
+            halt_at_cup_height: None,
+            features: None,
+            ecdsa_config: None,
+            ecdsa_key_signing_enable: None,
+            ecdsa_key_signing_disable: None,
+            max_number_of_canisters: None,
+            ssh_readonly_access: None,
+            ssh_backup_access: None,
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
+            // Deprecated/unused values follow
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,
@@ -526,21 +667,7 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
+            set_gossip_config_to_default: Default::default(),
         }
     }
 
@@ -556,23 +683,10 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -606,22 +720,10 @@ mod tests {
             initial_notary_delay_millis: Some(200),
             dkg_interval_length: Some(8),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: Some(5),
-            max_chunk_size: Some(1024),
-            receive_check_cache_size: Some(500),
-            pfn_evaluation_period_ms: Some(5000),
-            registry_poll_period_ms: Some(4000),
-            retransmission_request_ms: Some(7000),
-            set_gossip_config_to_default: false,
             start_as_nns: Some(true),
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -636,6 +738,19 @@ mod tests {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         assert_eq!(
@@ -650,23 +765,10 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 5,
-                    max_chunk_size: 1024,
-                    receive_check_cache_size: 500,
-                    pfn_evaluation_period_ms: 5000,
-                    registry_poll_period_ms: 4000,
-                    retransmission_request_ms: 7000,
-                }),
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 6_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 300_000_000_000,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -675,8 +777,8 @@ mod tests {
                     }
                     .into()
                 ),
-                ecdsa_config: ecdsa_config_pb,
                 chain_key_config: chain_key_config_pb,
+                ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
@@ -696,23 +798,10 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -735,22 +824,10 @@ mod tests {
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -758,8 +835,20 @@ mod tests {
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
-
         assert_eq!(
             merge_subnet_record(subnet_record, payload),
             SubnetRecordPb {
@@ -772,23 +861,10 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 2,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: 200,
-                    pfn_evaluation_period_ms: 100,
-                    registry_poll_period_ms: 100,
-                    retransmission_request_ms: 100,
-                }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],
@@ -799,327 +875,12 @@ mod tests {
         );
     }
 
-    // TODO[NNS1-2988]: Add test `panic_on_removing_chain_key_config`.
-    #[test]
-    #[should_panic]
-    fn panic_on_removing_ecdsa_config() {
-        let subnet_record = SubnetRecordPb {
-            ecdsa_config: Some(
-                EcdsaConfig {
-                    key_ids: vec![make_ecdsa_key("key_id_1")],
-                    ..Default::default()
-                }
-                .into(),
-            ),
-            ..Default::default()
-        };
-
-        let mut payload = make_default_update_subnet_payload_for_merge_subnet_tests();
-        payload.ecdsa_config = None;
-
-        merge_subnet_record(subnet_record, payload);
-    }
-
-    #[test]
-    #[should_panic]
-    // This test confirms that if `set_gossip_config_to_default` = false and the
-    // existing subnet record does not have a gossip config and some gossip related
-    // fields are set to override, `merge_subnet_record` panics as expected.
-    fn can_handle_invalid_combination_of_set_gossip_config_to_default() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: None,
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: Some(100),
-            initial_notary_delay_millis: None,
-            dkg_interval_length: Some(2),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: Some(SubnetType::Application),
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        merge_subnet_record(subnet_record, payload);
-    }
-
-    #[test]
-    fn can_set_default_gossip_config_and_override_fields() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: Some(build_default_gossip_config()),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: None,
-            initial_notary_delay_millis: None,
-            dkg_interval_length: None,
-            dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: Some(MAX_ARTIFACT_STREAMS_PER_PEER),
-            max_chunk_wait_ms: Some(MAX_CHUNK_WAIT_MS),
-            max_duplicity: Some(MAX_DUPLICITY),
-            max_chunk_size: Some(10),
-            receive_check_cache_size: Some(RECEIVE_CHECK_PEER_SET_SIZE),
-            pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
-            registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
-            retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            set_gossip_config_to_default: true,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        assert_eq!(
-            merge_subnet_record(subnet_record, payload),
-            SubnetRecordPb {
-                membership: vec![],
-                max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_ingress_messages_per_block: 1000,
-                max_block_payload_size: 4 * 1024 * 1024,
-                unit_delay_millis: 500,
-                initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
-                dkg_interval_length: 0,
-                dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-                    max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-                    max_duplicity: MAX_DUPLICITY,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-                    pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-                    registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-                    retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-                }),
-                start_as_nns: false,
-                subnet_type: SubnetType::Application.into(),
-                is_halted: false,
-                halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
-                features: None,
-                max_number_of_canisters: 0,
-                ssh_readonly_access: vec![],
-                ssh_backup_access: vec![],
-                ecdsa_config: None,
-                chain_key_config: None,
-            }
-        );
-    }
-
-    #[test]
-    fn update_advert_config() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 10,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: Some(100),
-            initial_notary_delay_millis: None,
-            dkg_interval_length: Some(2),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        assert_eq!(
-            merge_subnet_record(subnet_record, payload),
-            SubnetRecordPb {
-                membership: vec![],
-                max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_ingress_messages_per_block: 1000,
-                max_block_payload_size: 4 * 1024 * 1024,
-                unit_delay_millis: 100,
-                initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
-                dkg_interval_length: 2,
-                dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 2,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: 200,
-                    pfn_evaluation_period_ms: 100,
-                    registry_poll_period_ms: 100,
-                    retransmission_request_ms: 100,
-                }),
-                start_as_nns: false,
-                subnet_type: SubnetType::Application.into(),
-                is_halted: false,
-                halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
-                features: None,
-                max_number_of_canisters: 10,
-                ssh_readonly_access: vec![],
-                ssh_backup_access: vec![],
-                ecdsa_config: None,
-                chain_key_config: None,
-            }
-        );
-    }
-
     #[test]
     #[should_panic(
-        expected = "roposal attempts to enable signing for ECDSA key 'Secp256k1:existing_key_id' \
-        on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', but the subnet does not hold the given key. \
-        A proposal to add that key to the subnet must first be separately submitted."
+        expected = "[Registry] Proposal attempts to enable signing for ECDSA key \
+        'ecdsa:Secp256k1:existing_key_id' on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted."
     )]
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
         let mut registry = invariant_compliant_registry(0);
@@ -1165,8 +926,9 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "The requested ECDSA key ids [EcdsaKeyId { curve: Secp256k1, name: \"key_id\" }, \
-        EcdsaKeyId { curve: Secp256k1, name: \"key_id\" }] have duplicates"
+        expected = "The requested chain key IDs [Ecdsa(EcdsaKeyId { curve: Secp256k1, \
+        name: \"key_id\" }), Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"key_id\" })] \
+        have duplicates."
     )]
     fn test_disallow_duplicate_ecdsa_keys() {
         // Step 1: prepare registry with a subnet record.
@@ -1206,8 +968,8 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "ECDSA key with id 'Secp256k1:existing_key_id' already exists.  \
-                    ID must be globally unique."
+        expected = "[Registry] Chain key with id 'ecdsa:Secp256k1:existing_key_id' already exists. \
+                    IDs must be globally unique."
     )]
     fn test_ecdsa_key_ids_must_be_globally_unique() {
         // We create 2 subnets. One has the key already, and the other tries to have that key id added
@@ -1231,19 +993,24 @@ mod tests {
         let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks_iter
             .next()
             .expect("should contain at least one node ID");
+
         let mut subnet_holding_key_record =
             get_invariant_compliant_subnet_record(vec![*first_node_id]);
+
         // This marks the subnet as having the key.
-        subnet_holding_key_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![existing_key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![existing_key_id],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+
+        {
+            let chain_key_config = ChainKeyConfigInternal::from(ecdsa_config.clone());
+            let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+            subnet_holding_key_record.chain_key_config = Some(chain_key_config_pb);
+        }
 
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_holding_key_id,
@@ -1338,6 +1105,7 @@ mod tests {
             curve: EcdsaCurve::Secp256k1,
             name: "existing_key_id".to_string(),
         };
+        let master_public_key_held_by_subnet = MasterPublicKeyId::Ecdsa(key_held_by_subnet.clone());
 
         // Create first subnet that holds the ECDSA key
         let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
@@ -1347,16 +1115,16 @@ mod tests {
         let mut subnet_holding_key_record =
             get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // This marks the subnet as having the key
-        subnet_holding_key_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_held_by_subnet.clone()],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key_held_by_subnet.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+        let chain_key_config = ChainKeyConfigInternal::from(ecdsa_config);
+        let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+        subnet_holding_key_record.chain_key_config = Some(chain_key_config_pb);
 
         let subnet_id = subnet_test_id(1000);
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -1380,7 +1148,7 @@ mod tests {
 
         // Make sure it's actually in the signing list.
         assert!(registry
-            .get_ecdsa_signing_subnet_list(&key_held_by_subnet)
+            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
             .unwrap()
             .subnets
             .contains(&subnet_id_into_protobuf(subnet_id)));
@@ -1388,10 +1156,13 @@ mod tests {
         // Make sure config contains the key.
         assert!(registry
             .get_subnet_or_panic(subnet_id)
-            .ecdsa_config
+            .chain_key_config
             .unwrap()
-            .key_ids
-            .contains(&(&key_held_by_subnet).into()));
+            .key_configs
+            .iter()
+            .map(|key_config| key_config.key_id.clone().unwrap())
+            .collect::<Vec<_>>()
+            .contains(&(&master_public_key_held_by_subnet).into()));
 
         // The next payload to disable signing with the key.
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1400,23 +1171,28 @@ mod tests {
 
         // Ensure it's now removed from signing list.
         assert!(!registry
-            .get_ecdsa_signing_subnet_list(&key_held_by_subnet)
+            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
             .unwrap()
             .subnets
             .contains(&subnet_id_into_protobuf(subnet_id)));
         // Ensure the config still  has the key.
         assert!(registry
             .get_subnet_or_panic(subnet_id)
-            .ecdsa_config
+            .chain_key_config
             .unwrap()
-            .key_ids
-            .contains(&(&key_held_by_subnet).into()));
+            .key_configs
+            .iter()
+            .map(|key_config| key_config.key_id.clone().unwrap())
+            .collect::<Vec<_>>()
+            .contains(&(&master_public_key_held_by_subnet).into()));
     }
 
     #[test]
     #[should_panic(
-        expected = "update_subnet aborted: Proposal attempts to enable and disable signing for same \
-                    ECDSA keys: [EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id\" }]"
+        expected = "[Registry] Proposal attempts to enable signing for ECDSA key \
+        'ecdsa:Secp256k1:existing_key_id' on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', but the subnet \
+        does not hold the given key. A proposal to add that key to the subnet must first be \
+        separately submitted."
     )]
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
         let mut registry = invariant_compliant_registry(0);
@@ -1474,10 +1250,12 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "ECDSA Keys cannot be changed once set for a subnet. Attempted to update ECDSA \
-                   keys for subnet: 'ge6io-epiam-aaaaa-aaaap-yai'"
+        expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
+        {Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id_2\" })} for subnet: \
+        'ge6io-epiam-aaaaa-aaaap-yai'"
     )]
-    fn test_modify_ecdsa_keys_after_setting_fails() {
+    // TODO(NNS1-3022): Delete this once ecdsa_config is obsolete
+    fn test_deleting_ecdsa_keys_fails_legacy() {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
@@ -1485,9 +1263,14 @@ mod tests {
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        let key = EcdsaKeyId {
+        let key_1 = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "existing_key_id".to_string(),
+        };
+
+        let key_2 = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "existing_key_id_2".to_string(),
         };
 
         // Create the subnet we will update
@@ -1495,20 +1278,25 @@ mod tests {
             .iter()
             .next()
             .expect("should contain at least one node ID");
+
         let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
-        // Give it the key.
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key.clone()],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+
+        // Give it the keys.
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key_1.clone(), key_2.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+        {
+            let chain_key_config = ChainKeyConfigInternal::from(ecdsa_config.clone());
+            let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+            subnet_record.chain_key_config = Some(chain_key_config_pb);
+        }
 
         let subnet_id = subnet_test_id(1000);
+
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -1516,22 +1304,348 @@ mod tests {
             &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.ecdsa_config = Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
+        let payload = UpdateSubnetPayload {
+            ecdsa_config: Some(ecdsa_config.clone()),
+            ..make_empty_update_payload(subnet_id)
+        };
 
         registry.do_update_subnet(payload.clone());
 
-        if let Some(ecdsa_config) = payload.ecdsa_config.as_mut() {
-            ecdsa_config.key_ids.clear()
-        }
+        let payload = UpdateSubnetPayload {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec![key_1.clone()],
+                ..ecdsa_config
+            }),
+            ..payload
+        };
 
         // Should panic because we are trying to modify the config
-        registry.do_update_subnet(payload)
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
+        {Schnorr(SchnorrKeyId { algorithm: Bip340Secp256k1, name: \"existing_key_id_2\" })} for \
+        subnet: 'ge6io-epiam-aaaaa-aaaap-yai'"
+    )]
+    fn test_deleting_chain_keys_fails() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let existing_key_1 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "existing_key_id".to_string(),
+        });
+
+        let existing_key_2 = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "existing_key_id_2".to_string(),
+        });
+
+        let new_key = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "new_key_id_3".to_string(),
+        });
+
+        // Create the subnet we will update
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+
+        let subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+
+        let fake_key_config = |key_id: &MasterPublicKeyId| KeyConfig {
+            key_id: Some(key_id.clone()),
+            pre_signatures_to_create_in_advance: Some(1),
+            max_queue_size: Some(2),
+        };
+
+        // Give it the keys.
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![
+                fake_key_config(&existing_key_1),
+                fake_key_config(&existing_key_2),
+            ],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+
+        let subnet_id = subnet_test_id(1000);
+
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        let payload = UpdateSubnetPayload {
+            chain_key_config: Some(chain_key_config.clone()),
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload.clone());
+
+        // Try to update the subnet by adding a new key and removing one of the existing keys
+        let payload = UpdateSubnetPayload {
+            chain_key_config: Some(ChainKeyConfig {
+                key_configs: vec![fake_key_config(&existing_key_1), fake_key_config(&new_key)],
+                ..chain_key_config
+            }),
+            ..payload
+        };
+
+        // Should panic because we are trying to delete an existing key
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Replace this with a test that checks that `UpdateSubnetPayload.ecdsa_config`
+    // TODO[NNS1-3022]: cannot be set.
+    #[test]
+    #[should_panic(
+        expected = "Deprecated field ecdsa_config cannot be specified with chain_key_config."
+    )]
+    fn test_disallow_legacy_and_chain_key_ecdsa_config_specification_together() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make a request for the key from a subnet that does not have the key.
+        let subnet_id = subnet_test_id(1000);
+        let payload = UpdateSubnetPayload {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec![key_id.clone()],
+                quadruples_to_create_in_advance: 111,
+                max_queue_size: Some(222),
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            }),
+            chain_key_config: Some(ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+                    pre_signatures_to_create_in_advance: Some(111),
+                    max_queue_size: Some(222),
+                }],
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            }),
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Replace this with a test that checks that
+    // TODO[NNS1-3022]: `UpdateSubnetPayload.ecdsa_key_signing_{en,dis}able` cannot be set.
+    #[test]
+    #[should_panic(
+        expected = "Deprecated fields ecdsa_key_signing_{en,dis}able should not be used \
+        together with chain_key_signing_{en,dis}able."
+    )]
+    fn test_disallow_legacy_and_chain_key_ecdsa_signing_enable_specification_together() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = subnet_test_id(1000);
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_enable: Some(vec![key_id.clone()]),
+            chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(key_id)]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Remove this test.
+    #[test]
+    #[should_panic(
+        expected = "Deprecated fields ecdsa_key_signing_{en,dis}able should not be used \
+        together with chain_key_signing_{en,dis}able."
+    )]
+    fn test_disallow_legacy_and_chain_key_ecdsa_signing_disable_specification_together() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = subnet_test_id(1000);
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_disable: Some(vec![key_id.clone()]),
+            chain_key_signing_disable: Some(vec![MasterPublicKeyId::Ecdsa(key_id)]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Remove this test.
+    #[test]
+    #[should_panic(
+        expected = "Deprecated fields ecdsa_key_signing_{en,dis}able should not be used \
+        together with chain_key_signing_{en,dis}able."
+    )]
+    fn test_disallow_legacy_enable_and_chain_key_ecdsa_signing_disable_specification_together() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = subnet_test_id(1000);
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_enable: Some(vec![key_id.clone()]),
+            chain_key_signing_disable: Some(vec![MasterPublicKeyId::Ecdsa(key_id)]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Remove this test.
+    #[test]
+    #[should_panic(
+        expected = "Deprecated fields ecdsa_key_signing_{en,dis}able should not be used \
+        together with chain_key_signing_{en,dis}able."
+    )]
+    fn test_disallow_legacy_disable_and_chain_key_ecdsa_signing_enable_specification_together() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = subnet_test_id(1000);
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_disable: Some(vec![key_id.clone()]),
+            chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(key_id)]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Remove this test.
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to enable and disable signing for the same ECDSA keys"
+    )]
+    fn test_disallow_ecdsa_key_signing_disable_and_enable_for_same_key_legacy() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let subnet_id = subnet_test_id(1000);
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make sure the registry has the expected subnet record.
+        {
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+                .iter()
+                .next()
+                .expect("should contain at least one node ID");
+            let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+            subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+                key_configs: vec![KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb::from(&MasterPublicKeyId::Ecdsa(
+                        key_id.clone(),
+                    ))),
+                    pre_signatures_to_create_in_advance: Some(111),
+                    max_queue_size: Some(222),
+                }],
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            });
+            registry.maybe_apply_mutation_internal(add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &btreemap!(*first_node_id => first_dkg_pk.clone()),
+            ));
+        }
+
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_disable: Some(vec![key_id.clone()]),
+            ecdsa_key_signing_enable: Some(vec![key_id]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to enable and disable signing for the same chain keys"
+    )]
+    fn test_disallow_chain_key_signing_disable_and_enable_for_same_key() {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        });
+        let subnet_id = subnet_test_id(1000);
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make sure the registry has the expected subnet record.
+        {
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+                .iter()
+                .next()
+                .expect("should contain at least one node ID");
+            let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+            subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+                key_configs: vec![KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
+                    pre_signatures_to_create_in_advance: Some(111),
+                    max_queue_size: Some(222),
+                }],
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            });
+            registry.maybe_apply_mutation_internal(add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &btreemap!(*first_node_id => first_dkg_pk.clone()),
+            ));
+        }
+
+        let payload = UpdateSubnetPayload {
+            chain_key_signing_disable: Some(vec![key_id.clone()]),
+            chain_key_signing_enable: Some(vec![key_id]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
     }
 }

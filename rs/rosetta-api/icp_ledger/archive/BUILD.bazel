@@ -17,6 +17,7 @@ rust_canister(
     service_file = "//rs/rosetta-api/icp_ledger:ledger_archive.did",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/nns/constants",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/ledger_canister_core",
@@ -60,11 +61,14 @@ rust_ic_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
+        # Keep sorted.
         "//packages/pocket-ic",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icp_ledger/test_utils",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/http_types",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:serde_bytes",
     ],
 )

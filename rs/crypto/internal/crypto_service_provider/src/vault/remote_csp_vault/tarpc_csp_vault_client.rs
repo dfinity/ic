@@ -40,7 +40,7 @@ use ic_logger::{debug, new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -55,6 +55,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
+use tracing::instrument;
 
 #[cfg(test)]
 use ic_config::logger::Config as LoggerConfig;
@@ -248,6 +249,7 @@ fn context_with_timeout(timeout: Duration) -> tarpc::context::Context {
 // the remote server, as the API used by `Csp` is synchronous, while the server
 // API is async.
 impl BasicSignatureCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -267,6 +269,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -281,6 +284,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
 }
 
 impl MultiSignatureCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -300,6 +304,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn gen_committee_signing_key_pair(
         &self,
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
@@ -316,6 +321,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
 }
 
 impl ThresholdSignatureCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
@@ -337,6 +343,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
 }
 
 impl SecretKeyStoreCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn sks_contains(&self, key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -351,6 +358,7 @@ impl SecretKeyStoreCspVault for RemoteCspVault {
 }
 
 impl PublicKeyStoreCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -363,6 +371,7 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn current_node_public_keys_with_timestamps(
         &self,
     ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
@@ -377,6 +386,7 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -391,6 +401,7 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
 }
 
 impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn pks_and_sks_contains(
         &self,
         external_public_keys: ExternalPublicKeys,
@@ -406,6 +417,7 @@ impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -420,6 +432,7 @@ impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
 }
 
 impl NiDkgCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn gen_dealing_encryption_key_pair(
         &self,
         node_id: NodeId,
@@ -435,6 +448,7 @@ impl NiDkgCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn update_forward_secure_epoch(
         &self,
         algorithm_id: AlgorithmId,
@@ -456,6 +470,7 @@ impl NiDkgCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
@@ -483,6 +498,7 @@ impl NiDkgCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
@@ -508,6 +524,7 @@ impl NiDkgCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn retain_threshold_keys_if_present(
         &self,
         active_key_ids: BTreeSet<KeyId>,
@@ -527,6 +544,7 @@ impl NiDkgCspVault for RemoteCspVault {
 }
 
 impl TlsHandshakeCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -539,6 +557,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         // Here we cannot call `block_on` directly but have to wrap it in
         // `block_in_place` because this method here is called via a Rustls
@@ -563,6 +582,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 }
 
 impl IDkgProtocolCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
@@ -588,6 +608,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_verify_dealing_private(
         &self,
         algorithm_id: AlgorithmId,
@@ -613,6 +634,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
@@ -638,8 +660,10 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_load_transcript_with_openings(
         &self,
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: Vec<u8>,
@@ -649,6 +673,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     ) -> Result<(), IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             context_with_timeout(self.rpc_timeout),
+            alg,
             dealings,
             openings,
             ByteBuf::from(context_data),
@@ -663,6 +688,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
@@ -680,6 +706,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         self.tokio_block_on(
             self.tarpc_csp_client
@@ -692,8 +719,10 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_open_dealing(
         &self,
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: Vec<u8>,
@@ -702,6 +731,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_open_dealing(
             context_with_timeout(self.rpc_timeout),
+            alg,
             dealing,
             dealer_index,
             ByteBuf::from(context_data),
@@ -717,8 +747,9 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 }
 
 impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     #[inline]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -729,8 +760,8 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_ecdsa_sig_share(
             context_with_timeout(self.rpc_timeout),
             derivation_path,
             ByteBuf::from(hashed_message),
@@ -743,7 +774,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
             algorithm_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(ThresholdEcdsaSignShareError::TransientInternalError {
+            Err(ThresholdEcdsaCreateSigShareError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -751,6 +782,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
 }
 
 impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     #[inline]
     fn create_schnorr_sig_share(
         &self,
@@ -781,6 +813,7 @@ impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
 }
 
 impl PublicRandomSeedGenerator for RemoteCspVault {
+    #[instrument(skip_all)]
     fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError> {
         self.tokio_block_on(
             self.tarpc_csp_client

@@ -24,7 +24,93 @@ my_useful_function() {
 }
 ```
 
+## Upgrade Testing via Bazel
+
+TL;DR:
+
+```
+bazel test \
+    --test_env=SSH_AUTH_SOCK \
+    --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+    --test_output=streamed \
+    --test_arg=--nocapture \
+    //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+```
+
+This is a new way of doing upgrade/release testing (as of May 2024). (The old way is still
+documented elsewhere in this README.)
+
+Perform these instructions from the usual place:
+
+```
+ssh -A devenv
+cd src/ic
+./gitlab-ci/container/container-run.sh
+```
+
+One special requirement for this to work is access to zh1-pyr07. This can be
+requested from the consensus team, e.g. Christian Müller.
+
+If your devenv is not in zh1, this test will run much slower, because it
+downloads a large file.
+
+Other than that, the only thing non-standard about the above command are the two
+`--test_env` flags. Let us explain:
+
+* `SSH_AUTH_SOCK`: This copies the value of the `SSH_AUTH_SOCK` environment
+  variable from the environment where you are running into bazel's sandbox where
+  it runs the test.
+
+* `NNS_CANISTER_UPGRADE_SEQUENCE=...`: Here, you need to supply either a comma
+  separated list of NNS canister names (e.g. `governance,root`), or `all` (as
+  shown in the example).
+
+The other `--test_*` flags are not strictly _required_, but rather, highly
+recommended. Together, their effect is that you can watch the progress of the
+test. Whereas, by default, you would have to wait until the end to see test
+output (if there is a failure). For tests that take a longer time to run (like
+this one), live results is better.
+
+### Upgrade arguments
+
+Sometimes we prepare a canister release that requires a special upgrade argument. These can be defined per-canister in `NnsCanisterUpgrade::new`. To illustarte, we have the following code:
+
+```
+let module_arg = if nns_canister_name == "cycles-minting" {
+    Encode!(
+        &(Some(CyclesCanisterInitPayload {
+            cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
+            ledger_canister_id: None,
+            governance_canister_id: None,
+            minting_account_id: None,
+            last_purged_notification: None,
+            exchange_rate_canister: None,
+        }))
+    )
+    .unwrap()
+} else {
+    Encode!(&()).unwrap()
+};
+```
+
+This special CMC upgrade argument was needed only once, but we keep it for illustration since it should be harmless.
+
+_Why we needed this arg in the first place: The CMC can mint cycles and transfer them directly to the cycles ledger. The cycles ledger was (re)installed recently in [this proposal](https://dashboard.internetcomputer.org/proposal/130327). Since it is now available and under NNS control, we needed to provide the canister ID to the CMC to enable the interaction with the cycles ledger._
+
+### Troubleshooting
+
+* `Cannot mkdir: No space`: try to clean up some space, e.g., by running the following command:
+
+  ```
+  ./bazel/bazel_clean.sh
+  ```
+
 ## Replicate mainnet state in a dynamic testnet
+
+*Warning*: There is now a [new (May, 2024)/better way to do release/upgrade
+testing][bazel-based-upgrade-testing].
+
+[bazel-based-upgrade-testing]: #upgrade-testing-via-bazel
 
 An overview of this procedure
 

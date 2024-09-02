@@ -4,12 +4,10 @@
 # and outputs root hash to a separate file.
 #
 import argparse
-import atexit
 import os
 import re
 import subprocess
 import sys
-import tempfile
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
@@ -36,13 +34,14 @@ def main():
         type=int,
         default=10 * 1024 * 1024 * 1024 - 128 * 1024 * 1024,
     )
-    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     subprocess.run(
         [
@@ -88,6 +87,7 @@ def main():
     with open(args.root_hash, "w") as f:
         f.write(root_hash + "\n")
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     temp_tar = os.path.join(tmpdir, "partition.tar")

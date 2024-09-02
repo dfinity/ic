@@ -20,20 +20,22 @@ from the node directly, fetching the cache statistics. Finally, check that the c
 - for the 2nd user, number of cache misses is exactly 3
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
-};
-use crate::util::delegations::*;
-use crate::util::{agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher};
 use candid::Principal;
 use core::ops::RangeInclusive;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot,
+};
+use ic_system_test_driver::util::delegations::*;
+use ic_system_test_driver::util::{
+    agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher,
+};
 use ic_types::messages::Blob;
 use rand::Rng;
 use serde_bytes::ByteBuf;

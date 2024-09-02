@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
@@ -251,7 +250,7 @@ fn install_code_validate_input_compute_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%."))
     );
 }
 
@@ -300,7 +299,7 @@ fn install_code_validate_input_memory_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet."))
     );
 }
 
@@ -593,16 +592,13 @@ fn install_code_with_start_with_err() {
 
     let message_id = execute_install_code_message_dts_helper(&mut test, canister_id, wasm);
 
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterTrapped,
-            format!(
-                "Error from Canister {}: Canister trapped: unreachable",
-                canister_id
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {}: Canister trapped: unreachable",
+            canister_id
+        ),
     );
 }
 
@@ -707,16 +703,13 @@ fn install_code_with_init_method_with_error() {
 
     let message_id = execute_install_code_init_dts_helper(&mut test, canister_id, wasm);
 
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterTrapped,
-            format!(
-                "Error from Canister {}: Canister trapped: unreachable",
-                canister_id
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {}: Canister trapped: unreachable",
+            canister_id
+        ),
     );
 }
 
@@ -784,7 +777,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
+            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`.", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
         ))
     );
 }
@@ -835,16 +828,15 @@ fn install_code_running_out_of_instructions() {
         NextExecution::None
     );
 
-    assert_eq!(
-        check_ingress_status(test.ingress_status(&message_id)),
-        Err(UserError::new(
-            ErrorCode::CanisterInstructionLimitExceeded,
-            format!(
-                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
-                canister_id,
-                test.install_code_instructions_limit(),
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        &format!(
+            "Error from Canister {}: \
+            Canister exceeded the limit of {} instructions for single message execution.",
+            canister_id,
+            test.install_code_instructions_limit(),
+        ),
     );
 }
 
@@ -1408,9 +1400,7 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
 fn install_chunked_works_from_whitelist() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1471,9 +1461,7 @@ fn install_chunked_works_from_whitelist() {
 fn install_chunked_defaults_to_using_target_as_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1521,9 +1509,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
 fn install_chunked_recorded_in_history() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1591,9 +1577,7 @@ fn install_chunked_recorded_in_history() {
 fn install_chunked_works_from_other_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let target_canister = test.create_canister(CYCLES);
     let store_canister = test.create_canister(CYCLES);
@@ -1640,9 +1624,7 @@ fn install_chunked_works_from_other_canister() {
 fn install_chunked_works_with_legacy_args() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let target_canister = test.create_canister(CYCLES);
     let store_canister = test.create_canister(CYCLES);
@@ -1689,9 +1671,7 @@ fn install_chunked_works_with_legacy_args() {
 fn install_chunked_fails_with_wrong_chunk_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1737,9 +1717,7 @@ fn install_chunked_fails_with_wrong_chunk_hash() {
 fn install_chunked_fails_with_wrong_wasm_hash() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -1785,9 +1763,7 @@ fn install_chunked_fails_with_wrong_wasm_hash() {
 fn install_chunked_fails_when_store_canister_not_found() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let target_canister = test.create_canister(CYCLES);
     // Store canister doesn't actually exist.
@@ -1818,9 +1794,7 @@ fn install_chunked_fails_when_store_canister_not_found() {
 fn install_chunked_works_from_controller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -1875,9 +1849,7 @@ fn install_chunked_works_from_controller_of_store() {
 fn install_chunked_fails_from_noncontroller_of_store() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
@@ -1946,9 +1918,7 @@ fn install_chunked_fails_from_noncontroller_of_store() {
 fn install_chunked_succeeds_from_store_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let target_canister = test.create_canister(CYCLES);
     // Install universal canister to canister which will also be the store and
@@ -2008,7 +1978,7 @@ fn install_chunked_succeeds_from_store_canister() {
 #[test]
 fn install_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_instruction_limit(2_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_manual_execution()
         .build();
@@ -2135,7 +2105,7 @@ fn install_with_dts_correctly_updates_system_state() {
 #[test]
 fn upgrade_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_instruction_limit(2_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_manual_execution()
         .build();
@@ -2265,9 +2235,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
 fn failed_install_chunked_charges_for_wasm_assembly() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(CYCLES);
 
@@ -2325,9 +2293,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
 fn successful_install_chunked_charges_for_wasm_assembly() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wasm = wat::parse_str("(module)").unwrap();
 
     // Get the charges for a normal install
@@ -2407,7 +2373,6 @@ fn install_chunked_with_dts_works() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
-        .with_wasm_chunk_store(FlagStatus::Enabled)
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .build();

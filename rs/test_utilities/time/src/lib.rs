@@ -47,6 +47,22 @@ impl FastForwardTimeSource {
         }
     }
 
+    /// Similar to [`set_time`], but instead of setting both real-time and
+    /// monotonic clock forward, we only advance the monotonic clock. Returns
+    /// an error if setting the time in this manner would make the monotonic
+    /// clock go backwards.
+    pub fn set_time_monotonic(&self, time: Time) -> Result<(), TimeNotMonotoneError> {
+        let data = &mut self.0.write().unwrap();
+        let duration_since_origin = time.saturating_duration_since(UNIX_EPOCH);
+        let new_instant = data.origin_instant + duration_since_origin;
+        if new_instant > data.current_instant {
+            data.current_instant = new_instant;
+            Ok(())
+        } else {
+            Err(TimeNotMonotoneError)
+        }
+    }
+
     /// Increases only the monotonic time. This emulates a stalled real-time clock.
     /// Call [`sync_realtime`] to bring the real-time clock back in sync with how much
     /// time the monotonic clock has advanced
@@ -108,4 +124,36 @@ where
         tx.send(()).unwrap();
     });
     rx.recv_timeout(timeout).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_time() {
+        let t = FastForwardTimeSource::new();
+        let origin = t.get_instant();
+
+        // Changing only monontonic time must leave relative clock unaffected
+        assert_eq!(t.get_relative_time(), UNIX_EPOCH);
+        assert!(t
+            .set_time_monotonic(Time::from_nanos_since_unix_epoch(100))
+            .is_ok());
+        assert_eq!(t.get_relative_time(), UNIX_EPOCH);
+
+        // Monotonic time should have advanced by 100ns
+        let advanced = t.get_instant();
+        assert_eq!(
+            advanced.saturating_duration_since(origin),
+            Duration::from_nanos(100)
+        );
+
+        // Setting time to UNIX_EPOCH + 10ns should fail, because it would
+        // require moving the monotonic clock backwards.
+        assert!(t
+            .set_time_monotonic(Time::from_nanos_since_unix_epoch(10))
+            .is_err());
+        assert_eq!(t.get_relative_time(), UNIX_EPOCH);
+    }
 }

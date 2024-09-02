@@ -1,0 +1,11 @@
+[Unit]
+Description=If verbose flag enabled, pipe GuestOS console to the Host terminal
+Requires=guestos.service
+After=guestos.service
+
+[Service]
+ExecStart=/opt/ic/bin/verbose-logging.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

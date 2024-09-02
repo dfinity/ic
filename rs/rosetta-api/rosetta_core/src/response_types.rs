@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 /// A NetworkListResponse contains all NetworkIdentifiers that the node can
 /// serve information for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkListResponse {
     pub network_identifiers: Vec<NetworkIdentifier>,
 }
@@ -47,7 +46,6 @@ impl NetworkOptionsResponse {
 /// it may appear that the implementation is stuck syncing and needs to be
 /// terminated.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkStatusResponse {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub current_block_identifier: BlockIdentifier,
@@ -77,7 +75,7 @@ impl NetworkStatusResponse {
         current_block_timestamp: u64,
         genesis_block_identifier: BlockIdentifier,
         oldest_block_identifier: Option<BlockIdentifier>,
-        sync_status: SyncStatus,
+        sync_status: Option<SyncStatus>,
         peers: Vec<Peer>,
     ) -> NetworkStatusResponse {
         NetworkStatusResponse {
@@ -85,7 +83,7 @@ impl NetworkStatusResponse {
             current_block_timestamp,
             genesis_block_identifier,
             oldest_block_identifier,
-            sync_status: Some(sync_status),
+            sync_status,
             peers,
         }
     }
@@ -101,7 +99,6 @@ impl NetworkStatusResponse {
 /// words, the `PartialBlockIdentifier` of a block after an omitted block should
 /// reference the last non-omitted block.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct BlockResponse {
     /// Blocks contain an array of Transactions that occurred at a particular BlockIdentifier. A hard requirement for blocks returned by Rosetta implementations is that they MUST be inalterable: once a client has requested and received a block identified by a specific BlockIndentifier, all future calls for that same BlockIdentifier must return the same block contents.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,7 +124,6 @@ impl BlockResponse {
 
 /// A BlockTransactionResponse contains information about a block transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct BlockTransactionResponse {
     /// Transactions contain an array of Operations that are attributable to the same TransactionIdentifier.
     pub transaction: Transaction,
@@ -142,7 +138,6 @@ impl BlockTransactionResponse {
 /// A MempoolResponse contains all transaction identifiers in the mempool for a
 /// particular network_identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct MempoolResponse {
     #[serde(rename = "transaction_identifiers")]
     pub transaction_identifiers: Vec<TransactionIdentifier>,
@@ -160,7 +155,6 @@ impl MempoolResponse {
 /// It may not be possible to know the full impact of a transaction in the
 /// mempool (ex: fee paid).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct MempoolTransactionResponse {
     #[serde(rename = "transaction")]
     pub transaction: Transaction,
@@ -175,7 +169,6 @@ impl MempoolTransactionResponse {
 /// ConstructionDeriveResponse is returned by the `/construction/derive`
 /// endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionDeriveResponse {
     /// [DEPRECATED by `account_identifier` in `v1.4.4`] Address in
     /// network-specific format.
@@ -212,7 +205,6 @@ impl ConstructionDeriveResponse {
 /// desired PublicKeys. If it is not necessary to retrieve any PublicKeys for
 /// construction, `required_public_keys` should be omitted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionPreprocessResponse {
     /// The options that will be sent directly to `/construction/metadata` by
     /// the caller.
@@ -240,7 +232,6 @@ impl ConstructionPreprocessResponse {
 /// Suggested fee is an array in case fee payment must occur in multiple
 /// currencies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionMetadataResponse {
     pub metadata: ObjectMap,
 
@@ -253,7 +244,6 @@ pub struct ConstructionMetadataResponse {
 /// the a network transaction from a collection of signatures) and an array of
 /// payloads that must be signed by the caller.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionPayloadsResponse {
     /// CBOR+hex-encoded 'UnsignedTransaction'
     pub unsigned_transaction: String,
@@ -277,7 +267,6 @@ impl ConstructionPayloadsResponse {
 /// transaction blob. This should match the array of operations provided to
 /// `/construction/preprocess` and `/construction/payloads`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionParseResponse {
     pub operations: Vec<Operation>,
 
@@ -301,7 +290,6 @@ impl ConstructionParseResponse {
 /// ConstructionCombineResponse is returned by `/construction/combine`. The
 /// network payload will be sent directly to the `construction/submit` endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct ConstructionCombineResponse {
     /// CBOR+hex-encoded 'SignedTransaction'
     pub signed_transaction: String,
@@ -327,7 +315,6 @@ pub struct ConstructionSubmitResponse {
 /// ERC-20 token balance on a few smart contracts), an account balance request
 /// must be made with each AccountIdentifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct AccountBalanceResponse {
     #[serde(rename = "block_identifier")]
     pub block_identifier: BlockIdentifier,
@@ -354,7 +341,6 @@ pub struct ConstructionHashResponse {
 /// BlockTransactions that match the query in SearchTransactionsRequest. These
 /// BlockTransactions are sorted from most recent block to oldest block.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SearchTransactionsResponse {
     /// transactions is an array of BlockTransactions sorted by most recent BlockIdentifier (meaning that transactions in recent blocks appear first).
     /// If there are many transactions for a particular search, transactions may not contain all matching transactions. It is up to the caller to paginate these transactions using the max_block field.
@@ -367,4 +353,20 @@ pub struct SearchTransactionsResponse {
     /// next_offset is the next offset to use when paginating through transaction results. If this field is not populated, there are no more transactions to query.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CallResponse {
+    /// Result contains the result of the `/call` invocation. This result will not be inspected or interpreted by Rosetta tooling and is left to the caller to decode.
+    #[serde(rename = "result")]
+    pub result: ObjectMap,
+
+    /// Idempotent indicates that if `/call` is invoked with the same CallRequest again, at any point in time, it will return the same CallResponse. Integrators may cache the CallResponse if this is set to true to avoid making unnecessary calls to the Rosetta implementation. For this reason, implementers should be very conservative about returning true here or they could cause issues for the caller.
+    pub idempotent: bool,
+}
+
+impl CallResponse {
+    pub fn new(result: ObjectMap, idempotent: bool) -> CallResponse {
+        CallResponse { result, idempotent }
+    }
 }

@@ -8,10 +8,11 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-tests = { path = ".." }
 ic-mainnet-nns-recovery = { path = "ic_mainnet_nns_recovery" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
 slog = { workspace = true }
+tests = { path = ".." }
 
 [[bin]]
 name = "nns_upgrade_test"

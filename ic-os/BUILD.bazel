@@ -1,5 +1,4 @@
 exports_files([
     "vuln-scan/vuln-scan.sh",
     "vuln-scan/vuln-scan.html",
-    "scripts/build-bootstrap-config-image.sh",
 ])

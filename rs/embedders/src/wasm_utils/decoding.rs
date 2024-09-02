@@ -1,18 +1,7 @@
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
 use ic_types::NumBytes;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::io::Read;
 use std::sync::Arc;
-
-/// Maximum size of a WebAssembly module.
-pub const MAX_WASM_MODULE_SIZE_BYTES: NumBytes = wasm_chunk_store::DEFAULT_MAX_SIZE;
-
-fn make_module_too_large_error() -> WasmValidationError {
-    WasmValidationError::DecodingError(format!(
-        "Wasm module is too large, it can be at most {} bytes",
-        MAX_WASM_MODULE_SIZE_BYTES
-    ))
-}
 
 enum WasmEncoding {
     Wasm,
@@ -71,11 +60,17 @@ pub fn decoded_wasm_size(module_bytes: &[u8]) -> Result<usize, WasmValidationErr
 }
 
 /// Decodes a WebAssembly module, uncompressing it if required.
-pub fn decode_wasm(module: Arc<Vec<u8>>) -> Result<BinaryEncodedWasm, WasmValidationError> {
+pub fn decode_wasm(
+    max_size: NumBytes,
+    module: Arc<Vec<u8>>,
+) -> Result<BinaryEncodedWasm, WasmValidationError> {
     let module_bytes = module.as_slice();
     let (encoding, uncompressed_size) = wasm_encoding_and_size(module_bytes)?;
-    if uncompressed_size as u64 > MAX_WASM_MODULE_SIZE_BYTES.get() {
-        return Err(make_module_too_large_error());
+    if uncompressed_size as u64 > max_size.get() {
+        return Err(WasmValidationError::ModuleTooLarge {
+            size: uncompressed_size as u64,
+            allowed: max_size.get(),
+        });
     }
 
     match encoding {

@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/registry/subnet_type",
+    "//rs/state_machine_tests",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:tempfile",
+]
+
+# Tests that use this should have
+#
+# tags = [
+#     "manual",
+#     "requires-network",
+# ]
+#
+# When running such test via 'bazel test', pass --test_env=SSH_AUTH_SOCK to the
+# command. This causes the SSH_AUTH_SOCK environment variable to be "forwarded"
+# from your shell to the sandbox where the test is run. This authorizes the test
+# to download the test data (assuming you are authorized).
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+rust_library(
+    name = "golden_nns_state",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nns_test_utils_golden_nns_state",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)

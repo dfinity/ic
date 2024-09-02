@@ -4,28 +4,37 @@
     "minter": {
       "type": "custom",
       "build": [
-        "bazel build //rs/ethereum/cketh/minter:cketh_minter"
+        "bazel build //rs/ethereum/cketh/minter:cketh_minter.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm",
+      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm.gz",
       "candid": "../minter/cketh_minter.did",
       "shrink": false
     },
     "ledger": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
       "shrink": false
     },
     "index": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm"
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "archive": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/archive/archive.did",
       "shrink": false
     },
     "orchestrator": {
@@ -40,18 +49,54 @@
     "ckusdc_ledger": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
       "shrink": false
     },
     "ckusdc_index": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm"
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "cklink_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "cklink_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "ckpepe_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "ckpepe_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
     }

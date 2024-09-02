@@ -3,14 +3,14 @@
 set -euo pipefail
 VERSION=$(git rev-parse HEAD)
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
     RUN_ON_DIFF_ONLY="false"
 fi
 
 cd "$CI_PROJECT_DIR"
 
 if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] \
-    || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
+    || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
 elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \

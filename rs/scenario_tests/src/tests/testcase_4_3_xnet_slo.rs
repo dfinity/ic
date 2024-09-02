@@ -178,7 +178,7 @@ pub async fn test_impl(
 
     let cycles_per_canister = cycles_per_subnet
         .map(|cycles| cycles / canisters_per_subnet as u64)
-        .unwrap_or(std::u64::MAX);
+        .unwrap_or(u64::MAX);
     let payload_size_bytes = payload_size_bytes.unwrap_or(DEFAULT_PAYLOAD_SIZE);
     let targeted_latency_seconds =
         targeted_latency_seconds.unwrap_or(DEFAULT_TARGETED_LATENCY_SECONDS);

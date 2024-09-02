@@ -18,7 +18,7 @@ where
         allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ServerConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",
@@ -31,7 +31,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config(
-            &self.csp,
+            &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
             allowed_clients,
@@ -56,7 +56,7 @@ where
         &self,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ServerConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",
@@ -69,7 +69,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::server_handshake::server_config_without_client_auth(
-            &self.csp,
+            &self.vault,
             self.node_id,
             self.registry_client.as_ref(),
             registry_version,
@@ -94,7 +94,7 @@ where
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<::rustls::ClientConfig, TlsConfigError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "TlsConfig",
@@ -107,7 +107,7 @@ where
         );
         let start_time = self.metrics.now();
         let result = rustls::client_handshake::client_config(
-            &self.csp,
+            &self.vault,
             self.node_id,
             Arc::clone(&self.registry_client),
             server,

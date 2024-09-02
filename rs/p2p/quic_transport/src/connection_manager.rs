@@ -34,22 +34,22 @@ use std::{
 };
 
 use axum::{middleware::from_fn_with_state, Router};
-use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{
-    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
-    EndpointConfig, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
+    Runtime, TokioRuntime, VarInt,
 };
+use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
@@ -60,6 +60,20 @@ use crate::{
     ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+
+/// The value of 25MB is chosen from experiments and the BDP product shown below to support
+/// around 2Gb/s.
+/// Bandwidth-Delay Product
+/// 2Gb/s * 100ms ≈ 200M bits = 25MB
+/// To this only on to avoid unnecessary error in dfx on MacOS
+#[cfg(target_os = "linux")]
+const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
+
+const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
+const SEND_WINDOW: u64 = 100_000_000;
+const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
+const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
+const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
@@ -116,28 +130,33 @@ struct ConnectionManager {
     router: Router,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ConnectionEstablishError {
+    #[error("Timeout during connection establishment")]
     Timeout,
+    #[error("Gruezi handshake failed. {0}")]
     Gruezi(String),
+    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
     TlsClientConfigError {
         peer_id: NodeId,
         cause: TlsConfigError,
     },
+    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
     ConnectError {
         peer_id: NodeId,
         cause: ConnectError,
     },
+    #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
+    #[error("No peer identity available.")]
     MissingPeerIdentity,
-    MalformedPeerIdentity(MalformedPeerCertificateError),
-    PeerIdMismatch {
-        client: NodeId,
-        server: NodeId,
-    },
+    #[error("Malformed peer identity. {0}")]
+    MalformedPeerIdentity(String),
+    #[error("Received peer ids didn't match {client:?} and {server:?}.")]
+    PeerIdMismatch { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
@@ -145,33 +164,23 @@ struct ConnectionWithPeerId {
     connection: Connection,
 }
 
-impl std::fmt::Display for ConnectionEstablishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Timeout => write!(f, "Timeout during connection establishment."),
-            Self::Gruezi(e) => write!(f, "Gruezi handshake failed. {e}"),
-            Self::TlsClientConfigError { peer_id, cause } => {
-                write!(
-                    f,
-                    "Failed to get rustls client config for peer {peer_id}. {cause}"
-                )
-            }
-            Self::ConnectError { peer_id, cause } => {
-                write!(f, "Failed to connect to peer {peer_id}. {cause}")
-            }
-            Self::ConnectionError { peer_id, cause } => match peer_id {
-                Some(peer_id) => write!(f, "Outgoing connection to peer {peer_id}. {cause}"),
-                None => write!(f, "Incoming connection failed. {cause}"),
-            },
-            Self::MissingPeerIdentity => write!(f, "No peer identity available."),
-            Self::MalformedPeerIdentity(MalformedPeerCertificateError { internal_error }) => {
-                write!(f, "Malformed peer identity. {internal_error}")
-            }
-            Self::PeerIdMismatch { client, server } => {
-                write!(f, "Received peer ids didn't match {client} and {server}.")
-            }
-        }
-    }
+pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocket> {
+    let _guard = rt.enter();
+    let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
+        .expect("Failed to create udp socket");
+
+    // Set socket send/recv buffer size. Setting these explicitly makes sure that a
+    // sufficiently large value is used. Increasing these buffers can help with high packet loss.
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE);
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_send_buffer_size(UDP_BUFFER_SIZE);
+
+    socket2
+        .bind(&SockAddr::from(addr))
+        .expect("Failed to bind to UDP socket");
+
+    TokioRuntime::wrap_udp_socket(&TokioRuntime, socket2.into()).unwrap()
 }
 
 pub(crate) fn start_connection_manager(
@@ -183,7 +192,7 @@ pub(crate) fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    socket: Either<SocketAddr, impl AsyncUdpSocket>,
+    socket: Arc<dyn AsyncUdpSocket>,
     router: Router,
 ) -> Shutdown {
     let topology = watcher.borrow().clone();
@@ -210,73 +219,30 @@ pub(crate) fn start_connection_manager(
 
     let mut transport_config = quinn::TransportConfig::default();
 
-    transport_config.keep_alive_interval(Some(KEEP_ALIVE_INTERVAL));
-    transport_config.max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()));
-    // defaults:
-    // STREAM_RWN 1_250_000
-    // stream_receive_window: STREAM_RWND.into(),
-    // send_window: (8 * STREAM_RWND).into()
-    transport_config.send_window(100_000_000);
-    // Upper bound on receive memory consumption.
-    transport_config.receive_window(VarInt::from_u32(200_000_000));
-    transport_config.stream_receive_window(VarInt::from_u32(4_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
+    transport_config
+        .max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()))
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .send_window(SEND_WINDOW)
+        .receive_window(RECEIVE_WINDOW)
+        .stream_receive_window(STREAM_RECEIVE_WINDOW)
+        .max_concurrent_bidi_streams(MAX_CONCURRENT_BIDI_STREAMS)
+        .max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS);
+
     let transport_config = Arc::new(transport_config);
-    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        QuicServerConfig::try_from(rustls_server_config).unwrap(),
+    ));
     server_config.transport_config(transport_config.clone());
 
-    // Start endpoint
-    let endpoint = match socket {
-        Either::Left(addr) => {
-            let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
-                .expect("Failed to create udp socket");
-
-            // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
-            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
-            // around 2Gb/s.
-            // Bandwidth-Delay Product
-            // 2Gb/s * 100ms ~ 200M bits = 25MB
-            // To this only on to avoid unecessary error in dfx on MacOS
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
-                info!(log, "Failed to set receive udp buffer. {}", e)
-            }
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
-                info!(log, "Failed to set send udp buffer. {}", e)
-            }
-            info!(
-                log,
-                "Udp receive buffer size: {:?}",
-                socket2.recv_buffer_size()
-            );
-            info!(
-                log,
-                "Udp send buffer size: {:?}",
-                socket2.send_buffer_size()
-            );
-            socket2
-                .bind(&SockAddr::from(addr))
-                .expect("Failed to bind to UDP socket");
-
-            let _enter_guard = rt.enter();
-            Endpoint::new(
-                endpoint_config,
-                Some(server_config),
-                socket2.into(),
-                Arc::new(quinn::TokioRuntime),
-            )
-            .expect("Failed to create endpoint")
-        }
-        Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
+    let endpoint = {
+        let _guard = rt.enter();
+        Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            async_udp_socket,
+            socket,
             Arc::new(quinn::TokioRuntime),
         )
-        .expect("Failed to create endpoint"),
+        .expect("Failed to create endpoint")
     };
     let manager = ConnectionManager {
         log: log.clone(),
@@ -321,9 +287,9 @@ impl ConnectionManager {
                 Ok(()) = self.watcher.changed() => {
                     self.handle_topology_change();
                 },
-                connecting = self.endpoint.accept() => {
-                    if let Some(connecting) = connecting {
-                        self.handle_inbound(connecting);
+                incoming = self.endpoint.accept() => {
+                    if let Some(incoming) = incoming {
+                        self.handle_inbound(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -412,8 +378,9 @@ impl ConnectionManager {
             .server_config(subnet_nodes, self.topology.latest_registry_version())
         {
             Ok(rustls_server_config) => {
+                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).unwrap();
                 let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
                 server_config.transport_config(self.transport_config.clone());
                 self.endpoint.set_server_config(Some(server_config));
             }
@@ -489,15 +456,17 @@ impl ConnectionManager {
             .get_addr(&peer_id)
             .expect("Just checked this conditions");
         let endpoint = self.endpoint.clone();
-        let client_config = self
+        let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause });
+            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
+            .unwrap();
         let transport_config = self.transport_config.clone();
         let conn_fut = async move {
-            let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
-            quinn_client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(quinn_client_config, addr, "irrelevant");
+            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+            client_config.transport_config(transport_config);
+            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
             let established = connecting
                 .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
                 .await
@@ -600,12 +569,12 @@ impl ConnectionManager {
         };
     }
 
-    fn handle_inbound(&mut self, connecting: Connecting) {
+    fn handle_inbound(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
         let conn_fut = async move {
             let established =
-                connecting
+                incoming
                     .await
                     .map_err(|cause| ConnectionEstablishError::ConnectionError {
                         peer_id: None,
@@ -615,21 +584,16 @@ impl ConnectionManager {
             let rustls_certs = established
                 .peer_identity()
                 .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
-                .downcast::<Vec<rustls::Certificate>>()
+                .downcast::<Vec<CertificateDer>>()
                 .unwrap();
             let rustls_cert =
                 rustls_certs
                     .first()
                     .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
-                        MalformedPeerCertificateError {
-                            internal_error: "a single cert must be present".to_string(),
-                        },
+                        "a single cert must be present".to_string(),
                     ))?;
-            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
-                ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: format!("{:?}", err),
-                })
-            })?;
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
+                .map_err(|err| ConnectionEstablishError::MalformedPeerIdentity(err.to_string()))?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
@@ -675,6 +639,8 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 let data = recv
@@ -707,6 +673,8 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
             }

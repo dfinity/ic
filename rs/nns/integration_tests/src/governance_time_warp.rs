@@ -6,15 +6,15 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::{
-    governance::TimeWarp,
+use ic_nns_governance_api::{
     pb::v1::{
         governance_error::ErrorType,
-        manage_neuron::{Command, Disburse, NeuronIdOrSubaccount},
+        manage_neuron::{Disburse, NeuronIdOrSubaccount},
         manage_neuron_response,
         neuron::DissolveState,
-        ManageNeuron, ManageNeuronResponse, Neuron,
+        ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
     },
+    test_api::TimeWarp,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -48,10 +48,12 @@ fn test_time_warp() {
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     TWELVE_MONTHS_SECONDS + start_timestamp_s,
                 )),
+                aging_since_timestamp_seconds: u64::MAX,
                 cached_neuron_stake_e8s: 123_000_000_000,
                 account: neuron_4_subaccount,
                 not_for_profit: true,
                 kyc_verified: true,
+
                 ..Default::default()
             },
         );
@@ -69,10 +71,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(Command::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),
@@ -108,10 +110,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(Command::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),
@@ -146,10 +148,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(Command::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),

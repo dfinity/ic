@@ -21,10 +21,6 @@ use std::{
 // in other workloads because it increases work per signal handler call.
 const MAX_PAGES_TO_MAP: usize = 128;
 
-// The target number of memory instructions allowed when prefetching
-// beyond the minimum range
-const TARGET_MEMORY_INSTRUCTIONS: usize = 0;
-
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
 fn new_signal_handler_available() -> bool {
@@ -276,7 +272,7 @@ impl SigsegvMemoryTracker {
             let mut instructions = tracker.page_map.get_base_memory_instructions();
 
             // Restrict to tracked range before applying
-            instructions.range = tracker.page_range();
+            instructions.restrict_to_range(&tracker.page_range());
 
             apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
         } else {
@@ -682,6 +678,7 @@ pub fn sigsegv_fault_handler_new(
 /// Preconditions:
 ///    * The pages in `max_prefetch_range` have not been dirtied before.
 ///    * `min_prefetch_range` ⊆ `max_prefetch_range`
+///
 /// Guarantees:
 ///    * `min_prefetch_range` ⊆ result ⊆ `max_prefetch_range`
 ///    * Any data read from the tracker's memory within the result range will be equal
@@ -697,11 +694,9 @@ fn map_unaccessed_pages(
             && min_prefetch_range.end <= max_prefetch_range.end
     );
 
-    let instructions = tracker.page_map.get_memory_instructions(
-        min_prefetch_range,
-        max_prefetch_range,
-        TARGET_MEMORY_INSTRUCTIONS,
-    );
+    let instructions = tracker
+        .page_map
+        .get_memory_instructions(min_prefetch_range, max_prefetch_range);
 
     let range = instructions.range.clone();
 
@@ -727,8 +722,10 @@ fn apply_memory_instructions(
     // for any later mmap calls.
     let mut current_prot_flags = ProtFlags::PROT_NONE;
     for (range, mmap_or_data) in instructions {
-        let clamped_range = range_intersection(&prefetch_range, &range);
-        let start_offset = (clamped_range.start.get() - range.start.get()) as usize;
+        debug_assert!(
+            range.start.get() >= prefetch_range.start.get()
+                && range.end.get() <= prefetch_range.end.get()
+        );
         match mmap_or_data {
             ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
                 FileDescriptor { fd },
@@ -740,12 +737,12 @@ fn apply_memory_instructions(
                     .fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
-                        tracker.page_start_addr_from(clamped_range.start),
-                        range_size_in_bytes(&clamped_range),
+                        tracker.page_start_addr_from(range.start),
+                        range_size_in_bytes(&range),
                         current_prot_flags,
                         MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
                         fd,
-                        (offset + start_offset * PAGE_SIZE) as i64,
+                        offset as i64,
                     )
                     .map_err(print_enomem_help)
                     .unwrap()
@@ -753,7 +750,7 @@ fn apply_memory_instructions(
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
                 tracker.memory_instructions_stats.copy_page_count.fetch_add(
-                    (clamped_range.end.get() - clamped_range.start.get()) as usize,
+                    (range.end.get() - range.start.get()) as usize,
                     Ordering::Relaxed,
                 );
 
@@ -774,13 +771,11 @@ fn apply_memory_instructions(
                         .fetch_add(1, Ordering::Relaxed);
                 }
                 unsafe {
-                    let data = &data[start_offset * PAGE_SIZE
-                        ..start_offset * PAGE_SIZE + range_size_in_bytes(&clamped_range)];
-                    debug_assert_eq!(data.len(), range_size_in_bytes(&clamped_range));
+                    debug_assert_eq!(data.len(), range_size_in_bytes(&range));
                     std::ptr::copy_nonoverlapping(
                         data.as_ptr() as *const libc::c_void,
-                        tracker.page_start_addr_from(clamped_range.start),
-                        range_size_in_bytes(&clamped_range),
+                        tracker.page_start_addr_from(range.start),
+                        range_size_in_bytes(&range),
                     )
                 }
             }

@@ -1,0 +1,27 @@
+type SendArg = record {
+    to : principal;
+    method : text;
+    arg : blob;
+    payment : nat;
+};
+
+type RejectionCode = variant {
+    NoError;
+    CanisterError;
+    SysTransient;
+    DestinationInvalid;
+    Unknown;
+    SysFatal;
+    CanisterReject;
+};
+
+type SendError = record { RejectionCode; text };
+
+type SendResult = variant {
+    Ok : blob;
+    Err : SendError;
+};
+
+service : {
+    send : (vec SendArg) -> (vec SendResult);
+}

@@ -1,7 +1,11 @@
-use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
+use crate::{
+    state_test_helpers::state_machine_builder_for_sns_tests,
+    SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+};
 use candid::{types::number::Nat, Principal};
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
+use futures::FutureExt;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
@@ -261,7 +265,6 @@ impl SnsTestsInitPayloadBuilder {
                 dissolve_delay_interval_seconds: 10_001,
             }),
             nns_proposal_id: Some(10),
-            neurons_fund_participants: None,
             neurons_fund_participation: Some(false),
             neurons_fund_participation_constraints: None,
             ..Default::default()
@@ -1326,6 +1329,20 @@ pub async fn install_rust_canister_with_memory_allocation(
         canister.canister_id(),
         binary_name.as_ref()
     );
+}
+
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+pub fn state_machine_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
+where
+    Fut: Future<Output = Result<Out, String>>,
+    F: FnOnce(Runtime) -> Fut + 'static,
+{
+    let state_machine = state_machine_builder_for_sns_tests().build();
+    // This is for easy conversion from existing tests, but nothing is actually async.
+    run(Runtime::StateMachine(state_machine))
+        .now_or_never()
+        .expect("Async call did not return from now_or_never")
+        .expect("state_machine_test_on_sns_subnet failed.")
 }
 
 /// Runs a local test on the sns subnetwork, so that the canister will be

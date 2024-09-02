@@ -9,6 +9,6 @@ documentation.workspace = true
 [dependencies]
 ic-logger = { path = "../../monitoring/logger" }
 slog = { workspace = true }
-slog-scope = "4.1.2"
-slog-term = "2.6.0"
+slog-scope = { workspace = true }
+slog-term = { workspace = true }
 

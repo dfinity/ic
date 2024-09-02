@@ -2,11 +2,9 @@ workspace(
     name = "ic",
 )
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
-load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("mainnet-canisters.bzl", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
+load("//third_party/lmdb:repository.bzl", "lmdb_repository")
+load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
     name = "aspect_rules_sol",
@@ -82,15 +80,17 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.77.1",
-        "nightly/2024-02-06",
+        "1.80.0",
+        "nightly/2024-06-06",
     ],
 )
 
-git_repository(
+# Necessary for our ic-os Makefile build
+http_archive(
     name = "rules_foreign_cc",
-    commit = "9acbb356916760192d4c16301a69267fe44e6dec",
-    remote = "https://github.com/bazelbuild/rules_foreign_cc.git",
+    sha256 = "db6fcdb4f5ac217658f2c3aabd61e618d7fadc1cdf7d806ab1b52f2709d3fc66",
+    strip_prefix = "rules_foreign_cc-9acbb356916760192d4c16301a69267fe44e6dec",
+    url = "https://github.com/bazelbuild/rules_foreign_cc/archive/9acbb356916760192d4c16301a69267fe44e6dec.tar.gz",
 )
 
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
@@ -304,19 +304,9 @@ container_pull(
     repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
 
-# URL: registry.gitlab.com/dfinity-lab/open/public-docker-registry/nns-dapp-specs:latest
-container_pull(
-    name = "nns-dapp-specs",
-    digest = "sha256:9e003fe2740f2813bf9e776b9cabd5cdb1fbe15581fc4b78876708fdf3791b3f",
-    registry = "registry.gitlab.com",
-    repository = "dfinity-lab/open/public-docker-registry/nns-dapp-specs",
-)
-
 # Third party dependencies that require special treatment
 
-lmdb_repository(name = "lmdb")
-
-lmdb_rkv_repository(name = "lmdb_rkv")
+lmdb_repository()
 
 http_archive(
     name = "pigz",
@@ -344,9 +334,9 @@ cc_binary(
     deps = [":zopfli"],
     visibility = ["//visibility:public"],
 )""",
-    sha256 = "d4396b58bc2875daf8dc3ae9a657be945c2c2697944894fea8a72634eded93ab",
-    strip_prefix = "pigz-2.7",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.7.zip",
+    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
+    strip_prefix = "pigz-2.8",
+    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
 )
 
 http_archive(
@@ -418,11 +408,6 @@ load("//pre-commit:buf.bzl", "buf")
 
 buf(name = "buf")
 
-# shellcheck binary
-load("//pre-commit:shellcheck.bzl", "shellcheck")
-
-shellcheck(name = "shellcheck")
-
 # candid binary
 load("//pre-commit:candid.bzl", "candid")
 
@@ -473,19 +458,21 @@ http_jar(
 
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
-
-new_git_repository(
+http_archive(
     name = "wasm_spec_testsuite",
     build_file_content = """filegroup(
-        name = "wast_files",
-        srcs = glob(["**/*.wast"]),
-        visibility = ["//visibility:public"]
-    )""",
-    commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
-    remote = "https://github.com/WebAssembly/testsuite.git",
+         name = "wast_files",
+         srcs = glob(["**/*.wast"]),
+         visibility = ["//visibility:public"]
+     )""",
+    sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
+    strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
+    url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
 
 mainnet_core_nns_canisters()
+
+mainnet_ck_canisters()
 
 mainnet_sns_canisters()
 
@@ -512,8 +499,8 @@ http_file(
 http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
-    sha256 = "8cc43d3f40bb734a0c87f42ae19eee70c360f2d66a0c88c631f0f0e785505133",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2023-06-12/ic-btc-canister.wasm.gz",
+    sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2024-07-28/ic-btc-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -657,29 +644,41 @@ http_file(
     url = "https://download.dfinity.systems/ic/300dc603a92b5f70dae79229793c902f346af3cc/canisters/ic-icrc1-ledger-u256.wasm.gz",
 )
 
+# XC artifacts for testing
+
+# EVM RPC canister
+
+http_file(
+    name = "evm_rpc.wasm.gz",
+    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
+)
+
 # Haskell toolchain for spec_compliance tests
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "ebc5309d1617492b7edb63cded5d5cec4c32f146f2dee2935ae133f036e441f4",
-    strip_prefix = "rules_haskell-9d29e14b313123a0735abd0989c620d754500452",
-    url = "https://github.com/tweag/rules_haskell/archive/9d29e14b313123a0735abd0989c620d754500452.tar.gz",
+    sha256 = "0aa541a4278cbcc39d4c92af25f0860b745e5ce5408e9aed641d307d4267c609",
+    strip_prefix = "rules_haskell-96e231409b772859926914e76296e894982db600",
+    url = "https://github.com/tweag/rules_haskell/archive/96e231409b772859926914e76296e894982db600.tar.gz",
 )
 
-http_archive(
-    name = "rules_sh",
-    sha256 = "d4ad015a8e72e92a5c171efa760524502e098cd927ae800dfad03b02dad2299a",
-    strip_prefix = "rules_sh-06170f1fbff23f900bc04dfbdb75ed1acf2b8c42",
-    urls = ["https://github.com/tweag/rules_sh/archive/06170f1fbff23f900bc04dfbdb75ed1acf2b8c42.tar.gz"],
+# Load the rules_haskell dependencies necessary for loading the toolchains
+load(
+    "@rules_haskell//haskell:repositories.bzl",
+    "rules_haskell_dependencies",
 )
 
+rules_haskell_dependencies()
+
+# Load the Haskell toolchains
 load(
     "@rules_haskell//haskell:toolchain.bzl",
     "rules_haskell_toolchains",
 )
 
 rules_haskell_toolchains(
-    version = "9.6.2",
+    version = "9.6.6",
 )
 
 load(
@@ -791,15 +790,15 @@ stack_snapshot(
         "word8",
         "zlib",
     ],
-    snapshot = "nightly-2023-07-29",
+    snapshot = "lts-22.30",
     stack_snapshot_json = "//:stackage_snapshot.json",
 )
 
 http_archive(
     name = "haskell-candid",
-    sha256 = "df5116a59502da272d261a772cd7019486f9ddc47361d43a195316ccb8500f84",
-    strip_prefix = "haskell-candid-a682fca78f5770d3ec0c1184ecf7de866dc5ae77",
-    urls = ["https://github.com/nomeata/haskell-candid/archive/a682fca78f5770d3ec0c1184ecf7de866dc5ae77.tar.gz"],
+    sha256 = "bd9d67c3f719ac4cfb5ba339b52dd8ee985b11029a53e97b3cd555334f28d1e3",
+    strip_prefix = "haskell-candid-b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222",
+    urls = ["https://github.com/nomeata/haskell-candid/archive/b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222.tar.gz"],
 )
 
 http_archive(

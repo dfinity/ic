@@ -1,0 +1,11 @@
+[package]
+name = "ic-crypto-utils-canister-threshold-sig"
+description = "Utils for canister threshold signatures"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-internal-threshold-sig-ecdsa = { path = "../../internal/crypto_lib/threshold_sig/tecdsa" }
+ic-types = { path = "../../../types/types" }

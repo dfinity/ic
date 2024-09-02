@@ -1,11 +1,23 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nns:__subpackages__",
+    "//rs/registry/canister:__pkg__",
+    "//rs/rosetta-api/icp_ledger:__subpackages__",
+    "//rs/rosetta-api/icrc1:__pkg__",
+    "//rs/rosetta-api/icrc1/benchmark/generator:__pkg__",
+    "//rs/rosetta-api/icrc1/benchmark/worker:__pkg__",
+    "//rs/rosetta-api/icrc1/ledger:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http",
+    "//rs/rust_canisters/http_types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde_bytes",
 ]
