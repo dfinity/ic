@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
@@ -22,7 +22,9 @@ use axum::{
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
 use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{body::buffer_body, headers::*, proxy, Client as HttpClient};
+use ic_bn_lib::http::{
+    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
+};
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
@@ -38,6 +40,7 @@ use url::Url;
 use crate::{
     cache::CacheStatus,
     core::{decoder_config, MAX_REQUEST_BODY_SIZE},
+    http::error_infer,
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
     snapshot::{Node, RegistrySnapshot},
@@ -98,6 +101,7 @@ pub enum RateLimitCause {
 // Not using Error as inner type since it's not cloneable
 #[derive(Debug, Clone)]
 pub enum ErrorCause {
+    BodyTimedOut,
     UnableToReadBody(String),
     PayloadTooLarge(usize),
     UnableToParseCBOR(String),
@@ -123,6 +127,7 @@ impl ErrorCause {
         match self {
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::BodyTimedOut => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
             Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
@@ -165,10 +170,12 @@ impl ErrorCause {
     }
 }
 
+// TODO use strum
 impl fmt::Display for ErrorCause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Other(_) => write!(f, "general_error"),
+            Self::BodyTimedOut => write!(f, "body_timed_out"),
             Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
             Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
             Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
@@ -341,7 +348,7 @@ impl Proxy for ProxyRouter {
         // TODO map errors
         let response = proxy::proxy(url, request, &self.http_client)
             .await
-            .map_err(|e| ErrorCause::ReplicaErrorOther(e.to_string()))?;
+            .map_err(|e| error_infer(&e))?;
 
         Ok(response)
     }
@@ -549,7 +556,12 @@ pub async fn preprocess_request(
     let (parts, body) = request.into_parts();
     let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
         .await
-        .context("unable to read client body")?;
+        .map_err(|e| match e {
+            IcBnError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            IcBnError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
+            IcBnError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            _ => ErrorCause::Other(e.to_string()),
+        })?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)

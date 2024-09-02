@@ -175,13 +175,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-trait": crate.spec(
                 version = "^0.1.81",
             ),
-            "axum_0_6_1": crate.spec(
-                package = "axum",
-                version = "^0.6.1",
-                features = [
-                    "headers",
-                ],
-            ),
             "axum": crate.spec(
                 version = "^0.7.5",
             ),
@@ -191,13 +184,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "axum-server": crate.spec(
                 version = "^0.5.1",
-                features = [
-                    "tls-rustls",
-                ],
-            ),
-            "axum-server_0_6_0": crate.spec(
-                package = "axum-server",
-                version = "^0.6.0",
                 features = [
                     "tls-rustls",
                 ],
@@ -581,6 +567,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "reqwest",
                     "pem",
                 ],
+            ),
+            "ic-bn-lib": crate.spec(
+                git = "https://github.com/dfinity/ic-bn-lib",
+                rev = "7e56f2b6b839b989e8d56d2dea9c4b16bf4b2d4e",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -1044,7 +1034,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "reqwest": crate.spec(
-                version = "^0.12.5",
+                version = "^0.12.7",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1388,7 +1378,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "tower_governor": crate.spec(
-                version = "^0.1",
+                version = "^0.4.2",
             ),
             "tower-request-id": crate.spec(
                 version = "^0.3.0",
@@ -1508,9 +1498,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "wycheproof": crate.spec(
                 version = "^0.5",
-            ),
-            "wiremock": crate.spec(
-                version = "^0.5.19",
             ),
             "x509-cert": crate.spec(
                 version = "^0.2.5",

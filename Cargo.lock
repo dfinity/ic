@@ -1137,7 +1137,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
  "log",
@@ -5041,7 +5041,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.7",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -5095,7 +5095,6 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.4.1",
  "hyper-util",
- "log",
  "rustls 0.23.12",
  "rustls-native-certs 0.7.2",
  "rustls-pki-types",
@@ -5599,7 +5598,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib#7e56f2b6b839b989e8d56d2dea9c4b16bf4b2d4e"
+source = "git+https://github.com/dfinity/ic-bn-lib#fd97874acab12b7e48fe2230fd2a510db17e1bb0"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5674,8 +5673,6 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "humantime",
- "hyper 1.4.1",
- "hyper-rustls 0.27.2",
  "ic-base-types",
  "ic-bn-lib",
  "ic-certification-test-utils",
@@ -5698,7 +5695,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
- "instant-acme",
  "lazy_static",
  "little-loadshedder",
  "maxminddb",
@@ -5728,7 +5724,6 @@ dependencies = [
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
- "tokio-rustls 0.26.0",
  "tokio-util",
  "tower",
  "tower-http 0.5.2",
@@ -5739,7 +5734,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "x509-parser",
- "zeroize",
 ]
 
 [[package]]
@@ -16959,7 +16953,7 @@ checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
  "heck 0.5.0",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "log",
  "multimap",
  "once_cell",
@@ -16979,7 +16973,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.10.5",
  "proc-macro2 1.0.86",
  "quote 1.0.37",
  "syn 2.0.75",

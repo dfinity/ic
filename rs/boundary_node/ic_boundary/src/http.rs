@@ -58,13 +58,15 @@ impl<T: Client> Client for WithMetrics<T> {
 }
 
 // Try to categorize the error that we got from Reqwest call
-pub fn reqwest_error_infer(e: reqwest::Error) -> ErrorCause {
-    if e.is_connect() {
-        return ErrorCause::ReplicaErrorConnect;
-    }
+pub fn error_infer(e: &impl std::error::Error) -> ErrorCause {
+    if let Some(e) = error_source::<reqwest::Error>(&e) {
+        if e.is_connect() {
+            return ErrorCause::ReplicaErrorConnect;
+        }
 
-    if e.is_timeout() {
-        return ErrorCause::ReplicaTimeout;
+        if e.is_timeout() {
+            return ErrorCause::ReplicaTimeout;
+        }
     }
 
     // Check if it's a DNS error

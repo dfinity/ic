@@ -105,6 +105,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .context("Failed to setup a new process group for ic-boundary.")?;
     }
 
+    // Install crypto-provider
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| anyhow!("unable to install Rustls crypto provider"))?;
+
     // Metrics
     let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
@@ -210,6 +215,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     #[cfg(not(feature = "tls"))]
     let router_http = router_https;
 
+    // HTTP server metrics
+    let http_metrics = http::server::Metrics::new(&metrics_registry);
+
     let server_opts = http::server::Options {
         backlog: cli.listen.backlog,
         http1_header_read_timeout: Duration::from_secs(15),
@@ -226,7 +234,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             http::server::Addr::Tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x)),
             router_http.clone(),
             server_opts,
-            &metrics_registry,
+            http_metrics.clone(),
             None,
         )
     });
@@ -238,7 +246,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             http::server::Addr::Unix(x.clone()),
             router_http,
             server_opts,
-            &metrics_registry,
+            http_metrics.clone(),
             None,
         )
     });
@@ -273,7 +281,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         http::server::Addr::Tcp(cli.monitoring.metrics_addr),
         metrics_router,
         server_opts,
-        &metrics_registry,
+        http_metrics.clone(),
         None,
     );
 
