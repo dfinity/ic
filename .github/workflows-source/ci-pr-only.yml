@@ -15,7 +15,6 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
@@ -38,13 +37,6 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
-    env:
-      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -94,7 +86,6 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.IDX_PUSH_TO_PR }}
-      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -146,7 +137,6 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
-      - <<: *before-script
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
