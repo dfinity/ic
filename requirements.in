@@ -37,7 +37,6 @@ pandas
 elasticsearch
 func-timeout
 psutil
-slack-sdk
 # extra requirements that were previously in docker container, not sure what they are used for (potentially remove later)
 elasticsearch-dsl
 freezegun
