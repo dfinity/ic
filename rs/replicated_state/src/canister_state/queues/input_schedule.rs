@@ -24,6 +24,31 @@ mod tests;
 /// we rotate round-robin between the three sources. We also rotate round-robin
 /// over the canisters in the local sender and remote serder buckets when we pop
 /// or skip messages from those sources.
+///
+/// # Soft invariants
+///
+/// There are three possible outcomes of an inconsistent `InputSchedule`:
+///
+///  * An input queue is scheduled multiple times, leading to unfairness.
+///  * An input queue is never scheduled, leading to starvation.
+///  * Replica divergence, if a restarted replica loads an internally consistent
+///    `InputSchedule`, while other replicas continue with a mismatch between
+///    the two schedules on the one hand and `scheduled_senders` on the other.
+///
+/// All of the above occurrences would be detected from critical errors or other
+/// alerting. Thay are also exceedingly unlikely to result in a crash loop,
+/// unlike the use of `assert!()` to enforce hard invariants.
+///
+/// As a result, we rely on defensive programming and validation to check the
+/// following soft invariants:
+///
+///  * All non-empty input queues are scheduled exactly once.
+///  * A sender is enqueued in `local_sender_schedule` or
+///    `remote_sender_schedule` iff it is present in `scheduled_senders`.
+///  * Local senders are enqueued in the `local_sender_schedule`; remote senders
+///    may be ensured in either schedule (this is because we rely on
+///    `ReplicatedState::canister_states` to decide whether a canister is local,
+///    and this will mis-identify a recently deleted local sender as remote).
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub(super) struct InputSchedule {
     /// The input source (local senders, ingress or remote senders) at the front
@@ -102,8 +127,12 @@ impl InputSchedule {
             InputQueueType::LocalSubnet => &mut self.local_sender_schedule,
             InputQueueType::RemoteSubnet => &mut self.remote_sender_schedule,
         };
-        assert_eq!(Some(sender), sender_schedule.pop_front());
-        sender_schedule.push_back(sender);
+
+        let popped = sender_schedule.pop_front();
+        debug_assert_eq!(Some(sender), popped);
+        if let Some(popped) = popped {
+            sender_schedule.push_back(popped);
+        }
     }
 
     /// Returns a reference to the sender at the front of the given schedule (local
@@ -122,7 +151,7 @@ impl InputSchedule {
             InputQueueType::LocalSubnet => self.local_sender_schedule.pop_front(),
             InputQueueType::RemoteSubnet => self.remote_sender_schedule.pop_front(),
         }?;
-        assert!(self.scheduled_senders.remove(&sender));
+        debug_assert!(self.scheduled_senders.remove(&sender));
         Some(sender)
     }
 
