@@ -13093,7 +13093,6 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
- "chrono",
  "futures",
  "ic-agent",
  "ic-base-types",
