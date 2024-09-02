@@ -1,0 +1,4 @@
+[workspace]
+
+members = ["tla_instrumentation", "tla_instrumentation_proc_macros"]
+resolver = "2"

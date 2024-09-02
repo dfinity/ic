@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "tla_instrumentation",
+    srcs = glob(["tla_instrumentation/src/**/*.rs"]),
+    crate_name = "tla_instrumentation",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:sha2",
+    ],
+)
+
+rust_test(
+    name = "tla_instrumentation_test",
+    srcs = glob(["tla_instrumentation/tests/**/*.rs"]),
+    data = [
+        ":tla_models",
+        "@tla_apalache//:contents",
+    ],
+    proc_macro_deps = [":proc_macros"],
+    deps = [
+        ":tla_instrumentation",
+        "@crate_index//:candid",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-test",
+    ],
+)
+
+filegroup(
+    name = "tla_models",
+    srcs = glob(["tla/**/*.tla"]),
+)
+
+rust_proc_macro(
+    name = "proc_macros",
+    srcs = glob(["tla_instrumentation_proc_macros/src/**/*.rs"]),
+    crate_name = "tla_instrumentation_proc_macros",
+    deps = [
+        "@crate_index//:proc-macro2",
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
+)

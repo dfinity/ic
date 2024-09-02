@@ -1,0 +1,16 @@
+[package]
+name = "tla_instrumentation"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = "^0.10.2"
+serde = "1.0"
+tla_instrumentation_proc_macros = { path = "../tla_instrumentation_proc_macros" }
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+tokio = { version = "1.39", features = ["rt"] }

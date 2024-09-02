@@ -41,6 +41,10 @@ rust_decimal = "1.25"
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+tla-instrumentation = { path = "../../tla-instrumentation", package = "tla_instrumentation", optional = true }
+tla-instrumentation-proc-macros = { path = "../../tla-instrumentation", package = "tla_instrumentation_proc_macros", optional = true }
+tokio = { version = "^1.39.0", optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
 
@@ -51,3 +55,6 @@ build-info-build = { workspace = true }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 proptest = { workspace = true }
 serde_bytes = { workspace = true }
+
+[features]
+tla = ["tla-instrumentation", "tla-instrumentation-proc-macros", "tokio"]
