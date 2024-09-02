@@ -30,12 +30,7 @@ toml
 tqdm
 uuid
 PyGithub==2.3.0
-#policy-monitoring
-elasticsearch
-func-timeout
-psutil
 # extra requirements that were previously in docker container, not sure what they are used for (potentially remove later)
-elasticsearch-dsl
 freezegun
 junit-xml
 libhoney

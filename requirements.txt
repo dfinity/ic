@@ -99,7 +99,6 @@ certifi==2022.12.7 \
     --hash=sha256:35824b4c3a97115964b408844d64aa14db1cc518f6562e8d7261699d1350a9e3 \
     --hash=sha256:4ad3232f5e926d6718ec31cfc1fcadfde020920e278684144551c91769c7bc18
     # via
-    #   elasticsearch
     #   httpcore
     #   httpx
     #   requests
@@ -430,16 +429,6 @@ ecdsa==0.18.0 \
     --hash=sha256:190348041559e21b22a1d65cee485282ca11a6f81d503fddb84d5017e9ed1e49 \
     --hash=sha256:80600258e7ed2f16b9aa1d7c295bd70194109ad5a30fdee0eaeefef1d4c559dd
     # via ic-py
-elasticsearch==7.17.9 \
-    --hash=sha256:0e2454645dc00517dee4c6de3863411a9c5f1955d013c5fefa29123dadc92f98 \
-    --hash=sha256:66c4ece2adfe7cc120e2b6a6798a1fd5c777aecf82eec39bb95cef7cfc7ea2b3
-    # via
-    #   -r requirements.in
-    #   elasticsearch-dsl
-elasticsearch-dsl==7.4.1 \
-    --hash=sha256:07ee9c87dc28cc3cae2daa19401e1e18a172174ad9e5ca67938f752e3902a1d5 \
-    --hash=sha256:97f79239a252be7c4cce554c29e64695d7ef6a4828372316a5e5ff815e7a7498
-    # via -r requirements.in
 exceptiongroup==1.1.0 \
     --hash=sha256:327cbda3da756e2de031a3107b81ab7b3770a602c4d16ca618298c526f4bec1e \
     --hash=sha256:bcb67d800a4497e1b404c2dd44fca47d3b7a5e5433dbab67f96c1a685cdfdf23
@@ -459,9 +448,6 @@ fonttools==4.38.0 \
 freezegun==1.2.2 \
     --hash=sha256:cd22d1ba06941384410cd967d8a99d5ae2442f57dfafeff2fda5de8dc5c05446 \
     --hash=sha256:ea1b963b993cb9ea195adbd893a48d573fda951b0da64f60883d7e988b606c9f
-    # via -r requirements.in
-func-timeout==4.3.5 \
-    --hash=sha256:74cd3c428ec94f4edfba81f9b2f14904846d5ffccc27c92433b8b5939b5575dd
     # via -r requirements.in
 gitdb==4.0.10 \
     --hash=sha256:6eb990b69df4e15bad899ea868dc46572c3f75339735663b81de79b06f17eb9a \
@@ -944,22 +930,6 @@ pluggy==1.0.0 \
     --hash=sha256:4224373bacce55f955a878bf9cfa763c1e360858e330072059e10bad68531159 \
     --hash=sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3
     # via pytest
-psutil==5.9.4 \
-    --hash=sha256:149555f59a69b33f056ba1c4eb22bb7bf24332ce631c44a319cec09f876aaeff \
-    --hash=sha256:16653106f3b59386ffe10e0bad3bb6299e169d5327d3f187614b1cb8f24cf2e1 \
-    --hash=sha256:3d7f9739eb435d4b1338944abe23f49584bde5395f27487d2ee25ad9a8774a62 \
-    --hash=sha256:3ff89f9b835100a825b14c2808a106b6fdcc4b15483141482a12c725e7f78549 \
-    --hash=sha256:54c0d3d8e0078b7666984e11b12b88af2db11d11249a8ac8920dd5ef68a66e08 \
-    --hash=sha256:54d5b184728298f2ca8567bf83c422b706200bcbbfafdc06718264f9393cfeb7 \
-    --hash=sha256:6001c809253a29599bc0dfd5179d9f8a5779f9dffea1da0f13c53ee568115e1e \
-    --hash=sha256:68908971daf802203f3d37e78d3f8831b6d1014864d7a85937941bb35f09aefe \
-    --hash=sha256:6b92c532979bafc2df23ddc785ed116fced1f492ad90a6830cf24f4d1ea27d24 \
-    --hash=sha256:852dd5d9f8a47169fe62fd4a971aa07859476c2ba22c2254d4a1baa4e10b95ad \
-    --hash=sha256:9120cd39dca5c5e1c54b59a41d205023d436799b1c8c4d3ff71af18535728e94 \
-    --hash=sha256:c1ca331af862803a42677c120aff8a814a804e09832f166f226bfd22b56feee8 \
-    --hash=sha256:efeae04f9516907be44904cc7ce08defb6b665128992a56957abc9b61dca94b7 \
-    --hash=sha256:fd8522436a6ada7b4aad6638662966de0d61d241cb821239b2ae7013d41a43d4
-    # via -r requirements.in
 py==1.11.0 \
     --hash=sha256:51c75c4126074b472f746a24399ad32f6053d1b34b68d2fa41e558e6f4a98719 \
     --hash=sha256:607c53218732647dff4acdfcd50cb62615cedf612e72d1724fb1a0cc6405b378
@@ -1030,7 +1000,6 @@ python-dateutil==2.8.2 \
     --hash=sha256:0123cacc1627ae19ddf3c27a5de5bd67ee4586fbdd6440d9748f8abb483d3e86 \
     --hash=sha256:961d03dc3453ebbc59dbdea9e4e11c5651520a876d0f4db161e8674aae935da9
     # via
-    #   elasticsearch-dsl
     #   freezegun
     #   matplotlib
 pyyaml==6.0 \
@@ -1118,7 +1087,6 @@ six==1.16.0 \
     # via
     #   -r requirements.in
     #   ecdsa
-    #   elasticsearch-dsl
     #   junit-xml
     #   nested-lookup
     #   pytest-shutil
@@ -1177,7 +1145,6 @@ urllib3==1.26.14 \
     --hash=sha256:076907bf8fd355cde77728471316625a4d2f7e713c125f51953bb5b3eecf4f72 \
     --hash=sha256:75edcdc2f7d85b137124a6c3c9fc3933cdeaa12ecb9a6a959f22797a0feca7e1
     # via
-    #   elasticsearch
     #   pygithub
     #   requests
 uuid==1.30 \
