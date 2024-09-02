@@ -4,11 +4,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/clients",
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
+    "//rs/sns/governance",
+    "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+    "@crate_index//:serde",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]

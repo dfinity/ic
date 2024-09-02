@@ -4,11 +4,12 @@ use core::{
     option::Option::{None, Some},
     time::Duration,
 };
-use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
+use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
-    ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
+    ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -86,7 +87,7 @@ impl NnsInitPayloadsBuilder {
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID.try_into().unwrap()),
+                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),

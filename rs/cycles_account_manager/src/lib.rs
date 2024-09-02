@@ -25,8 +25,12 @@ use ic_replicated_state::{
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+    messages::{
+        Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SubnetId,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -374,6 +378,48 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Withdraws up to `cycles` worth of cycles from the canister's balance
+    /// without putting the canister below its freezing threshold even if
+    /// the call currently under construction is performed.
+    ///
+    /// NOTE: This method is intended for use in inter-canister transfers.
+    ///       It doesn't report these cycles as consumed. To withdraw cycles
+    ///       and have them reported as consumed, use `consume_cycles`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn withdraw_up_to_cycles_for_transfer(
+        &self,
+        freeze_threshold: NumSeconds,
+        memory_allocation: MemoryAllocation,
+        current_payload_size_bytes: NumBytes,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        cycles_balance: &mut Cycles,
+        cycles: Cycles,
+        subnet_size: usize,
+        reserved_balance: Cycles,
+    ) -> Cycles {
+        let call_perform_cost = self.xnet_call_performed_fee(subnet_size)
+            + self.xnet_call_bytes_transmitted_fee(current_payload_size_bytes, subnet_size)
+            + self.prepayment_for_response_transmission(subnet_size)
+            + self.prepayment_for_response_execution(subnet_size);
+        let memory_used_to_enqueue_message =
+            current_payload_size_bytes.max((MAX_RESPONSE_COUNT_BYTES as u64).into());
+        let freeze_threshold = self.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage + memory_used_to_enqueue_message,
+            canister_compute_allocation,
+            subnet_size,
+            reserved_balance,
+        );
+        let available_for_withdrawal = *cycles_balance - freeze_threshold - call_perform_cost;
+        let withdrawn_cycles = available_for_withdrawal.min(cycles);
+        *cycles_balance -= withdrawn_cycles;
+        withdrawn_cycles
+    }
+
     /// Charges the canister for ingress induction cost.
     ///
     /// Note that this method reports the cycles withdrawn as consumed (i.e.
@@ -458,6 +504,32 @@ impl CyclesAccountManager {
             system_state.reserved_balance(),
         );
         self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
+    }
+
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions.
+    pub fn consume_cycles_for_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let cycles = self.execution_cost(amount, subnet_size);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            compute_allocation,
+            cycles,
+            subnet_size,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
     }
 
     /// Prepays the cost of executing a message with the given number of

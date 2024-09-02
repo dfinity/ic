@@ -156,6 +156,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
             2059000006,
         ),
         common::Benchmark(
+            "call_new+ic0_call_cycles_add128_up_to()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_cycles_add128_up_to",
+                Params3(0_i64, 100_i64, 0_i32),
+                Result::No,
+            ),
+            2059000006,
+        ),
+        common::Benchmark(
             "call_new+ic0_call_perform()".into(),
             Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32),
             6558000006,

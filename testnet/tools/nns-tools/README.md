@@ -79,9 +79,7 @@ Sometimes we prepare a canister release that requires a special upgrade argument
 let module_arg = if nns_canister_name == "cycles-minting" {
     Encode!(
         &(Some(CyclesCanisterInitPayload {
-            cycles_ledger_canister_id: Some(
-                CanisterId::try_from(CYCLES_LEDGER_CANISTER_ID).unwrap()
-            ),
+            cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             ledger_canister_id: None,
             governance_canister_id: None,
             minting_account_id: None,
