@@ -187,7 +187,7 @@ impl XNetEndpoint {
                                     let metrics = ctx.metrics.clone();
                                     let log = ctx.log.clone();
 
-                                    tokio::task::spawn_blocking(move || {
+                                    Ok(tokio::task::spawn_blocking(move || {
                                         let _permit = _permit;
 
                                         handle_http_request(
@@ -199,7 +199,7 @@ impl XNetEndpoint {
                                         )
                                     })
                                     .await
-                                    .map_err(|_| panic!(""))
+                                    .expect("Processing http request paniced!"))
                                 }
                             }
                         }))
