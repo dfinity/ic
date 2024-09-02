@@ -111,6 +111,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
+    pub(super) canister_snapshots_memory_usage: Histogram,
+    pub(super) num_canister_snapshots: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -674,6 +676,15 @@ impl SchedulerMetrics {
             stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
+            ),
+            canister_snapshots_memory_usage: memory_histogram(
+                "scheduler_canister_snapshots_memory_usage_bytes",
+                "Canisters total snapshots memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            num_canister_snapshots: metrics_registry.int_gauge(
+                "scheduler_num_canister_snapshots",
+                "Total number of canister snapshots on this subnet.",
             ),
         }
     }

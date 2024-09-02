@@ -1830,7 +1830,7 @@ impl CanisterManager {
             None => {
                 if state
                     .canister_snapshots
-                    .snapshots_count(&canister.canister_id())
+                    .count_by_canister(&canister.canister_id())
                     >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
                 {
                     return (

@@ -156,11 +156,16 @@ impl CanisterSnapshots {
     }
 
     /// Returns the number of snapshots stored for the given canister id.
-    pub fn snapshots_count(&self, canister_id: &CanisterId) -> usize {
+    pub fn count_by_canister(&self, canister_id: &CanisterId) -> usize {
         match self.snapshot_ids.get(canister_id) {
             Some(snapshot_ids) => snapshot_ids.len(),
             None => 0,
         }
+    }
+
+    /// Returns the total number of snapshots stored in the replicated state.
+    pub fn count(&self) -> usize {
+        self.snapshots.len()
     }
 
     /// Computes the total memory usage of all of the specified canister's snapshots.
@@ -237,7 +242,7 @@ impl CanisterSnapshots {
 
     /// Returns the amount of memory taken by all canister snapshots on
     /// this subnet.
-    pub(crate) fn memory_taken(&self) -> NumBytes {
+    pub fn memory_taken(&self) -> NumBytes {
         // The running sum of the memory usage of all canister snapshots should
         // be the same as the one computed by iterating over all snapshots.
         debug_assert_eq!(
