@@ -142,8 +142,6 @@ jobs:
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -196,8 +194,6 @@ jobs:
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -223,8 +219,6 @@ jobs:
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."

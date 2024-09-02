@@ -51,9 +51,7 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 
 # add aws credentials file if it's set
-if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
-    ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
-elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
     echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
 fi
 
