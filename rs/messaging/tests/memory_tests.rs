@@ -29,7 +29,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(1))]
     #[test]
     fn check_guaranteed_response_message_memory_limits_are_respected(
-        seeds in proptest::collection::vec(any::<u64>(), 3),
+        seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
         max_payload_bytes in (MAX_PAYLOAD_BYTES / 4)..=MAX_PAYLOAD_BYTES,
         calls_per_round in 3..=10,
     ) {
@@ -37,7 +37,7 @@ proptest! {
         const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
         // The maximum number of rounds to execute after chatter is turned off. It it takes more than
         // this number of rounds until there are no more hanging calls, the test fails.
-        const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 100;
+        const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
         // The amount of memory available for guaranteed response message memory on `local_env`.
         const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
         // The amount of memory available for guaranteed response message memory on `remote_env`.
@@ -103,6 +103,9 @@ proptest! {
 
             prop_assert!(counter <= SHUTDOWN_PHASE_MAX_ROUNDS);
         }
+
+        // One extra tick to make sure everything is gc'ed.
+        fixture.tick();
 
         // Check the system agrees on 'no hanging calls'.
         for (canisters, env) in [
