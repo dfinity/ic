@@ -1757,10 +1757,7 @@ fn snapshot_must_include_globals() {
         .build();
 
     // Create canister.
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
-    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
-        .unwrap();
+    let canister_id = test.canister_from_binary(wasm).unwrap();
 
     // Check that global is initially 0
     let result = test
