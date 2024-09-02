@@ -9,8 +9,33 @@ type CheckAddressArgs = record {
 
 type CheckAddressResponse = variant { Passed; Failed };
 
+type CheckTransactionArgs = record { txid : blob };
+
+// The result of check_transaction call.
+type CheckTransactionResponse = variant {
+    // When check finishes and all input addresses passed KYT.
+    Passed;
+    // When check finishes and one or more input addresses failed KYT.
+    Failed;
+    // More work to be done, and the caller should call again.
+    Pending;
+    // Too much work pending, and the caller should try again later.
+    HighLoad;
+    // Caller should call with a minimum of 40 billion cycles.
+    NotEnoughCycles;
+    // Permanent error with a description.
+    Error: text;
+};
+
 service : {
-    get_inputs: (tx_id) -> (vec bitcoin_address);
+    // Check input addresses of a transaction matching the given transaction id.
+    // See `CheckTransactionResponse` for more details on return result.
+    //
+    // The caller should attach at least 40 billion cycles with each call.
+    // The actual cost may be well less than that, and unspent cycles will be refunded.
+    // There is also a service charge of 0.1 billion cycles for each call, regardless
+    // of the return result.
+    check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
 
     // Return `Passed` if the given bitcoin address passes the KYT check, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.

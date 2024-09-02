@@ -5742,10 +5742,15 @@ dependencies = [
  "candid",
  "candid_parser",
  "futures",
+ "ic-base-types",
+ "ic-btc-interface",
  "ic-cdk 0.13.5",
  "ic-test-utilities-load-wasm",
+ "ic-types",
+ "ic-universal-canister",
  "pocket-ic",
  "serde",
+ "tokio",
 ]
 
 [[package]]
