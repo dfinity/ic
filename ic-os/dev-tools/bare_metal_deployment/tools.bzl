@@ -34,9 +34,9 @@ def launch_bare_metal(name, image_zst_file):
             "$(location //rs/ic_os/dev_test_tools/setupos-inject-configuration)",
             "--upload_img",
             "$(location " + image_zst_file + ")",
-            "--idrac_script_dir",
-            "$(location //ic-os/dev-tools/bare_metal_deployment:find_idrac_package_path)",
+            "--idrac_script",
+            "$(location @python_deps_idracredfishsupport//:IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py)",
         ],
-        data = [":" + binary_name, image_zst_file, "//rs/ic_os/dev_test_tools/setupos-inject-configuration", "//ic-os/dev-tools/bare_metal_deployment:find_idrac_package_path"],
+        data = [":" + binary_name, image_zst_file, "//rs/ic_os/dev_test_tools/setupos-inject-configuration", "@python_deps_idracredfishsupport//:IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py"],
         tags = ["manual"],
     )
