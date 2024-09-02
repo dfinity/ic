@@ -1,4 +1,4 @@
-load("//ic-os/components/conformance:defs.bzl", "check_unused_components_test")
+load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
 load("boundary-guestos.bzl", boundaryos_component_files = "component_files")
 load("guestos.bzl", guestos_component_files = "component_files")
 load("hostos.bzl", hostos_component_files = "component_files")

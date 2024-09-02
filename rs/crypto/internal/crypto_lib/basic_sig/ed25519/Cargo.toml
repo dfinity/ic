@@ -32,4 +32,4 @@ proptest = { workspace = true }
 proptest-derive = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
-wycheproof = "0.5"
+wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

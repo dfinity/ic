@@ -108,4 +108,5 @@ xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
 
 [dev-dependencies]
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }

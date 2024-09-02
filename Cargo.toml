@@ -552,6 +552,8 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "schnorr",
     "std",
 ] }
+# kube is used by our test driver
+kube = { version = "0.93.1" }
 lazy_static = "1.4.0"
 libc = "0.2.155"
 libflate = "2.1.0"
@@ -677,8 +679,7 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
-walrus = "0.21.1"
-wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
+wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
 wasmparser = "0.212.0"
 wasmprinter = "0.212.0"
 wast = "212.0.0"
