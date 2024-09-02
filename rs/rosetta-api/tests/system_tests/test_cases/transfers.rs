@@ -1,6 +1,6 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
-use crate::common::utils::bytebuf_to_u64;
 use crate::common::utils::get_custom_agent;
+use crate::common::utils::memo_bytebuf_to_u64;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
@@ -134,9 +134,9 @@ fn test_icp_transfer() {
                                 rosetta_testing_environment.network_identifier.clone(),
                                 transfer_operations,
                                 // We don't care about the specific memo, only that there exists a memo
-                                transfer_args
-                                    .memo
-                                    .map(|memo| bytebuf_to_u64(memo.0.as_slice()).unwrap_or(0)),
+                                transfer_args.memo.map(|memo| {
+                                    memo_bytebuf_to_u64(memo.0.as_slice()).unwrap_or(0)
+                                }),
                                 transfer_args.created_at_time,
                             )
                             .await

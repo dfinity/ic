@@ -55,7 +55,7 @@ pub async fn wait_for_rosetta_block(
     panic!("Failed to sync with the ledger");
 }
 
-pub fn bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
+pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
     // Ensure we have at least 8 bytes.
     if bytebuf.len() < 8 {
         return None; // Handle insufficient bytes.
