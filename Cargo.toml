@@ -676,9 +676,9 @@ url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
-wasmparser = "0.212.0"
-wasmprinter = "0.212.0"
+wasm-encoder = { version = "0.215.0", features = ["wasmparser"] }
+wasmparser = "0.215.0"
+wasmprinter = "0.215.0"
 wast = "212.0.0"
 wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

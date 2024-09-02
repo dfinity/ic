@@ -129,8 +129,8 @@ use crate::wasmtime_embedder::{
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
-    BlockType, CompositeType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType,
-    Operator, SubType, TypeRef, ValType,
+    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
+    Import, MemoryType, Operator, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -720,7 +720,7 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeType::Func(existing_ty) = &existing_subtype.composite_type {
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
             if *existing_ty == ty {
                 return idx as u32;
             }
@@ -729,7 +729,10 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     module.types.push(SubType {
         is_final: true,
         supertype_idx: None,
-        composite_type: CompositeType::Func(ty),
+        composite_type: CompositeType {
+            inner: CompositeInnerType::Func(ty),
+            shared: false,
+        },
     });
     (module.types.len() - 1) as u32
 }
@@ -1002,7 +1005,10 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        if let CompositeType::Func(t) = &module.types[module.functions[i] as usize].composite_type {
+        if let CompositeInnerType::Func(t) = &module.types[module.functions[i] as usize]
+            .composite_type
+            .inner
+        {
             func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
