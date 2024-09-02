@@ -74,6 +74,7 @@ struct DeploymentConfig {
     #[arg(long)]
     memory_gb: Option<u32>,
 
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     #[arg(long)]
     cpu: Option<String>,
 }
