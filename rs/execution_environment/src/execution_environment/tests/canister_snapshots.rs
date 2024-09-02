@@ -224,19 +224,16 @@ fn take_canister_snapshot_fails_invalid_controller() {
     assert_matches!(response, RequestOrResponse::Response(_));
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                format!(
-                    "Only the controllers of the canister {} can control it.\n\
+        res.response_payload.assert_contains_reject(
+            RejectCode::CanisterError,
+            &format!(
+                "Only the controllers of the canister {} can control it.\n\
                     Canister's controllers: {}\n\
                     Sender's ID: {}",
-                    canister_id,
-                    test.user_id().get(),
-                    caller_canister.get(),
-                )
-            ))
+                canister_id,
+                test.user_id().get(),
+                caller_canister.get(),
+            ),
         );
     }
 
@@ -279,15 +276,12 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
     assert_matches!(response, RequestOrResponse::Response(_));
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::DestinationInvalid,
-                format!(
-                    "Could not find the snapshot ID {} for canister {}.",
-                    snapshot_id, canister_id
-                ),
-            ))
+        res.response_payload.assert_contains_reject(
+            RejectCode::DestinationInvalid,
+            &format!(
+                "Could not find the snapshot ID {} for canister {}.",
+                snapshot_id, canister_id
+            ),
         );
     }
 
@@ -1131,19 +1125,16 @@ fn list_canister_snapshot_fails_invalid_controller() {
     assert_matches!(response, RequestOrResponse::Response(_));
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                format!(
-                    "Only the controllers of the canister {} can control it.\n\
+        res.response_payload.assert_contains_reject(
+            RejectCode::CanisterError,
+            &format!(
+                "Only the controllers of the canister {} can control it.\n\
                     Canister's controllers: {}\n\
                     Sender's ID: {}",
-                    canister_id,
-                    test.user_id().get(),
-                    caller_canister.get(),
-                )
-            ))
+                canister_id,
+                test.user_id().get(),
+                caller_canister.get(),
+            ),
         );
     }
 
@@ -1259,19 +1250,16 @@ fn load_canister_snapshot_fails_invalid_controller() {
     assert_matches!(response, RequestOrResponse::Response(_));
     if let RequestOrResponse::Response(res) = response {
         assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                format!(
-                    "Only the controllers of the canister {} can control it.\n\
+        res.response_payload.assert_contains_reject(
+            RejectCode::CanisterError,
+            &format!(
+                "Only the controllers of the canister {} can control it.\n\
                     Canister's controllers: {}\n\
                     Sender's ID: {}",
-                    canister_id,
-                    test.user_id().get(),
-                    caller_canister.get(),
-                )
-            ))
+                canister_id,
+                test.user_id().get(),
+                caller_canister.get(),
+            ),
         );
     }
 

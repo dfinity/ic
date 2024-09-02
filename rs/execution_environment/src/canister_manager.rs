@@ -2643,7 +2643,7 @@ impl From<CanisterManagerError> for UserError {
                 canister_id,
                 controllers_expected,
                 controller_provided } => {
-                let controllers_expected = controllers_expected.iter().map(|id| format!("{}{additional_help}", id)).collect::<Vec<String>>().join(" ");
+                let controllers_expected = controllers_expected.iter().map(|id| format!("{}", id)).collect::<Vec<String>>().join(" ");
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(

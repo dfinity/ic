@@ -312,6 +312,18 @@ impl RejectContext {
         &self.message
     }
 
+    /// For use in tests.
+    /// Assert that the rejection has the given code and containing the given string.
+    pub fn assert_contains(&self, code: RejectCode, message: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.message.contains(message),
+            "Unable to match rejection message {} with expected {}",
+            self.message,
+            message
+        );
+    }
+
     /// Returns the size of this `RejectContext` in bytes.
     fn size_bytes(&self) -> NumBytes {
         let size = std::mem::size_of::<RejectCode>() + self.message.len();
@@ -340,6 +352,16 @@ pub enum Payload {
 }
 
 impl Payload {
+    /// For use in tests.
+    /// Assert that the payload is a rejection with the given code and
+    /// containing the given string.
+    pub fn assert_contains_reject(&self, code: RejectCode, message: &str) {
+        match self {
+            Self::Reject(err) => err.assert_contains(code, message),
+            Self::Data(_) => panic!("Expected a rejection, but got a valid response."),
+        }
+    }
+
     /// Returns the size of this `Payload` in bytes.
     fn size_bytes(&self) -> NumBytes {
         match self {
