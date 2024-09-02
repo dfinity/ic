@@ -12,13 +12,6 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-/// `um5iw-rqaaa-aaaaq-qaaba-cai`
-pub const CYCLES_LEDGER_CANISTER_ID: PrincipalId = PrincipalId::new(
-    10,
-    [
-        0, 0, 0, 0, 2, 16, 0, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ],
-);
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;

@@ -23,8 +23,6 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
@@ -35,7 +33,7 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3" }
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "3be26b5a2c71bf56e05b910951c1935a1ac550c4" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -76,10 +74,13 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
+ic-registry-transport = { path = "../registry/transport" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 rcgen = { workspace = true }
+registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
 slog = { workspace = true }

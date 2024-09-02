@@ -30,7 +30,7 @@ pub(crate) enum IDkgPayloadError {
     IDkgTranscriptIdError(IDkgTranscriptIdError),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
     TranscriptLookupError(idkg::TranscriptLookupError),
-    TranscriptCastError(idkg::TranscriptCastError),
+    TranscriptCastError(Box<idkg::TranscriptCastError>),
     InvalidChainCacheError(InvalidChainCacheError),
     InitialIDkgDealingsNotUnmaskedParams(Box<InitialIDkgDealings>),
 }
@@ -79,7 +79,7 @@ impl From<ThresholdEcdsaSigInputsCreationError> for IDkgPayloadError {
 
 impl From<idkg::TranscriptCastError> for IDkgPayloadError {
     fn from(err: idkg::TranscriptCastError) -> Self {
-        IDkgPayloadError::TranscriptCastError(err)
+        IDkgPayloadError::TranscriptCastError(Box::new(err))
     }
 }
 

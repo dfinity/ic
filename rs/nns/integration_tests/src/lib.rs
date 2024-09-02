@@ -140,3 +140,6 @@ mod subnet_rental_canister;
 
 #[cfg(test)]
 mod stop_or_start_canister;
+
+#[cfg(test)]
+mod hotkeys_migration_test;

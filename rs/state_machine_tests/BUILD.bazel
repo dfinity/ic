@@ -54,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:rand",
+    "@crate_index//:rcgen",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
