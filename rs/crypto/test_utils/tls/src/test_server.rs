@@ -68,7 +68,7 @@ impl ServerBuilder {
 
     pub fn build(self, registry: Arc<FakeRegistryClient>) -> Server {
         let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("failed to bind");
-        let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id, true);
+        let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id);
         let allowed_clients = self
             .allowed_nodes
             .unwrap_or_else(|| SomeOrAllNodes::Some(BTreeSet::new()));

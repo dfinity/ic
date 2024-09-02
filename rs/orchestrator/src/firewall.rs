@@ -802,12 +802,21 @@ mod tests {
         boundary_node_firewall_config
             .config_file
             .clone_from(&nftables_config_path);
-        let mut firewall = set_up_firewall_dependencies(
-            replica_firewall_config,
-            boundary_node_firewall_config,
-            tmp_dir.path(),
-            role,
-        );
+
+        let (_tmp_dir, mut firewall) = tokio::task::spawn_blocking(move || {
+            let path = tmp_dir.path().to_owned();
+            (
+                tmp_dir,
+                set_up_firewall_dependencies(
+                    replica_firewall_config,
+                    boundary_node_firewall_config,
+                    &path,
+                    role,
+                ),
+            )
+        })
+        .await
+        .unwrap();
 
         firewall
             .check_for_firewall_config(RegistryVersion::new(1))
@@ -881,7 +890,7 @@ mod tests {
         let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
         let (crypto, _) =
-            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node, false);
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),

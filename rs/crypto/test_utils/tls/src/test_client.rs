@@ -37,7 +37,7 @@ impl ClientBuilder {
     }
 
     pub fn build(self, registry: Arc<FakeRegistryClient>) -> Client {
-        let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id, true);
+        let (crypto, cert) = temp_crypto_component_with_tls_keys(registry, self.node_id);
         Client {
             crypto,
             server_node_id: self.server_node_id,

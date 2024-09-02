@@ -1301,7 +1301,7 @@ fn generate_cert_using_temp_crypto(node_id: NodeId) -> X509PublicKeyCert {
     let unused_dummy_registry = Arc::new(FakeRegistryClient::new(Arc::clone(&Arc::new(
         ProtoRegistryDataProvider::new(),
     )) as Arc<_>));
-    let (_crypto, cert) = temp_crypto_component_with_tls_keys(unused_dummy_registry, node_id, true);
+    let (_crypto, cert) = temp_crypto_component_with_tls_keys(unused_dummy_registry, node_id);
     cert.to_proto()
 }
 
