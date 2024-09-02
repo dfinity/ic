@@ -37,6 +37,12 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
+  before-script: &before-script
+    name: Before script
+    id: before-script
+    shell: bash
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -47,6 +53,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -85,6 +92,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.IDX_PUSH_TO_PR }}
+      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -136,6 +144,7 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
+      - <<: *before-script
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
