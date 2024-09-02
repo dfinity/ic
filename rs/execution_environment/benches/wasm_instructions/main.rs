@@ -28,7 +28,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
     benchmarks.extend(basic::benchmarks(WASM64_ENABLED));
-    //benchmarks.extend(simd::benchmarks(WASM64_ENABLED));
+    benchmarks.extend(simd::benchmarks(WASM64_ENABLED));
 
     ////////////////////////////////////////////////////////////////////
     // Benchmark function.
