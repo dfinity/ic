@@ -2588,7 +2588,7 @@ pub fn test_upgrade_serialization(
         .unwrap();
 }
 
-pub fn icrc1_test_upgrade_serialization_deterministic<T>(
+pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
     ledger_wasm_upgradetomemorymanager: Vec<u8>,
