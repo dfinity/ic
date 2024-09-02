@@ -126,7 +126,7 @@ pub struct CanisterQueues {
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
     /// time-based expiration and load shedding.
-    #[validate_eq(Ignore)]
+    #[validate_eq(CompareWithValidateEq)]
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
