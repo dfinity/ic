@@ -5,6 +5,8 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
@@ -167,9 +169,10 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_message_stats()` (only called during deserialization) execute in
 /// at most `O(log(N))` time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub(super) struct MessagePool {
     /// Pool contents.
+    #[validate_eq(CompareWithValidateEq)]
     messages: BTreeMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response

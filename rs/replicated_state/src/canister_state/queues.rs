@@ -122,7 +122,6 @@ pub struct CanisterQueues {
     /// messages from being enqueued; but at the same time the canister is never
     /// included in an `OutputIterator` (the only way of consuming the stale
     /// references).
-    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
@@ -137,7 +136,6 @@ pub struct CanisterQueues {
     /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
     /// and remote subnet senders; as well as within local subnet senders and remote
     /// subnet senders.
-    #[validate_eq(CompareWithValidateEq)]
     input_schedule: InputSchedule,
 }
 

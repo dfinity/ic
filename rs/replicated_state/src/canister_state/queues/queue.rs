@@ -95,7 +95,7 @@ impl CanisterQueueItem {
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of requests and responses.
     ///
