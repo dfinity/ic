@@ -886,6 +886,27 @@ impl dyn StorageLayout + '_ {
         }
         Ok(result)
     }
+
+    pub fn memory_size(&self) -> StorageResult<u64> {
+        let mut result = 0;
+        for base in self.existing_base() {
+            panic!();
+        }
+        for overlay in self.existing_overlays() {
+            let file = OpenOptions::new().read(true).open(overlay).map_err(|err| {
+                PersistenceError::FileSystemError {
+                    path: path.display().to_string(),
+                    context: "Failed to open file".to_string(),
+                    internal_error: err.to_string(),
+                }
+            })?;
+            file.seek(SeekFrom::End(-28));
+            let mut len = 0u64;
+            file.read_exact(&mut len);
+            result = max(result, len);
+        }
+        result
+    }
 }
 
 /// Whether to merge into a base file or an overlay.
