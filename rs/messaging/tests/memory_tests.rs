@@ -34,7 +34,7 @@ proptest! {
         calls_per_round in 3..=10,
     ) {
         // The number of rounds to execute while chatter is on.
-        const CHATTER_PHASE_ROUND_COUNT: u64 = 40;
+        const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
         // The maximum number of rounds to execute after chatter is turned off. It it takes more than
         // this number of rounds until there are no more hanging calls, the test fails.
         const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 100;
@@ -103,6 +103,30 @@ proptest! {
 
             prop_assert!(counter <= SHUTDOWN_PHASE_MAX_ROUNDS);
         }
+
+        // Check the system agrees on 'no hanging calls'.
+        for (canisters, env) in [
+            (&fixture.local_canisters, &fixture.local_env),
+            (&fixture.remote_canisters, &fixture.remote_env),
+        ] {
+            for canister in canisters.iter() {
+                let state = env.get_latest_state();
+                let call_context_manager = state
+                    .canister_states
+                    .get(canister)
+                    .unwrap()
+                    .system_state
+                    .call_context_manager()
+                    .unwrap();
+                prop_assert!(call_context_manager.call_contexts().is_empty());
+            }
+        }
+
+        // All memory is freed without hanging calls.
+        prop_assert_eq!(
+            (NumBytes::new(0), NumBytes::new(0)),
+            fixture.guaranteed_response_message_memory_taken()
+        );
     }
 
 }
