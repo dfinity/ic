@@ -160,11 +160,6 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
