@@ -4,34 +4,7 @@ use async_trait::async_trait;
 use ic_bn_lib::http::{http_version, Client};
 use rustls::Error as RustlsError;
 
-#[cfg(feature = "tls")]
-use axum::{
-    extract::{Host, OriginalUri},
-    response::{IntoResponse, Redirect},
-};
-
 use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
-
-#[cfg(feature = "tls")]
-pub async fn redirect_to_https(
-    Host(host): Host,
-    OriginalUri(uri): OriginalUri,
-) -> impl IntoResponse {
-    use http::uri::{PathAndQuery, Uri};
-
-    let fallback_path = PathAndQuery::from_static("/");
-    let pq = uri.path_and_query().unwrap_or(&fallback_path).as_str();
-
-    Redirect::permanent(
-        &Uri::builder()
-            .scheme("https") // redirect to https
-            .authority(host) // re-use the same host
-            .path_and_query(pq) // re-use the same path and query
-            .build()
-            .unwrap()
-            .to_string(),
-    )
-}
 
 #[async_trait]
 impl<T: Client> Client for WithMetrics<T> {

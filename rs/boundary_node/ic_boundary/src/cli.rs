@@ -80,15 +80,14 @@ pub struct ListenConfig {
     #[clap(long)]
     pub http_port: Option<u16>,
 
+    /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
+    #[cfg(feature = "tls")]
+    #[clap(long)]
+    pub https_port: Option<u16>,
+
     /// Unix socket to listen on for HTTP
-    #[cfg(not(feature = "tls"))]
     #[clap(long)]
     pub http_unix_socket: Option<PathBuf>,
-
-    /// Port to listen for HTTPS
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "443")]
-    pub https_port: u16,
 
     /// Skip replica TLS certificate verification. DANGER: to be used only for testing
     #[clap(long)]
@@ -131,6 +130,10 @@ pub struct ListenConfig {
     /// How long to keep idle outgoing connections open, in seconds
     #[clap(long, default_value = "120")]
     pub http_idle_timeout: u64,
+
+    /// Max number of HTTP2 streams to allow
+    #[clap(long, default_value = "200", value_parser = clap::value_parser!(u32).range(1..))]
+    pub http2_max_streams: u32,
 
     /// Backlog of incoming connections to set on the listening socket.
     #[clap(long, default_value = "8192")]

@@ -60,10 +60,7 @@ use crate::{
 };
 
 #[cfg(feature = "tls")]
-use {
-    crate::{cli, http::redirect_to_https},
-    rustls::server::ResolvesServerCert,
-};
+use {crate::cli, rustls::server::ResolvesServerCert};
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
@@ -202,7 +199,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ));
 
     // Server / API
-    let router_https = setup_router(
+    let router = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
         http_client.clone(),
@@ -213,20 +210,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cache.clone(),
     );
 
-    #[cfg(feature = "tls")]
-    let router_http = Router::new().fallback(redirect_to_https);
-
-    // Use HTTPS routers for HTTP if TLS is disabled
-    #[cfg(not(feature = "tls"))]
-    let router_http = router_https;
-
     // HTTP server metrics
     let http_metrics = http::server::Metrics::new(&metrics_registry);
 
     let server_opts = http::server::Options {
         backlog: cli.listen.backlog,
         http1_header_read_timeout: Duration::from_secs(15),
-        http2_max_streams: 200,
+        http2_max_streams: cli.listen.http2_max_streams,
         http2_keepalive_interval: Duration::from_secs(cli.listen.http_keepalive),
         http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
         grace_period: Duration::from_secs(60),
@@ -237,7 +227,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let server_http = cli.listen.http_port.map(|x| {
         http::Server::new(
             http::server::Addr::Tcp(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x)),
-            router_http.clone(),
+            router.clone(),
             server_opts,
             http_metrics.clone(),
             None,
@@ -245,32 +235,42 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     });
 
     // HTTP Unix Socket
-    #[cfg(not(feature = "tls"))]
     let server_http_unix = cli.listen.http_unix_socket.as_ref().map(|x| {
         http::Server::new(
             http::server::Addr::Unix(x.clone()),
-            router_http,
+            router.clone(),
             server_opts,
             http_metrics.clone(),
             None,
         )
     });
 
-    #[cfg(not(feature = "tls"))]
-    if server_http.is_none() && server_http_unix.is_none() {
-        panic!("at least one of --http-port or --http-unix-socket must be specified");
-    }
-
     // HTTPS
     #[cfg(feature = "tls")]
-    let server_https = setup_https(
-        router_https,
-        server_opts.clone(),
-        &cli,
-        &metrics_registry,
-        http_metrics.clone(),
-    )
-    .context("unable to setup HTTPS")?;
+    let server_https = if cli.listen.https_port.is_some() {
+        Some(
+            setup_https(
+                router,
+                server_opts.clone(),
+                &cli,
+                &metrics_registry,
+                http_metrics.clone(),
+            )
+            .context("unable to setup HTTPS")?,
+        )
+    } else {
+        None
+    };
+
+    #[cfg(feature = "tls")]
+    if server_http.is_none() && server_http_unix.is_none() && server_https.is_none() {
+        panic!("at least one of --http-port / --https-port / --http-unix-socket must be specified");
+    }
+
+    #[cfg(not(feature = "tls"))]
+    if server_http.is_none() && server_http_unix.is_none() {
+        panic!("at least one of --http-port / --http-unix-socket must be specified");
+    }
 
     // Metrics
     let metrics_cache = Arc::new(RwLock::new(MetricsCache::new(METRICS_CACHE_CAPACITY)));
@@ -370,7 +370,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             });
         }
 
-        #[cfg(not(feature = "tls"))]
         if let Some(v) = server_http_unix {
             s.spawn(async move {
                 v.serve(CancellationToken::new())
@@ -380,12 +379,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         #[cfg(feature = "tls")]
-        s.spawn(async move {
-            server_https
-                .serve(CancellationToken::new())
-                .map_err(|e| anyhow!("unable to serve https: {e:#}"))
-                .await
-        });
+        if let Some(v) = server_https {
+            s.spawn(async move {
+                v.serve(CancellationToken::new())
+                    .map_err(|e| anyhow!("unable to serve https: {e:#}"))
+                    .await
+            });
+        }
 
         // Runners
         runners.into_iter().for_each(|mut r| {
@@ -605,7 +605,7 @@ fn setup_https(
     let server_https = http::Server::new(
         http::server::Addr::Tcp(SocketAddr::new(
             Ipv6Addr::UNSPECIFIED.into(),
-            cli.listen.https_port,
+            cli.listen.https_port.unwrap(),
         )),
         router,
         opts,
