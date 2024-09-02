@@ -125,86 +125,88 @@ impl XNetEndpoint {
         // Spawn a request handler. We pass the certified stream store, which is
         // currently realized by the state manager.
 
-        let make_service = make_service_fn({
-            #[derive(Clone)]
-            struct Context {
-                log: ReplicaLogger,
-                semaphore: Arc<Semaphore>,
-                metrics: Arc<XNetEndpointMetrics>,
-            }
+        let make_service_closure = |address: SocketAddr| {
+            make_service_fn({
+                let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
+                #[derive(Clone)]
+                struct Context {
+                    log: ReplicaLogger,
+                    semaphore: Arc<Semaphore>,
+                    metrics: Arc<XNetEndpointMetrics>,
+                }
 
-            let ctx = Context {
-                log: log.clone(),
-                metrics: Arc::clone(&metrics),
-                semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_NUM_WORKER_THREADS)),
-            };
+                let ctx = Context {
+                    log: log.clone(),
+                    metrics: Arc::clone(&metrics),
+                    semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_NUM_WORKER_THREADS)),
+                };
 
-            fn ok<T>(t: T) -> Result<T, Infallible> {
-                Ok(t)
-            }
+                fn ok<T>(t: T) -> Result<T, Infallible> {
+                    Ok(t)
+                }
 
-            move |tls_conn: &TlsConnection| {
-                let ctx = ctx.clone();
-                let certified_stream_store = certified_stream_store.clone();
-                debug!(
-                    ctx.log,
-                    "Serving XNet streams to peer {:?}",
-                    tls_conn.peer()
-                );
-
-                async move {
+                move |tls_conn: &TlsConnection| {
                     let ctx = ctx.clone();
                     let certified_stream_store = certified_stream_store.clone();
-                    ok(service_fn({
-                        move |request: Request<Body>| {
-                            let ctx = ctx.clone();
-                            let certified_stream_store = certified_stream_store.clone();
+                    let base_url = base_url.clone();
 
-                            async move {
-                                let _permit = match ctx.semaphore.try_acquire_owned() {
-                                    Ok(permit) => permit,
-                                    Err(_) => {
-                                        ctx.metrics
-                                            .request_duration
-                                            .with_label_values(&[
-                                                RESOURCE_UNKNOWN,
-                                                StatusCode::SERVICE_UNAVAILABLE.as_str(),
-                                            ])
-                                            .observe(0.0);
+                    debug!(
+                        ctx.log,
+                        "Serving XNet streams to peer {:?}",
+                        tls_conn.peer()
+                    );
 
-                                        return ok(Response::builder()
-                                            .status(StatusCode::SERVICE_UNAVAILABLE)
-                                            .body(Body::from("Queue full"))
-                                            .unwrap());
-                                    }
-                                };
-                                let metrics = ctx.metrics.clone();
-                                tokio::task::spawn_blocking(move || {
-                                    let _permit = _permit;
-                                    route_request(
-                                        Url::parse("http://example.com/")
-                                            .unwrap()
-                                            .join(
-                                                request
-                                                    .uri()
-                                                    .path_and_query()
-                                                    .map(|pq| pq.as_str())
-                                                    .unwrap_or(""),
-                                            )
-                                            .unwrap(),
-                                        certified_stream_store.as_ref(),
-                                        &metrics,
-                                    )
-                                })
-                                .await
-                                .map_err(|_| panic!(""))
+                    async move {
+                        let ctx = ctx.clone();
+                        let certified_stream_store = certified_stream_store.clone();
+                        let base_url = base_url.clone();
+                        ok(service_fn({
+                            move |request: Request<Body>| {
+                                let ctx = ctx.clone();
+                                let certified_stream_store = certified_stream_store.clone();
+                                let base_url = base_url.clone();
+
+                                async move {
+                                    let _permit = match ctx.semaphore.try_acquire_owned() {
+                                        Ok(permit) => permit,
+                                        Err(_) => {
+                                            ctx.metrics
+                                                .request_duration
+                                                .with_label_values(&[
+                                                    RESOURCE_UNKNOWN,
+                                                    StatusCode::SERVICE_UNAVAILABLE.as_str(),
+                                                ])
+                                                .observe(0.0);
+
+                                            return ok(Response::builder()
+                                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                                .body(Body::from("Queue full"))
+                                                .unwrap());
+                                        }
+                                    };
+                                    let metrics = ctx.metrics.clone();
+                                    let log = ctx.log.clone();
+
+                                    tokio::task::spawn_blocking(move || {
+                                        let _permit = _permit;
+
+                                        handle_http_request(
+                                            request,
+                                            certified_stream_store.as_ref(),
+                                            &base_url,
+                                            &metrics,
+                                            &log,
+                                        )
+                                    })
+                                    .await
+                                    .map_err(|_| panic!(""))
+                                }
                             }
-                        }
-                    }))
+                        }))
+                    }
                 }
-            }
-        });
-
+            })
+        };
         let (address, server) = {
             let _guard = runtime_handle.enter();
 
@@ -221,11 +223,12 @@ impl XNetEndpoint {
                         config.address, e
                     )
                 });
+
             (
-                addr,
+                addr.clone(),
                 builder
                     .executor(ExecuteOnRuntime(runtime_handle.clone()))
-                    .serve(make_service),
+                    .serve(make_service_closure(addr)),
             )
         };
 
@@ -262,6 +265,31 @@ impl XNetEndpoint {
     #[allow(dead_code)]
     pub fn server_port(&self) -> u16 {
         self.server_address.port()
+    }
+}
+
+/// Handles an incoming HTTP request by parsing the URL, handing over to
+/// `route_request()` and replying with the produced response.
+fn handle_http_request(
+    request: Request<Body>,
+    certified_stream_store: &dyn CertifiedStreamStore,
+    base_url: &Url,
+    metrics: &XNetEndpointMetrics,
+    log: &ReplicaLogger,
+) -> Response<Body> {
+    match base_url.join(
+        request
+            .uri()
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or(""),
+    ) {
+        Ok(url) => route_request(url, certified_stream_store, metrics),
+        Err(e) => {
+            let msg = format!("Invalid URL {}: {}", request.uri(), e);
+            warn!(log, "{}", msg);
+            bad_request(msg)
+        }
     }
 }
 
