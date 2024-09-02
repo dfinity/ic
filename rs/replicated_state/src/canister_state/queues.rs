@@ -428,7 +428,7 @@ impl CanisterQueues {
         // input queue if all messages in said queue have expired / were shed since it
         // was scheduled. Meaning that iteration may be required.
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
-            let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
+            let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
                 self.input_schedule.pop(input_queue_type).unwrap();
                 continue;
@@ -438,8 +438,7 @@ impl CanisterQueues {
             // If the input queue is non-empty, re-enqueue the sender at the back of the
             // input schedule queue.
             if input_queue.len() != 0 {
-                self.input_schedule
-                    .reschedule(sender.clone(), input_queue_type);
+                self.input_schedule.reschedule(*sender, input_queue_type);
             } else {
                 self.input_schedule.pop(input_queue_type).unwrap();
             }
@@ -498,8 +497,7 @@ impl CanisterQueues {
                 .map(|(input_queue, _)| input_queue.len() != 0)
                 .unwrap_or(false)
             {
-                self.input_schedule
-                    .reschedule(sender.clone(), input_queue_type);
+                self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
             } else {
                 self.input_schedule.pop(input_queue_type);
@@ -1576,11 +1574,11 @@ pub mod testing {
         }
 
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.input_schedule.local_sender_schedule()
+            self.input_schedule.local_sender_schedule()
         }
 
         fn remote_sender_schedule(&self) -> &VecDeque<CanisterId> {
-            &self.input_schedule.remote_sender_schedule()
+            self.input_schedule.remote_sender_schedule()
         }
 
         fn output_queue_iter_for_testing(
