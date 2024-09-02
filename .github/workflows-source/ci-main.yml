@@ -61,9 +61,7 @@ anchors:
     id: before-script
     shell: bash
     run: |
-      if [ -n "${NODE_NAME:-}" ]; then
-          echo "Node: $NODE_NAME"
-      fi
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   docker-login: &docker-login
     name: Login to Dockerhub
     uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
