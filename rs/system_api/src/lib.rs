@@ -31,6 +31,7 @@ use ic_types::{
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
+use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
 use sandbox_safe_system_state::{
     CanisterStatusView, CyclesAmountType, SandboxSafeSystemState, SystemStateChanges,
@@ -1142,8 +1143,10 @@ impl SystemApiImpl {
                 "\"{}\" cannot be executed in {} mode",
                 method_name, self.api_type
             ),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
+            suggestion: "Check the ICP documentation to make sure APIs are \
+            being called in the correct message types."
+                .to_string(),
+            doc_link: doc_ref("calling-a-system-api-from-the-wrong-mode"),
         }
     }
 
@@ -1883,8 +1886,11 @@ impl SystemApi for SystemApiImpl {
                         );
                         return Err(UserContractViolation {
                             error: string,
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
+                            suggestion:
+                                "Consider checking the response size and returning an error if \
+                                it is too long."
+                                    .to_string(),
+                            doc_link: doc_ref("msg_reply_data_append-payload-too-large"),
                         });
                     }
                     data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
@@ -1921,8 +1927,9 @@ impl SystemApi for SystemApiImpl {
                     );
                         return Err(UserContractViolation {
                             error: string,
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
+                            suggestion: "Try truncating the error messages that are too long."
+                                .to_string(),
+                            doc_link: doc_ref("msg_reject-payload-too-large"),
                         });
                     }
                     let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
@@ -3033,8 +3040,10 @@ impl SystemApi for SystemApiImpl {
                     no larger than {} bytes. Found {} bytes.",
                             CERTIFIED_DATA_MAX_LENGTH, size
                         ),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
+                        suggestion: "Try certifying just the hash of your data instead of \
+                        the full contents."
+                            .to_string(),
+                        doc_link: doc_ref("certified_data_set-payload-too-large"),
                     });
                 }
 
