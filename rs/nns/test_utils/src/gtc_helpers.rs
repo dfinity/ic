@@ -15,7 +15,7 @@ const INVESTOR_TYPE_SR: &str = "sr";
 const INVESTOR_TYPE_ECT: &str = "ect";
 
 // impl From<&Vec<Neuron>> for AccountState can't be done in this crate, but we only need it here.
-fn account_state_from(neurons: &Vec<Neuron>) -> AccountState {
+fn account_state_from(neurons: &[Neuron]) -> AccountState {
     let neuron_ids = neurons
         .iter()
         .map(|neuron| neuron.id.expect("GTC neuron missing ID"))
