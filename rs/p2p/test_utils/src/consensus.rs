@@ -291,7 +291,7 @@ impl BouncerFactory<u64, TestConsensus<U64Artifact>> for TestConsensus<U64Artifa
         Box::new(|_| BouncerValue::Wants)
     }
 
-    fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }
