@@ -337,7 +337,14 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, None, None, false, None)
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+            None,
+        )
     }
 
     pub(crate) fn from_components(
@@ -1281,13 +1288,14 @@ pub enum WasmResult {
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
-    start_or_reuse_server_with_redirects(None, None)
+    start_or_reuse_server_with_redirects_and_pid(None, None, None)
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
-pub fn start_or_reuse_server_with_redirects(
+pub fn start_or_reuse_server_with_redirects_and_pid(
     stdout: Option<std::process::Stdio>,
     stderr: Option<std::process::Stdio>,
+    pid: Option<u32>,
 ) -> Url {
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
         None => "./pocket-ic".to_string(),
@@ -1309,12 +1317,12 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let parent_pid = std::os::unix::process::parent_id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
+    let pid = pid.unwrap_or(std::os::unix::process::parent_id());
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", pid));
+    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", pid));
     if create_file_atomically(started_file_path).is_ok() {
         let mut cmd = Command::new(PathBuf::from(bin_path));
-        cmd.arg("--pid").arg(parent_pid.to_string());
+        cmd.arg("--pid").arg(pid.to_string());
         if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());

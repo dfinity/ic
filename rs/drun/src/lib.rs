@@ -5,7 +5,7 @@ use candid::{CandidType, Principal};
 use hex::encode;
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, RawEffectivePrincipal, SubnetSpec};
 use pocket_ic::{
-    call_candid_as, start_or_reuse_server_with_redirects, PocketIc, UserError, WasmResult,
+    call_candid_as, start_or_reuse_server_with_redirects_and_pid, PocketIc, UserError, WasmResult,
 };
 use serde::Serialize;
 use std::fs::File;
@@ -85,7 +85,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
 
     let msg_stream = msg_stream_from_file(&msg_filename)?;
 
-    let server_url = start_or_reuse_server_with_redirects(
+    let server_url = start_or_reuse_server_with_redirects_and_pid(
         Some(
             log_file
                 .map(|p| {
@@ -96,6 +96,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
                 .unwrap_or(std::process::Stdio::null()),
         ),
         Some(std::io::stdout().into()),
+        Some(std::process::id()),
     );
     let mut config = ExtendedSubnetConfigSet::default();
     match subnet_type {

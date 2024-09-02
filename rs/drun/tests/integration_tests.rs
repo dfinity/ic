@@ -73,7 +73,7 @@ fn expected_output() -> Vec<u8> {
 Canister successfully installed.
 Canister successfully installed.
 Canister successfully installed.
-2021-05-06 19:17:10.000000005 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
+2021-05-06 19:17:10.000000006 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
 ingress Ok: Reply: 0x41424344
 ingress Err: IC0536: Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister has no update method 'foo'..
 Check that the method being called is exported by the target canister. See documentation: http://internetcomputer.org/docs/current/references/execution-errors#method-not-found
