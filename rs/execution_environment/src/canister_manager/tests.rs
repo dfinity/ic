@@ -5049,8 +5049,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             test.canister_creation_fee(),
         )
         .build();
-    let result = test
-        .ingress(uc, "update", create_canister)
+    test.ingress(uc, "update", create_canister)
         .unwrap()
         .assert_contains_reject(
             "Canister requested a compute allocation of 10% which \
