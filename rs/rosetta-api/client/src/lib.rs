@@ -155,8 +155,7 @@ impl RosettaClient {
                     num_bigint::Sign::Minus,
                     Nat::try_from(suggested_fee)
                         .map_err(|e| anyhow::anyhow!("Failed to convert fee: {:?}", e))?
-                        .0
-                        .clone(),
+                        .0,
                 ),
                 currency.clone(),
             )),
