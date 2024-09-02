@@ -443,7 +443,7 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn blessed_replica_versions(&self) -> anyhow::Result<Vec<String>> {
+    pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
         Ok(self
             .local_registry
             .get_key_family(

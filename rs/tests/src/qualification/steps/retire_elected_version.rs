@@ -17,24 +17,24 @@ use slog::info;
 use super::Step;
 
 #[derive(Clone)]
-pub struct RetireBlessedVersions {
+pub struct RetireElectedVersions {
     pub versions: Vec<String>,
 }
 
 // Retire only if the version uses "disk-img"
-impl Step for RetireBlessedVersions {
+impl Step for RetireElectedVersions {
     fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
-        let blessed_versions = env.topology_snapshot().blessed_replica_versions()?;
+        let elected_versions = env.topology_snapshot().elected_replica_versions()?;
         let replica_versions = env.topology_snapshot().replica_version_records()?;
 
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| blessed_versions.contains(version))
+            .filter(|version| elected_versions.contains(version))
             .cloned()
             .collect_vec();
 

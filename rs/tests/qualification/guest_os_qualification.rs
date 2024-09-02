@@ -6,8 +6,8 @@ use ic_system_test_driver::driver::{
 use ic_tests::qualification::{
     defs::QualificationExecutor,
     steps::{
-        ensure_blessed_version::EnsureBlessedVersion,
-        retire_blessed_version::RetireBlessedVersions, update_subnet_type::UpdateSubnetType,
+        ensure_elected_version::EnsureElectedVersion,
+        retire_elected_version::RetireElectedVersions, update_subnet_type::UpdateSubnetType,
         workload::Workload, xnet::XNet,
     },
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
@@ -86,7 +86,7 @@ pub fn main() -> anyhow::Result<()> {
                         // Ensure that the initial version is blessed
                         // Since we are using our config this should
                         // always be the case.
-                        Box::new(EnsureBlessedVersion {
+                        Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
                         }),
                         // Ensure that application subnets are on the
@@ -111,7 +111,7 @@ pub fn main() -> anyhow::Result<()> {
                             version: initial_version.clone(),
                         }),
                         // Ensure that the new version is blessed
-                        Box::new(EnsureBlessedVersion {
+                        Box::new(EnsureElectedVersion {
                             version: to_version.clone(),
                         }),
                         // Ensure that application subnets are on the
@@ -142,12 +142,12 @@ pub fn main() -> anyhow::Result<()> {
                         // uses `rs/tests/src/message_routing/global_reboot_test`
                         Box::new(XNet::default()),
                         // Retire old version if it has disk-img
-                        Box::new(RetireBlessedVersions {
+                        Box::new(RetireElectedVersions {
                             versions: vec![initial_version.clone()],
                         }),
                         // Ensure that the old version is blessed
                         // if it was retired previously
-                        Box::new(EnsureBlessedVersion {
+                        Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),
                         }),
                         // Downgrade to the inital version

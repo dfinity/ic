@@ -2,11 +2,13 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use slog::{error, info};
 use tokio::runtime::Handle;
 
-pub mod ensure_blessed_version;
-pub mod retire_blessed_version;
+pub mod ensure_elected_version;
+pub mod retire_elected_version;
 pub mod update_subnet_type;
 pub mod workload;
 pub mod xnet;
+
+const DEFAULT_TOTAL_RUNS: usize = 1;
 
 pub trait Step: Sync + Send {
     fn execute(&self, env: TestEnv, rt: Handle) -> anyhow::Result<()>;
@@ -19,7 +21,7 @@ pub trait Step: Sync + Send {
     // mechianism allows us to retry flaky steps quickly
     // and cut down the time needed for the overall test.
     fn total_runs(&self) -> usize {
-        1
+        DEFAULT_TOTAL_RUNS
     }
 
     fn name(&self) -> &'static str {
