@@ -986,7 +986,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.11.3",
+                version = "^0.11.4",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
