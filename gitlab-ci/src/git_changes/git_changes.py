@@ -9,9 +9,6 @@ Example usage:
 
 Find changed files in the `rs` directory:
   python git_changes.py --changed-files-in-dirs rs
-
-Find the CI config changes in this branch:
-  python git_changes.py --ci_config_changes
 """
 import argparse
 import functools
@@ -22,7 +19,6 @@ import time
 from pprint import pformat
 
 import git
-import gitlab_config
 
 
 def target_branch() -> str:
@@ -145,28 +141,6 @@ def is_master(repo_path):
         return git_repo.active_branch.name == "master"
 
 
-def ci_config_changes(repo_path="."):
-    """Return whether the CI configuration changed in this branch."""
-    git_repo = git.Repo(repo_path, search_parent_directories=True)
-    git_root = git_repo.git.rev_parse("--show-toplevel")
-
-    gitlab_cfg_root = f"{git_root}/.gitlab-ci.yml"
-    if os.path.exists(gitlab_cfg_root):
-        with open(gitlab_cfg_root) as f:
-            gl = gitlab_config.DfinityGitLabConfig(git_root)
-            gl.ci_cfg_load_from_file(f)
-            included_files = gl.ci_cfg_included_files()
-    else:
-        included_files = []
-
-    key_ci_scripts = [
-        f"{git_root}/gitlab-ci",
-        f"{git_root}/rs/gitlab-ci-config.yml",
-    ]
-
-    return get_changed_files(git_root, included_files + key_ci_scripts)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
@@ -184,7 +158,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not (args.changed_files_in_dirs or args.ci_config_changes):
+    if not args.changed_files_in_dirs:
         parser.print_help()
         sys.exit(0)
 
@@ -197,8 +171,3 @@ if __name__ == "__main__":
         changed_files = get_changed_files(".", args.changed_files_in_dirs)
         logging.info("Changed files: %s", pformat(changed_files))
         sys.exit(not changed_files)
-
-    if args.ci_config_changes:
-        ci_config_changes_files = ci_config_changes()
-        logging.info("CI config changes: %s", ci_config_changes_files)
-        sys.exit(not ci_config_changes_files)

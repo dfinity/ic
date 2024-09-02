@@ -9,7 +9,7 @@ use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
-    ecdsa::{IDkgChangeAction, IDkgChangeSet},
+    idkg::{IDkgChangeAction, IDkgChangeSet},
     p2p::consensus::{ChangeSetProducer, MutablePool},
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -30,7 +30,7 @@ impl<'a> ConsensusDriver<'a> {
         consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
         consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
-        ecdsa: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+        idkg: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
         certifier: Box<
             dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
         >,
@@ -48,12 +48,12 @@ impl<'a> ConsensusDriver<'a> {
             metrics_registry,
         )));
         let consensus_priority =
-            PriorityFnState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
+            BouncerState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
             consensus_gossip,
             dkg,
-            ecdsa,
+            idkg,
             certifier,
             logger,
             consensus_pool,
@@ -65,7 +65,7 @@ impl<'a> ConsensusDriver<'a> {
         }
     }
 
-    /// Run a single step of consensus, dkg, certification, and ecdsa by repeatedly
+    /// Run a single step of consensus, dkg, certification, and idkg by repeatedly
     /// calling on_state_change and apply the changes until no more changes
     /// occur.
     ///
@@ -139,7 +139,7 @@ impl<'a> ConsensusDriver<'a> {
             }
         }
         loop {
-            let changeset = self.ecdsa.on_state_change(&*self.idkg_pool.read().unwrap());
+            let changeset = self.idkg.on_state_change(&*self.idkg_pool.read().unwrap());
             if changeset.is_empty() {
                 break;
             }
@@ -147,11 +147,11 @@ impl<'a> ConsensusDriver<'a> {
                 for change_action in &changeset {
                     match change_action {
                         IDkgChangeAction::AddToValidated(msg) => {
-                            debug!(self.logger, "Ecdsa Message Deliver {:?}", msg);
-                            to_deliver.push(InputMessage::Ecdsa(msg.clone()));
+                            debug!(self.logger, "IDKG Message Deliver {:?}", msg);
+                            to_deliver.push(InputMessage::IDkg(msg.clone()));
                         }
                         IDkgChangeAction::MoveToValidated(msg) => {
-                            debug!(self.logger, "Ecdsa Message Validated {:?}", msg);
+                            debug!(self.logger, "IDKG Message Validated {:?}", msg);
                         }
                         _ => {}
                     }

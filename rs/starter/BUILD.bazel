@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
-
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
@@ -39,6 +37,10 @@ rust_library(
     crate_name = "ic_starter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "4.0.0",
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs:tools-pkg",
+    ],
     deps = LIB_DEPENDENCIES,
 )
 
@@ -48,5 +50,9 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":ic-starter-lib"],
 )

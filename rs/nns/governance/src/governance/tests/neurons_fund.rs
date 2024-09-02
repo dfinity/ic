@@ -1,10 +1,13 @@
 use super::*;
-use crate::init::GovernanceCanisterInitPayloadBuilder;
-use crate::pb::v1::create_service_nervous_system::SwapParameters;
-use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+use crate::{
+    pb::v1::create_service_nervous_system::SwapParameters,
+    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+};
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 
@@ -16,13 +19,13 @@ fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
         .with_test_neurons_fund_neurons(500_000 * E8)
         .build();
     governance_proto.proposals = btreemap! {
-        123 => ProposalData {
+        123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
-        }
+        }.into()
     };
     let mut governance = Governance::new(
-        governance_proto,
+        governance_proto.into(),
         Box::<MockEnvironment>::default(),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
@@ -72,7 +75,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             })
             .unwrap();
         let neurons = (0..num_neurons_fund_neurons)
-            .map(|id| NeuronProto {
+            .map(|id| pb_api::Neuron {
                 id: Some(NeuronId { id }),
                 ..proto_neuron.clone()
             })
@@ -82,13 +85,13 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             .build()
     };
     governance_proto.proposals = btreemap! {
-        123 => ProposalData {
+        123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
-        }
+        }.into()
     };
     let mut governance = Governance::new(
-        governance_proto,
+        governance_proto.into(),
         Box::<MockEnvironment>::default(),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
@@ -123,13 +126,13 @@ fn proposal_fails_if_no_nf_neurons_exist() {
     let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
     let mut governance_proto = GovernanceCanisterInitPayloadBuilder::new().build();
     governance_proto.proposals = btreemap! {
-        123 => ProposalData {
+        123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
-        }
+        }.into()
     };
     let mut governance = Governance::new(
-        governance_proto,
+        governance_proto.into(),
         Box::<MockEnvironment>::default(),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),

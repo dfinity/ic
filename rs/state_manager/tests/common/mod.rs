@@ -35,7 +35,7 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 
-const EMPTY_WASM: &[u8] = &[
+pub const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
     0x01, 0x00,
 ];
@@ -169,9 +169,9 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and the same limits; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `witness_begin` and matching message limit.
+///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an
@@ -584,6 +584,50 @@ fn state_manager_test_with_state_sync_and_verifier_result<
         ));
         f(&metrics_registry, sm.clone(), StateSync::new(sm, log));
     })
+}
+
+pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        Arc<StateManagerImpl>,
+        StateSync,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+    ),
+{
+    let tmp = tmpdir("sm");
+    let config = Config::new(tmp.path().into());
+    let own_subnet = subnet_test_id(42);
+    let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
+
+    with_test_replica_logger(|log| {
+        let log_sm = log.clone();
+        let make_state_manager = move |starting_height| {
+            let metrics_registry = MetricsRegistry::new();
+
+            let state_manager = Arc::new(StateManagerImpl::new(
+                Arc::clone(&verifier),
+                own_subnet,
+                SubnetType::Application,
+                log_sm.clone(),
+                &metrics_registry,
+                &config,
+                starting_height,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            ));
+
+            (metrics_registry, state_manager)
+        };
+
+        let (metrics_registry, state_manager) = make_state_manager(None);
+        let state_sync = StateSync::new(state_manager.clone(), log.clone());
+
+        let restart_fn = Box::new(move |state_manager, starting_height| {
+            drop(state_manager);
+            make_state_manager(starting_height)
+        });
+        test(&metrics_registry, state_manager, state_sync, restart_fn);
+    });
 }
 
 pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {

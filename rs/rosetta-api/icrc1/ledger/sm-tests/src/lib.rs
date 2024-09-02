@@ -10,6 +10,7 @@ use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -20,6 +21,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc21::errors::ErrorInfo;
 use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
@@ -28,9 +30,9 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::BlockRange;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse,
+};
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -45,6 +47,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub mod in_memory_ledger;
 pub mod metrics;
 
 pub const FEE: u64 = 10_000;
@@ -107,7 +110,6 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
@@ -277,6 +279,66 @@ fn icrc21_consent_message(
             Result<ConsentInfo, Icrc21Error>
     )
     .expect("failed to decode icrc21_canister_call_consent_message response")
+}
+
+pub fn get_all_ledger_and_archive_blocks(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+) -> Vec<Block<Tokens>> {
+    let req = GetBlocksRequest {
+        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(0u64),
+        length: Nat::from(u32::MAX),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = state_machine
+        .query(ledger_id, "get_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res = Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
+    // most tests.
+    let blocks_in_ledger = res
+        .chain_length
+        .saturating_sub(res.first_index.0.to_u64().unwrap());
+    assert!(
+        blocks_in_ledger <= res.blocks.len() as u64,
+        "Chain length: {}, first block index: {}, retrieved blocks: {}",
+        res.chain_length,
+        res.first_index,
+        res.blocks.len()
+    );
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        let mut remaining = archived.length.clone();
+        let mut next_archived_txid = archived.start.clone();
+        while remaining > 0u32 {
+            let req = GetTransactionsRequest {
+                start: next_archived_txid.clone(),
+                length: remaining.clone(),
+            };
+            let req =
+                Encode!(&req).expect("Failed to encode GetTransactionsRequest for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = state_machine
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, BlockRange).unwrap();
+            next_archived_txid += res.blocks.len() as u64;
+            remaining -= res.blocks.len() as u32;
+            blocks.extend(res.blocks);
+        }
+    }
+    blocks.extend(res.blocks);
+    blocks
+        .into_iter()
+        .map(ic_icrc1::Block::try_from)
+        .collect::<Result<Vec<Block<Tokens>>, String>>()
+        .expect("should convert generic blocks to ICRC1 blocks")
 }
 
 fn get_archive_remaining_capacity(env: &StateMachine, archive: Principal) -> u64 {
@@ -727,6 +789,17 @@ where
     let canister_id = install_ledger(&env, ledger_wasm, encode_init_args, initial_balances);
 
     (env, canister_id)
+}
+
+pub fn test_ledger_http_request_decoding_quota<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    test_http_request_decoding_quota(&env, canister_id);
 }
 
 pub fn test_balance_of<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -2391,6 +2464,128 @@ pub fn icrc1_test_block_transformation<T>(
     }
 }
 
+pub fn icrc1_test_approval_upgrade<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(1).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: Some([2; 32]),
+        },
+        Account::from(PrincipalId::new_user_test_id(3).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(4).0,
+            subaccount: Some([4; 32]),
+        },
+    ];
+    let additional_accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(5).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(6).0,
+            subaccount: Some([6; 32]),
+        },
+    ];
+    let mut initial_balances = vec![];
+    for account in &accounts {
+        initial_balances.push((*account, 10_000_000u64));
+    }
+    for account in &additional_accounts {
+        initial_balances.push((*account, 10_000_000u64));
+    }
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+
+    let mut expected_allowances = vec![];
+
+    for i in 0..accounts.len() {
+        for j in i + 1..accounts.len() {
+            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
+            approve_args.from_subaccount = accounts[i].subaccount;
+            send_approval(&env, canister_id, accounts[i].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
+
+            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = accounts[j].subaccount;
+            send_approval(&env, canister_id, accounts[j].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
+        }
+    }
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let mut allowances = vec![];
+        for i in 0..accounts.len() {
+            for j in i + 1..accounts.len() {
+                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+            }
+        }
+        assert_eq!(expected_allowances, allowances);
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+
+    // Add some more approvals
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
+            approve_args.from_subaccount = a1.subaccount;
+            send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+
+            let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = a2.subaccount;
+            send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+        }
+    }
+
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
+
+    // See if the additional approvals are there
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let allowance = get_allowance(&env, canister_id, *a1, *a2);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, None);
+
+            let allowance = get_allowance(&env, canister_id, *a2, *a1);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, Some(expiration));
+        }
+    }
+}
+
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
     ApproveArgs {
         from_subaccount: None,
@@ -3395,7 +3590,7 @@ fn test_icrc21_transfer_message(
     let expected_transfer_message = "# Approve the transfer of funds
 
 **Amount:**
-1'000'000 XTST
+0.01 XTST
 
 **From:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
@@ -3404,7 +3599,7 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
 6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
 
 **Fee:**
-10'000 XTST
+0.0001 XTST
 
 **Memo:**
 test_bytes";
@@ -3483,6 +3678,30 @@ fn test_icrc21_approve_message(
     from_account: Account,
     spender_account: Account,
 ) {
+    let message = &icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        ConsentMessageRequest {
+            method: "INVALID_FUNCTION".to_owned(),
+            arg: Encode!(&()).unwrap(),
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec: Some(DisplayMessageType::GenericDisplay),
+            },
+        },
+    )
+    .unwrap_err();
+    match message {
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+        }
+        _ => panic!("Unexpected error: {:?}", message),
+    }
+
     // Test the message for icrc2 approve
     let approve_args = ApproveArgs {
         spender: spender_account,
@@ -3506,16 +3725,16 @@ djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.30303030303030303030303030303030303030303030
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
 
 **Requested withdrawal allowance:**
-1'000'000 XTST
+0.01 XTST
 
 **Current withdrawal allowance:**
-1'000'000 XTST
+0.01 XTST
 
 **Expiration date:**
 Thu, 06 May 2021 20:17:10 +0000
 
 **Approval fee:**
-10'000 XTST
+0.0001 XTST
 
 **Transaction fees to be paid by:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
@@ -3556,8 +3775,8 @@ test_bytes";
     );
     // When the expected allowance is not set, a warning should be displayed.
     let expected_message = expected_approve_message.replace(
-    "\n\n**Current withdrawal allowance:**\n1'000'000 XTST",
-    "\u{26A0} The allowance will be set to 1'000'000 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
+    "\n\n**Current withdrawal allowance:**\n0.01 XTST",
+    "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
 );
     assert_eq!(
         message, expected_message,
@@ -3657,13 +3876,13 @@ d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.10101010101010101010101010101010101010101010
 djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
 
 **Amount to withdraw:**
-1'000'000 XTST
+0.01 XTST
 
 **To:**
 6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
 
 **Fee paid by withdrawal account:**
-10'000 XTST
+0.0001 XTST
 
 **Memo:**
 test_bytes";

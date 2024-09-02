@@ -1,7 +1,7 @@
 //! Random beacon maker is responsible for creating random beacon share
 //! for the node if the node is a beacon maker and no such share exists.
 use ic_consensus_utils::{
-    active_low_threshold_transcript,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
@@ -80,10 +80,8 @@ impl RandomBeaconMaker {
                 // beacon at height h only after there exists a block at
                 // height h, and we only use the random beacon at height
                 // h-1 in the validation of blocks at height h.
-                if let Some(transcript) =
-                    active_low_threshold_transcript(pool.as_cache(), next_height)
-                {
-                    match self.crypto.sign(&content, my_node_id, transcript.dkg_id) {
+                if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), next_height) {
+                    match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => Some(RandomBeaconShare { content, signature }),
                         Err(err) => {
                             error!(self.log, "Couldn't create a signature: {:?}", err);

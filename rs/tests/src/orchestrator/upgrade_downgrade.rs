@@ -12,21 +12,21 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::{
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-            store_message,
-        },
-        subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
-        upgrade::*,
-    },
-    tecdsa::{make_key_ids_for_all_schemes, ChainSignatureRequest},
-};
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
+use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    UpdateImageType,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, run_chain_key_signature_test, ChainSignatureRequest,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -53,7 +53,7 @@ const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
+const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -100,9 +100,7 @@ pub fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let branch_version = bless_branch_version(&env, &nns_node);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .unwrap();
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
     upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(
@@ -160,9 +158,7 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         None,
     );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .unwrap();
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
     upgrade(
         &env,
         &nns_node,
@@ -253,14 +249,13 @@ async fn start_workload(subnet: SubnetSnapshot, requests: Vec<ChainSignatureRequ
 fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let original_branch_version = env
-        .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless branch version
-    let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &original_branch_version,
@@ -276,13 +271,12 @@ fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
 fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();
 
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("mainnet IC version");
+    let mainnet_version =
+        read_dependency_to_string("testnet/mainnet_nns_revision.txt").expect("mainnet IC version");
 
     // Bless mainnet version
     let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
-    let upgrade_url = env.get_mainnet_ic_os_update_img_url().unwrap();
+    let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
     block_on(bless_replica_version(
         nns_node,
         &mainnet_version,

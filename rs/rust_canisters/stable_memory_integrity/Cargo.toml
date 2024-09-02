@@ -15,8 +15,8 @@ ic-cdk-macros = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 lazy-static = "1.4.0"
+proptest = { workspace = true }
 serde = { workspace = true }
-proptest = "1.2.0"
 
 [[bin]]
 name = "stable_memory_integrity"

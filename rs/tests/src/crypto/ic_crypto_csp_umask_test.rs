@@ -28,8 +28,8 @@ Coverage::
 
 end::catalog[] */
 
-use crate::consensus::catch_up_test::await_node_certified_height;
 use anyhow::bail;
+use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;

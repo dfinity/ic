@@ -32,7 +32,9 @@ use ic_types::{
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, CyclesAmountType, SandboxSafeSystemState, SystemStateChanges,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -225,7 +227,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {
@@ -616,7 +618,14 @@ impl ApiType {
             ApiType::SystemTask { system_task, .. } => match system_task {
                 SystemMethod::CanisterHeartbeat => "heartbeat",
                 SystemMethod::CanisterGlobalTimer => "global timer",
-                _ => panic!("Only `canister_heartbeat` and `canister_global_timer` are allowed."),
+                SystemMethod::CanisterOnLowWasmMemory => "on low Wasm memory",
+                SystemMethod::CanisterStart
+                | SystemMethod::CanisterInit
+                | SystemMethod::CanisterPreUpgrade
+                | SystemMethod::CanisterPostUpgrade
+                | SystemMethod::CanisterInspectMessage => {
+                    panic!("Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.")
+                }
             },
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
@@ -1111,6 +1120,12 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
+    /// Note that this function is made public only for the tests
+    #[doc(hidden)]
+    pub fn get_compute_allocation(&self) -> ComputeAllocation {
+        self.execution_parameters.compute_allocation
+    }
+
     /// Bytes allocated in the Wasm/stable memory.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory
@@ -1224,8 +1239,8 @@ impl SystemApiImpl {
     fn ic0_call_cycles_add_helper(
         &mut self,
         method_name: &str,
-        amount: Cycles,
-    ) -> HypervisorResult<()> {
+        amount: CyclesAmountType,
+    ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1260,15 +1275,17 @@ impl SystemApiImpl {
                         ),
                     }),
                     Some(request) => {
-                        self.sandbox_safe_system_state
+                        let amount_withdrawn = self
+                            .sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
+                                request.current_payload_size(),
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,
                                 false, // synchronous error => no need to reveal top up balance
                             )?;
-                        request.add_cycles(amount);
-                        Ok(())
+                        request.add_cycles(amount_withdrawn);
+                        Ok(amount_withdrawn)
                     }
                 }
             }
@@ -1469,9 +1486,8 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, is_enabled: bool, src: usize, size: usize, heap: &[u8]) {
+    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
-            is_enabled,
             self.api_type.time(),
             valid_subslice("save_log_message", src, size, heap)
                 .unwrap_or(
@@ -2218,15 +2234,38 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
+        let result = self
+            .ic0_call_cycles_add_helper(
+                "ic0_call_cycles_add",
+                CyclesAmountType::Exact(Cycles::from(amount)),
+            )
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd, result, amount);
         result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
+        let result = self
+            .ic0_call_cycles_add_helper("ic0_call_cycles_add128", CyclesAmountType::Exact(amount))
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd128, result, amount);
         result
+    }
+
+    fn ic0_call_cycles_add128_up_to(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self.ic0_call_cycles_add_helper(
+            "ic0_call_cycles_add128_up_to",
+            CyclesAmountType::UpTo(amount),
+        );
+        trace_syscall!(self, CallCyclesAdd128UpTo, result, amount);
+        let withdrawn_cycles = result?;
+        copy_cycles_to_heap(withdrawn_cycles, dst, heap, "ic0_call_cycles_add128_up_to")?;
+        Ok(())
     }
 
     // Note that if this function returns an error, then the canister will be

@@ -21,8 +21,8 @@ use ic_ledger_canister_core::ledger::{
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
-use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -297,7 +297,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -805,12 +805,14 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         consent_msg_request,
         caller_principal,
         ledger_fee,
         token_symbol,
+        decimals,
     )
 }
 

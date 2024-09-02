@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -77,3 +78,152 @@ rust_test(
         "//rs/rosetta-api/icrc1/tokens_u64",
     ] + DEV_DEPENDENCIES,
 )
+
+[
+    # To run this test,
+    #
+    #     bazel \
+    #         test \
+    #         --test_env=SSH_AUTH_SOCK \
+    #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test
+    #
+    # To run the U256 token version of the test (for ckETH and ckERC20 tokens), use:
+    #
+    #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test_u256
+    #
+    # The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+    # SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+    # is run. This authorizes the test to download the test data.
+    #
+    # Additionally, the following flags are recommended (but not required):
+    #
+    # --test_output=streamed
+    # --test_arg=--nocapture
+    #
+    # These let you watch the progress of the test, rather than only being able to see the output only
+    # at the end.
+    #
+    # See the .bazelrc for more configuration information.
+    rust_ic_test(
+        name = "icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test" + name_suffix,
+        # This uses on the order of 50 GB of disk space.
+        # Therefore, size = "large" is not large enough.
+        size = "enormous",
+        srcs = [
+            "tests/common.rs",
+            "tests/golden_state_upgrade_downgrade.rs",
+        ],
+        crate_features = features,
+        crate_root = "tests/golden_state_upgrade_downgrade.rs",
+        data = [
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
+            "@mainnet_ic-icrc1-ledger//file",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+        },
+        tags = [
+            "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
+            "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+            "requires-network",  # Because mainnet state is downloaded (and used).
+        ],
+        deps = [
+            # Keep sorted.
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/nns/test_utils",
+            "//rs/nns/test_utils/golden_nns_state",
+            "//rs/rosetta-api/icrc1/ledger",
+            "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
+            "//rs/rosetta-api/icrc1/test_utils",
+            "//rs/rust_canisters/canister_test",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:num-traits",
+        ],
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]
+
+[
+    rust_ic_test(
+        name = "upgrade_downgrade" + name_suffix,
+        srcs = [
+            "tests/common.rs",
+            "tests/upgrade_downgrade.rs",
+        ],
+        crate_features = features,
+        crate_root = "tests/upgrade_downgrade.rs",
+        data = [
+            "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@" + mainnet_ledger + "//file",
+            "@" + mainnet_index + "//file",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+            "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_index + "//file)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+        },
+        deps = [
+            # Keep sorted.
+            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/registry/subnet_type",
+            "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/icrc1/index-ng",
+            "//rs/rosetta-api/icrc1/ledger",
+            "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
+            "//rs/rosetta-api/ledger_canister_core",
+            "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/dfn_http_metrics",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:cddl",
+            "@crate_index//:hex",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:leb128",
+            "@crate_index//:num-traits",
+            "@crate_index//:proptest",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
+    )
+    for (name_suffix, mainnet_ledger, mainnet_index, features, extra_deps) in [
+        (
+            "",
+            "mainnet_ckbtc_ic-icrc1-ledger",
+            "mainnet_ckbtc-index-ng",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            "mainnet_cketh_ic-icrc1-ledger-u256",
+            "mainnet_cketh-index-ng",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]

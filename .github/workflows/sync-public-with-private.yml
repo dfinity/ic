@@ -1,0 +1,29 @@
+name: Sync IC private from IC public
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/minimal-runner-image:0.1
+    if: ${{ github.repository != 'dfinity/ic' }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: 'master-private'
+        token: ${{ secrets.IDX_PUSH_TO_PR }}
+
+    - name: Sync changes from public ic
+      run: |
+        git config --global user.name "IDX GitHub Automation"
+        git config --global user.email "idx@dfinity.org"
+
+        git remote add public https://github.com/dfinity/ic.git
+        git fetch public master
+        git push origin public/master:master-private

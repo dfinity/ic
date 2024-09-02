@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/sys",
@@ -31,7 +33,8 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_fstrim_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
+    # TODO: is this really needed?
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
@@ -40,7 +43,6 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [":fstrim_tool"],
 )
 

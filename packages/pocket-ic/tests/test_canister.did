@@ -1,3 +1,23 @@
+type SchnorrAlgorithm = variant {
+  bip340secp256k1;
+  ed25519;
+};
+type SchnorrKeyId = record {
+  algorithm: SchnorrAlgorithm;
+  name: text;
+};
+type SchnorrPublicKeyResponse = record {
+  public_key : blob;
+  chain_code : blob;
+};
+type SchnorrPublicKeyResult = variant {
+  Ok : SchnorrPublicKeyResponse;
+  Err : text;
+};
+type SignWithSchnorrResult = variant {
+  Ok : blob;
+  Err : text;
+};
 type EcdsaPublicKeyResponse = record {
   public_key : blob;
   chain_code : blob;
@@ -10,7 +30,25 @@ type SignWithEcdsaResult = variant {
   Ok : blob;
   Err : text;
 };
+type HttpHeader = record {
+  name : text;
+  value : text;
+};
+type HttpResponse = record {
+  status : nat;
+  headers : vec HttpHeader;
+  body : blob;
+};
+type TransformArgs = record {
+  response : HttpResponse;
+  context : blob;
+};
 service : {
+  schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
+  sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
+  canister_http : () -> (HttpResponse);
+  canister_http_with_transform : () -> (HttpResponse);
+  transform : (TransformArgs) -> (HttpResponse) query;
 }

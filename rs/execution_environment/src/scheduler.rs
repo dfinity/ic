@@ -25,8 +25,10 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
+    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -36,6 +38,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -531,7 +534,7 @@ impl SchedulerImpl {
         state
     }
 
-    /// Invokes `ExecutionEnvironmnet` to execute a subnet message.
+    /// Invokes `ExecutionEnvironment` to execute a subnet message.
     fn execute_subnet_message(
         &self,
         msg: CanisterMessage,
@@ -662,7 +665,7 @@ impl SchedulerImpl {
 
         // Start iteration loop:
         //      - Execute subnet messages.
-        //      - Execute hearbeat and global timer tasks.
+        //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
         //      - Induct messages on the same subnet.
         let mut state = loop {
@@ -815,12 +818,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+                    ExecutionTask::Heartbeat
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => false,
                     ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
@@ -1338,7 +1343,36 @@ impl SchedulerImpl {
                 }
             }
         }
+        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
+    }
+
+    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
+        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
+            // Returns the larger of the two:
+            // - the default value
+            // - the average between the current usage and the hard limit.
+            default.max(NumBytes::new(
+                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
+            ))
+        }
+
+        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
+        for (_id, canister) in state.canister_states.iter_mut() {
+            if canister.system_state.wasm_memory_limit.is_none() {
+                let num_wasm_pages = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
+                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
+                    canister.system_state.wasm_memory_limit =
+                        Some(compute_default_wasm_memory_limit(
+                            default_wasm_memory_limit,
+                            wasm_memory_usage,
+                        ));
+                }
+            }
+        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.
@@ -1352,7 +1386,7 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat and GlobalTimer tasks exist only during the round
+        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
         //    and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
         // 3. If deterministic time slicing is disabled, then there are no paused tasks.
@@ -1371,6 +1405,16 @@ impl SchedulerImpl {
                     ExecutionTask::GlobalTimer => {
                         panic!(
                             "Unexpected global timer task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    // TODO [EXC-1666]
+                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
+                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
+                    // come back to it, to revisit if we should keep it after the round ends.
+                    ExecutionTask::OnLowWasmMemory => {
+                        panic!(
+                            "Unexpected on low wasm memory task after a round in canister {:?}",
                             id
                         );
                     }
@@ -1573,9 +1617,6 @@ impl Scheduler for SchedulerImpl {
                     &idkg_subnet_public_keys,
                 );
                 state = new_state;
-                if subnet_round_limits.reached() {
-                    break;
-                }
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
@@ -1693,7 +1734,7 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithThresholdContext`]s by assigning randomness and matching quadruples.
+        // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
             let contexts = state
                 .metadata
@@ -1916,6 +1957,7 @@ struct ExecutionThreadResult {
 /// Executes the given canisters one by one. For each canister it
 /// - runs the heartbeat or timer handlers of the canister if needed,
 /// - executes all messages of the canister.
+///
 /// The execution stops if `total_instruction_limit` is reached
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
@@ -2131,7 +2173,10 @@ fn observe_replicated_state_metrics(
             Some(&ExecutionTask::AbortedInstallCode { .. }) => {
                 num_aborted_install += 1;
             }
-            Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
+            Some(&ExecutionTask::Heartbeat)
+            | Some(&ExecutionTask::GlobalTimer)
+            | Some(&ExecutionTask::OnLowWasmMemory)
+            | None => {}
         }
         consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
@@ -2215,10 +2260,6 @@ fn observe_replicated_state_metrics(
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
     metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-
-    metrics
-        .ecdsa_signature_agreements
-        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
 
     for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
         metrics
@@ -2367,6 +2408,7 @@ fn get_instructions_limits_for_subnet_message(
             | UpdateSettings
             | BitcoinGetBalance
             | BitcoinGetUtxos
+            | BitcoinGetBlockHeaders
             | BitcoinSendTransaction
             | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles
@@ -2377,7 +2419,6 @@ fn get_instructions_limits_for_subnet_message(
             | ProvisionalTopUpCanister
             | UploadChunk
             | StoredChunks
-            | DeleteChunks
             | ClearChunkStore
             | TakeCanisterSnapshot
             | LoadCanisterSnapshot

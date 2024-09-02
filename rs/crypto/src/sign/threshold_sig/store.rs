@@ -11,6 +11,7 @@ mod tests;
 /// * the `CspPublicCoefficients` for a particular DKG instance,
 /// * the `NodeIndex`es of the nodes participating in a DKG instance,
 /// * the `CspThresholdPublicKey`s of the nodes participating in a DKG instance,
+///
 /// where the DKG instance is identified by a `NiDkgId`.
 pub trait ThresholdSigDataStore {
     /// Inserts both public coefficients and indices for a given `dkg_id` into

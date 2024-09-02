@@ -23,7 +23,7 @@ use ic_management_canister_types::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{
@@ -1279,6 +1279,20 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         0
     );
 
+    // Taking a snapshot of the canister will decrease the balance.
+    // Increase the canister balance to be able to take a new snapshot.
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test.execution_cost(instructions);
+    test.state_mut()
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     test.inject_call_to_ic00(
@@ -1370,13 +1384,27 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-
     assert!(test
         .state()
         .canister_state(&canister_id)
         .unwrap()
         .execution_state
         .is_some());
+
+    // Taking a snapshot of the canister will decrease the balance.
+    // Increase the canister balance to be able to take a new snapshot.
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test.execution_cost(instructions);
+    test.state_mut()
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     test.inject_call_to_ic00(
@@ -3479,136 +3507,6 @@ fn scheduler_maintains_canister_order() {
 }
 
 #[test]
-fn ecdsa_signature_agreements_metric_is_updated() {
-    let key_id = make_ecdsa_key_id(0);
-    let mut test = SchedulerTestBuilder::new()
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
-        .build();
-
-    let canister_id = test.create_canister();
-
-    let payload = Encode!(&SignWithECDSAArgs {
-        message_hash: [0; 32],
-        derivation_path: DerivationPath::new(Vec::new()),
-        key_id,
-    })
-    .unwrap();
-
-    // inject two signing request
-    test.inject_call_to_ic00(
-        Method::SignWithECDSA,
-        payload.clone(),
-        test.ecdsa_signature_fee(),
-        canister_id,
-        InputQueueType::RemoteSubnet,
-    );
-    test.inject_call_to_ic00(
-        Method::SignWithECDSA,
-        payload,
-        test.ecdsa_signature_fee(),
-        canister_id,
-        InputQueueType::RemoteSubnet,
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // Check that the SubnetCallContextManager contains both requests.
-    let sign_with_ecdsa_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts();
-    assert_eq!(sign_with_ecdsa_contexts.len(), 2);
-
-    // reject the first one
-    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = ConsensusResponse::new(
-        *callback_id,
-        Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
-    );
-
-    test.state_mut().consensus_queue.push(response);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        1.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
-
-    let ecdsa_signature_agreements_before = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .ecdsa_signature_agreements;
-    let metric_before = fetch_int_gauge(
-        test.metrics_registry(),
-        "replicated_state_ecdsa_signature_agreements_total",
-    )
-    .unwrap();
-
-    // metric and state variable should not have been updated
-    assert_eq!(ecdsa_signature_agreements_before, metric_before);
-    assert_eq!(0, metric_before);
-
-    let sign_with_ecdsa_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts();
-    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
-
-    // send a reply to the second request
-    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = ConsensusResponse::new(
-        *callback_id,
-        Payload::Data(
-            ic00::SignWithECDSAReply {
-                signature: vec![1, 2, 3],
-            }
-            .encode(),
-        ),
-    );
-
-    test.state_mut().consensus_queue.push(response);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        2.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
-
-    let ecdsa_signature_agreements_after = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .ecdsa_signature_agreements;
-    let metric_after = fetch_int_gauge(
-        test.metrics_registry(),
-        "replicated_state_ecdsa_signature_agreements_total",
-    )
-    .unwrap();
-
-    assert_eq!(
-        ecdsa_signature_agreements_before + 1,
-        ecdsa_signature_agreements_after
-    );
-    assert_eq!(ecdsa_signature_agreements_after, metric_after);
-
-    // Check that the request was removed.
-    let sign_with_ecdsa_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts();
-    assert!(sign_with_ecdsa_contexts.is_empty());
-}
-
-#[test]
 fn threshold_signature_agreements_metric_is_updated() {
     let ecdsa_key_id = make_ecdsa_key_id(0);
     let master_ecdsa_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
@@ -3621,14 +3519,6 @@ fn threshold_signature_agreements_metric_is_updated() {
         ])
         .build();
 
-    // The old (ecdsa-only) metric is set to an initial value which should later
-    // be used to initialize the new metric
-    let initial_ecdsa_agreements = 123;
-    test.state_mut()
-        .metadata
-        .subnet_metrics
-        .ecdsa_signature_agreements = initial_ecdsa_agreements;
-
     observe_replicated_state_metrics(
         test.scheduler().own_subnet_id,
         test.state(),
@@ -3636,15 +3526,6 @@ fn threshold_signature_agreements_metric_is_updated() {
         &test.scheduler().metrics,
         &no_op_logger(),
     );
-
-    let metric_init = fetch_int_gauge(
-        test.metrics_registry(),
-        "replicated_state_ecdsa_signature_agreements_total",
-    )
-    .unwrap();
-
-    // metric is set to the initial value
-    assert_eq!(initial_ecdsa_agreements, metric_init);
 
     let canister_id = test.create_canister();
 
@@ -3779,11 +3660,11 @@ fn threshold_signature_agreements_metric_is_updated() {
         .threshold_signature_agreements;
     assert_eq!(threshold_signature_agreements_after.len(), 2);
 
-    // Value of the new ecdsa metric should be set to the old ecdsa metric + 1
+    // Value of the new ecdsa metric should be set to 1
     let ecdsa_count = threshold_signature_agreements_after
         .get(&master_ecdsa_key_id)
         .unwrap();
-    assert_eq!(initial_ecdsa_agreements + 1, *ecdsa_count);
+    assert_eq!(1, *ecdsa_count);
 
     // Value of the new schnorr metric should be set to 1
     let schnorr_count = threshold_signature_agreements_after
@@ -3798,10 +3679,7 @@ fn threshold_signature_agreements_metric_is_updated() {
     assert_eq!(
         metrics_after,
         metric_vec(&[
-            (
-                &[("key_id", &master_ecdsa_key_id.to_string())],
-                initial_ecdsa_agreements + 1
-            ),
+            (&[("key_id", &master_ecdsa_key_id.to_string())], 1),
             (&[("key_id", &master_schnorr_key_id.to_string())], 1),
         ]),
     );

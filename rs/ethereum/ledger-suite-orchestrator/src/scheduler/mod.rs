@@ -509,6 +509,7 @@ impl UpgradeOrchestratorArgs {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
     contract: Erc20Token,
+    minter_id: Principal,
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
@@ -537,6 +538,7 @@ pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
     Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashError(WasmHashError),
+    InternalError(String),
 }
 
 impl InstallLedgerSuiteArgs {
@@ -547,6 +549,13 @@ impl InstallLedgerSuiteArgs {
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+        let minter_id =
+            state
+                .minter_id()
+                .cloned()
+                .ok_or(InvalidAddErc20ArgError::InternalError(
+                    "ERROR: minter principal not set in state".to_string(),
+                ))?;
         if let Some(_canisters) = state.managed_canisters(&contract) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
                 contract,
@@ -578,6 +587,7 @@ impl InstallLedgerSuiteArgs {
         };
         Ok(Self {
             contract,
+            minter_id,
             ledger_init_arg: args.ledger_init_arg,
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,
@@ -838,6 +848,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
         &args.contract,
         &args.ledger_compressed_wasm_hash,
         &LedgerArgument::Init(icrc1_ledger_init_arg(
+            args.minter_id,
             args.ledger_init_arg.clone(),
             runtime.id().into(),
             more_controllers,
@@ -886,19 +897,32 @@ fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata
 }
 
 fn icrc1_ledger_init_arg(
+    minter_id: Principal,
     ledger_init_arg: LedgerInitArg,
     archive_controller_id: PrincipalId,
     archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> LedgerInitArgs {
+    use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+
+    const LEDGER_FEE_SUBACCOUNT: [u8; 32] = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x0f, 0xee,
+    ];
+    const MAX_MEMO_LENGTH: u16 = 80;
+    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags { icrc2: true };
 
     LedgerInitArgs {
-        minting_account: ledger_init_arg.minting_account,
-        fee_collector_account: ledger_init_arg.fee_collector_account,
-        initial_balances: ledger_init_arg.initial_balances,
+        minting_account: LedgerAccount::from(minter_id),
+        fee_collector_account: Some(LedgerAccount {
+            owner: minter_id,
+            subaccount: Some(LEDGER_FEE_SUBACCOUNT),
+        }),
+        initial_balances: vec![],
         transfer_fee: ledger_init_arg.transfer_fee,
-        decimals: ledger_init_arg.decimals,
+        decimals: Some(ledger_init_arg.decimals),
         token_name: ledger_init_arg.token_name,
         token_symbol: ledger_init_arg.token_symbol,
         metadata: vec![(
@@ -910,10 +934,10 @@ fn icrc1_ledger_init_arg(
             archive_more_controller_ids,
             cycles_for_archive_creation,
         ),
-        max_memo_length: ledger_init_arg.max_memo_length,
-        feature_flags: ledger_init_arg.feature_flags,
-        maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
-        accounts_overflow_trim_quantity: ledger_init_arg.accounts_overflow_trim_quantity,
+        max_memo_length: Some(MAX_MEMO_LENGTH),
+        feature_flags: Some(ICRC2_FEATURE),
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }
 }
 

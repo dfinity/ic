@@ -1,13 +1,9 @@
 name: Container IC Build Image
 
 on:
-  # TODO: add to Dockerfile before ENTRYPOINT before migration
-  # 'RUN date +"%D %T.%6N" > /build-date.txt'
-  # TODO: switch to pull_request_target before migration
-  #pull_request_target:
   pull_request:
     paths:
-      - '.github/workflows/container-autobuild.yml' # TODO: remove me before migration
+      - '.github/workflows/container-autobuild.yml'
       - '.bazelversion'
       - 'rust-toolchain.toml'
       - 'gitlab-ci/container/**'
@@ -52,10 +48,10 @@ jobs:
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
-          if grep "$IMAGE_TAG" gitlab-ci/container/TAG_GH; then
+          if grep "$IMAGE_TAG" gitlab-ci/container/TAG; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify gitlab-ci/container/TAG_GH with random string to trigger new build."
+            echo "Modify gitlab-ci/container/TAG with random string to trigger new build."
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -96,14 +92,11 @@ jobs:
 
           IMG_NAME=${{ github.repository_owner }}/ic-build
           IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ env.IMAGE_SHA }}"
-          # TODO: remove after to migration
-          IMG_NAME="(dfinity\|dfinity-sandbox)/ic-build"
 
-          echo "$IMAGE_TAG" > gitlab-ci/container/TAG_GH
-          # TODO: uncomment prior to migration
-          #pushd .devcontainer
-          #sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
-          #popd
+          echo "$IMAGE_TAG" > gitlab-ci/container/TAG
+          pushd .devcontainer
+          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          popd
           pushd .github
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
           popd

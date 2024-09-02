@@ -42,7 +42,7 @@ use super::{
 pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
-/// 1. to identify the matching request in sign_with_ecdsa_contexts.
+/// 1. to identify the matching request in signature request contexts.
 /// 2. to identify which pre-signature the request is matched to.
 ///
 /// Pre-signatures must be matched with requests in the same order as requests
@@ -643,7 +643,7 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 pub type TranscriptLookupError = String;
 
-/// Wrapper to access the ECDSA related info from the blocks.
+/// Wrapper to access the IDKG related info from the blocks.
 pub trait IDkgBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;

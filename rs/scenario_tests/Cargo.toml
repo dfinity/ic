@@ -17,6 +17,8 @@ dfn_json = { path = "../rust_canisters/dfn_json" }
 futures = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-canister-client = { path = "../canister_client" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
@@ -29,10 +31,8 @@ serde = { workspace = true }
 slog = { workspace = true }
 tester = "0.7.0"
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }
-ic-crypto-ed25519 = { path = "../crypto/ed25519" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 
 [[bin]]
 name = "e2e-test-driver"

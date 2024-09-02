@@ -26,12 +26,12 @@ rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-url = "2.2.1"
+url = { workspace = true }
 
 [dev-dependencies]
-actix-rt = "2.2.0"
+actix-rt = "2.10.0"
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
-proptest = "1.0"
+proptest = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

@@ -1,10 +1,9 @@
 ---
-
 - name: Download disk images
   vars:
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes)  | difference(boundary_nodes) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes) | difference(boundary_nodes) }}"
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
@@ -87,17 +86,17 @@
   args:
     executable: /bin/bash
   register: script_res
-  changed_when: "script_res.stdout | default('')"
+  changed_when: script_res.stdout | default('')
   retries: 10
   delay: 10
   until: script_res is not failed
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]
 
-- name: unarchive image files # noqa risky-shell-pipe
+- name: Unarchive image files # noqa risky-shell-pipe
   vars:
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes)  | difference(boundary_nodes) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes) | difference(boundary_nodes) }}"
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
@@ -131,9 +130,8 @@
             tar xavf disk-img.tar.zst --sparse
         fi
     done
-
   args:
     executable: /bin/bash
   register: script_res
-  changed_when: "script_res.stdout | default('')"
-  tags: [ "ic_guest" ]
+  changed_when: script_res.stdout | default('')
+  tags: [ic_guest]

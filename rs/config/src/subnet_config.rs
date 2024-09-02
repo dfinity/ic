@@ -161,6 +161,11 @@ const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 /// 1/10th of a round.
 pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
 
+/// Baseline cost for creating or loading a canister snapshot (2B instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(2_000_000_000);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
@@ -259,6 +264,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading a chunk to the wasm store.
     pub upload_wasm_chunk_instructions: NumInstructions,
+
+    /// Number of instructions to count when creating or loading a canister snapshot.
+    pub canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -286,13 +294,16 @@ impl SchedulerConfig {
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
+            canister_snapshot_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
         }
     }
 
     pub fn system_subnet() -> Self {
         let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
-        let max_instructions_per_slice = NumInstructions::from(10 * B);
+        let max_instructions_per_slice = NumInstructions::from(2 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(10 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -304,6 +315,7 @@ impl SchedulerConfig {
             // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
             max_instructions_per_round: max_instructions_per_message_without_dts
                 .max(max_instructions_per_slice)
+                .max(max_instructions_per_install_code_slice)
                 + NumInstructions::from(2 * B),
             max_instructions_per_message: max_instructions_per_message_without_dts,
             max_instructions_per_message_without_dts,
@@ -313,7 +325,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
-            max_instructions_per_install_code_slice: max_instructions_per_slice,
+            max_instructions_per_install_code_slice,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -326,6 +338,7 @@ impl SchedulerConfig {
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
+            canister_snapshot_baseline_instructions: NumInstructions::from(0),
         }
     }
 
@@ -356,6 +369,8 @@ impl SchedulerConfig {
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
+            canister_snapshot_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
         }
     }
 

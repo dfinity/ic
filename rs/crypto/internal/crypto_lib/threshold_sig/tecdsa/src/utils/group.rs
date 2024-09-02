@@ -941,14 +941,15 @@ impl EccPoint {
 
     /// Constant-time multiscalar multiplication using Pippenger's algorithm
     ///
-    /// Return point_scalar_pairs[1].0 * point_scalar_pairs[1].1 + ...
-    /// + point_scalar_pairs[n].0 * point_scalar_pairs[n].1
+    /// Return
+    /// point_scalar_pairs[0].0 * point_scalar_pairs[1].1 + ...
+    /// \+ point_scalar_pairs[n].0 * point_scalar_pairs[n].1
     /// where .0 is a point and .1 is a scalar
     ///
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
     /// * `CanisterThresholdError::InvalidArguments` if `point_scalar_pairs`
-    /// is empty because we cannot infer a curve type from the input arguments.
+    ///   is empty because we cannot infer a curve type from the input arguments.
     pub fn mul_n_points_pippenger(
         point_scalar_pairs: &[(&EccPoint, &EccScalar)],
     ) -> CanisterThresholdResult<Self> {
@@ -1453,7 +1454,7 @@ impl Naf {
     /// * The callee is responsible to guarantee that the invariant holds.
     /// * `bit_len` MUST be greater than 0 and less than 8.
     /// * Input arguments MUST be in bounds, i.e.
-    /// `(pos + bit_len) <= self.bit_len()` must hold.
+    ///   `(pos + bit_len) <= self.bit_len()` must hold.
     ///
     /// # Panics
     /// * If the invariant doesn't hold.
@@ -1637,7 +1638,7 @@ impl NafLut {
     ///
     /// # Errors
     /// * CurveMismatch in case of inconsistent points. However, this should generally not happen
-    /// because the curve type of all computed points is derived from `point`.
+    ///   because the curve type of all computed points is derived from `point`.
     fn compute_table(
         point: &EccPoint,
         window_size: usize,

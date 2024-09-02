@@ -13,16 +13,18 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use super::utils::ssh_access::execute_bash_command;
-use super::utils::upgrade::{bless_replica_version, deploy_guestos_to_all_subnet_nodes};
-use crate::orchestrator::utils::rw_message::{
-    can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
-    store_message_with_retries,
-};
-use crate::orchestrator::utils::upgrade::get_assigned_replica_version;
-use crate::orchestrator::utils::upgrade::UpdateImageType;
 use anyhow::bail;
+use ic_consensus_system_test_utils::upgrade::{
+    bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    UpdateImageType,
+};
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
+        install_nns_and_check_progress, store_message_with_retries,
+    },
+    ssh_access::execute_bash_command,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
@@ -67,9 +69,9 @@ pub fn test(test_env: TestEnv) {
         get_assigned_replica_version(&nns_node).expect("Failed to get assigned replica version");
     info!(logger, "Target version: {}", target_version);
 
-    let upgrade_url = test_env.get_ic_os_update_img_url().unwrap();
+    let upgrade_url = get_ic_os_update_img_url().unwrap();
     // Note: we're pulling a wrong hash on purpose to simulate a failed upgrade
-    let sha256 = test_env.get_ic_os_update_img_test_sha256().unwrap();
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -134,7 +136,7 @@ pub fn test(test_env: TestEnv) {
         sudo chmod --reference=. image.bin
         sudo chown --reference=. image.bin
         "#,
-        test_env.get_ic_os_update_img_test_url().unwrap(),
+        get_ic_os_update_img_test_url().unwrap(),
     );
     for n in &nodes {
         let s = n

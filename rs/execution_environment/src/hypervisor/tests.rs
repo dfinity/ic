@@ -40,7 +40,9 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::mem::size_of;
@@ -2180,6 +2182,196 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
     );
 }
 
+#[test]
+fn ic0_call_cycles_add128_up_to_deducts_cycles() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(MAX_NUM_INSTRUCTIONS.get())
+        .build();
+    let requested_cycles = Cycles::new(10_000_000_000);
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_cycles_add128_up_to" (func $ic0_call_cycles_add128_up_to (param i64 i64 i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_cycles_add128_up_to
+                    (i64.const 0)                       ;; amount of cycles used to be added - high
+                    (i64.const {requested_cycles})      ;; amount of cycles used to be added - low
+                    (i32.const 200)                     ;; where to write amount of cycles added
+                )
+                (call $ic0_call_perform)
+                drop
+                ;; return number of cycles attached
+                (call $msg_reply_data_append (i32.const 200) (i32.const 16))
+                (call $msg_reply)
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#
+    );
+    let initial_cycles = Cycles::new(100_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    let WasmResult::Reply(reply_bytes) = test.ingress(canister_id, "test", vec![]).unwrap() else {
+        panic!("bad WasmResult")
+    };
+    // The canister has plenty of cycles available to add the requested 10B cycles to the call.
+    // Therefore we expect that 10B cycles are transferred
+    let transferred_cycles: Cycles =
+        u128::from_le_bytes(reply_bytes.try_into().expect("bad number of reply bytes")).into();
+    assert_eq!(requested_cycles, transferred_cycles);
+    assert_eq!(1, test.xnet_messages().len());
+    let mgr = test.cycles_account_manager();
+    let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
+        + mgr.xnet_call_bytes_transmitted_fee(
+            test.xnet_messages()[0].payload_size_bytes(),
+            test.subnet_size(),
+        )
+        + mgr.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            test.subnet_size(),
+        )
+        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+    assert_eq!(
+        initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
+        test.canister_state(canister_id).system_state.balance(),
+    );
+}
+
+#[test]
+fn ic0_call_cycles_add128_up_to_limit_allows_performing_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(MAX_NUM_INSTRUCTIONS.get())
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_cycles_add128_up_to" (func $ic0_call_cycles_add128_up_to (param i64 i64 i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_cycles_add128_up_to
+                (i64.const 999000000000)            ;; amount of cycles used to be added - high
+                (i64.const 0)                       ;; amount of cycles used to be added - low
+                (i32.const 200)                     ;; where to write amount of cycles added
+                )
+                (call $ic0_call_perform)
+                drop
+                ;; return number of cycles attached
+                (call $msg_reply_data_append (i32.const 200) (i32.const 16))
+                (call $msg_reply)
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let initial_cycles = Cycles::new(100_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    let WasmResult::Reply(reply_bytes) = test.ingress(canister_id, "test", vec![]).unwrap() else {
+        panic!("bad WasmResult")
+    };
+    // The canister doesn't have enough cycles to attach the requested amount of cycles to the call.
+    // We expect to see a bunch of cycles transferred, but the subsequent `call_perform` still must have succeeded.
+    let transferred_cycles =
+        u128::from_le_bytes(reply_bytes.try_into().expect("bad number of reply bytes"));
+    assert_eq!(1, test.xnet_messages().len());
+    let mgr = test.cycles_account_manager();
+    let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
+        + mgr.xnet_call_bytes_transmitted_fee(
+            test.xnet_messages()[0].payload_size_bytes(),
+            test.subnet_size(),
+        )
+        + mgr.xnet_call_bytes_transmitted_fee(
+            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            test.subnet_size(),
+        )
+        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+    assert_eq!(
+        initial_cycles - messaging_fee - transferred_cycles.into() - test.execution_cost(),
+        test.canister_state(canister_id).system_state.balance(),
+    );
+}
+
+#[test]
+fn ic0_call_cycles_add128_up_to_has_no_effect_without_ic0_call_perform() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32) (param $method_name_len i32)
+                    (param $reply_fun i32)       (param $reply_env i32)
+                    (param $reject_fun i32)      (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_cycles_add128_up_to" (func $call_cycles_add128_up_to (param i64 i64 i32)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $call_cycles_add128_up_to
+                    (i64.const 0)                   ;; amount of cycles used to be added - high
+                    (i64.const 10000000000)         ;; amount of cycles used to be added - low
+                    (i32.const 200)                 ;; where to write amount of cycles added
+                )
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+
+    let initial_cycles = Cycles::new(100_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert_eq!(0, test.xnet_messages().len());
+    // Cycles deducted by `ic0.call_cycles_add128_up_to` are refunded.
+    assert_eq!(
+        initial_cycles - test.execution_cost(),
+        test.canister_state(canister_id).system_state.balance(),
+    );
+}
+
 const MINT_CYCLES: &str = r#"
     (module
         (import "ic0" "msg_reply_data_append"
@@ -3864,6 +4056,7 @@ impl MemoryAccessor {
         assert_empty_reply(result);
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
         let execution_state = self.test.execution_state(self.canister_id);
         let mut actual_dirty = vec![false; is_dirty_page.len()];
@@ -3922,6 +4115,7 @@ fn write_after_grow() {
 }
 
 #[derive(Debug, Clone)]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 enum Operation {
     Read(i32),
     Write(i32, u8),
@@ -3929,6 +4123,7 @@ enum Operation {
     GrowAndWrite(u8),
 }
 
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn random_operations(
     num_pages: i32,
     num_operations: usize,
@@ -7733,4 +7928,113 @@ fn wasm_memory_limit_cannot_exceed_256_tb() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_canister_cycle_balance_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles((1 << 64) - 1)
+        .build();
+    let id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(id, "update", wasm().cycles_balance().reply_int64().build())
+        .unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_available_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().msg_cycles_available().reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().message_payload().append_and_reply()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_refunded_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().push_int64(0).reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().msg_cycles_refunded().reply_int64()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_mint_cycles_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1 << 64)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "mint_cycles" (func $mint_cycles (param i64) (result i64)))
+
+            (func (export "canister_update test")
+                (drop (call $mint_cycles (i64.const 18446744073709551615)))
+            )
+        )"#;
+    let mut canister_id = test.canister_from_wat(wat).unwrap();
+    // This loop should finish after four iterations.
+    while canister_id != CYCLES_MINTING_CANISTER_ID {
+        canister_id = test.canister_from_wat(wat).unwrap();
+    }
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .balance()
+            .get()
+            >= 2 * (1 << 64) - 10_000_000
+    );
 }

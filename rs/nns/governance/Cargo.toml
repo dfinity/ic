@@ -50,10 +50,14 @@ ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-init = { path = "./init" }
+ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -97,6 +101,7 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 futures = { workspace = true }
@@ -104,7 +109,7 @@ ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

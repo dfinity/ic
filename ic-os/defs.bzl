@@ -8,6 +8,7 @@ load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
+load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
@@ -43,6 +44,19 @@ def icos_build(
         mode = name
 
     image_deps = image_deps_func(mode, malicious)
+
+    # -------------------- Pre-check --------------------
+
+    # Verify that all the referenced components exist
+    native.genrule(
+        name = name + "_pre_check",
+        srcs = [k for k, v in image_deps["component_files"].items()],
+        outs = [name + "_pre_check_result.txt"],
+        cmd = """
+            echo "Running pre_check for {name}"
+            echo "All paths exist" > $@
+        """,
+    )
 
     # -------------------- Version management --------------------
 
@@ -172,6 +186,12 @@ def icos_build(
         tags = ["manual"],
     )
 
+    component_file_references_test(
+        name = name + "_component_file_references_test",
+        image = ":partition-root-unsigned.tzst",
+        component_files = image_deps["component_files"].keys(),
+    )
+
     if upgrades:
         inject_files(
             name = "partition-root-test-unsigned.tzst",
@@ -201,9 +221,9 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
             tags = ["manual"],
         )
 
@@ -224,8 +244,8 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
-                tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
+                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
                 tags = ["manual"],
             )
 
@@ -318,20 +338,6 @@ def icos_build(
     sha256sum2url(
         name = "disk-img.tar.zst.cas-url",
         src = ":disk-img.tar.zst.sha256",
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    gzip_compress(
-        name = "disk-img.tar.gz",
-        srcs = [":disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.gz.sha256",
-        srcs = [":disk-img.tar.gz"],
         visibility = visibility,
         tags = ["manual"],
     )
@@ -444,7 +450,6 @@ def icos_build(
             name = "upload_disk-img",
             inputs = [
                 ":disk-img.tar.zst",
-                ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
             visibility = visibility,
@@ -454,14 +459,6 @@ def icos_build(
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        output_files(
-            name = "disk-img-url-gz",
-            target = ":upload_disk-img",
-            basenames = ["upload_disk-img_disk-img.tar.gz.url"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -587,7 +584,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -613,7 +610,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -628,8 +625,8 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
+            name + "_pre_check_result.txt",
             ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
         ] + ([
             ":update-img.tar.zst",
             ":update-img.tar.gz",
@@ -789,9 +786,9 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
         tags = ["manual"],
     )
 

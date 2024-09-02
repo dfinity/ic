@@ -169,7 +169,7 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
     );
 }
 
-fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
+pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
     let metrics = retrieve_metrics(env, canister_id);
     for line in &metrics {
         let tokens: Vec<&str> = line.split(' ').collect();

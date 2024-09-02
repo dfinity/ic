@@ -76,6 +76,7 @@ pub struct CanisterHttpRequestArgs {
     pub url: String,
     pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,

@@ -2,8 +2,8 @@
 
 use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::{
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{
@@ -19,11 +19,10 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -569,7 +568,6 @@ pub async fn submit_create_application_subnet_proposal(
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
-    let scheduler = SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -584,9 +582,6 @@ pub async fn submit_create_application_subnet_proposal(
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
-        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
-        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
-        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
         features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
@@ -688,8 +683,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         sender,
         neuron_id,
         NnsFunction::ReviseElectedHostosVersions,
-        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
-        UpdateElectedHostosVersionsPayload {
+        ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -730,8 +724,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         sender,
         neuron_id,
         NnsFunction::DeployHostosToSomeNodes,
-        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),
         },

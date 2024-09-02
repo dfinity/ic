@@ -11,9 +11,9 @@ name = "call-tree-test-canister"
 path = "src/main.rs"
 
 [dependencies]
-dfn_core = { path = "../dfn_core" }
-dfn_json = { path = "../dfn_json" }
-dfn_macro = { path = "../dfn_macro" }
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-futures = { workspace = true }

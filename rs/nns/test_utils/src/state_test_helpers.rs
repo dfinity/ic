@@ -7,13 +7,11 @@ use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
-    CYCLES_LEDGER_CANISTER_ID,
 };
 use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -29,14 +27,14 @@ use ic_nervous_system_common::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
-    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
-    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
     governance::Migrations,
     manage_neuron::{
@@ -47,15 +45,15 @@ use ic_nns_governance::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    proposal::{self, Action},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCode, ListNeurons,
-    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal,
-    ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_subnet_type::SubnetType;
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
@@ -64,11 +62,11 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
+use ic_types::{ingress::WasmResult, Cycles};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -86,28 +84,12 @@ use std::{convert::TryInto, env, time::Duration};
 /// is omitted so that the canister range of the II subnet is not used
 /// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    // TODO, remove when this is the value set in the normal IC build
-    // This is to uncover issues in testing that might affect performance in production
-    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
-    const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions =
-        NumInstructions::new(2_000_000_000);
-
-    let mut subnet_config = SubnetConfig::new(SubnetType::System);
-    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
-    subnet_config
-        .scheduler_config
-        .max_instructions_per_install_code_slice = MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE;
-
     StateMachineBuilder::new()
         .with_current_time()
         .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            Config::default(),
-        )))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -379,7 +361,7 @@ pub fn get_canister_status(
 
 pub fn get_root_canister_status(machine: &StateMachine) -> Result<CanisterStatusResultV2, String> {
     machine
-        .canister_status_as(PrincipalId::from(ROOT_CANISTER_ID), ROOT_CANISTER_ID)
+        .canister_status_as(PrincipalId::from(LIFELINE_CANISTER_ID), ROOT_CANISTER_ID)
         .unwrap()
 }
 
@@ -829,14 +811,14 @@ fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    command: nns_governance_pb::manage_neuron::Command,
+    command: nns_governance_pb::ManageNeuronCommandRequest,
 ) -> ManageNeuronResponse {
     let result = state_machine
         .execute_ingress_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
-            Encode!(&ManageNeuron {
+            Encode!(&ManageNeuronRequest {
                 id: Some(neuron_id),
                 command: Some(command),
                 neuron_id_or_subaccount: None
@@ -864,12 +846,12 @@ impl NnsManageNeuronConfigureOperation for IncreaseDissolveDelay {
 }
 
 trait NnsManageNeuronCommand {
-    fn into_command(self) -> nns_governance_pb::manage_neuron::Command;
+    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandRequest;
 }
 
 impl NnsManageNeuronCommand for nns_governance_pb::manage_neuron::Configure {
-    fn into_command(self) -> nns_governance_pb::manage_neuron::Command {
-        nns_governance_pb::manage_neuron::Command::Configure(self)
+    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandRequest {
+        nns_governance_pb::ManageNeuronCommandRequest::Configure(self)
     }
 }
 
@@ -945,13 +927,13 @@ pub fn nns_claim_or_refresh_neuron(
     memo: u64,
 ) -> NeuronId {
     // Construct request.
-    let command = Some(manage_neuron::Command::ClaimOrRefresh(ClaimOrRefresh {
+    let command = Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
         by: Some(claim_or_refresh::By::MemoAndController(MemoAndController {
             memo,
             controller: Some(controller),
         })),
     }));
-    let manage_neuron = ManageNeuron {
+    let manage_neuron = ManageNeuronRequest {
         id: None,
         command,
         neuron_id_or_subaccount: None,
@@ -993,7 +975,7 @@ pub fn nns_disburse_neuron(
         state_machine,
         sender,
         neuron_id,
-        manage_neuron::Command::Disburse(Disburse {
+        ManageNeuronCommandRequest::Disburse(Disburse {
             amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
             to_account: to_account.map(|account| account.into()),
         }),
@@ -1034,7 +1016,7 @@ pub fn nns_propose_upgrade_nns_canister(
     use_proposal_action: bool,
 ) -> ProposalId {
     let action = if use_proposal_action {
-        Some(proposal::Action::InstallCode(InstallCode {
+        Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
             canister_id: Some(target_canister_id.get()),
             install_mode: Some(3),
             wasm_module: Some(wasm_module),
@@ -1052,10 +1034,12 @@ pub fn nns_propose_upgrade_nns_canister(
 
         let payload = Encode!(&payload).unwrap();
 
-        Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-            payload,
-        }))
+        Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                payload,
+            },
+        ))
     } else {
         let payload = UpgradeRootProposal {
             wasm_module,
@@ -1064,15 +1048,17 @@ pub fn nns_propose_upgrade_nns_canister(
         };
         let payload = Encode!(&payload).unwrap();
 
-        Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsRootUpgrade as i32,
-            payload,
-        }))
+        Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload,
+            },
+        ))
     };
 
     let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(format!("Upgrade {}", target_canister_name)),
         action,
         ..Default::default()
@@ -1182,7 +1168,7 @@ pub fn nns_cast_vote(
     proposal_id: u64,
     vote: Vote,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::RegisterVote(RegisterVote {
+    let command = ManageNeuronCommandRequest::RegisterVote(RegisterVote {
         proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
         vote: vote as i32,
     });
@@ -1196,7 +1182,7 @@ pub fn nns_split_neuron(
     neuron_id: NeuronId,
     amount: u64,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Split(Split { amount_e8s: amount });
+    let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
 
     manage_neuron(state_machine, sender, neuron_id, command)
 }
@@ -1239,7 +1225,7 @@ pub fn nns_join_community_fund(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
     });
 
@@ -1251,7 +1237,7 @@ pub fn nns_leave_community_fund(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
     });
 
@@ -1262,9 +1248,9 @@ pub fn nns_governance_make_proposal(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    proposal: &Proposal,
+    proposal: &MakeProposalRequest,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::MakeProposal(Box::new(proposal.clone()));
+    let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
     manage_neuron(state_machine, sender, neuron_id, command)
 }
@@ -1275,7 +1261,7 @@ pub fn nns_add_hot_key(
     neuron_id: NeuronId,
     new_hot_key: PrincipalId,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::AddHotKey(AddHotKey {
             new_hot_key: Some(new_hot_key),
         })),
@@ -1291,7 +1277,7 @@ pub fn nns_set_followees_for_neuron(
     followees: &[NeuronId],
     topic: i32,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Follow(Follow {
+    let command = ManageNeuronCommandRequest::Follow(Follow {
         topic,
         followees: followees
             .iter()
@@ -1308,7 +1294,7 @@ pub fn nns_remove_hot_key(
     neuron_id: NeuronId,
     hot_key_to_remove: PrincipalId,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::RemoveHotKey(RemoveHotKey {
             hot_key_to_remove: Some(hot_key_to_remove),
         })),
@@ -1323,7 +1309,7 @@ pub fn nns_stake_maturity(
     neuron_id: NeuronId,
     percentage_to_stake: Option<u32>,
 ) -> ManageNeuronResponse {
-    let command = manage_neuron::Command::StakeMaturity(StakeMaturity {
+    let command = ManageNeuronCommandRequest::StakeMaturity(StakeMaturity {
         percentage_to_stake,
     });
 
@@ -1342,12 +1328,15 @@ pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
     Decode!(&reply, Migrations).unwrap()
 }
 
-pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoResponse {
+pub fn nns_list_proposals(
+    state_machine: &StateMachine,
+    request: ListProposalInfo,
+) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
             "list_proposals",
-            Encode!(&ListProposalInfo::default()).unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1357,6 +1346,43 @@ pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoRespo
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+pub fn get_all_proposal_ids(
+    state_machine: &StateMachine,
+    exclude_topic: Vec<Topic>,
+) -> Vec<ProposalId> {
+    let mut proposal_ids = vec![];
+    let mut before_proposal = None;
+
+    loop {
+        let ListProposalInfoResponse { proposal_info } = nns_list_proposals(
+            state_machine,
+            ListProposalInfo {
+                before_proposal,
+                limit: 100,
+                exclude_topic: exclude_topic
+                    .iter()
+                    .map(|topic| i32::from(*topic))
+                    .collect(),
+                include_reward_status: vec![],
+                include_status: vec![],
+                include_all_manage_neuron_proposals: None,
+                omit_large_fields: Some(true),
+            },
+        );
+        let new_proposal_ids = proposal_info
+            .into_iter()
+            .map(|info| info.id.unwrap())
+            .collect::<Vec<_>>();
+        if new_proposal_ids.is_empty() {
+            break;
+        }
+        before_proposal = Some(new_proposal_ids[new_proposal_ids.len() - 1]);
+        proposal_ids.extend(new_proposal_ids);
+    }
+
+    proposal_ids
 }
 
 /// Return the monthly Node Provider rewards
@@ -1406,6 +1432,26 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
     Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
 }
 
+pub fn nns_list_node_provider_rewards(
+    state_machine: &StateMachine,
+    list_node_provider_rewards_request: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "list_node_provider_rewards",
+            Encode!(&list_node_provider_rewards_request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_node_provider_rewards failed: {:#?}", s),
+    };
+
+    Decode!(&result, ListNodeProviderRewardsResponse).unwrap()
+}
+
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {
     let result = state_machine
         .execute_ingress(
@@ -1442,6 +1488,31 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
 }
 
+pub fn get_neurons_fund_audit_info(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> GetNeuronsFundAuditInfoResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_neurons_fund_audit_info",
+            Encode!(&GetNeuronsFundAuditInfoRequest {
+                nns_proposal_id: Some(proposal_id)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
+}
+
 pub fn list_neurons(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1475,6 +1546,7 @@ pub fn list_neurons_by_principal(
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
         },
     )
 }
@@ -1958,14 +2030,16 @@ pub fn cmc_set_default_authorized_subnetworks(
     neuron_id: NeuronId,
 ) {
     let args = SetAuthorizedSubnetworkListArgs { who: None, subnets };
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("set subnetworks".to_string()),
         summary: "setting subnetworks".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
-            payload: Encode!(&args).unwrap(),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
+                payload: Encode!(&args).unwrap(),
+            },
+        )),
     };
 
     let propose_response = nns_governance_make_proposal(machine, sender, neuron_id, &proposal);
@@ -1991,13 +2065,13 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 
     state_machine.reroute_canister_range(
         std::ops::RangeInclusive::<CanisterId>::new(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID,
+            CYCLES_LEDGER_CANISTER_ID,
         ),
         state_machine.get_subnet_id(),
     );
     state_machine.create_canister_with_cycles(
-        Some(CYCLES_LEDGER_CANISTER_ID),
+        Some(CYCLES_LEDGER_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -2011,11 +2085,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }))
     .unwrap();
     state_machine
-        .install_existing_canister(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            cycles_ledger_wasm,
-            arg,
-        )
+        .install_existing_canister(CYCLES_LEDGER_CANISTER_ID, cycles_ledger_wasm, arg)
         .expect("Installing cycles ledger failed");
 }
 

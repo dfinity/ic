@@ -108,6 +108,27 @@ impl PrivateKey {
         Self { sk }
     }
 
+    /// Generate a key using an input seed
+    ///
+    /// # Warning
+    ///
+    /// For security the seed should be at least 256 bits and
+    /// randomly generated
+    pub fn generate_from_seed(seed: &[u8]) -> Self {
+        let digest: [u8; 32] = {
+            let mut sha2 = Sha512::new();
+            sha2.update(seed);
+            let digest: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&digest[..32]);
+            truncated
+        };
+
+        Self {
+            sk: SigningKey::from_bytes(&digest),
+        }
+    }
+
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
@@ -341,6 +362,60 @@ impl DerivedPrivateKey {
     /// Return the public key associated with this private key
     pub fn public_key(&self) -> PublicKey {
         PublicKey::new(self.vk)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (DerivedPrivateKey, [u8; 32]) {
+        let sk_scalar = self.esk.scalar;
+        let pt = EdwardsPoint::mul_base(&sk_scalar);
+
+        let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
+
+        let derived_scalar = sk_scalar + sum;
+
+        let derived_hash_prefix = {
+            // Hash the new derived key and chain code with SHA-512 to derive
+            // the new hash prefix
+            let mut sha2 = Sha512::new();
+            sha2.update(derived_scalar.to_bytes());
+            sha2.update(chain_code);
+            let hash: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&hash[..32]);
+            truncated
+        };
+
+        let dpk = DerivedPrivateKey::new(derived_scalar, derived_hash_prefix, pt);
+        (dpk, chain_code)
     }
 }
 
@@ -659,8 +734,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        // TODO(CRP-2542): Can we use smaller randomizers here?
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::random(rng)).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()
@@ -742,6 +816,17 @@ impl DerivationPath {
     /// Create a free-form derivation path
     pub fn new(path: Vec<DerivationIndex>) -> Self {
         Self { path }
+    }
+
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
     }
 
     /// Return the length of this path

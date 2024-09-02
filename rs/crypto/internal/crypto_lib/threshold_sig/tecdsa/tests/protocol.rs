@@ -314,62 +314,59 @@ fn should_basic_signing_protocol_work() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
-        for use_masked_kappa in [true, false] {
-            let random_seed = Seed::from_rng(rng);
+        let random_seed = Seed::from_rng(rng);
 
-            let setup = EcdsaSignatureProtocolSetup::new(
-                cfg,
-                nodes,
-                threshold,
-                number_of_dealings_corrupted,
-                random_seed,
-                use_masked_kappa,
-            )?;
+        let setup = EcdsaSignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            number_of_dealings_corrupted,
+            random_seed,
+        )?;
 
-            let alg = setup.alg();
+        let alg = setup.alg();
 
-            let signed_message = rng.gen::<[u8; 32]>().to_vec();
-            let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-            let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-            let proto = EcdsaSignatureProtocolExecution::new(
-                setup.clone(),
-                signed_message.clone(),
-                random_beacon,
-                derivation_path.clone(),
-            );
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+        let proto = EcdsaSignatureProtocolExecution::new(
+            setup.clone(),
+            signed_message.clone(),
+            random_beacon,
+            derivation_path.clone(),
+        );
 
-            let shares = proto.generate_shares()?;
+        let shares = proto.generate_shares()?;
 
-            for i in 0..=nodes {
-                let shares = random_subset(&shares, i, rng);
+        for i in 0..=nodes {
+            let shares = random_subset(&shares, i, rng);
 
-                if shares.len() < threshold {
-                    assert!(proto.generate_signature(&shares).is_err());
-                } else {
-                    let sig = proto.generate_signature(&shares).unwrap();
-                    test_sig_serialization(alg, &sig)?;
-                    assert!(proto.verify_signature(&sig).is_ok());
-                }
+            if shares.len() < threshold {
+                assert!(proto.generate_signature(&shares).is_err());
+            } else {
+                let sig = proto.generate_signature(&shares).unwrap();
+                test_sig_serialization(alg, &sig)?;
+                assert!(proto.verify_signature(&sig).is_ok());
             }
-
-            // Test that another run of the protocol generates signatures
-            // which are not verifiable in the earlier one (due to different rho)
-            let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
-            let proto2 = EcdsaSignatureProtocolExecution::new(
-                setup,
-                signed_message,
-                random_beacon2,
-                derivation_path,
-            );
-
-            let shares = proto2.generate_shares()?;
-            let sig = proto2.generate_signature(&shares).unwrap();
-            test_sig_serialization(alg, &sig)?;
-
-            assert!(proto.verify_signature(&sig).is_err());
-            assert!(proto2.verify_signature(&sig).is_ok());
         }
+
+        // Test that another run of the protocol generates signatures
+        // which are not verifiable in the earlier one (due to different rho)
+        let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
+        let proto2 = EcdsaSignatureProtocolExecution::new(
+            setup,
+            signed_message,
+            random_beacon2,
+            derivation_path,
+        );
+
+        let shares = proto2.generate_shares()?;
+        let sig = proto2.generate_signature(&shares).unwrap();
+        test_sig_serialization(alg, &sig)?;
+
+        assert!(proto.verify_signature(&sig).is_err());
+        assert!(proto2.verify_signature(&sig).is_ok());
     }
 
     Ok(())
@@ -504,7 +501,6 @@ fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
             threshold,
             number_of_dealings_corrupted,
             random_seed,
-            true,
         )?;
 
         let alg = setup.alg();
@@ -579,7 +575,6 @@ fn should_fail_on_hashed_message_length_mismatch() {
             threshold,
             number_of_dealings_corrupted,
             Seed::from_rng(rng),
-            true,
         )
         .expect("failed to create setup");
 

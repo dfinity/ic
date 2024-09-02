@@ -2,11 +2,11 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus::ecdsa::{malicious_pre_signer, EcdsaImpl};
+use ic_consensus::idkg::{malicious_pre_signer, IDkgImpl};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
-    ecdsa::{IDkgChangeSet, IDkgPool},
+    idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::ChangeSetProducer,
 };
 use ic_protobuf::types::v1 as pb;
@@ -117,20 +117,20 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusWithMaliciousFlags {
     }
 }
 
-/// Simulate a malicious ecdsa behavior via MaliciousFlags.
-pub struct EcdsaWithMaliciousFlags {
-    ecdsa: RefCell<EcdsaImpl>,
+/// Simulate a malicious idkg behavior via MaliciousFlags.
+pub struct IDkgWithMaliciousFlags {
+    idkg: RefCell<IDkgImpl>,
     malicious_flags: MaliciousFlags,
 }
 
-impl<T: IDkgPool> ChangeSetProducer<T> for EcdsaWithMaliciousFlags {
+impl<T: IDkgPool> ChangeSetProducer<T> for IDkgWithMaliciousFlags {
     type ChangeSet = IDkgChangeSet;
     fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
-        let changeset = EcdsaImpl::on_state_change(&self.ecdsa.borrow(), pool);
-        if self.malicious_flags.is_ecdsa_malicious() {
+        let changeset = IDkgImpl::on_state_change(&self.idkg.borrow(), pool);
+        if self.malicious_flags.is_idkg_malicious() {
             malicious_pre_signer::maliciously_alter_changeset(
                 changeset,
-                &self.ecdsa.borrow().pre_signer,
+                &self.idkg.borrow().pre_signer,
                 &self.malicious_flags,
             )
         } else {
@@ -150,10 +150,10 @@ pub fn with_malicious_flags(malicious_flags: MaliciousFlags) -> ComponentModifie
             })
         })
     };
-    if malicious_flags.is_ecdsa_malicious() {
-        modifier.ecdsa = Box::new(move |ecdsa: EcdsaImpl| {
-            Box::new(EcdsaWithMaliciousFlags {
-                ecdsa: RefCell::new(ecdsa),
+    if malicious_flags.is_idkg_malicious() {
+        modifier.idkg = Box::new(move |idkg: IDkgImpl| {
+            Box::new(IDkgWithMaliciousFlags {
+                idkg: RefCell::new(idkg),
                 malicious_flags: malicious_flags.clone(),
             })
         })

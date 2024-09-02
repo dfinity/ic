@@ -25,7 +25,6 @@ pub use sign::{
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -202,7 +201,7 @@ impl CryptoComponentImpl<Csp> {
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let node_pks = csp
+        let node_pks = vault
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks

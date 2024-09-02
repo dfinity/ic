@@ -3,11 +3,13 @@
 mod errors;
 
 pub use errors::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
     WasmValidationError,
 };
 use ic_types::CountBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -50,9 +52,10 @@ impl BinaryEncodedWasm {
 ///   * Gzip-compressed Wasm modules (magic number \1f\8b\08)
 // We don't derive `Serialize` and `Deserialize` because this is a binary that is serialized by
 // writing it to a file when creating checkpoints.
-#[derive(Clone)]
+#[derive(Clone, ValidateEq)]
 pub struct CanisterModule {
     // The Wasm binary.
+    #[validate_eq(Ignore)]
     module: ModuleStorage,
     // The Sha256 hash of the binary.
     module_hash: [u8; WASM_HASH_LENGTH],

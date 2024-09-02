@@ -7,7 +7,7 @@ pub(crate) mod known_tags;
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
@@ -620,3 +620,4 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
 }
 
 pub type LedgerBalances<Tokens> = Balances<BTreeMap<Account, Tokens>>;
+pub type LedgerAllowances<Tokens> = AllowanceTable<HeapAllowancesData<Account, Tokens>>;

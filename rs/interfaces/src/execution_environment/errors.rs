@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
 use serde::{Deserialize, Serialize};
 
@@ -343,12 +343,6 @@ impl CountBytes for HypervisorError {
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
-        fn doc_ref(section: &str) -> String {
-            format!(
-                "http://internetcomputer.org/docs/current/references/execution-errors#{}",
-                section
-            )
-        }
         match self {
             Self::FunctionNotFound(_, _)
             | Self::ToolchainContractViolation { .. }

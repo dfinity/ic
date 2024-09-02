@@ -1,3 +1,6 @@
+use rand::seq::SliceRandom;
+use regex::Regex;
+use slog::Logger;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -7,7 +10,7 @@ use anyhow::Result;
 use backon::Retryable;
 use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, Service, TypedLocalObjectReference,
+    ConfigMap, PersistentVolumeClaim, Pod, Secret, Service, TypedLocalObjectReference,
 };
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
@@ -25,13 +28,18 @@ use serde::{Deserialize, Serialize};
 use tokio;
 use tracing::*;
 
-use crate::driver::farm::{CreateVmRequest, ImageLocation, VMCreateResponse, VmSpec};
+use crate::driver::farm::{
+    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
+    VMCreateResponse, VmSpec,
+};
 use crate::driver::resource::ImageType;
-use crate::driver::test_env::TestEnvAttribute;
+use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::persistentvolumeclaim::*;
 use crate::k8s::virtualmachine::*;
+
+const PLAYNET_POOL_SIZE: usize = 33;
 
 #[allow(dead_code)]
 pub struct K8sClient {
@@ -154,6 +162,8 @@ pub struct TNet {
     pub nodes: Vec<TNode>,
     pub owner: ConfigMap,
     terminate_time: Option<DateTime<Utc>>,
+    #[serde(skip)]
+    pub logger: Option<Logger>,
 }
 
 impl TestEnvAttribute for TNet {
@@ -169,6 +179,13 @@ impl TNet {
             ..Default::default()
         }
         .ttl(Duration::minutes(90))
+    }
+
+    pub fn from_env(env: &TestEnv) -> Self {
+        let log = env.logger();
+        let mut tnet = Self::read_attribute(env);
+        tnet.logger = Some(log);
+        tnet
     }
 
     pub fn version(mut self, version: &str) -> Self {
@@ -633,6 +650,181 @@ spec:
             node.stop().await?;
         }
         Ok(())
+    }
+
+    pub async fn acquire_playnet_certificate(&self) -> Result<PlaynetCertificate> {
+        let client = Client::try_default().await?;
+        let config_map_api = Api::<ConfigMap>::namespaced(client.clone(), &TNET_NAMESPACE);
+
+        let playnet_prefix = format!("{}-playnet-", self.unique_name.clone().unwrap());
+        let config_map = (|| async {
+            let existing_playnets = config_map_api
+                .list(&Default::default())
+                .await?
+                .items
+                .into_iter()
+                .filter(|cm| {
+                    cm.metadata
+                        .labels
+                        .as_ref()
+                        .map(|l| l.contains_key(TNET_PLAYNET_LABEL))
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>();
+
+            if let Some(playnet) = existing_playnets.iter().find(|cm| {
+                cm.metadata
+                    .owner_references
+                    .as_ref()
+                    .expect("should have owner references")
+                    .iter()
+                    .any(|o| o.name == self.group_name)
+            }) {
+                slog::info!(
+                    self.logger.as_ref().unwrap(),
+                    "Using existing playnet: {}",
+                    playnet.name_any()
+                );
+                return Ok(playnet.clone());
+            }
+
+            if existing_playnets.len() >= PLAYNET_POOL_SIZE {
+                return Err(anyhow::anyhow!("Playnet pool is full"));
+            }
+
+            let random_number = *(1..=PLAYNET_POOL_SIZE)
+                .filter(|n| {
+                    !existing_playnets.iter().any(|cm| {
+                        cm.metadata
+                            .labels
+                            .clone()
+                            .expect("should have labels")
+                            .get(TNET_PLAYNET_LABEL)
+                            .unwrap()
+                            == n.to_string().as_str()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .choose_multiple(&mut rand::thread_rng(), 1)
+                .next()
+                .expect("should be able to choose one playnet");
+            config_map_api
+                .create(
+                    &PostParams::default(),
+                    &ConfigMap {
+                        metadata: ObjectMeta {
+                            name: format!("{}{}", playnet_prefix, random_number).into(),
+                            labels: [(TNET_PLAYNET_LABEL.to_string(), random_number.to_string())]
+                                .into_iter()
+                                .collect::<BTreeMap<String, String>>()
+                                .into(),
+                            owner_references: vec![self.owner_reference()].into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
+        let playnet_id = config_map
+            .name_any()
+            .strip_prefix(&playnet_prefix)
+            .unwrap()
+            .to_string();
+
+        slog::info!(self.logger.as_ref().unwrap(), "Using playnet {playnet_id}");
+
+        let secret_api = Api::<Secret>::namespaced(client.clone(), &TNET_NAMESPACE);
+        let playnet_secret = secret_api.get(TNET_PLAYNET_SECRET).await?;
+
+        let playnet = playnet_secret
+            .metadata
+            .annotations
+            .expect("must have annotations")
+            .get("cert-manager.io/alt-names")
+            .expect("should have cert-manager.io/alt-names annotation")
+            .split(',')
+            .find(|n| {
+                Regex::new(&format!(r"^ic0*{playnet_id}\..+\.dfinity\.network$"))
+                    .unwrap()
+                    .is_match(n)
+            })
+            .unwrap()
+            .to_string();
+
+        let priv_key_pem = String::from_utf8(
+            playnet_secret
+                .data
+                .as_ref()
+                .and_then(|d| d.clone().remove("tls.key"))
+                .map(|d| d.0)
+                .expect("missing tls.key"),
+        )
+        .expect("should be able to convert priv key pem");
+
+        let cert_pem = String::from_utf8(
+            playnet_secret
+                .data
+                .and_then(|d| d.clone().remove("tls.crt"))
+                .map(|d| d.0)
+                .expect("missing tls.crt"),
+        )
+        .expect("should be able to convert cert pem");
+
+        Ok(PlaynetCertificate {
+            playnet,
+            cert: Certificate {
+                priv_key_pem,
+                chain_pem: cert_pem.clone(),
+                cert_pem,
+            },
+        })
+    }
+
+    pub async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> Result<String> {
+        let client = Client::try_default().await?;
+        let api_svc: Api<Service> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        for dns_record in dns_records {
+            for record in dns_record.records {
+                let mut svc: Service = serde_yaml::from_str(&format!(
+                    r#"
+kind: Service
+apiVersion: v1
+metadata:
+  generateName: {generate_name_prefix}-
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "{hostname}"
+spec:
+  type: ExternalName
+  externalName: "{external_name}"
+            "#,
+                    generate_name_prefix = self.unique_name.clone().unwrap(),
+                    hostname = dns_record.name,
+                    external_name = record,
+                ))?;
+                if dns_record.record_type == DnsRecordType::AAAA {
+                    if let Some(annotations) = svc.metadata.annotations.as_mut() {
+                        annotations.insert(
+                            "external-dns.alpha.kubernetes.io/target".to_string(),
+                            record,
+                        );
+                    }
+                    if let Some(spec) = svc.spec.as_mut() {
+                        spec.external_name = "notimportant".to_string().into();
+                    }
+                }
+                svc.metadata.owner_references = vec![self.owner_reference()].into();
+
+                (|| async { api_svc.create(&PostParams::default(), &svc).await })
+                    .retry(&ExponentialBuilder::default())
+                    .await?;
+            }
+        }
+        Ok("".to_string())
     }
 }
 

@@ -6,14 +6,15 @@ use crate::{
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    ecdsa::{self, metrics::IDkgPayloadMetrics},
+    idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
-    get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
+    get_notarization_delay_settings, get_subnet_record, is_time_to_make_block,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -164,15 +165,15 @@ impl BlockMaker {
         }
     }
 
-    /// Return true if the validated pool contains a better (lower ranked) block
-    /// proposal than the given rank, for the given height.
+    /// Return true if the validated pool contains a better (lower ranked & not
+    /// disqualified) block proposal than the given rank, for the given height.
     fn is_better_block_proposal_available(
         &self,
         pool: &PoolReader<'_>,
         height: Height,
         rank: Rank,
     ) -> bool {
-        if let Some(block) = find_lowest_ranked_proposals(pool, height).first() {
+        if let Some(block) = find_lowest_ranked_non_disqualified_proposals(pool, height).first() {
             return block.rank() < rank;
         }
         false
@@ -321,7 +322,7 @@ impl BlockMaker {
                 dkg::Payload::Summary(summary) => {
                     // Summary block does not have batch payload.
                     self.metrics.report_byte_estimate_metrics(0, 0);
-                    let idkg_summary = ecdsa::create_summary_payload(
+                    let idkg_summary = idkg::create_summary_payload(
                         self.replica_config.subnet_id,
                         &*self.registry_client,
                         pool,
@@ -336,11 +337,11 @@ impl BlockMaker {
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
-                        ecdsa: idkg_summary,
+                        idkg: idkg_summary,
                     })
                 }
                 dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, ecdsa_data) = match status::get_status(
+                    let (batch_payload, dealings, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -355,7 +356,7 @@ impl BlockMaker {
                         Status::Halting => (
                             BatchPayload::default(),
                             dkg::Dealings::new_empty(dealings.start_height),
-                            /*ecdsa_data=*/ None,
+                            /*idkg_data=*/ None,
                         ),
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
@@ -367,7 +368,7 @@ impl BlockMaker {
                                 subnet_records,
                             );
 
-                            let ecdsa_data = ecdsa::create_data_payload(
+                            let idkg_data = idkg::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
@@ -385,7 +386,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, ecdsa_data)
+                            (batch_payload, dealings, idkg_data)
                         }
                     };
 
@@ -397,14 +398,14 @@ impl BlockMaker {
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
                         dealings,
-                        ecdsa: ecdsa_data,
+                        idkg: idkg_data,
                     })
                 }
             },
         );
         let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
-        let metadata = BlockMetadata::from_block(&hashed_block, &self.replica_config);
+        let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
         match self
             .crypto
             .sign(&metadata, self.replica_config.node_id, registry_version)
@@ -515,7 +516,7 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 
 #[cfg(test)]
 mod tests {
-    use crate::ecdsa::test_utils::create_idkg_pool;
+    use crate::idkg::test_utils::create_idkg_pool;
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};

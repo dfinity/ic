@@ -18,10 +18,10 @@ use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
-use ic_system_test_driver::driver::test_env_api::{FarmBaseUrl, HasDependencies, SshSession};
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
-use slog::{debug, error, info};
+use slog::{debug, error, info, Logger};
 use ssh2::Session;
 
 const UVM_NAME: &str = "test-driver";
@@ -29,6 +29,7 @@ const COLOCATED_TEST: &str = "COLOCATED_TEST";
 const COLOCATED_TEST_BIN: &str = "COLOCATED_TEST_BIN";
 const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
 
+pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -72,7 +73,9 @@ fn setup(env: TestEnv) {
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
-        .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"));
+        .with_config_img(get_dependency_path(
+            "rs/tests/colocate_uvm_config_image.zst",
+        ));
 
     let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
         uvm.enable_ipv4()
@@ -84,6 +87,31 @@ fn setup(env: TestEnv) {
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
+    // Create a tarball of the runfiles (runtime dependencies) such that they can be copied to the UVM.
+    let runfiles_tar_path = env.get_path(RUNFILES_TAR_ZST);
+    let runfiles = std::env::var("RUNFILES")
+        .expect("Expected the environment variable RUNFILES to be defined!");
+    info!(log, "Creating {runfiles_tar_path:?} ...");
+    let output = Command::new("tar")
+        .arg("--create")
+        .arg("--file")
+        .arg(runfiles_tar_path.clone())
+        .arg("--auto-compress")
+        .arg("--directory")
+        .arg(runfiles)
+        .arg("--dereference")
+        .arg("--exclude=rs/tests/colocate_test_bin")
+        .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
+        .arg(".")
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to tar the runfiles directory because: {e}"));
+
+    if !output.status.success() {
+        let err = str::from_utf8(&output.stderr).unwrap_or("");
+        panic!("Tarring the runfiles directory failed with error: {err}");
+    }
+
+    // Create a tarball of some required files in the environment directory such that they can be copied to the UVM.
     let env_tar_path = env.get_path(ENV_TAR_ZST);
     info!(log, "Creating {env_tar_path:?} ...");
     let output = Command::new("tar")
@@ -93,20 +121,16 @@ fn setup(env: TestEnv) {
         .arg("--auto-compress")
         .arg("--directory")
         .arg(env.base_path())
-        .arg("--dereference")
-        .arg("--exclude=dependencies/rs/tests/colocate_test_bin")
-        .arg("--exclude=dependencies/rs/tests/colocate_uvm_config_image.zst")
-        .arg("dependencies")
         .arg(Path::new(&FarmBaseUrl::attribute_name()).with_extension("json"))
         .arg(Path::new(&GroupSetup::attribute_name()).with_extension("json"))
         .arg(Path::new(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME))
         .arg(Path::new(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(SSH_USERNAME))
         .output()
-        .unwrap_or_else(|e| panic!("Failed to tar the dependencies directory because: {e}"));
+        .unwrap_or_else(|e| panic!("Failed to tar the env directory because: {e}"));
 
     if !output.status.success() {
         let err = str::from_utf8(&output.stderr).unwrap_or("");
-        panic!("Tarring the dependencies directory failed with error: {err}");
+        panic!("Tarring the env directory failed with error: {err}");
     }
 
     let uvm = env.get_deployed_universal_vm(UVM_NAME).unwrap();
@@ -116,50 +140,23 @@ fn setup(env: TestEnv) {
         .block_on_ssh_session()
         .unwrap_or_else(|e| panic!("Failed to setup SSH session to {UVM_NAME} because: {e}"));
 
-    let size = fs::metadata(env_tar_path.clone()).unwrap().len();
-    let to = Path::new("/home/admin").join(ENV_TAR_ZST);
-    info!(
-        log,
-        "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?} ...",
-        env_tar_path,
-        size / 1024,
+    scp(
+        log.clone(),
+        &session,
+        runfiles_tar_path,
+        Path::new("/home/admin").join(RUNFILES_TAR_ZST),
     );
-    ic_system_test_driver::retry_with_msg!(
-        format!(
-            "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?}",
-            env_tar_path,
-            size / 1024,
-        ),
-        env.logger(),
-        SCP_RETRY_TIMEOUT,
-        SCP_RETRY_BACKOFF,
-        || {
-            let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-            let mut from_file = File::open(env_tar_path.clone())?;
-            std::io::copy(&mut from_file, &mut remote_file)?;
-            Ok(())
-        }
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "Failed to scp {:?} to {UVM_NAME}:{to:?} because: {e}",
-            env_tar_path
-        )
-    });
-    info!(
-        log,
-        "scp-ed {:?} of {:?} KiB to {UVM_NAME}:{to:?} .",
+    scp(
+        log.clone(),
+        &session,
         env_tar_path,
-        size / 1024,
+        Path::new("/home/admin").join(ENV_TAR_ZST),
     );
 
     let docker_env_vars = {
         let mut env_vars = String::from("");
         for (key, value) in env::vars() {
-            // NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-            if key.starts_with("ENV_DEPS__") {
-                env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
-            }
+            env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
         }
         env_vars
     };
@@ -189,13 +186,14 @@ fn setup(env: TestEnv) {
 set -e
 cd /home/admin
 
-mkdir /home/admin/root_env
-tar -xf /home/admin/{ENV_TAR_ZST} -C root_env
+tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level=runfiles
+tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level=root_env
 
 docker load -i /config/image.tar
 
 cat <<EOF > /home/admin/Dockerfile
 FROM bazel/image:image
+COPY runfiles /home/root/runfiles
 COPY root_env /home/root/root_env
 RUN chmod 700 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
 RUN chmod 600 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
@@ -214,10 +212,15 @@ else
 fi
 docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   {docker_env_vars}
+  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
   final \
-  /home/root/root_env/dependencies/{colocated_test_bin} \
-  --working-dir /home/root --no-delete-farm-group --no-farm-keepalive {required_host_features} --group-base-name {colocated_test} run
+  /home/root/runfiles/{colocated_test_bin} \
+    --working-dir /home/root \
+    --no-delete-farm-group --no-farm-keepalive \
+    {required_host_features} \
+    --group-base-name {colocated_test} \
+    run
 EOF
 chmod +x /home/admin/run
 "#,
@@ -284,6 +287,27 @@ fn start_test(env: TestEnv, uvm: DeployedUniversalVm) {
     if !out.status.success() {
         panic!("Failed to ssh to the test-driver VM!");
     }
+}
+
+fn scp(log: Logger, session: &Session, from: std::path::PathBuf, to: std::path::PathBuf) {
+    let size = fs::metadata(from.clone()).unwrap().len();
+    ic_system_test_driver::retry_with_msg!(
+        format!("scp-ing {:?} of {:?} B to {UVM_NAME}:{to:?}", from, size,),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
+            let mut from_file = File::open(from.clone())?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| panic!("Failed to scp {:?} to {UVM_NAME}:{to:?} because: {e}", from));
+    info!(
+        log,
+        "scp-ed {:?} of {:?} B to {UVM_NAME}:{to:?} .", from, size,
+    );
 }
 
 fn receive_test_exit_code_async(

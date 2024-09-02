@@ -22,8 +22,8 @@ jobs:
 
           DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/$GITHUB_SHA"
 
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.gz" -o setup-os-img.tar.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.gz" -o update-os-img.tar.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/drun.gz" -o drun-x86_64-linux.gz
@@ -53,8 +53,6 @@ jobs:
             "ledger-canister_notify-method.wasm"
             "lifeline_canister.wasm"
             "nns-ui-canister.wasm"
-            "pmap_canister.wasm"
-            "proxy_canister.wasm"
             "registry-canister.wasm"
             "root-canister.wasm"
             "sns-governance-canister.wasm"

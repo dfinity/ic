@@ -1,7 +1,6 @@
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
-    FractionalDeveloperVotingPower as FractionalDVP, NeuronsFundParticipants, SnsInitPayload,
-    SwapDistribution,
+    FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload, SwapDistribution,
 };
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -9,8 +8,9 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ledger_validation;
-use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, E8};
+use ic_nervous_system_common::{
+    ledger_validation, DEFAULT_TRANSFER_FEE, E8, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -68,10 +68,6 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 /// decentralization swap.
 /// Aka, the ceiling for the value `max_direct_participation_icp_e8s`.
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
-
-/// Maximum allowed number of SNS neurons for direct swap participants that an SNS may create.
-/// This constant must not exceed `NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING`.
-pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;
 
 /// Minimum allowed number of SNS neurons per neuron basket.
 pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
@@ -336,21 +332,6 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
     }
 }
 
-impl From<NeuronsFundParticipants> for ic_sns_swap::pb::v1::NeuronsFundParticipants {
-    fn from(value: NeuronsFundParticipants) -> Self {
-        Self {
-            cf_participants: value
-                .participants
-                .iter()
-                .map(|cf_participant| ic_sns_swap::pb::v1::CfParticipant {
-                    hotkey_principal: cf_participant.hotkey_principal.clone(),
-                    cf_neurons: cf_participant.cf_neurons.clone(),
-                })
-                .collect(),
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum NeuronsFundParticipationValidationError {
     Unspecified,
@@ -453,7 +434,6 @@ impl SnsInitPayload {
             confirmation_text: None,
             restricted_countries: None,
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }
@@ -466,7 +446,6 @@ impl SnsInitPayload {
     pub fn with_valid_values_for_testing_pre_execution() -> Self {
         Self {
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
             neurons_fund_participation_constraints: None,
@@ -537,7 +516,6 @@ impl SnsInitPayload {
                     ),
                 }),
             }),
-            neurons_fund_participants: None,
             ..SnsInitPayload::with_default_values()
         }
     }
@@ -740,8 +718,6 @@ impl SnsInitPayload {
                 .neurons_fund_participation_constraints
                 .clone(),
             neurons_fund_participation: self.neurons_fund_participation,
-            // This field must not be set at Swap initialization time.
-            neurons_fund_participants: None,
         })
     }
 
@@ -823,7 +799,6 @@ impl SnsInitPayload {
             swap_due_timestamp_seconds: _,
             neuron_basket_construction_parameters: _,
             nns_proposal_id: _,
-            neurons_fund_participants: _,
             token_logo: _,
             neurons_fund_participation_constraints: _,
             neurons_fund_participation: _,
@@ -899,7 +874,6 @@ impl SnsInitPayload {
             // Ensure that the values that can only be known after the execution
             // of the CreateServiceNervousSystem proposal are not set.
             self.validate_nns_proposal_id_pre_execution(),
-            self.validate_neurons_fund_participants_pre_execution(),
             self.validate_swap_start_timestamp_seconds_pre_execution(),
             self.validate_swap_due_timestamp_seconds_pre_execution(),
             self.validate_neurons_fund_participation_constraints(true),
@@ -943,7 +917,6 @@ impl SnsInitPayload {
             self.validate_restricted_countries(),
             self.validate_all_post_execution_swap_parameters_are_set(),
             self.validate_nns_proposal_id(),
-            self.validate_neurons_fund_participants(),
             self.validate_swap_start_timestamp_seconds(),
             self.validate_swap_due_timestamp_seconds(),
             self.validate_neurons_fund_participation_constraints(false),
@@ -1780,28 +1753,6 @@ impl SnsInitPayload {
         match self.nns_proposal_id {
             None => Err("Error: nns_proposal_id must be specified".to_string()),
             Some(_) => Ok(()),
-        }
-    }
-
-    fn validate_neurons_fund_participants_pre_execution(&self) -> Result<(), String> {
-        if self.neurons_fund_participants.is_none() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Error: neurons_fund_participants cannot be specified pre_execution, but was {:?}",
-                self.neurons_fund_participants
-            ))
-        }
-    }
-
-    fn validate_neurons_fund_participants(&self) -> Result<(), String> {
-        if self.neurons_fund_participants.is_none() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Error: neurons_fund_participants can be set only by Swap; was initialized to {:?}",
-                self.neurons_fund_participants
-            ))
         }
     }
 
@@ -3057,7 +3008,6 @@ mod test {
             let mut sns_init_payload =
                 SnsInitPayload::with_valid_values_for_testing_post_execution();
             sns_init_payload.nns_proposal_id = None;
-            sns_init_payload.neurons_fund_participants = None;
             sns_init_payload.swap_start_timestamp_seconds = None;
             sns_init_payload.swap_due_timestamp_seconds = None;
             sns_init_payload.neurons_fund_participation_constraints = None;

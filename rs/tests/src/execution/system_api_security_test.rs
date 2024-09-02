@@ -358,7 +358,7 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
             debug!(logger, "total cycles used = {}", cycles_used_proxy);
         }
 
-        /* Now make intercanister call proxy_err that throws error  and check the cycles used */
+        /* Now make intercanister call proxy_err that throws error and check the cycles used */
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
         let num_cycles_before =
             print_validate_num_cycles(logger, &ret_val, "Before calling proxy_err()");
@@ -366,9 +366,10 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
         let ret_val = agent
             .update(&canister_a, "proxy_err")
             .with_arg(vec![2; 4])
-            .call()
+            .call_and_wait()
             .await;
-        assert!(ret_val.is_ok());
+
+        assert!(matches!(ret_val, Err(AgentError::CertifiedReject(_)),));
 
         // Wait for few seconds before reading the data.
         for _ in 0..NR_SLEEPS {

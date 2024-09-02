@@ -6,7 +6,7 @@ use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup},
+    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
@@ -23,7 +23,6 @@ use crate::driver::{
     log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::HasIcDependencies,
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::k8s::tnet::TNet;

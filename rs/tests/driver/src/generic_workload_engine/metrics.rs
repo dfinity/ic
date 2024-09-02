@@ -348,7 +348,7 @@ pub struct RequestOutcome<ResultType, ErrorType> {
     /// - [`workflow_pos`] is an (optional, unique) position of this request in its workflow. [`None`] is used to classify the overall workflow outcome, in which case the position
     ///   is statically unknown. See [`with_workflow_position`]
     /// - [`label`] is a canister endpoint name, or some other (short) description of the request.
-    /// See [`RequestOutcome.into_test_outcome`].
+    ///   See [`RequestOutcome.into_test_outcome`].
     workflow_pos: Option<usize>,
     label: String,
     pub duration: Duration,

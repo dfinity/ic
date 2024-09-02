@@ -1,8 +1,6 @@
 use crate::scheduler::Erc20Token;
 use crate::state::{Canister, Canisters};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
-use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::fmt::{Display, Formatter};
 
 #[allow(clippy::large_enum_variant)]
@@ -13,7 +11,7 @@ pub enum OrchestratorArg {
     AddErc20Arg(AddErc20Arg),
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct InitArg {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
@@ -57,18 +55,11 @@ pub struct Erc20Contract {
 
 #[derive(CandidType, Deserialize, serde::Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerInitArg {
-    pub minting_account: LedgerAccount,
-    pub fee_collector_account: Option<LedgerAccount>,
-    pub initial_balances: Vec<(LedgerAccount, Nat)>,
     pub transfer_fee: Nat,
-    pub decimals: Option<u8>,
+    pub decimals: u8,
     pub token_name: String,
     pub token_symbol: String,
     pub token_logo: String,
-    pub max_memo_length: Option<u16>,
-    pub feature_flags: Option<LedgerFeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]

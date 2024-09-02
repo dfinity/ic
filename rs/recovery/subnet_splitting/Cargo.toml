@@ -13,18 +13,18 @@ ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_d
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replay = { path = "../../replay" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-tool = { path = "../../state_tool" }
-ic-registry-routing-table = { path = "../../registry/routing_table" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-url = { version = "2.1.1", features = ["serde"] }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-tmpdir = { path = "../../test_utilities/tmpdir" }

@@ -29,13 +29,15 @@ use ic_system_test_driver::{
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
+            load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::{agent_observes_canister_module, assert_create_agent, block_on},
+    util::{
+        agent_observes_canister_module, agent_using_call_v2_endpoint, assert_create_agent, block_on,
+    },
 };
-use std::{iter, net::SocketAddrV6, time::Duration};
+use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
@@ -71,7 +73,7 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
     );
     let agent = assert_create_agent(install_node.0.as_str()).await;
 
-    let canister = env.load_wasm(path);
+    let canister = load_wasm(path);
 
     info!(&logger, "installing canister from path {}", path);
     let canister_id = create_canister(&agent, install_node.1, &canister, None)
@@ -638,7 +640,8 @@ pub fn http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister =
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -819,7 +822,8 @@ pub fn prefix_canister_id_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister =
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -992,7 +996,8 @@ pub fn proxy_http_canister_test(env: TestEnv) {
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
-        let kv_store_canister = env.load_wasm("rs/tests/test_canisters/kv_store/kv_store.wasm");
+        let kv_store_canister =
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -1211,7 +1216,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
+        let http_counter_canister = load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
@@ -1322,7 +1327,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm("rs/tests/test_canisters/http_counter/http_counter.wasm");
+        let http_counter_canister = load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
@@ -2005,7 +2010,7 @@ pub fn icx_proxy_test(env: TestEnv) {
         .block_on(install_canister(
             env.clone(),
             logger.clone(),
-            "rs/tests/test_canisters/http_counter/http_counter.wasm",
+            &env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"),
         ))
         .unwrap();
 
@@ -2895,8 +2900,14 @@ pub fn canister_routing_test(env: TestEnv) {
             .unwrap()
             .get_snapshot()
             .unwrap();
-        boundary_node.build_default_agent()
+
+        block_on(agent_using_call_v2_endpoint(
+            boundary_node.get_public_url().as_ref(),
+            boundary_node.ipv6().into(),
+        ))
+        .expect("Agent can be created")
     };
+
     info!(
         log,
         "Incrementing counters on canisters via BN agent update calls ..."
@@ -2944,4 +2955,86 @@ pub fn read_state_via_subnet_path_test(env: TestEnv) {
     let metrics = block_on(bn_agent.read_state_subnet_metrics(subnet_id))
         .expect("Call to read_state via /api/v2/subnet/{subnet_id}/read_state failed.");
     info!(log, "subnet metrics are {:?}", metrics);
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes headers test
+
+Goal:: Make sure the boundary node sets the content-type, x-content-type-options, x-frame-options ehaders
+
+end::catalog[] */
+
+pub fn headers_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        let http_client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
+            (http_client_builder, playnet)
+        } else {
+            let host = "ic0.app";
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let client_builder = http_client_builder
+                .danger_accept_invalid_certs(true)
+                .resolve(host, bn_addr);
+            (client_builder, host.to_string())
+        };
+        let http_client = client_builder.build().unwrap();
+
+        ic_system_test_driver::retry_with_msg_async!(
+            "Making a status call to inspect the headers",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                info!(&logger, "Requesting status endpoint...");
+                let res = http_client
+                    .get(format!("https://{host}/api/v2/status"))
+                    .send()
+                    .await
+                    .unwrap();
+
+                let headers = res.headers();
+                assert!(
+                    headers.contains_key("content-type"),
+                    "Header content-type is missing"
+                );
+                assert_eq!(
+                    headers.get("content-type").unwrap(),
+                    "application/cbor",
+                    "Header content-type does not match expected value: application/cbor"
+                );
+
+                assert!(
+                    headers.contains_key("x-content-type-options"),
+                    "Header x-content-type-options is missing"
+                );
+                assert_eq!(
+                    headers.get("x-content-type-options").unwrap(),
+                    "nosniff",
+                    "Header x-content-type-options does not match expected value: nosniff",
+                );
+
+                assert!(
+                    headers.contains_key("x-frame-options"),
+                    "Header x-frame-options is missing"
+                );
+                assert_eq!(
+                    headers.get("x-frame-options").unwrap(),
+                    "DENY",
+                    "Header x-frame-options does not match expected value: DENY",
+                );
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
+    });
 }

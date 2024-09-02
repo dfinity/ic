@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
+use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
 use ic_nns_gtc::{
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},

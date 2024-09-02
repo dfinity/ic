@@ -60,7 +60,8 @@ pub enum CallbackUpdate {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
-    pub(super) callback_updates: Vec<CallbackUpdate>,
+    // pub for testing
+    pub callback_updates: Vec<CallbackUpdate>,
     cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
@@ -249,13 +250,13 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinGetSuccessors)
             | Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
@@ -542,6 +543,16 @@ impl SystemStateChanges {
     }
 }
 
+/// Determines if a precise amount of cycles is requested
+/// or if the provided number is only a limit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CyclesAmountType {
+    /// Use exactly this many cycles or fail.
+    Exact(Cycles),
+    /// Use as many cycles as possible, up to this limit.
+    UpTo(Cycles),
+}
+
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
@@ -557,6 +568,7 @@ pub struct SandboxSafeSystemState {
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
@@ -587,6 +599,7 @@ impl SandboxSafeSystemState {
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
@@ -616,6 +629,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            wasm_memory_threshold,
             compute_allocation,
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
@@ -700,6 +714,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            system_state.wasm_memory_threshold,
             compute_allocation,
             system_state.balance(),
             system_state.reserved_balance(),
@@ -926,28 +941,46 @@ impl SandboxSafeSystemState {
 
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
+        current_payload_size_bytes: NumBytes,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
-        amount: Cycles,
+        amount: CyclesAmountType,
         reveal_top_up: bool,
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<Cycles> {
         let mut new_balance = self.cycles_balance();
-        let result = self
-            .cycles_account_manager
-            .withdraw_cycles_for_transfer(
-                self.canister_id,
-                self.freeze_threshold,
-                self.memory_allocation,
-                canister_current_memory_usage,
-                canister_current_message_memory_usage,
-                self.compute_allocation,
-                &mut new_balance,
-                amount,
-                self.subnet_size,
-                self.reserved_balance(),
-                reveal_top_up,
-            )
-            .map_err(HypervisorError::InsufficientCyclesBalance);
+        let result = match amount {
+            CyclesAmountType::Exact(amount) => self
+                .cycles_account_manager
+                .withdraw_cycles_for_transfer(
+                    self.canister_id,
+                    self.freeze_threshold,
+                    self.memory_allocation,
+                    canister_current_memory_usage,
+                    canister_current_message_memory_usage,
+                    self.compute_allocation,
+                    &mut new_balance,
+                    amount,
+                    self.subnet_size,
+                    self.reserved_balance(),
+                    reveal_top_up,
+                )
+                .map(|()| amount)
+                .map_err(HypervisorError::InsufficientCyclesBalance),
+            CyclesAmountType::UpTo(amount) => Ok(self
+                .cycles_account_manager
+                .withdraw_up_to_cycles_for_transfer(
+                    self.freeze_threshold,
+                    self.memory_allocation,
+                    current_payload_size_bytes,
+                    canister_current_memory_usage,
+                    canister_current_message_memory_usage,
+                    self.compute_allocation,
+                    &mut new_balance,
+                    amount,
+                    self.subnet_size,
+                    self.reserved_balance(),
+                )),
+        };
         self.update_balance_change(new_balance);
         result
     }
@@ -1232,12 +1265,10 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
-        self.system_state_changes.canister_log.add_record(
-            is_enabled,
-            time.as_nanos_since_unix_epoch(),
-            content,
-        );
+    pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
     }
 
     /// Takes collected canister log records.
@@ -1283,7 +1314,8 @@ mod tests {
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
         time::CoarseTime,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        Time,
     };
 
     use crate::{
@@ -1361,6 +1393,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            NumBytes::new(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),

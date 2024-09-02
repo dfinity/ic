@@ -4,7 +4,7 @@
 
 use crate::{
     consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
-    ecdsa::{
+    idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
         utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
@@ -15,7 +15,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -386,15 +386,15 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnFactory<Message, Pool> for DkgGossipImpl {
-    fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
+impl<Pool: DkgPool> BouncerFactory<Message, Pool> for DkgGossipImpl {
+    fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
-                Ordering::Equal => Priority::FetchNow,
-                Ordering::Greater => Priority::Stash,
-                Ordering::Less => Priority::Drop,
+                Ordering::Equal => BouncerValue::Wants,
+                Ordering::Greater => BouncerValue::MaybeWantsLater,
+                Ordering::Less => BouncerValue::Unwanted,
             }
         })
     }
@@ -469,7 +469,7 @@ pub fn make_registry_cup_from_cup_contents(
         Err(err) => {
             warn!(
                 logger,
-                "Failed constructing ECDSA summary block from CUP contents: {}", err
+                "Failed constructing IDKG summary block from CUP contents: {}", err
             );
 
             None
@@ -498,7 +498,7 @@ pub fn make_registry_cup_from_cup_contents(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: dkg_summary,
-                ecdsa: idkg_summary,
+                idkg: idkg_summary,
             }),
         ),
         height: cup_height,
@@ -554,7 +554,7 @@ fn bootstrap_idkg_summary_from_cup_contents(
         initial_dealings,
         logger,
     )
-    .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
+    .map_err(|err| format!("Failed to create IDKG summary block: {:?}", err))
 }
 
 fn bootstrap_idkg_summary(

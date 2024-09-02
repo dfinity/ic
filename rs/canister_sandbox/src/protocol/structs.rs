@@ -15,7 +15,7 @@ use super::id::MemoryId;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Round(pub u64);
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SandboxExecInput {
     pub func_ref: FuncRef,
     pub api_type: ApiType,
@@ -32,7 +32,7 @@ pub struct SandboxExecInput {
     pub wasm_reserved_pages: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SandboxExecOutput {
     pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
@@ -48,7 +48,7 @@ pub struct MemoryModifications {
     pub size: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct StateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,

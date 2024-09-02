@@ -26,8 +26,8 @@ mod proptests;
 use crate::consensus::{
     block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_priority_function,
-    purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_utils::{
@@ -38,10 +38,10 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
-    ecdsa::IDkgPool,
+    idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -374,23 +374,23 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    /// non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
-    /// applied to the pool or timer before another subcomponent uses
-    /// them, because each subcomponent expects to see full state in order to
-    /// make correct decisions on what to do next.
+    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    applied to the pool or timer before another subcomponent uses
+    ///    them, because each subcomponent expects to see full state in order to
+    ///    make correct decisions on what to do next.
     ///
     /// 2. The order in which subcomponents are called also matters. At the
-    /// moment it is important to call finalizer first, because otherwise
-    /// we'll just keep producing notarized blocks indefinitely without
-    /// finalizing anything, due to the above decision of having to return
-    /// early.
-    /// Additionally, we call the purger after every function that may increment
-    /// the finalized or CUP height (currently aggregation & validation), as
-    /// these heights determine which artifacts we can purge. This reduces the
-    /// number of excess artifacts, which allows us to maintain a stricter bound
-    /// on the memory consumption of our advertised validated pool.
-    /// The order of the rest subcomponents decides whom is given
-    /// a priority, but it should not affect liveness or correctness.
+    ///    moment it is important to call finalizer first, because otherwise
+    ///    we'll just keep producing notarized blocks indefinitely without
+    ///    finalizing anything, due to the above decision of having to return
+    ///    early.
+    ///    Additionally, we call the purger after every function that may increment
+    ///    the finalized or CUP height (currently aggregation & validation), as
+    ///    these heights determine which artifacts we can purge. This reduces the
+    ///    number of excess artifacts, which allows us to maintain a stricter bound
+    ///    on the memory consumption of our advertised validated pool.
+    ///    The order of the rest subcomponents decides whom is given
+    ///    a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
@@ -588,10 +588,10 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
-    /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
-        get_priority_function(pool, self.message_routing.expected_batch_height())
+impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+    /// Return a bouncer function that matches the given consensus pool.
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 }
 

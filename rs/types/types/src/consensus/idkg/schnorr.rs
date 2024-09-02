@@ -201,7 +201,7 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
@@ -243,7 +243,7 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
         resolver: &dyn IDkgBlockReader,

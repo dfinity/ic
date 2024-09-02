@@ -7,12 +7,11 @@ use proptest::option;
 use proptest::prelude::Strategy;
 
 pub fn new_state() -> State {
-    State::try_from(InitArg {
-        more_controller_ids: vec![],
-        minter_id: None,
-        cycles_management: None,
-    })
-    .unwrap()
+    new_state_from(InitArg::default())
+}
+
+pub fn new_state_from(init_arg: InitArg) -> State {
+    State::try_from(init_arg).unwrap()
 }
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(

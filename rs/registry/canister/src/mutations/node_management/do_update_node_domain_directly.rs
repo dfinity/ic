@@ -1,10 +1,10 @@
-use crate::mutations::common::is_valid_domain;
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
 use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
+use idna::domain_to_ascii_strict;
 use prost::Message;
 use serde::Serialize;
 
@@ -54,7 +54,7 @@ impl Registry {
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain {
-            if !is_valid_domain(domain) {
+            if !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain) {
                 panic!("invalid domain");
             }
         }
@@ -153,7 +153,7 @@ mod tests {
                 .expect("failed to get the node operator id");
 
         // Assert setting domain name to Some() works
-        let new_domain = Some("invalid".to_string());
+        let new_domain = Some("_invalid".to_string());
         registry.do_update_node_domain(
             UpdateNodeDomainDirectlyPayload {
                 node_id,

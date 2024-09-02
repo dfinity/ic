@@ -1,7 +1,7 @@
 use super::types::*;
 use ic_consensus::consensus::bounds::validated_pool_within_bounds;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::p2p::consensus::{MutablePool, Priority, UnvalidatedArtifact};
+use ic_interfaces::p2p::consensus::{BouncerValue, MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities_types::ids::node_test_id;
 use ic_types::time::Time;
@@ -39,15 +39,15 @@ fn execute_instance(
                             .borrow()
                             .get_priority(&msg)
                         {
-                            Priority::Drop => return Some(timestamp),
-                            Priority::Stash => {
+                            BouncerValue::Unwanted => return Some(timestamp),
+                            BouncerValue::MaybeWantsLater => {
                                 instance
                                     .buffered
                                     .borrow_mut()
                                     .push(InputMessage::Consensus(msg));
                                 return Some(timestamp);
                             }
-                            Priority::FetchNow => (),
+                            BouncerValue::Wants => (),
                         };
                     }
                     let mut pool = instance.driver.consensus_pool.write().unwrap();
@@ -73,7 +73,7 @@ fn execute_instance(
                         timestamp,
                     });
                 }
-                InputMessage::Ecdsa(msg) => {
+                InputMessage::IDkg(msg) => {
                     let mut idkg_pool = instance.driver.idkg_pool.write().unwrap();
                     idkg_pool.insert(UnvalidatedArtifact {
                         message: msg,

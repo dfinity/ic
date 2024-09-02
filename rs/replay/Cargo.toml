@@ -33,9 +33,9 @@ ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -51,7 +51,7 @@ slog-async = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }

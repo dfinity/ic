@@ -134,9 +134,9 @@ canister_http_calls sub httpbin_proto =
        in [ -- Corner cases
 
             simpleTestCase "invalid domain name" ecid $ \cid ->
-              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com" Nothing Nothing cid >>= isReject [2],
+              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com" Nothing Nothing cid >>= isReject [2],
             simpleTestCase "invalid IP address" ecid $ \cid ->
-              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "240.0.0.0" Nothing Nothing cid >>= isReject [2],
+              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "240.0.0.0" Nothing Nothing cid >>= isReject [2],
             -- "Currently, the GET, HEAD, and POST methods are supported for HTTP requests."
 
             simpleTestCase "GET call" ecid $ \cid -> do

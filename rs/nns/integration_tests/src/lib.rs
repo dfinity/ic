@@ -43,6 +43,9 @@ mod governance_get_build_metadata_test;
 mod gtc;
 
 #[cfg(test)]
+mod http_request;
+
+#[cfg(test)]
 mod ledger;
 
 #[cfg(test)]
@@ -134,3 +137,9 @@ mod canister_upgrade;
 
 #[cfg(test)]
 mod subnet_rental_canister;
+
+#[cfg(test)]
+mod stop_or_start_canister;
+
+#[cfg(test)]
+mod hotkeys_migration_test;
