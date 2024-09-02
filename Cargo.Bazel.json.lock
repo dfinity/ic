@@ -1,5 +1,5 @@
 {
-  "checksum": "1a204e337a330e45664bf177d84b8773690a8e4654d56b2a95d484bd7ca69d5f",
+  "checksum": "02f4e44dce6ff631f3ec2c6a1842383e34c52707e71558d8482aae43183e9505",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18140,7 +18140,7 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.3",
+              "id": "quinn 0.11.4",
               "target": "quinn"
             },
             {
@@ -49056,14 +49056,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.3": {
+    "quinn 0.11.4": {
       "name": "quinn",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.3/download",
-          "sha256": "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
+          "url": "https://static.crates.io/crates/quinn/0.11.4/download",
+          "sha256": "a2d2fb862b7ba45e615c1429def928f2e15f815bdf933b27a2d3824e224c1f46"
         }
       },
       "targets": [
@@ -49142,7 +49142,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.3"
+        "version": "0.11.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78228,7 +78228,7 @@
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
-    "quinn 0.11.3",
+    "quinn 0.11.4",
     "quinn-udp 0.5.4",
     "quote 1.0.35",
     "rand 0.8.5",
