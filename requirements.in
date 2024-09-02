@@ -23,7 +23,6 @@ pytest
 pytest-cov
 PyYAML>=5.4.1
 requests>=2.26.0
-scp>=0.14.4
 simple-parsing
 six>=1.16.0
 termcolor>=1.1.0
@@ -31,8 +30,6 @@ toml
 tqdm
 uuid
 PyGithub==2.3.0
-# gitlab_statistics
-pandas
 #policy-monitoring
 elasticsearch
 func-timeout

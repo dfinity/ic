@@ -827,7 +827,6 @@ numpy==1.24.2 \
     # via
     #   contourpy
     #   matplotlib
-    #   pandas
 oauthlib==3.2.2 \
     --hash=sha256:8139f29aac13e25d502680e9e19963e83f16838d48a0d71c287fe40e7067fbca \
     --hash=sha256:9859c40929662bec5d64f34d01c99e093149682a3f38915dc0655d5a633dd918
@@ -841,42 +840,12 @@ packaging==21.3 \
     #   jira
     #   matplotlib
     #   pytest
-pandas==1.5.3 \
-    --hash=sha256:14e45300521902689a81f3f41386dc86f19b8ba8dd5ac5a3c7010ef8d2932813 \
-    --hash=sha256:26d9c71772c7afb9d5046e6e9cf42d83dd147b5cf5bcb9d97252077118543792 \
-    --hash=sha256:3749077d86e3a2f0ed51367f30bf5b82e131cc0f14260c4d3e499186fccc4406 \
-    --hash=sha256:41179ce559943d83a9b4bbacb736b04c928b095b5f25dd2b7389eda08f46f373 \
-    --hash=sha256:478ff646ca42b20376e4ed3fa2e8d7341e8a63105586efe54fa2508ee087f328 \
-    --hash=sha256:50869a35cbb0f2e0cd5ec04b191e7b12ed688874bd05dd777c19b28cbea90996 \
-    --hash=sha256:565fa34a5434d38e9d250af3c12ff931abaf88050551d9fbcdfafca50d62babf \
-    --hash=sha256:5f2b952406a1588ad4cad5b3f55f520e82e902388a6d5a4a91baa8d38d23c7f6 \
-    --hash=sha256:5fbcb19d6fceb9e946b3e23258757c7b225ba450990d9ed63ccceeb8cae609f7 \
-    --hash=sha256:6973549c01ca91ec96199e940495219c887ea815b2083722821f1d7abfa2b4dc \
-    --hash=sha256:74a3fd7e5a7ec052f183273dc7b0acd3a863edf7520f5d3a1765c04ffdb3b0b1 \
-    --hash=sha256:7a0a56cef15fd1586726dace5616db75ebcfec9179a3a55e78f72c5639fa2a23 \
-    --hash=sha256:7cec0bee9f294e5de5bbfc14d0573f65526071029d036b753ee6507d2a21480a \
-    --hash=sha256:87bd9c03da1ac870a6d2c8902a0e1fd4267ca00f13bc494c9e5a9020920e1d51 \
-    --hash=sha256:972d8a45395f2a2d26733eb8d0f629b2f90bebe8e8eddbb8829b180c09639572 \
-    --hash=sha256:9842b6f4b8479e41968eced654487258ed81df7d1c9b7b870ceea24ed9459b31 \
-    --hash=sha256:9f69c4029613de47816b1bb30ff5ac778686688751a5e9c99ad8c7031f6508e5 \
-    --hash=sha256:a50d9a4336a9621cab7b8eb3fb11adb82de58f9b91d84c2cd526576b881a0c5a \
-    --hash=sha256:bc4c368f42b551bf72fac35c5128963a171b40dce866fb066540eeaf46faa003 \
-    --hash=sha256:c39a8da13cede5adcd3be1182883aea1c925476f4e84b2807a46e2775306305d \
-    --hash=sha256:c3ac844a0fe00bfaeb2c9b51ab1424e5c8744f89860b138434a363b1f620f354 \
-    --hash=sha256:c4c00e0b0597c8e4f59e8d461f797e5d70b4d025880516a8261b2817c47759ee \
-    --hash=sha256:c74a62747864ed568f5a82a49a23a8d7fe171d0c69038b38cedf0976831296fa \
-    --hash=sha256:dd05f7783b3274aa206a1af06f0ceed3f9b412cf665b7247eacd83be41cf7bf0 \
-    --hash=sha256:dfd681c5dc216037e0b0a2c821f5ed99ba9f03ebcf119c7dac0e9a7b960b9ec9 \
-    --hash=sha256:e474390e60ed609cec869b0da796ad94f420bb057d86784191eefc62b65819ae \
-    --hash=sha256:f76d097d12c82a535fda9dfe5e8dd4127952b45fea9b0276cb30cca5ea313fbc
-    # via -r requirements.in
 paramiko==3.0.0 \
     --hash=sha256:6bef55b882c9d130f8015b9a26f4bd93f710e90fe7478b9dcc810304e79b3cd8 \
     --hash=sha256:fedc9b1dd43bc1d45f67f1ceca10bc336605427a46dcdf8dec6bfea3edf57965
     # via
     #   -r requirements.in
     #   fabric
-    #   scp
 parse==1.19.0 \
     --hash=sha256:9ff82852bcb65d139813e2a5197627a94966245c897796760a3a2a8eb66f020b
     # via -r requirements.in
@@ -1064,11 +1033,6 @@ python-dateutil==2.8.2 \
     #   elasticsearch-dsl
     #   freezegun
     #   matplotlib
-    #   pandas
-pytz==2022.7.1 \
-    --hash=sha256:01a0681c4b9684a28304615eba55d1ab31ae00bf68ec157ec3708a8182dbbcd0 \
-    --hash=sha256:78f4f37d8198e0627c5f1143240bb0206b8691d8d7ac6d78fee88b78733f8c4a
-    # via pandas
 pyyaml==6.0 \
     --hash=sha256:01b45c0191e6d66c470b6cf1b9531a771a83c1c4208272ead47a3ae4f2f603bf \
     --hash=sha256:0283c35a6a9fbf047493e3a0ce8d79ef5030852c51e9d911a27badfde0605293 \
@@ -1144,10 +1108,6 @@ rfc3986[idna2008]==1.5.0 \
     --hash=sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835 \
     --hash=sha256:a86d6e1f5b1dc238b218b012df0aa79409667bb209e58da56d0b94704e712a97
     # via httpx
-scp==0.14.5 \
-    --hash=sha256:64f0015899b3d212cb8088e7d40ebaf0686889ff0e243d5c1242efe8b50f053e \
-    --hash=sha256:d224535dd8ed00294f52b0e0e18fde7a6fb7a3d06b97ede9e3f750fa7bf75c09
-    # via -r requirements.in
 simple-parsing==0.1.4 \
     --hash=sha256:1fb042499d8872090ed3aad1f60f4d53026d2062942196a600933bc83787328e \
     --hash=sha256:312300327d8f0beb61b6419500423bd335be8b83da66f733e9c67c6c18341ae8
