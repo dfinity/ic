@@ -887,23 +887,34 @@ impl dyn StorageLayout + '_ {
         Ok(result)
     }
 
-    pub fn memory_size(&self) -> StorageResult<u64> {
+    pub fn memory_pages(&self) -> StorageResult<u64> {
+        use std::io::{Read, Seek, SeekFrom};
         let mut result = 0;
         for base in self.existing_base() {
-            panic!();
+            result = std::fs::metadata(&base)
+                .map_err(|err: _| {
+                    Box::new(PersistenceError::FileSystemError {
+                        path: base.display().to_string(),
+                        context: format!("Failed get existing file length: {}", base.display()),
+                        internal_error: err.to_string(),
+                    }) as Box<dyn std::error::Error + Send>
+                })?
+                .len();
         }
-        for overlay in self.existing_overlays() {
-            let file = OpenOptions::new().read(true).open(overlay).map_err(|err| {
-                PersistenceError::FileSystemError {
-                    path: path.display().to_string(),
+        for overlay in self.existing_overlays().unwrap() {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .open(&overlay)
+                .map_err(|err| PersistenceError::FileSystemError {
+                    path: overlay.display().to_string(),
                     context: "Failed to open file".to_string(),
                     internal_error: err.to_string(),
-                }
-            })?;
+                })
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
             file.seek(SeekFrom::End(-28));
-            let mut len = 0u64;
-            file.read_exact(&mut len);
-            result = max(result, len);
+            let mut buf = [0u8; 8];
+            file.read_exact(&mut buf);
+            result = std::cmp::max(result, u64::from_le_bytes(buf));
         }
         Ok(result)
     }

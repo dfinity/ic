@@ -880,15 +880,6 @@ impl PageMap {
         )
     }
 
-    /// Get number of logical pages of the PageMap corresponding to the layout, i.e.
-    /// maximum page index in memory + 1.
-    /// Loads the Storage from disk and performs validation.
-    pub fn load_num_storage_host_pages(
-        layout: &dyn StorageLayout,
-    ) -> Result<usize, PersistenceError> {
-        Ok(Storage::load(layout)?.num_logical_pages())
-    }
-
     /// Switches the checkpoint file of the current page map to the one provided
     /// by the given page map. Page deltas of both page maps must be empty.
     pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
