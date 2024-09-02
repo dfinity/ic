@@ -6,7 +6,7 @@ use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
+#[cfg(not(feature = "next-migration-version-memory-manager"))]
 use ic_cdk::api::stable::StableWriter;
 
 #[cfg(not(feature = "canbench-rs"))]
@@ -27,7 +27,7 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "upgrade-to-memory-manager")]
+#[cfg(feature = "next-migration-version-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
@@ -124,7 +124,7 @@ fn init_state(init_args: InitArgs) {
     })
 }
 
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
+#[cfg(not(feature = "next-migration-version-memory-manager"))]
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
@@ -145,7 +145,7 @@ fn pre_upgrade() {
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
 
-#[cfg(feature = "upgrade-to-memory-manager")]
+#[cfg(feature = "next-migration-version-memory-manager")]
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
