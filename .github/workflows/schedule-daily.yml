@@ -4,7 +4,6 @@ on:
     - cron: "0 1 * * *"
   workflow_dispatch:
 env:
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -15,9 +14,7 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   cut-release-candidate:
@@ -64,6 +61,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash
@@ -93,6 +92,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -112,6 +113,46 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+      - name: Run FI Tests Nightly
+        id: bazel-test-all
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/rosetta-api/..."
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=7200"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on:
@@ -129,6 +170,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -167,6 +210,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set Benchmark Targets
         shell: bash
         run: |
@@ -214,6 +259,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      GITHUB_REF: ${{ github.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -221,6 +267,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup environment deps
         id: setup-environment-deps
         shell: bash

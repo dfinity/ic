@@ -31,8 +31,9 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-thread = { path = "../utils/thread" }
+ic-validate-eq = { path = "../utils/validate_eq" }
 nix = { workspace = true }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -73,7 +74,7 @@ ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
-proptest = "1.0"
+proptest = { workspace = true }
 strum = { workspace = true }
 
 [[bench]]

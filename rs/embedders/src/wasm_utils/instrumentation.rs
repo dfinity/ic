@@ -1350,6 +1350,7 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
@@ -1360,6 +1361,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1368,6 +1370,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -2001,6 +2004,7 @@ fn update_memories(
             shared: false,
             initial: wasm_bytemap_size_in_wasm_pages,
             maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2017,6 +2021,7 @@ fn update_memories(
             shared: false,
             initial: 0,
             maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2031,6 +2036,7 @@ fn update_memories(
             shared: false,
             initial: stable_bytemap_size_in_wasm_pages,
             maximum: Some(stable_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {

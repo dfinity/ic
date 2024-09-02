@@ -45,6 +45,9 @@ message SnsRootCanister {
   // True if the SNS is running in testflight mode. Then additional
   // controllers beyond SNS root are allowed when registering a dapp.
   bool testflight = 8;
+
+  reserved "updated_framework_canisters_memory_limit";
+  reserved 9;
 }
 
 message RegisterDappCanisterRequest {

@@ -410,7 +410,7 @@ mod tests {
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -449,7 +449,7 @@ mod tests {
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -491,7 +491,7 @@ mod tests {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }

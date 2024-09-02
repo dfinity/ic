@@ -67,6 +67,7 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance:build_script",
     "@crate_index//:assert_matches",
@@ -75,6 +76,7 @@ BASE_DEV_DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:pretty_assertions",
     "@crate_index//:rust_decimal",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]

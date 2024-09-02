@@ -4,6 +4,7 @@ set -e
 
 # Generate the GuestOS configuration.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -65,16 +66,6 @@ DEPLOYMENT="${DEPLOYMENT:=/boot/config/deployment.json}"
 INPUT="${INPUT:=/opt/ic/share/guestos.xml.template}"
 MEDIA="${MEDIA:=/run/ic-node/config.img}"
 OUTPUT="${OUTPUT:=/var/lib/libvirt/guestos.xml}"
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could

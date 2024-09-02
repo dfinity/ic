@@ -87,6 +87,7 @@ prost-build = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+candid_parser = { workspace = true }
 futures = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
@@ -99,7 +100,7 @@ ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

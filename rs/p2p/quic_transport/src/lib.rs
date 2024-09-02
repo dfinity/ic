@@ -32,11 +32,8 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
     future::Future,
-    io::IoSliceMut,
     net::SocketAddr,
-    pin::Pin,
     sync::{Arc, RwLock},
-    task::{Context, Poll},
 };
 
 use anyhow::anyhow;
@@ -46,16 +43,15 @@ use axum::{
     Router,
 };
 use bytes::Bytes;
-use either::Either;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, UdpPoller};
-use quinn_udp::{RecvMeta, Transmit};
+use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
+use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 use tracing::instrument;
 
@@ -67,18 +63,24 @@ mod connection_manager;
 mod metrics;
 mod request_handler;
 mod utils;
+pub use crate::connection_manager::create_udp_socket;
 
-#[derive(Clone)]
+/// The shutdown primitive is useful if futures should be cancelled at places different than '.await' points.
+/// Such functionality is needed to have explicit control on the state when exiting.
 pub struct Shutdown {
     cancellation: CancellationToken,
     task_tracker: TaskTracker,
+    join_handle: JoinHandle<()>,
 }
 
 impl Shutdown {
-    pub async fn shutdown(&self) {
+    /// If a panic happens it should be propagated upstream.
+    /// https://github.com/tokio-rs/tokio/issues/4516
+    pub async fn shutdown(self) -> Result<(), JoinError> {
         // If an error is returned it means the conn manager is already stopped.
         self.cancellation.cancel();
         self.task_tracker.wait().await;
+        self.join_handle.await
     }
 
     pub fn cancel(&self) {
@@ -94,16 +96,16 @@ impl Shutdown {
         rt_handle: &tokio::runtime::Handle,
     ) -> Self
     where
-        F: Future + Send + 'static,
-        F::Output: Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         let task_tracker = TaskTracker::new();
         let cancellation = CancellationToken::new();
-        task_tracker.spawn_on(run(cancellation.clone()), rt_handle);
+        let join_handle = task_tracker.spawn_on(run(cancellation.clone()), rt_handle);
         let _ = task_tracker.close();
         Self {
             cancellation,
             task_tracker,
+            join_handle,
         }
     }
 }
@@ -111,7 +113,7 @@ impl Shutdown {
 #[derive(Clone)]
 pub struct QuicTransport {
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    shutdown: Shutdown,
+    shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
 
 /// This is the main transport handle used for communication between peers.
@@ -139,7 +141,7 @@ impl QuicTransport {
         // The receiver is passed here mainly to be consistent with other managers that also
         // require receivers on construction.
         topology_watcher: watch::Receiver<SubnetTopology>,
-        udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
+        udp_socket: Arc<dyn AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
         router: Router,
     ) -> QuicTransport {
@@ -162,13 +164,16 @@ impl QuicTransport {
 
         QuicTransport {
             conn_handles,
-            shutdown,
+            shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
     }
 
     /// Graceful shutdown of transport
-    pub async fn shutdown(&self) {
-        self.shutdown.shutdown().await;
+    pub async fn shutdown(&mut self) {
+        let maybe_shutdown = self.shutdown.write().unwrap().take();
+        if let Some(shutdown) = maybe_shutdown {
+            let _ = shutdown.shutdown().await;
+        }
     }
 
     pub(crate) fn get_conn_handle(
@@ -198,12 +203,6 @@ impl Transport for QuicTransport {
         peer.rpc(request).await
     }
 
-    #[instrument(skip(self, request))]
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
-        let peer = self.get_conn_handle(peer_id)?;
-        peer.push(request).await
-    }
-
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
         self.conn_handles
             .read()
@@ -226,8 +225,6 @@ pub trait Transport: Send + Sync {
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, anyhow::Error>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
-
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }
 
@@ -247,36 +244,6 @@ impl From<MessagePriority> for i32 {
             MessagePriority::High => 1,
             MessagePriority::Low => 0,
         }
-    }
-}
-
-/// This is a workaround for being able to initiate quic transport
-/// with both a real and virtual udp socket. This is needed due
-/// to an inconsistency with the quinn API. This is fixed upstream
-/// and can be removed with quinn 0.11.0.
-/// https://github.com/quinn-rs/quinn/pull/1595
-#[derive(Debug)]
-pub struct DummyUdpSocket;
-
-impl AsyncUdpSocket for DummyUdpSocket {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
-        todo!()
-    }
-
-    fn try_send(&self, _transmit: &Transmit<'_>) -> std::io::Result<()> {
-        todo!()
-    }
-
-    fn poll_recv(
-        &self,
-        _cx: &mut Context<'_>,
-        _bufs: &mut [IoSliceMut<'_>],
-        _meta: &mut [RecvMeta],
-    ) -> Poll<std::io::Result<usize>> {
-        todo!()
-    }
-    fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        todo!()
     }
 }
 

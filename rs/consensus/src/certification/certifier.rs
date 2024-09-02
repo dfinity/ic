@@ -3,12 +3,12 @@ use crate::{
     consensus::MINIMUM_CHAIN_LENGTH,
 };
 use ic_consensus_utils::{
-    active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
+    active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -60,28 +60,23 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
-    for CertifierGossipImpl
-{
+impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for CertifierGossipImpl {
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
     // any new artifacts at that height. If it is above the CUP height and we do not
     // have a full certification at that height, we're interested in all artifacts.
-    fn get_priority_function(
-        &self,
-        certification_pool: &Pool,
-    ) -> PriorityFn<CertificationMessageId, ()> {
+    fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
             if height < cup_height || certified_heights.contains(&height) {
-                Priority::Drop
+                BouncerValue::Unwanted
             } else {
-                Priority::FetchNow
+                BouncerValue::Wants
             }
         })
     }
@@ -357,8 +352,7 @@ impl CertifierImpl {
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
-                    active_high_threshold_transcript(self.consensus_pool_cache.as_ref(), height)?
-                        .dkg_id;
+                    active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
@@ -410,13 +404,7 @@ impl CertifierImpl {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
-                Some(
-                    active_high_threshold_transcript(
-                        self.consensus_pool_cache.as_ref(),
-                        cert.height(),
-                    )?
-                    .dkg_id,
-                )
+                active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
             shares,
         )
@@ -589,11 +577,10 @@ impl CertifierImpl {
                         .crypto
                         .verify(
                             &share.signed,
-                            active_high_threshold_transcript(
+                            active_high_threshold_nidkg_id(
                                 self.consensus_pool_cache.as_ref(),
                                 share.height,
-                            )?
-                            .dkg_id,
+                            )?,
                         )
                         .map_err(VerifierError::from)
                     {
@@ -752,23 +739,20 @@ mod tests {
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(change_set);
 
-                let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
+                let bouncer = certifier_gossip.new_bouncer(&cert_pool);
                 for (height, prio) in &[
-                    (1, Priority::Drop),
-                    (2, Priority::FetchNow),
-                    (3, Priority::Drop),
-                    (4, Priority::FetchNow),
+                    (1, BouncerValue::Unwanted),
+                    (2, BouncerValue::Wants),
+                    (3, BouncerValue::Unwanted),
+                    (4, BouncerValue::Wants),
                 ] {
                     assert_eq!(
-                        prio_fn(
-                            &CertificationMessageId {
-                                height: Height::from(*height),
-                                hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                    CryptoHash(Vec::new())
-                                )),
-                            },
-                            &()
-                        ),
+                        bouncer(&CertificationMessageId {
+                            height: Height::from(*height),
+                            hash: CertificationMessageHash::Certification(CryptoHashOf::from(
+                                CryptoHash(Vec::new())
+                            )),
+                        },),
                         *prio
                     );
                 }

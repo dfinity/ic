@@ -1,9 +1,27 @@
-//! The artifact pool public interface that defines the Consensus-P2P API.
-//! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
+//! The public interface that defines the Consensus-P2P API.
+//! Clients must implement the traits in this file in order to use the IC P2P/Replication protocol.
 use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
 };
+
+#[derive(Debug, PartialEq)]
+pub struct ArtifactWithOpt<T> {
+    pub artifact: T,
+    /// The value defines the strategy to deliver a message to all peers.
+    /// If true, the artifact will be pushed (send directly to all peers).
+    /// This is fast but it can result in significant traffic overhead.
+    /// If false, only the ID of the artifact is pushed to the peers and then each
+    /// peer can fetch the artifact on demand.
+    pub is_latency_sensitive: bool,
+}
+
+/// Specifies an addition or removal to the outbound set of messages that are replicated.
+#[derive(Debug, PartialEq)]
+pub enum ArtifactMutation<T: IdentifiableArtifact> {
+    Insert(ArtifactWithOpt<T>),
+    Remove(T::Id),
+}
 
 /// Produces mutations to be applied on the artifact pool.
 pub trait ChangeSetProducer<Pool>: Send {
@@ -28,19 +46,6 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
-/// The enum specifies if a given artifact should be replicated.
-/// In other words, this specifies an addition or removal
-/// to the outbound set of messages that is replicated.
-#[derive(Debug, PartialEq)]
-pub enum ArtifactMutation<T: IdentifiableArtifact> {
-    Insert(ArtifactWithOpt<T>),
-    Remove(T::Id),
-}
-
-/// Ids of validated artifacts that were purged during the pool mutation, and adverts
-/// of artifacts that were validated during the pool mutation. As some changes (i.e.
-/// to the unvalidated section) might not generate adverts or purged IDs, `changed`
-/// indicates if the mutation changed the pool's state at all.
 pub struct ChangeResult<T: IdentifiableArtifact> {
     /// The list of replication mutations returned by the client. Mutations are applied in order by P2P-replication.
     pub mutations: Vec<ArtifactMutation<T>>,
@@ -48,12 +53,6 @@ pub struct ChangeResult<T: IdentifiableArtifact> {
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ArtifactWithOpt<T> {
-    pub artifact: T,
-    pub is_latency_sensitive: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.
@@ -69,27 +68,6 @@ pub trait MutablePool<T: IdentifiableArtifact> {
 
     /// Applies a set of change actions to the pool.
     fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<T>;
-}
-
-/// Priority of artifact.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Priority {
-    /// Drop the advert, the local replica doesn't need the corresponding artifact for
-    /// making progress.
-    Drop,
-    /// Stash the advert. It may be requested at a later point in time.
-    Stash,
-    /// High priority adverts, fetch the artifact immediately.
-    FetchNow,
-}
-
-/// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
-
-pub trait PriorityFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
-    /// Returns a priority function for the given pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
@@ -142,8 +120,29 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
         peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
+}
+
+/// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
+/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
+pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
+
+/// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BouncerValue {
+    /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
+    Unwanted,
+    /// The client may need later the artifact.
+    MaybeWantsLater,
+    /// The artifact needs to be delivered to the client.
+    Wants,
+}
+
+/// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh to a newer function.
+/// Invocations of the bouncer closure and factory should happen inside the implentations of the ArtifactAssembler.
+pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
+    /// Returns a new bouncer function for the given pool.
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
 }

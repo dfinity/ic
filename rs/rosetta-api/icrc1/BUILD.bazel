@@ -117,15 +117,20 @@ rust_test(
         crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
         tags = [
-            "manual",  # CI should not be downloading fiduciary_state.tar.zst or sns_state.tar.zst.
+            "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
+            "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
             "requires-network",  # Because mainnet state is downloaded (and used).
         ],
         deps = [
