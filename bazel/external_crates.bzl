@@ -730,11 +730,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "kube": crate.spec(
                 version = "^0.93.1",
-                features = [
-                    "runtime",
-                    "derive",
-                    "ws",
-                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
