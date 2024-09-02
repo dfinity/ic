@@ -1500,7 +1500,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.delete_canister_snapshot(*msg.sender(), &mut state, args)
+                        self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
                     });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
@@ -2193,6 +2193,7 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
+        round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2208,7 +2209,13 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .delete_canister_snapshot(sender, &mut canister, args.get_snapshot_id(), state)
+            .delete_canister_snapshot(
+                sender,
+                &mut canister,
+                args.get_snapshot_id(),
+                state,
+                round_limits,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
 

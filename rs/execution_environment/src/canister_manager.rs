@@ -1912,10 +1912,10 @@ impl CanisterManager {
             // Verify that the subnet has enough memory for a new snapshot.
             if let Err(err) = round_limits
                 .subnet_available_memory
-                .check_available_memory(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+                .check_available_memory(new_snapshot_increase, NumBytes::from(0), NumBytes::from(0))
                 .map_err(
                     |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                        requested: new_snapshot_size,
+                        requested: new_snapshot_increase,
                         available: NumBytes::from(
                             round_limits
                                 .subnet_available_memory
@@ -1951,11 +1951,6 @@ impl CanisterManager {
             {
                 return (Err(err), NumInstructions::new(0));
             };
-            // Actually deduct memory from the subnet. It's safe to unwrap
-            // here because we already checked the available memory above.
-            round_limits.subnet_available_memory
-                        .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
         // Charge for taking a snapshot of the canister.
@@ -1997,7 +1992,18 @@ impl CanisterManager {
                     .canister_snapshots
                     .compute_memory_usage_by_canister(canister.canister_id()),
             );
+            round_limits.subnet_available_memory.increment(
+                replace_snapshot_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
         }
+
+        // Actually deduct memory from the subnet. It's safe to unwrap
+        // here because we already checked the available memory above.
+        round_limits.subnet_available_memory
+            .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += new_snapshot.heap_delta();
@@ -2239,6 +2245,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         delete_snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2262,7 +2269,7 @@ impl CanisterManager {
             }
         }
         let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
-        // Already confirmed that `replace_snapshot` exists.
+        // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();
         canister.system_state.snapshots_memory_usage = canister
             .system_state
@@ -2276,6 +2283,11 @@ impl CanisterManager {
             state
                 .canister_snapshots
                 .compute_memory_usage_by_canister(canister.canister_id()),
+        );
+        round_limits.subnet_available_memory.increment(
+            old_snapshot_size,
+            NumBytes::from(0),
+            NumBytes::from(0),
         );
         Ok(())
     }
