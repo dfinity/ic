@@ -123,7 +123,7 @@ fn try_call() -> Result<(), ()> {
     let on_reject = move || {
         set_reply(
             call_id,
-            Reply::AsynchronousRejection(api::reject_code(), api::reject_message())
+            Reply::AsynchronousRejection(api::reject_code(), api::reject_message()),
         );
     };
 
@@ -141,7 +141,7 @@ fn try_call() -> Result<(), ()> {
                     receiver,
                     sent_bytes: payload_bytes,
                     reply: None,
-                }
+                },
             );
             Ok(())
         }
@@ -152,7 +152,7 @@ fn try_call() -> Result<(), ()> {
                     receiver,
                     sent_bytes: payload_bytes,
                     reply: Some(Reply::SynchronousRejection(error_code)),
-                }
+                },
             );
             Err(())
         }

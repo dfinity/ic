@@ -93,7 +93,7 @@ pub enum Reply {
     Bytes(u32),
     /// The call was rejected synchronously by the system with an error code.
     SynchronousRejection(i32),
-    /// The call was rejected asynchronously through a reject response, which 
+    /// The call was rejected asynchronously through a reject response, which
     /// includes an error code and a reject message.
     AsynchronousRejection(i32, String),
 }
@@ -110,7 +110,12 @@ pub struct Record {
 /// Human readable printer.
 impl std::fmt::Debug for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{} | sending {} bytes | ", &self.receiver.to_string()[..5], self.sent_bytes)?;
+        write!(
+            f,
+            "{} | sending {} bytes | ",
+            &self.receiver.to_string()[..5],
+            self.sent_bytes
+        )?;
         match &self.reply {
             None => write!(f, "..."),
             Some(Reply::Bytes(bytes)) => write!(f, "received {} bytes", bytes),
@@ -153,11 +158,11 @@ pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
     for record in records {
         metrics.calls_attempted += 1;
         metrics.sent_bytes += record.sent_bytes;
-        
+
         match record.reply {
             Some(Reply::Bytes(received_bytes)) => {
                 metrics.calls_replied += 1;
-                metrics.received_bytes+= received_bytes;
+                metrics.received_bytes += received_bytes;
             }
             Some(Reply::SynchronousRejection(_)) => {
                 metrics.calls_rejected_synchronously += 1;
