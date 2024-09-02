@@ -465,7 +465,6 @@ fn start_consensus(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
-            metrics_registry.clone(),
         ));
 
         let (client, jh) = create_artifact_handler(

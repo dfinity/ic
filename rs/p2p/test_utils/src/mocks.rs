@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{
-        Aborted, ArtifactAssembler, Peers, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
-    },
+    consensus::{Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
@@ -44,12 +42,6 @@ mock! {
             request: Request<Bytes>,
         ) -> Result<Response<Bytes>, anyhow::Error>;
 
-        async fn push(
-            &self,
-            peer_id: &NodeId,
-            request: Request<Bytes>,
-        ) -> Result<(), anyhow::Error>;
-
         fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }
 }
@@ -75,10 +67,10 @@ mock! {
 }
 
 mock! {
-    pub PriorityFnFactory<A: IdentifiableArtifact> {}
+    pub BouncerFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
-        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
+    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A, MockValidatedPoolReader<A>> for BouncerFactory<A> {
+        fn new_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
     }
 }
 
@@ -102,7 +94,6 @@ mock! {
         fn assemble_message<P: Peers + Send + 'static>(
             &self,
             id: u64,
-            attr: (),
             artifact: Option<(U64Artifact, NodeId)>,
             peers: P,
         ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;

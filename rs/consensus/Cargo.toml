@@ -68,6 +68,7 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
 proptest = { workspace = true }
 prost = { workspace = true }
 serde_cbor = { workspace = true }

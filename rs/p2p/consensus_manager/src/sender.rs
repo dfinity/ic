@@ -179,7 +179,6 @@ impl<
         let id = new_artifact.artifact.id();
         let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
-        let wire_artifact_attribute = wire_artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -200,7 +199,6 @@ impl<
                     is_latency_sensitive: new_artifact.is_latency_sensitive,
                 },
                 wire_artifact_id,
-                wire_artifact_attribute,
                 child_token_clone,
             );
 
@@ -224,7 +222,6 @@ impl<
             is_latency_sensitive,
         }: ArtifactWithOpt<WireArtifact>,
         id: WireArtifact::Id,
-        attribute: WireArtifact::Attribute,
         cancellation_token: CancellationToken,
     ) {
         let pb_slot_update = pb::SlotUpdate {
@@ -237,10 +234,7 @@ impl<
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Advert(pb::Advert {
-                        id: WireArtifact::PbId::proxy_encode(id),
-                        attribute: WireArtifact::PbAttribute::proxy_encode(attribute),
-                    })
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
                 }
             }),
         };
@@ -328,7 +322,8 @@ async fn send_advert_to_peer(
             .body(message.clone())
             .expect("Building from typed values");
 
-        if let Ok(()) = transport.push(&peer, request).await {
+        // TODO: NET-1748
+        if transport.rpc(&peer, request).await.is_ok() {
             return;
         }
 
@@ -406,6 +401,7 @@ mod available_slot_set {
 #[cfg(test)]
 mod tests {
     use anyhow::anyhow;
+    use axum::http::Response;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
@@ -428,7 +424,6 @@ mod tests {
         async fn assemble_message<P: Peers + Send + 'static>(
             &self,
             _id: <U64Artifact as IdentifiableArtifact>::Id,
-            _attr: <U64Artifact as IdentifiableArtifact>::Attribute,
             _artifact: Option<(U64Artifact, NodeId)>,
             _peers: P,
         ) -> Result<(U64Artifact, NodeId), Aborted> {
@@ -447,13 +442,10 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1)), (NODE_2, ConnId::from(2))]);
-            mock_transport
-                .expect_push()
-                .times(2)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(2).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -486,6 +478,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that increasing connection id causes advert to be resent.
@@ -509,13 +502,10 @@ mod tests {
                 .returning(|| vec![(NODE_1, ConnId::from(3)), (NODE_2, ConnId::from(2))])
                 .in_sequence(&mut seq);
             mock_transport.expect_peers().return_const(vec![]);
-            mock_transport
-                .expect_push()
-                .times(3)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(3).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -547,6 +537,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify failed send is retried.
@@ -564,17 +555,14 @@ mod tests {
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
             // Let transport push fail a few times.
             mock_transport
-                .expect_push()
+                .expect_rpc()
                 .times(5)
                 .returning(move |_, _| Err(anyhow!("")))
                 .in_sequence(&mut seq);
-            mock_transport
-                .expect_push()
-                .times(1)
-                .returning(move |n, _| {
-                    push_tx.send(*n).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(1).returning(move |n, _| {
+                push_tx.send(*n).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -599,6 +587,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify commit id increases with new adverts/purge events.
@@ -613,14 +602,11 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
-            mock_transport
-                .expect_push()
-                .times(3)
-                .returning(move |_, r| {
-                    let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
-                    commit_id_tx.send(pb_slot.commit_id).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(3).returning(move |_, r| {
+                let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
+                commit_id_tx.send(pb_slot.commit_id).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -662,6 +648,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that duplicate Advert event does not cause sending twice.
@@ -676,14 +663,11 @@ mod tests {
             mock_transport
                 .expect_peers()
                 .return_const(vec![(NODE_1, ConnId::from(1))]);
-            mock_transport
-                .expect_push()
-                .times(2)
-                .returning(move |_, r| {
-                    let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
-                    commit_id_tx.send(pb_slot.commit_id).unwrap();
-                    Ok(())
-                });
+            mock_transport.expect_rpc().times(2).returning(move |_, r| {
+                let pb_slot = pb::SlotUpdate::decode(&mut r.into_body()).unwrap();
+                commit_id_tx.send(pb_slot.commit_id).unwrap();
+                Ok(Response::new("".into()))
+            });
 
             let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
@@ -726,6 +710,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that a panic happening in one of the tasks spawned by the ConsensusManagerSender
@@ -746,7 +731,7 @@ mod tests {
 
             // We don't create an expectation for `push` here, so that we can trigger a panic
             mock_transport
-                .expect_push()
+                .expect_rpc()
                 .times(2)
                 .returning(move |_, _| {
                     panic!("Panic in mock transport expectation.");
@@ -770,7 +755,8 @@ mod tests {
 
         timeout(Duration::from_secs(5), shutdown.shutdown())
             .await
-            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.");
+            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.")
+            .unwrap();
 
         //assert!(join_error.is_panic(), "The join error should be a panic.");
     }).await

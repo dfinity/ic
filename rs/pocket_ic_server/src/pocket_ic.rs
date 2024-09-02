@@ -20,10 +20,10 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
+    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
-use ic_https_outcalls_adapter::CanisterHttp;
+use ic_https_outcalls_adapter::{CanisterHttp, Config as HttpsOutcallsConfig};
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -35,7 +35,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -43,6 +43,7 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::Level;
 use ic_state_machine_tests::{
     finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
@@ -169,6 +170,7 @@ pub struct PocketIc {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 impl Drop for PocketIc {
@@ -258,6 +260,7 @@ impl PocketIc {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         time: SystemTime,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -304,6 +307,7 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
+            .with_log_level(log_level)
     }
 
     pub(crate) fn new(
@@ -311,6 +315,7 @@ impl PocketIc {
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -445,6 +450,7 @@ impl PocketIc {
                 registry_data_provider.clone(),
                 time,
                 nonmainnet_features,
+                log_level,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -459,19 +465,24 @@ impl PocketIc {
                 builder = builder.with_subnet_id(subnet_id);
             }
 
-            if subnet_kind == SubnetKind::II {
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "dfx_test_key1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "test_key_1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "key_1".to_string(),
-                }));
+            if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
+                for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+                    for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                        let key_id = SchnorrKeyId {
+                            algorithm,
+                            name: name.to_string(),
+                        };
+                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                    }
+                }
+
+                for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                    let key_id = EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: name.to_string(),
+                    };
+                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                }
             }
 
             let sm = builder.build_with_subnets(subnets.clone());
@@ -574,6 +585,7 @@ impl PocketIc {
             registry_data_provider,
             runtime,
             nonmainnet_features,
+            log_level,
         }
     }
 
@@ -674,6 +686,7 @@ impl Default for PocketIc {
             },
             None,
             false,
+            None,
         )
     }
 }
@@ -1625,13 +1638,13 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => CallServiceV2::new_service(ingress_validator),
+                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
                         let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
-                        CallServiceV3::new_service(
+                        call_v3::new_service(
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
@@ -1727,7 +1740,7 @@ impl Operation for QueryRequest {
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
-                    Arc::new(PocketNodeSigner(node.signing_key.clone())),
+                    Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(RwLock::new(delegation)),
@@ -2277,6 +2290,7 @@ fn route(
                         pic.registry_data_provider.clone(),
                         time,
                         pic.nonmainnet_features,
+                        pic.log_level,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -2409,40 +2423,18 @@ fn new_canister_http_adapter(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
 ) -> CanisterHttp {
-    use hyper_legacy::{client::connect::HttpConnector, Client};
-    use hyper_rustls::HttpsConnectorBuilder;
-    use hyper_socks2::SocksConnector;
-
     // Socks client setup
     // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
     // but we still have to provide one when constructing the production `CanisterHttp` object
     // and thus we use a reserved (and invalid) proxy IP address.
-    let mut http_connector = HttpConnector::new();
-    http_connector.enforce_http(false);
-    http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
-    let proxy_connector = SocksConnector {
-        proxy_addr: "http://240.0.0.0:8080"
-            .parse::<tonic::transport::Uri>()
-            .expect("Failed to parse socks url."),
-        auth: None,
-        connector: http_connector.clone(),
+    let config = HttpsOutcallsConfig {
+        http_connect_timeout_secs: 2,
+        http_request_timeout_secs: 2,
+        socks_proxy: "http://240.0.0.0:8080".to_string(),
+        ..Default::default()
     };
-    let https_connector = HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .https_only()
-        .enable_http1()
-        .wrap_connector(proxy_connector);
-    let socks_client = Client::builder().build::<_, hyper_legacy::Body>(https_connector);
 
-    // Https client setup.
-    let builder = HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .https_or_http()
-        .enable_http1();
-    let https_client =
-        Client::builder().build::<_, hyper_legacy::Body>(builder.wrap_connector(http_connector));
-
-    CanisterHttp::new(https_client, socks_client, log, metrics_registry)
+    CanisterHttp::new(config, log, metrics_registry)
 }
 
 #[cfg(test)]
@@ -2615,6 +2607,7 @@ mod tests {
             },
             None,
             false,
+            None,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 

@@ -262,6 +262,7 @@ impl RosettaTestingEnvironmentBuilder {
                 });
             }
         }
+
         // Create a testing agent
         let icrc1_agent = Arc::new(Icrc1Agent {
             agent: local_replica::get_testing_agent(self.port).await,

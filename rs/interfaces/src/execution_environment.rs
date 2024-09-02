@@ -131,6 +131,8 @@ pub enum SystemApiCallId {
     CallCyclesAdd,
     /// Tracker for `ic0.call_cycles_add128()`
     CallCyclesAdd128,
+    /// Tracker for `ic0.call_cycles_add128_up_to()`
+    CallCyclesAdd128UpTo,
     /// Tracker for `ic0.call_data_append()`
     CallDataAppend,
     /// Tracker for `ic0.call_new()`
@@ -800,6 +802,28 @@ pub trait SystemApi {
     /// This traps if trying to transfer more cycles than are in the current
     /// balance of the canister.
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()>;
+
+    /// Adds cycles to a call by moving them from the canister's balance onto
+    /// the call under construction. The cycles are deducted immediately
+    /// from the canister's balance and moved back if the call cannot be
+    /// performed (e.g. if `ic0.call_perform` signals an error or if the
+    /// canister invokes `ic0.call_new` or returns without invoking
+    /// `ic0.call_perform`).
+    ///
+    /// The number of cycles added to the call will be `<= amount` and such that a
+    /// subsequent `ic0.call_perform` will not fail because of insufficient cycles
+    /// balance (assuming no `ic0.call_data_append` is called between
+    /// `ic0.call_cycles_add128_up_to` and `ic0.call_perform`).
+    ///
+    /// This system call also copies the actual amount of cycles that were moved
+    /// onto the call represented by a 128-bit value starting at the location
+    /// `dst` in the canister memory.
+    fn ic0_call_cycles_add128_up_to(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// This call concludes assembling the call. It queues the call message to
     /// the given destination, but does not actually act on it until the current

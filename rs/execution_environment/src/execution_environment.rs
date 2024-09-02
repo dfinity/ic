@@ -397,6 +397,7 @@ impl ExecutionEnvironment {
             upload_wasm_chunk_instructions,
             config.embedders_config.wasm_max_size,
             canister_snapshot_baseline_instructions,
+            config.default_wasm_memory_limit,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -2143,7 +2144,7 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
-        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             &old_canister,
@@ -3559,6 +3560,11 @@ impl ExecutionEnvironment {
             self.config.subnet_memory_capacity.get(),
             self.resource_saturation_scaling as u64,
         )
+    }
+
+    /// Returns the default value of `wasm_memory_limit` in canister settings.
+    pub fn default_wasm_memory_limit(&self) -> NumBytes {
+        self.config.default_wasm_memory_limit
     }
 
     /// For testing purposes only.

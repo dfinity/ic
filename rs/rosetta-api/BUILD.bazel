@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
-    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -63,14 +63,23 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/pocket-ic",
     "//rs/crypto/ed25519",
+    "//rs/rosetta-api/client:ic-icp-rosetta-client",
+    "//rs/rosetta-api/icp_ledger/test_utils",
+    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
+    "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
     "@crate_index//:proptest",
     "@crate_index//:rand_chacha",
+    "@crate_index//:tempfile",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -78,7 +87,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.0.0"
+ROSETTA_VERSION = "2.1.0"
 
 rust_library(
     name = "rosetta-api",
@@ -135,6 +144,36 @@ rust_test_suite_with_extra_srcs(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "icp_rosetta_system_tests",
+    size = "large",
+    srcs = [
+        "tests/system_tests/system_tests.rs",
+    ],
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox:sandbox_launcher",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/replica",
+        "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    ],
+    env = {
+        "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REPLICA_BIN": "$(rootpath //rs/replica)",
+        "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
+        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+    },
+    extra_srcs = glob([
+        "tests/system_tests/common/*.rs",
+        "tests/system_tests/test_cases/*.rs",
+    ]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
 # Rosetta docker image

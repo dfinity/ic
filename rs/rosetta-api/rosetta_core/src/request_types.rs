@@ -362,25 +362,74 @@ pub struct SearchTransactionsRequest {
 }
 
 impl SearchTransactionsRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-    ) -> SearchTransactionsRequest {
-        SearchTransactionsRequest {
+    pub fn builder(network_identifier: NetworkIdentifier) -> SearchTransactionsRequestBuilder {
+        SearchTransactionsRequestBuilder::new(network_identifier)
+    }
+}
+
+pub struct SearchTransactionsRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    operator: Option<Operator>,
+    max_block: Option<i64>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+    transaction_identifier: Option<TransactionIdentifier>,
+    account_identifier: Option<AccountIdentifier>,
+    coin_identifier: Option<CoinIdentifier>,
+    currency: Option<Currency>,
+    status: Option<String>,
+    type_: Option<String>,
+    address: Option<String>,
+    success: Option<bool>,
+}
+
+impl SearchTransactionsRequestBuilder {
+    pub fn new(network_identifier: NetworkIdentifier) -> SearchTransactionsRequestBuilder {
+        SearchTransactionsRequestBuilder {
             network_identifier,
             operator: None,
             max_block: None,
             offset: None,
             limit: None,
-            transaction_identifier,
-            account_identifier,
+            transaction_identifier: None,
+            account_identifier: None,
             coin_identifier: None,
             currency: None,
             status: None,
             type_: None,
             address: None,
             success: None,
+        }
+    }
+
+    pub fn with_transaction_identifier(
+        mut self,
+        transaction_identifier: TransactionIdentifier,
+    ) -> Self {
+        self.transaction_identifier = Some(transaction_identifier);
+        self
+    }
+
+    pub fn with_account_identifier(mut self, account_identifier: AccountIdentifier) -> Self {
+        self.account_identifier = Some(account_identifier);
+        self
+    }
+
+    pub fn build(self) -> SearchTransactionsRequest {
+        SearchTransactionsRequest {
+            network_identifier: self.network_identifier,
+            operator: self.operator,
+            max_block: self.max_block,
+            offset: self.offset,
+            limit: self.limit,
+            transaction_identifier: self.transaction_identifier,
+            account_identifier: self.account_identifier,
+            coin_identifier: self.coin_identifier,
+            currency: self.currency,
+            status: self.status,
+            type_: self.type_,
+            address: self.address,
+            success: self.success,
         }
     }
 }

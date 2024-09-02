@@ -11,7 +11,7 @@ Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 ---
 
 ## Motivation
-THIS MUST BE FILLED OUT
+TODO: THIS MUST BE FILLED OUT
 
 
 ## Upgrade args

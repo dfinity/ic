@@ -15,7 +15,7 @@ use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-use ic_crypto_ecdsa_secp256k1::PublicKey;
+use ic_crypto_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
