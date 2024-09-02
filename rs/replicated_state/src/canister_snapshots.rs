@@ -287,6 +287,7 @@ pub struct ExecutionStateSnapshot {
     /// The Wasm global variables.
     /// Note: The hypervisor instrumentations exports all global variables,
     /// including originally internal global variables.
+    #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
     /// Snapshot of stable memory.
     #[validate_eq(CompareWithValidateEq)]
