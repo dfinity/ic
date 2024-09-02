@@ -140,7 +140,7 @@ pub fn main() -> anyhow::Result<()> {
                         }),
                         // Run xnet tests
                         // uses `rs/tests/src/message_routing/global_reboot_test`
-                        Box::new(XNet {}),
+                        Box::new(XNet::default()),
                         // Retire old version if it has disk-img
                         Box::new(RetireBlessedVersions {
                             versions: vec![initial_version.clone()],
@@ -170,7 +170,7 @@ pub fn main() -> anyhow::Result<()> {
                             rps: 500.0,
                         }),
                         // Run xnet tests
-                        Box::new(XNet {}),
+                        Box::new(XNet::default()),
                     ],
                 );
                 qualifier.qualify(env).expect("Failed to qualify")
