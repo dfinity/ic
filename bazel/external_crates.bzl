@@ -570,7 +570,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "d745b667d8334605beb99c003e980ebdb338487c",
+                rev = "77a3ca6f98c4a3cdf7c2d34fe4463c9e37e81072",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
