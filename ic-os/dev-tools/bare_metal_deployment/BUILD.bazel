@@ -1,11 +1,3 @@
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files(["deploy.py"])
-
-# Necessary to find the directory where the scripts are stored.
-genrule(
-    name = "find_idrac_package_path",
-    outs = ["idrac_package_path.txt"],
-    cmd = "echo $(location @python_deps_idracredfishsupport//:IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py) | xargs dirname > $@",
-    tools = ["@python_deps_idracredfishsupport//:IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py"],
-)

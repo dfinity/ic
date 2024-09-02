@@ -101,8 +101,8 @@ class Args:
     # How many nodes should be deployed in parallel
     parallel: int = 1
 
-    # Directory where idrac scripts are held. If None, pip bin directory will be used.
-    idrac_script_dir_file: Optional[str] = None
+    # Path to an idrac script, which we use to find the directory. If None, pip bin directory will be used.
+    idrac_script: Optional[str] = None
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
@@ -535,15 +535,6 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     return result_path
 
 
-def get_idrac_script_dir(idrac_script_dir_file: Optional[str]) -> Path:
-    if idrac_script_dir_file:
-        log.info(f"Using idrac script dir file: {idrac_script_dir_file}")
-        idrac_script_dir = open(idrac_script_dir_file).read().strip()
-        assert '\n' not in idrac_script_dir, "idrac script dir file must be one line"
-        return Path(idrac_script_dir)
-    return Path(DEFAULT_IDRAC_SCRIPT_DIR)
-
-
 def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
@@ -555,7 +546,7 @@ def main():
     )
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = get_idrac_script_dir(args.idrac_script_dir_file)
+    idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     csv_filename: str = args.csv_filename
