@@ -4,7 +4,7 @@ use pocket_ic::{
     common::rest::{
         CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, MockCanisterHttpResponse,
     },
-    PocketIc, WasmResult,
+    query_candid, PocketIc, WasmResult,
 };
 
 const MAX_TICKS: usize = 10;
@@ -17,14 +17,79 @@ fn kyt_wasm() -> Vec<u8> {
     )
 }
 
-#[test]
-fn test_get_inputs() {
+fn setup_env() -> (Principal, PocketIc) {
     let env = PocketIc::new();
-    let sender = Principal::anonymous();
 
     let kyt = env.create_canister();
     env.add_cycles(kyt, 100_000_000_000_000);
     env.install_canister(kyt, kyt_wasm(), vec![], None);
+    (kyt, env)
+}
+
+#[test]
+fn test_check_address() {
+    use ic_btc_kyt::{blocklist, CheckAddressArgs, CheckAddressResponse};
+
+    let (kyt, env) = setup_env();
+
+    // Choose an address from the blocklist
+    let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
+    let result = query_candid(
+        &env,
+        kyt,
+        "check_address",
+        (CheckAddressArgs {
+            address: blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string(),
+        },),
+    );
+    assert!(
+        matches!(result, Ok((CheckAddressResponse::Failed,))),
+        "result = {:?}",
+        result
+    );
+
+    // Satoshi's address hopefully is not in the blocklist
+    let result = query_candid(
+        &env,
+        kyt,
+        "check_address",
+        (CheckAddressArgs {
+            address: "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S".to_string(),
+        },),
+    );
+    assert!(
+        matches!(result, Ok((CheckAddressResponse::Passed,))),
+        "result = {:?}",
+        result
+    );
+
+    // Test with an malformed address
+    let result = query_candid::<_, (CheckAddressResponse,)>(
+        &env,
+        kyt,
+        "check_address",
+        (CheckAddressArgs {
+            address: "not an address".to_string(),
+        },),
+    );
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid bitcoin address")));
+
+    // Test with an testnet address
+    let result = query_candid::<_, (CheckAddressResponse,)>(
+        &env,
+        kyt,
+        "check_address",
+        (CheckAddressArgs {
+            address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
+        },),
+    );
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
+}
+
+#[test]
+fn test_get_inputs() {
+    let (kyt, env) = setup_env();
+    let sender = Principal::anonymous();
 
     let call_id = env
         .submit_call(

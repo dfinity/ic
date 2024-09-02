@@ -32,7 +32,9 @@ use ic_types::{
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{
+    CanisterStatusView, CyclesAmountType, SandboxSafeSystemState, SystemStateChanges,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -1118,6 +1120,12 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
+    /// Note that this function is made public only for the tests
+    #[doc(hidden)]
+    pub fn get_compute_allocation(&self) -> ComputeAllocation {
+        self.execution_parameters.compute_allocation
+    }
+
     /// Bytes allocated in the Wasm/stable memory.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory
@@ -1231,8 +1239,8 @@ impl SystemApiImpl {
     fn ic0_call_cycles_add_helper(
         &mut self,
         method_name: &str,
-        amount: Cycles,
-    ) -> HypervisorResult<()> {
+        amount: CyclesAmountType,
+    ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -1267,15 +1275,17 @@ impl SystemApiImpl {
                         ),
                     }),
                     Some(request) => {
-                        self.sandbox_safe_system_state
+                        let amount_withdrawn = self
+                            .sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
+                                request.current_payload_size(),
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,
                                 false, // synchronous error => no need to reveal top up balance
                             )?;
-                        request.add_cycles(amount);
-                        Ok(())
+                        request.add_cycles(amount_withdrawn);
+                        Ok(amount_withdrawn)
                     }
                 }
             }
@@ -2224,15 +2234,38 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_call_cycles_add(&mut self, amount: u64) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add", Cycles::from(amount));
+        let result = self
+            .ic0_call_cycles_add_helper(
+                "ic0_call_cycles_add",
+                CyclesAmountType::Exact(Cycles::from(amount)),
+            )
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd, result, amount);
         result
     }
 
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()> {
-        let result = self.ic0_call_cycles_add_helper("ic0_call_cycles_add128", amount);
+        let result = self
+            .ic0_call_cycles_add_helper("ic0_call_cycles_add128", CyclesAmountType::Exact(amount))
+            .map(|_| ());
         trace_syscall!(self, CallCyclesAdd128, result, amount);
         result
+    }
+
+    fn ic0_call_cycles_add128_up_to(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self.ic0_call_cycles_add_helper(
+            "ic0_call_cycles_add128_up_to",
+            CyclesAmountType::UpTo(amount),
+        );
+        trace_syscall!(self, CallCyclesAdd128UpTo, result, amount);
+        let withdrawn_cycles = result?;
+        copy_cycles_to_heap(withdrawn_cycles, dst, heap, "ic0_call_cycles_add128_up_to")?;
+        Ok(())
     }
 
     // Note that if this function returns an error, then the canister will be
