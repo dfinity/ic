@@ -3335,6 +3335,112 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CyclesBurn128, result, amount);
         result
     }
+
+    fn ic0_mat_mul(
+        &mut self,
+        a: u64,
+        a_shape_src: u64,
+        a_shape_dims: u64,
+        b: u64,
+        b_shape_src: u64,
+        b_shape_dims: u64,
+        heap_offset: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        // TODO: check for nans?
+
+        println!("a shape dims: {}", a_shape_dims);
+
+        fn read_shape(src: usize, dims: u64, heap: &[u8]) -> (Vec<usize>, usize) {
+            // TODO: don't initialize with zeros?
+            let mut shape = vec![0; dims as usize];
+            let mut len = 1;
+
+            let mut n = [0; 8];
+            for i in 0..dims as usize {
+                n.copy_from_slice(&heap[src + 8 * i..src + 8 * (i + 1) as usize]);
+                shape[i] = u64::from_le_bytes(n) as usize;
+                len *= shape[i];
+            }
+
+            (shape, len as usize)
+        }
+
+        let (a_shape, a_len) = read_shape(a_shape_src as usize, a_shape_dims, heap);
+        let (b_shape, b_len) = read_shape(b_shape_src as usize, b_shape_dims, heap);
+        println!("a shape : {:?}", a_shape);
+        println!("a len : {:?}", a_len);
+        println!("b shape : {:?}", b_shape);
+
+        let tensor_a = {
+            let mut d = vec![0.0f32; a_len];
+            let mut n = [0; 4];
+            for i in 0..a_len {
+                n.copy_from_slice(&heap[a as usize + 4 * i..a as usize + 4 * (i + 1)]);
+                d[i] = f32::from_le_bytes(n);
+            }
+            d
+        };
+
+        let tensor_b = {
+            let mut d = vec![0.0f32; b_len];
+            let mut n = [0; 4];
+            for i in 0..b_len {
+                n.copy_from_slice(&heap[b as usize + 4 * i..b as usize + 4 * (i + 1)]);
+                d[i] = f32::from_le_bytes(n);
+            }
+            d
+        };
+
+//        println!("a : {:?}", tensor_a);
+//        println!("b : {:?}", tensor_b);
+
+        use burn::backend::Wgpu as Backend;
+        use burn::prelude::Tensor;
+        use burn::prelude::TensorData;
+        use std::time::Instant;
+
+        println!("Loading tensors...");
+        let start = Instant::now();
+        let a_tensor_data = TensorData::new(tensor_a, a_shape);
+        let a = Tensor::<Backend, 2>::from(a_tensor_data);
+
+        let b_tensor_data = TensorData::new(tensor_b, b_shape);
+        let b = Tensor::<Backend, 2>::from(b_tensor_data);
+        let duration = start.elapsed();
+        println!("Time taken: {:?}", duration);
+
+        println!("A: {}", a);
+        println!("B: {}", a);
+
+        println!("matmul...");
+        let start = Instant::now();
+        let res = a.matmul(b);
+        let duration = start.elapsed();
+        println!("Time taken: {:?}", duration);
+//        println!("res: {}", res);
+
+        println!("into data...");
+        let start = Instant::now();
+        let res_data = res.into_data();
+        let duration = start.elapsed();
+        println!("Time taken: {:?}", duration);
+//        println!("res data: {}", res_data);
+//        println!("res data bytes: {:?}", res_data.bytes);
+ //       println!("res data shape: {:?}", res_data.shape);
+
+        println!("copy back to heap...");
+        let start = Instant::now();
+        deterministic_copy_from_slice(
+            &mut heap[heap_offset as usize..heap_offset as usize + res_data.bytes.len()],
+            &res_data.bytes,
+        );
+        let duration = start.elapsed();
+        println!("Time taken: {:?}", duration);
+
+        println!("finished writing. DONE");
+        Ok(())
+    }
 }
 
 /// The default implementation of the `OutOfInstructionHandler` trait.

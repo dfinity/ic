@@ -16,7 +16,7 @@
 //!     // Create an empty canister as the anonymous principal and add cycles.
 //!     let canister_id = pic.create_canister();
 //!     pic.add_cycles(canister_id, 2_000_000_000_000);
-//!  
+//!
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
@@ -1332,7 +1332,7 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
         }
-        if start.elapsed() > Duration::from_secs(10) {
+        if start.elapsed() > Duration::from_secs(40) {
             panic!("Failed to start PocketIC service in time");
         }
         std::thread::sleep(Duration::from_millis(20));

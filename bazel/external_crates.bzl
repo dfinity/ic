@@ -267,6 +267,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bs58": crate.spec(
                 version = "^0.5.0",
             ),
+            "burn": crate.spec(
+                version = "^0.14.0",
+                features = [
+                    "wgpu",
+                ],
+                default_features = False,
+            ),
             "ic_bls12_381": crate.spec(
                 version = "=0.10.0",
                 features = [
@@ -1096,7 +1103,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "0.9",
             ),
             "rusqlite": crate.spec(
-                version = "^0.28.0",
+                version = "^0.31.0",
                 features = ["bundled"],
             ),
             "rust_decimal": crate.spec(

@@ -9,6 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+burn = { version = "0.14.0", features = ["wgpu"] }
 candid = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }

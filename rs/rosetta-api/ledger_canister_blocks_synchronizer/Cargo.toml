@@ -22,7 +22,7 @@ ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
 leb128 = "0.2.5"
 on_wire = { path = "../../rust_canisters/on_wire" }
-rusqlite = { version = "~0.28.0", features = ["bundled"] }
+rusqlite = { version = "~0.31.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

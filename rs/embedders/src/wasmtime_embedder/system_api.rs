@@ -893,6 +893,32 @@ pub(crate) fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "mat_mul", {
+            move |mut caller: Caller<'_, StoreData>,
+                  a: u64,
+                  a_shape: u64,
+                  a_shape_size: u64,
+                  b: u64,
+                  b_shape: u64,
+                  b_shape_size: u64,
+                  memory_offset: u64| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_mat_mul(
+                        a,
+                        a_shape,
+                        a_shape_size,
+                        b,
+                        b_shape,
+                        b_shape_size,
+                        memory_offset,
+                        memory,
+                    )
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "time", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::TIME)?;

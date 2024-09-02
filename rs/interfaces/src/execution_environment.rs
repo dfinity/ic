@@ -1175,6 +1175,19 @@ pub trait SystemApi {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
+
+    /// Does a matrix multiplication of a and b.
+    fn ic0_mat_mul(
+        &mut self,
+        a: u64,
+        a_shape: u64,
+        a_shape_size: u64,
+        b: u64,
+        b_shape: u64,
+        b_shape_size: u64,
+        heap_offset: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

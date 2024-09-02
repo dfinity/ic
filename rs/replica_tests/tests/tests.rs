@@ -113,6 +113,87 @@ fn test_canister_init_debug_print() {
 }
 
 #[test]
+fn test_mat_mul() {
+    const MAT_MUL: &str = r#"
+            (module
+              (import "ic0" "mat_mul" (func $mat_mul (param i64 i64 i64 i64 i64 i64 i64)))
+              (import "ic0" "msg_reply" (func $msg_reply))
+              (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+
+              (func $run
+
+                (call $mat_mul
+                  (i64.const 300)
+                  (i64.const 100)
+                  (i64.const 2)
+                  (i64.const 400)
+                  (i64.const 200)
+                  (i64.const 2)
+                  (i64.const 500)
+                )
+
+                ;; Load the answer
+               ;; (i32.const 500)  ;; Push the memory address (500) onto the stack
+                ;;(f32.load)       ;; Load the 32-bit float from memory at the address on the stack
+
+                ;; now we copied the counter address into heap[0]
+                (call $msg_reply_data_append
+                  (i32.const 500) ;; the counter address from heap[0]
+                  (i32.const 16) ;; length
+                )
+                (call $msg_reply)
+              )
+
+              ;; A dims
+              (data (i32.const 100)
+                "\02\00\00\00\00\00\00\00"   ;; u64 value 2 at position 100 (100)
+                "\03\00\00\00\00\00\00\00"   ;; u64 value 3 at position 108 (100 + 8)
+              )
+
+              ;; B dims
+              (data (i32.const 200)
+                "\03\00\00\00\00\00\00\00"
+                "\02\00\00\00\00\00\00\00"
+              )
+
+              ;; Tensor A
+              (data (i32.const 300)
+                "\01\00\00\00\00\00\00\00"
+                "\02\00\00\00\00\00\00\00"
+                "\03\00\00\00\00\00\00\00"
+                "\04\00\00\00\00\00\00\00"
+                "\05\00\00\00\00\00\00\00"
+                "\06\00\00\00\00\00\00\00"
+              )
+
+              ;; Tensor B
+              (data (i32.const 400)
+                "\07\00\00\00\00\00\00\00"
+                "\08\00\00\00\00\00\00\00"
+                "\09\00\00\00\00\00\00\00"
+                "\10\00\00\00\00\00\00\00"
+                "\11\00\00\00\00\00\00\00"
+                "\12\00\00\00\00\00\00\00"
+              )
+
+              (memory $memory 1)
+              (export "memory" (memory $memory))
+              (export "canister_update run" (func $run)))"#;
+
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .no_dts()
+        .build();
+    let canister_id = env.install_canister_wat(MAT_MUL, vec![], None);
+    assert_eq!(
+        env.execute_ingress(canister_id, "run", vec![]),
+        Ok(WasmResult::Reply(vec![
+            0, 0, 152, 66, 0, 0, 188, 66, 0, 0, 47, 67, 0, 0, 92, 67
+        ]))
+    );
+}
+
+#[test]
 /// Tests that a counter can be incremented on the heap
 fn test_counter_heap() {
     let env = StateMachine::new();

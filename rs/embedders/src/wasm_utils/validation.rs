@@ -635,6 +635,24 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
                 },
             )],
         ),
+        (
+            "mat_mul",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                        ValType::I64,
+                    ],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis

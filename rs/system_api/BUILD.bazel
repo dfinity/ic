@@ -25,6 +25,7 @@ rust_library(
         "//rs/types/types",
         "//rs/types/wasm_types",
         "//rs/utils",
+        "@crate_index//:burn",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
