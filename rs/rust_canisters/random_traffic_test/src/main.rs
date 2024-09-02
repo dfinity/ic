@@ -4,7 +4,6 @@ use ic_base_types::CanisterId;
 use rand::{distributions::Distribution, rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use random_traffic_test::*;
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 thread_local! {
@@ -53,22 +52,22 @@ fn seed_rng() {
     api::reply(&[]);
 }
 
-fn insert_sent_record(call_id: u32, receiver: CanisterId, record: Request) {
+fn insert_new_call(call_id: u32, receiver: CanisterId, call: Call) {
     RECORDS.with_borrow_mut(|records| {
         records.insert(
             call_id,
             Record {
                 receiver,
-                sent: record,
-                received: None,
+                call,
+                reply: None,
             },
         );
     })
 }
 
-fn set_received_record(call_id: u32, record: Response) {
+fn set_reply(call_id: u32, reply: Reply) {
     RECORDS.with_borrow_mut(|records| {
-        records.get_mut(&call_id).unwrap().received = Some(record);
+        records.get_mut(&call_id).unwrap().reply = Some(reply);
     });
 }
 
@@ -115,7 +114,9 @@ fn next_call_id() -> u32 {
     id
 }
 
-/// Attemps to call a randomly chosen `receiver` with a random payload size.
+/// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
+/// attempted in `RECORDS` in the order they were made. Once a reply is received, this record is
+/// updated in place.
 fn try_call() -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
     let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
@@ -123,10 +124,10 @@ fn try_call() -> Result<(), ()> {
     let call_id = next_call_id();
     let on_reply = move || {
         let reply = api::arg_data();
-        set_received_record(call_id, Response::Data(reply.len() as u32));
+        set_reply(call_id, Reply::Data(reply.len() as u32));
     };
     let on_reject = move || {
-        set_received_record(call_id, Response::Rejected(api::reject_message()));
+        set_reply(call_id, Reply::Rejected(api::reject_message()));
     };
 
     let msg = vec![0_u8; payload_bytes as usize];
@@ -138,11 +139,11 @@ fn try_call() -> Result<(), ()> {
         on_reject,
     ) {
         0 => {
-            insert_sent_record(call_id, receiver, Request::Data(msg.len() as u32));
+            insert_new_call(call_id, receiver, Call::Data(msg.len() as u32));
             Ok(())
         }
         error_code => {
-            insert_sent_record(call_id, receiver, Request::Rejected(error_code));
+            insert_new_call(call_id, receiver, Call::Rejected(error_code));
             Err(())
         }
     }

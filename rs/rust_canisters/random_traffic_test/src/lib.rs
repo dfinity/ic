@@ -87,18 +87,18 @@ impl Config {
     }
 }
 
-/// Indicate whether a request was sent successfully including the size of the payload; or rejected
+/// Indicate whether a call was made successfully including the size of the payload; or rejected
 /// synchronously by the IC including the error code.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, CandidType)]
-pub enum Request {
+pub enum Call {
     Data(u32),
     Rejected(i32),
 }
 
-/// Indicates whether a data response was received including the size of the payload; or rejected
+/// Indicates whether a reply was received including the size of the payload; or rejected
 /// including the message in the reject response.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, CandidType)]
-pub enum Response {
+pub enum Reply {
     Data(u32),
     Rejected(String),
 }
@@ -107,24 +107,24 @@ pub enum Response {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub struct Record {
     pub receiver: CanisterId,
-    pub sent: Request,
-    pub received: Option<Response>,
+    pub call: Call,
+    pub reply: Option<Reply>,
 }
 
 /// Human readable printer.
 impl std::fmt::Debug for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "Calling {}, ", self.receiver)?;
-        match self.sent {
-            Request::Data(bytes) => write!(f, "sending {} bytes", bytes),
-            Request::Rejected(error_code) => {
+        match self.call {
+            Call::Data(bytes) => write!(f, "sending {} bytes", bytes),
+            Call::Rejected(error_code) => {
                 write!(f, "synchronously rejected with error code {}", error_code)
             }
         }?;
-        if let Some(received) = &self.received {
-            match received {
-                Response::Data(bytes) => write!(f, ", reply received with {} bytes", bytes),
-                Response::Rejected(msg) => write!(f, ", call rejected: '{}'", msg),
+        if let Some(reply) = &self.reply {
+            match reply {
+                Reply::Data(bytes) => write!(f, ", reply received with {} bytes", bytes),
+                Reply::Rejected(msg) => write!(f, ", call rejected: '{}'", msg),
             }
         } else {
             write!(f, "...")
@@ -150,15 +150,15 @@ pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
 
     for record in records {
         metrics.calls_attempted += 1;
-        match record.sent {
-            Request::Data(bytes) => {
+        match record.call {
+            Call::Data(bytes) => {
                 metrics.bytes_sent += bytes;
-                match record.received {
-                    Some(Response::Data(bytes)) => {
+                match record.reply {
+                    Some(Reply::Data(bytes)) => {
                         metrics.calls_replied += 1;
                         metrics.bytes_received += bytes;
                     }
-                    Some(Response::Rejected(_)) => {
+                    Some(Reply::Rejected(_)) => {
                         metrics.calls_rejected_asynchronously += 1;
                     }
                     None => {
@@ -166,9 +166,9 @@ pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
                     }
                 }
             }
-            Request::Rejected(_) => {
+            Call::Rejected(_) => {
                 metrics.calls_rejected_synchronously += 1;
-                assert!(record.received.is_none());
+                assert!(record.reply.is_none());
             }
         }
     }
