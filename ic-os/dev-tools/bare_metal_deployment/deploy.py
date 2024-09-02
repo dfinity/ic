@@ -92,6 +92,9 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_pub_key: Optional[str] = None
+
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
@@ -543,7 +546,8 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
                              ipv6_prefix: str,
                              ipv6_gateway: str,
                              ipv4_args: Optional[Ipv4Args],
-                             verbose: Optional[str]) -> Path:
+                             verbose: Optional[str],
+                             pub_key: Optional[str]) -> Path:
     """
     Transform the compressed image.
     * Decompress image into working_dir
@@ -578,7 +582,11 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     if verbose:
         verbose_part = f"--verbose {verbose} "
 
-    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part}", echo=True)
+    admin_key_part = ""
+    if pub_key:
+        admin_key_part = f"--public-keys \"{pub_key}\""
+
+    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}", echo=True)
 
     # Reuse the name of the compressed image path in the working directory
     result_filename = compressed_image_path.name
@@ -643,7 +651,8 @@ def main():
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
                 ipv4_args,
-                args.inject_image_verbose
+                args.inject_image_verbose,
+                args.inject_image_pub_key
                 )
 
             upload_to_file_share(
