@@ -93,7 +93,7 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
-pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
+pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(200 * 1024 * 1024); // 100 MiB
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
