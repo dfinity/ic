@@ -1017,7 +1017,7 @@ fn test_upgrade_serialization() {
 }
 
 #[test]
-fn test_upgrade_serialization_deterministic() {
+fn test_upgrade_serialization_fixed_tx() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
