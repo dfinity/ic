@@ -53,16 +53,9 @@ fn seed_rng() {
     api::reply(&[]);
 }
 
-fn insert_new_call(call_id: u32, receiver: CanisterId, call: Call) {
+fn insert_new_call_record(call_id: u32, record: Record) {
     RECORDS.with_borrow_mut(|records| {
-        records.insert(
-            call_id,
-            Record {
-                receiver,
-                call,
-                reply: None,
-            },
-        );
+        records.insert(call_id, record);
     })
 }
 
@@ -125,26 +118,42 @@ fn try_call() -> Result<(), ()> {
     let call_id = next_call_id();
     let on_reply = move || {
         let reply = api::arg_data();
-        set_reply(call_id, Reply::Data(reply.len() as u32));
+        set_reply(call_id, Reply::Bytes(reply.len() as u32));
     };
     let on_reject = move || {
-        set_reply(call_id, Reply::Rejected(api::reject_message()));
+        set_reply(
+            call_id,
+            Reply::AsynchronousRejection(api::reject_code(), api::reject_message())
+        );
     };
 
-    let msg = vec![0_u8; payload_bytes as usize];
     match api::call_with_callbacks(
         api::CanisterId::try_from(receiver).unwrap(),
         "handle_call",
-        &msg[..],
+        &vec![0_u8; payload_bytes as usize][..],
         on_reply,
         on_reject,
     ) {
         0 => {
-            insert_new_call(call_id, receiver, Call::Data(msg.len() as u32));
+            insert_new_call_record(
+                call_id,
+                Record {
+                    receiver,
+                    sent_bytes: payload_bytes,
+                    reply: None,
+                }
+            );
             Ok(())
         }
         error_code => {
-            insert_new_call(call_id, receiver, Call::Rejected(error_code));
+            insert_new_call_record(
+                call_id,
+                Record {
+                    receiver,
+                    sent_bytes: payload_bytes,
+                    reply: Some(Reply::SynchronousRejection(error_code)),
+                }
+            );
             Err(())
         }
     }

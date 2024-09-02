@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
+    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
