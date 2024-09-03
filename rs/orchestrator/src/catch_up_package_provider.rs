@@ -180,7 +180,10 @@ impl CatchUpPackageProvider {
             None
         })?;
         let mut uri = http_endpoint_to_url(&http, &self.logger)?;
-        uri.path_segments_mut().ok()?.push("_/catch_up_package");
+        uri.path_segments_mut()
+            .ok()?
+            .push("_")
+            .push("catch_up_package");
 
         let uri = uri.to_string();
 
@@ -243,6 +246,7 @@ impl CatchUpPackageProvider {
             .build();
 
         let client = Client::builder(TokioExecutor::new())
+            .http2_only(true)
             .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
             .build::<_, Full<Bytes>>(https);
