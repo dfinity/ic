@@ -48,6 +48,7 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
+    farm::HostFeature,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
@@ -59,7 +60,7 @@ use ic_tests::nns_dapp::{
     set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
 
-const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
+const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 0;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
 const NUM_BN: u64 = 1;
 
@@ -88,7 +89,13 @@ pub fn setup(env: TestEnv) {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
     }
     for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+        ic = ic.add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_required_host_features(vec![HostFeature::Host(
+                    "se1-dll02.se1.dfinity.network".to_string(),
+                )])
+                .add_nodes(1),
+        );
     }
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");

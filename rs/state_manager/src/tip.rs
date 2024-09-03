@@ -600,7 +600,9 @@ fn merge_candidates_and_storage_info(
     thread_pool: &mut scoped_threadpool::Pool,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
+    log: &ReplicaLogger,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
+    let start = Instant::now();
     let layout = &tip_handler
         .tip(height)
         .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
@@ -617,7 +619,7 @@ fn merge_candidates_and_storage_info(
                     .layout(layout)
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
                 storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
-                let num_pages = (&pm_layout as &dyn StorageLayout).num_pages()?;
+                let num_pages = (&pm_layout as &dyn StorageLayout).memory_pages()? as usize;
                 storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
                 Ok((
                     MergeCandidate::new(
@@ -641,6 +643,12 @@ fn merge_candidates_and_storage_info(
         merge_candidates.append(&mut merge_candidate_with_storage_info.0);
         storage_info = storage_info.add(&merge_candidate_with_storage_info.1);
     }
+    let elapsed = start.elapsed();
+    info!(
+        log,
+        "merge candidates and storage info time: {}",
+        elapsed.as_secs_f64()
+    );
     Ok((merge_candidates, storage_info))
 }
 
@@ -715,6 +723,7 @@ fn merge(
         thread_pool,
         lsmt_config,
         metrics,
+        log,
     )
     .unwrap_or_else(|err| {
         fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
@@ -835,7 +844,7 @@ fn merge_to_base(
             fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
         });
         let num_pages = (&pm_layout as &dyn StorageLayout)
-            .num_pages()
+            .memory_pages()
             .unwrap_or_else(|err| fatal!(log, "Failed to get num storage host pages: {}", err));
         let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
             .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));

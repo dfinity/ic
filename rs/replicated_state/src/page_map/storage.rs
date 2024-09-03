@@ -887,10 +887,10 @@ impl dyn StorageLayout + '_ {
         Ok(result)
     }
 
-    pub fn memory_pages(&self) -> StorageResult<u64> {
+    pub fn memory_pages(&self) -> StorageResult<usize> {
         use std::io::{Read, Seek, SeekFrom};
         let mut result = 0;
-        for base in self.existing_base() {
+        if let Some(base) = self.existing_base() {
             result = std::fs::metadata(&base)
                 .map_err(|err: _| {
                     Box::new(PersistenceError::FileSystemError {
@@ -899,7 +899,8 @@ impl dyn StorageLayout + '_ {
                         internal_error: err.to_string(),
                     }) as Box<dyn std::error::Error + Send>
                 })?
-                .len();
+                .len() as usize
+                / PAGE_SIZE;
         }
         for overlay in self.existing_overlays().unwrap() {
             let mut file = OpenOptions::new()
@@ -911,11 +912,14 @@ impl dyn StorageLayout + '_ {
                     internal_error: err.to_string(),
                 })
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-            file.seek(SeekFrom::End(-28));
+            file.seek(SeekFrom::End(-28))
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
             let mut buf = [0u8; 8];
-            file.read_exact(&mut buf);
-            result = std::cmp::max(result, u64::from_le_bytes(buf));
+            file.read_exact(&mut buf)
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+            result = std::cmp::max(result, usize::from_le_bytes(buf));
         }
+        debug_assert_eq!(result, Storage::load(self).unwrap().num_logical_pages());
         Ok(result)
     }
 }
