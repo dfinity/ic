@@ -176,7 +176,7 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(PartialEq, Debug, Deserialize)]
 struct ServiceContext {
     wallets: Vec<String>,
 }

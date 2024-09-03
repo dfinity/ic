@@ -128,7 +128,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,

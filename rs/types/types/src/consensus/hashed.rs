@@ -21,7 +21,7 @@ use std::cmp::{Eq, Ordering, PartialOrd};
 /// Bundle of both a value and its hash. Once created it remains immutable,
 /// which is why both fields are only accessible through member functions, not
 /// as record fields.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Hashed<H, V> {
     pub(crate) hash: H,
     pub(crate) value: V,
