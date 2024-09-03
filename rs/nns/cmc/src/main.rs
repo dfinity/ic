@@ -1309,13 +1309,13 @@ async fn notify_mint_cycles(
         subaccount: to_subaccount,
     };
 
-    if deposit_memo.as_ref().map_or(0, |memo| memo.len()) > MAX_MEMO_LENGTH {
+    let deposit_memo_len = deposit_memo.as_ref().map_or(0, |memo| memo.len());
+    if deposit_memo_len > MAX_MEMO_LENGTH {
         return Err(NotifyError::Other {
             error_code: NotifyErrorCode::DepositMemoTooLong as u64,
             error_message: format!(
                 "Memo length {} exceeds the maximum length of {}",
-                deposit_memo.map_or(0, |memo| memo.len()),
-                MAX_MEMO_LENGTH
+                deposit_memo_len, MAX_MEMO_LENGTH
             ),
         });
     }

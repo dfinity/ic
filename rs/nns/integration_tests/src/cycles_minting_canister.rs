@@ -1234,8 +1234,21 @@ fn cmc_notify_mint_cycles() {
     assert_eq!(block_index, block_index_duplicate);
     assert_eq!(minted, minted_duplicate);
     assert_eq!(balance, balance_duplicate);
+}
 
-    // Deposit memo is too long.
+#[test]
+fn cmc_notify_mint_cycles_deposit_memo_too_long() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(10, 0).unwrap();
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    // We deliberately not set up the cycles ledger here to make sure it is not called.
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
     let transfer_args = TransferArgs {
         memo: MEMO_MINT_CYCLES,
         amount: Tokens::new(3, 0).unwrap(),
@@ -1252,7 +1265,7 @@ fn cmc_notify_mint_cycles() {
     let notify_args = NotifyMintCyclesArg {
         block_index,
         to_subaccount: None,
-        deposit_memo: Some(vec![0; 100]),
+        deposit_memo: Some(vec![0; 33]),
     };
     let WasmResult::Reply(res) = state_machine
         .execute_ingress_as(
@@ -1459,7 +1472,7 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
     let non_existing_canister_id = CanisterId::from_u64(123_456_789);
 
-    // First make sure topping up 400T cylces on a valid canister works.
+    // First make sure topping up 400T cycles on a valid canister works.
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
@@ -1471,10 +1484,10 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
     // Advance time by 1 hour to make sure the rate limit is reset.
     state_machine.advance_time(Duration::from_secs(60 * 60));
 
-    // Now the attack begines - the bad account sends 0.69 tokens per 5 seconds to the non-existing
+    // Now the attack begins - the bad account sends 0.69 tokens per 5 seconds to the non-existing
     // canister, which makes it 69T * 12 * 60 = 49.68P cycles per hour, close to the 50P limit,
     // while getting the 0.69 tokens back each time (the account only has 1 token in the
-    // begingging).
+    // beginning).
     for _ in 0..(12 * 60) {
         let error = notify_top_up(
             &state_machine,
