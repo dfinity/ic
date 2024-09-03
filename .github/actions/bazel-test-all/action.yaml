@@ -50,7 +50,7 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
+          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
           if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then

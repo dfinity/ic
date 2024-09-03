@@ -52,12 +52,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::ConsensusMessageId,
-    consensus::{ConsensusMessage, ConsensusMessageHashable},
-    malicious_flags::MaliciousFlags,
-    replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion,
-    Time,
+    artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
+    replica_version::ReplicaVersion, Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -68,7 +65,7 @@ use std::{
 };
 use strum_macros::AsRefStr;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, AsRefStr)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {
     Notary,
@@ -588,10 +585,14 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusGossipImpl {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         new_bouncer(pool, self.message_routing.expected_batch_height())
+    }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
 

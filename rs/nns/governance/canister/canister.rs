@@ -385,7 +385,6 @@ fn canister_post_upgrade() {
         restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
-    let restored_state = migrate_neurons_fund_audit_info(restored_state);
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -394,17 +393,6 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
-}
-
-fn migrate_neurons_fund_audit_info(state: InternalGovernanceProto) -> InternalGovernanceProto {
-    InternalGovernanceProto {
-        proposals: state
-            .proposals
-            .into_iter()
-            .map(|(id, proposal_data)| (id, proposal_data.migrate()))
-            .collect(),
-        ..state
-    }
 }
 
 #[cfg(feature = "test")]

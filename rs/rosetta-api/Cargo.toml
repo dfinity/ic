@@ -68,6 +68,9 @@ pocket-ic = { path = "../../packages/pocket-ic" }
 ic-ledger-test-utils = { path = "./icp_ledger/test_utils" }
 ic-icrc1-test-utils = { path = "./icrc1/test_utils" }
 tempfile = { workspace = true }
+icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
 
 [features]
 rosetta-blocks = []
