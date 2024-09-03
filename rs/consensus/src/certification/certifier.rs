@@ -60,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for CertifierGossipImpl {
+impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for CertifierGossipImpl {
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
@@ -79,6 +79,10 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for Cer
                 BouncerValue::Wants
             }
         })
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }
 
