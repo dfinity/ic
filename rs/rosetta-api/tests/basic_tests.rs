@@ -5,30 +5,20 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scribe};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
-use ic_rosetta_api::convert::{block_id, from_hash, to_hash, to_model_account_identifier};
+use ic_rosetta_api::convert::{from_hash, to_hash};
 use ic_rosetta_api::errors::ApiError;
-use ic_rosetta_api::ledger_client::LedgerAccess;
-use ic_rosetta_api::models::amount::tokens_to_amount;
-use ic_rosetta_api::models::Amount;
 use ic_rosetta_api::models::CallRequest;
+use ic_rosetta_api::models::PartialBlockIdentifier;
 use ic_rosetta_api::models::QueryBlockRangeRequest;
 use ic_rosetta_api::models::QueryBlockRangeResponse;
-use ic_rosetta_api::models::{AccountBalanceRequest, PartialBlockIdentifier};
 use ic_rosetta_api::models::{
-    AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
-    BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
-    ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
-    MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
-    SearchTransactionsResponse,
+    BlockIdentifier, BlockRequest, BlockTransaction, BlockTransactionRequest,
+    SearchTransactionsRequest, SearchTransactionsResponse,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
-use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
 use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
-use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::objects::ObjectMap;
-use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
