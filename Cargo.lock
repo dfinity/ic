@@ -12931,9 +12931,12 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
+ "axum 0.7.5",
  "bytes",
  "crossbeam-channel",
- "hyper 0.14.26",
+ "hyper 1.4.1",
+ "hyper-util",
+ "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12951,7 +12954,6 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12961,6 +12963,8 @@ dependencies = [
  "slog",
  "threadpool",
  "tokio",
+ "tokio-rustls 0.26.0",
+ "tower",
  "url",
 ]
 
