@@ -587,7 +587,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "318801b082ef4763e84ca26c38f1728d73452983",
+                rev = "5d229a8cb336d592e825cf8ca04d79381226c33c",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -1109,9 +1109,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls": crate.spec(
                 version = "^0.23.12",
+                default_features = False,
                 features = [
                     "ring",
                     "std",
+                    "brotli",
                 ],
             ),
             "rustls-native-certs": crate.spec(

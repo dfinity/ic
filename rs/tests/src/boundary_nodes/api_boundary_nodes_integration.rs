@@ -517,8 +517,7 @@ async fn add_api_boundary_nodes_via_proposal(
         // Create an empty ACME json to signal ic-boundary that we don't need to create a new ACME account
         // Create self-signed certificate & update permissions
         node.block_on_bash_script(&format!(
-            "sudo touch /var/lib/ic/data/ic-boundary-acme.json && \
-            sudo openssl req -x509 -newkey rsa:2048 \
+            "sudo openssl req -x509 -newkey rsa:2048 \
             -keyout /var/lib/ic/data/ic-boundary-tls.key \
             -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
             -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={}\" && \

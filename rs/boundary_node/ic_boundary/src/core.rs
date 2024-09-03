@@ -103,7 +103,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // Install crypto-provider
-    rustls::crypto::aws_lc_rs::default_provider()
+    rustls::crypto::ring::default_provider()
         .install_default()
         .map_err(|_| anyhow!("unable to install Rustls crypto provider"))?;
 
@@ -121,7 +121,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
-    // TLS verifier
+    // TLS client
     let tls_verifier = Arc::new(TlsVerifier::new(
         Arc::clone(&registry_snapshot),
         cli.listen.skip_replica_tls_verification,
@@ -193,12 +193,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         None
     };
 
-    // Canister Ratelimiter
+    // Generic Ratelimiter
     let generic_limiter = Arc::new(generic::Limiter::new(
         cli.rate_limiting.rate_limit_generic.clone(),
     ));
 
-    // Server / API
+    // Prepare Axum Router
     let router = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
@@ -342,13 +342,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.append(&mut registry_runners);
 
     TokioScope::scope_and_block(move |s| {
-        s.spawn(async move {
-            metrics_server
-                .serve(CancellationToken::new())
-                .map_err(|e| anyhow!("unable to serve metrics: {e:#}"))
-                .await
-        });
-
         if let Some(v) = registry_replicator {
             s.spawn(async move {
                 v.start_polling(cli.registry.nns_urls, nns_pub_key)
@@ -361,7 +354,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             });
         }
 
-        // Servers
+        // HTTP servers
+        s.spawn(async move {
+            metrics_server
+                .serve(CancellationToken::new())
+                .map_err(|e| anyhow!("unable to serve metrics: {e:#}"))
+                .await
+        });
+
         if let Some(v) = server_http {
             s.spawn(async move {
                 v.serve(CancellationToken::new())
