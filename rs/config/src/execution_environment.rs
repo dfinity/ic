@@ -147,7 +147,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     pub embedders_config: EmbeddersConfig,
@@ -375,7 +375,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BitcoinConfig {
     /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
     /// This list is intentionally separate from the bitcoin canister IDs below because it

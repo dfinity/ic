@@ -200,7 +200,6 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
@@ -473,12 +472,16 @@ impl IDkgBouncerArgs {
     }
 }
 
-impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgGossipImpl {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
+    }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
 

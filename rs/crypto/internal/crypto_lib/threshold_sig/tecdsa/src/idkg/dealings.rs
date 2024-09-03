@@ -154,13 +154,13 @@ fn encrypt_and_commit_pair_of_polynomials(
     Ok((ciphertext.into(), commitment.into()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ZkProof {
     ProofOfMaskedResharing(zk::ProofOfEqualOpenings),
     ProofOfProduct(zk::ProofOfProduct),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct IDkgDealingInternal {
     pub ciphertext: MEGaCiphertext,
     pub commitment: PolynomialCommitment,

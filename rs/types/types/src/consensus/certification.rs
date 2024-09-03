@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 
 /// CertificationMessage captures the different types of messages sent around
 /// for the purpose of state certification.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CertificationMessage {
     /// Certification captures a full certification on behalf of a subnet
     Certification(Certification),
@@ -121,7 +121,7 @@ impl TryFrom<pb::CertificationMessage> for CertificationMessage {
 }
 
 /// CertificationMessageHash contains the hash of a CertificationMessage.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum CertificationMessageHash {
     /// Certification captures the hash of a full certification on behalf of a
     /// subnet
@@ -163,7 +163,7 @@ impl TryFrom<&pb::CertificationMessageHash> for CertificationMessageHash {
 }
 
 /// CertificationContent holds the data signed by certification
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertificationContent {
     /// The hash of the relevant parts of the replicated state
@@ -202,7 +202,7 @@ impl AsRef<CertificationContent> for CertificationMessage {
 
 /// A Certification is a CertificationContent that is cryptographically signed
 /// by a subnet using a threshold signature
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Certification {
     /// the height that the CertificationContent belongs to
@@ -227,7 +227,7 @@ impl CountBytes for Certification {
 
 /// A certification share is the signature of a single replica on a
 /// CertificationContent
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,

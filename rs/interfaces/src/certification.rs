@@ -11,7 +11,7 @@ use std::collections::HashSet;
 pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the certification pool.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ChangeAction {
     /// Adds the artifact to the validated pool.
     AddToValidated(CertificationMessage),
@@ -60,7 +60,7 @@ pub trait CertificationPool {
 }
 
 /// Reasons for why a certification might be invalid.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidCertificationReason {
     CryptoError(CryptoError),
     UnexpectedCertificationHash(CryptoHashOfPartialState),
@@ -69,7 +69,7 @@ pub enum InvalidCertificationReason {
 
 /// Possible failures of validating a certification. Doesn't necessarily mean the certification is
 /// invalid.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum CertificationValidationFailure {
     CryptoError(CryptoError),
 }

@@ -7,11 +7,11 @@ use std::fmt;
 mod tests;
 
 /// Occurs if the threshold is zero.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NiDkgThresholdZeroError {}
 
 /// Occurs if a non-interactive DKG configuration is invalid.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum NiDkgConfigValidationError {
     ThresholdZero,
     DealersEmpty,

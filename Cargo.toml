@@ -552,6 +552,8 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "schnorr",
     "std",
 ] }
+# kube is used by our test driver
+kube = { version = "0.93.1" }
 lazy_static = "1.4.0"
 libc = "0.2.155"
 libflate = "2.1.0"
@@ -591,7 +593,7 @@ proptest-derive = "0.5.0"
 prost = "^0.12"
 prost-build = "^0.12"
 protobuf = "2.28.0"
-quinn = { version = "0.11.3", default-features = false, features = [
+quinn = { version = "0.11.4", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
