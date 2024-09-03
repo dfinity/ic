@@ -333,7 +333,7 @@ impl OngoingStateSync {
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Clone, Debug, Error)]
 pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.

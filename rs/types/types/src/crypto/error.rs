@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt; // Probably move all the errors into this file
 
 /// Occurs if an argument is invalid.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct InvalidArgumentError {
     pub message: String,
 }
@@ -18,7 +18,7 @@ impl fmt::Display for InvalidArgumentError {
 }
 
 /// An internal error.  Occurs e.g. when an internal RPC communication fails.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct InternalError {
     pub internal_error: String,
 }
@@ -30,7 +30,7 @@ impl fmt::Display for InternalError {
 }
 
 /// Occurs if a public key is malformed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct MalformedPublicKeyError {
     pub algorithm: AlgorithmId,
     pub key_bytes: Option<Vec<u8>>,
@@ -50,7 +50,7 @@ impl fmt::Display for MalformedPublicKeyError {
 }
 
 /// Malformed X for other types of X.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct MalformedDataError {
     pub algorithm: AlgorithmId,
     pub internal_error: String,
@@ -70,7 +70,7 @@ impl fmt::Display for MalformedDataError {
 }
 
 /// The secret key was not found in the secret key store.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct KeyNotFoundError {
     pub internal_error: String,
     pub key_id: String,

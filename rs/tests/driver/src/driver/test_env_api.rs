@@ -327,20 +327,20 @@ impl std::fmt::Display for TopologySnapshot {
 
 impl TopologySnapshot {
     pub fn emit_log_event(&self, log: &slog::Logger) {
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct NodeView {
             pub id: NodeId,
             pub ipv6: IpAddr,
         }
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct SubnetView {
             pub subnet_type: SubnetType,
             pub subnet_id: SubnetId,
             pub nodes: Vec<NodeView>,
         }
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Deserialize, Serialize)]
         pub struct TopologyView {
             pub registry_version: String,
             pub subnets: Vec<SubnetView>,
@@ -2195,7 +2195,7 @@ where
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FarmBaseUrl {
     url: Url,
 }
@@ -2228,7 +2228,7 @@ impl TestEnvAttribute for FarmBaseUrl {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InitialReplicaVersion {
     pub version: ReplicaVersion,
 }
@@ -2251,7 +2251,7 @@ pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
 }
 
 pub fn emit_group_event(log: &slog::Logger, group: &str) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct GroupName {
         message: String,
         group: String,
@@ -2267,7 +2267,7 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
 }
 
 pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct KibanaUrl {
         message: String,
         url: String,

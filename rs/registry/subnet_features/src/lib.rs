@@ -10,7 +10,7 @@ use std::{convert::TryFrom, str::FromStr};
 pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 
 /// List of features that can be enabled or disabled on the given subnet.
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
@@ -87,7 +87,7 @@ impl FromStr for SubnetFeatures {
     }
 }
 
-#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaConfig {
     pub quadruples_to_create_in_advance: u32,
     pub key_ids: Vec<EcdsaKeyId>,
@@ -126,7 +126,7 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
     }
 }
 
-#[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: MasterPublicKeyId,
     pub pre_signatures_to_create_in_advance: u32,
@@ -171,7 +171,7 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
     }
 }
 
-#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,

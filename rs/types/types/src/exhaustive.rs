@@ -1038,12 +1038,12 @@ mod tests {
     /// Check if the BTreeMap implementation produces a correct minimal exhaustive set.
     #[test]
     fn check_impl_btreemap() {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ExhaustiveSet)]
         enum Small {
             A,
             B,
         }
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ExhaustiveSet)]
         enum Big {
             X,
             Y,
@@ -1069,12 +1069,12 @@ mod tests {
     /// Check if named enum fields produce correct result
     #[test]
     fn derive_named_enum_field() {
-        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Debug, ExhaustiveSet)]
         enum Enum1 {
             V1 { first: Enum2, second: Enum2 },
             V2,
         }
-        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Debug, ExhaustiveSet)]
         enum Enum2 {
             A1,
             A2,

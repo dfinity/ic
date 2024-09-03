@@ -127,7 +127,7 @@ pub struct FutureResult<Out> {
 }
 
 /// Engine execution errors.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum EngineError {
     FuturesDispatchTimeout(String),
     FuturesExecutionFailure(String),
