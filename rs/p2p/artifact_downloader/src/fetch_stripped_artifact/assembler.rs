@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use ic_interfaces::p2p::consensus::{
     Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
@@ -19,13 +22,15 @@ use super::{
     download::download_ingress,
     metrics::FetchStrippedConsensusArtifactMetrics,
     stripper::Strippable,
-    types::stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal},
+    types::stripped::{
+        MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+    },
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
 struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessage, Pool>>,
+    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
 }
 
 struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
@@ -53,19 +58,21 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>>
-    BouncerFactory<MaybeStrippedConsensusMessage, ConsensusPoolWrapper<Pool>>
+    BouncerFactory<StrippedConsensusMessageId, ConsensusPoolWrapper<Pool>>
     for BouncerFactoryWrapper<Pool>
 {
     fn new_bouncer(
         &self,
         pool: &ConsensusPoolWrapper<Pool>,
-    ) -> ic_interfaces::p2p::consensus::Bouncer<
-        <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
-    > {
+    ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
         let pool = pool.consensus_pool.read().unwrap();
         let nested = self.bouncer_factory.new_bouncer(&pool);
 
         Box::new(move |id| nested(id.as_ref()))
+    }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
 
@@ -85,7 +92,7 @@ impl FetchStrippedConsensusArtifact {
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessage, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
