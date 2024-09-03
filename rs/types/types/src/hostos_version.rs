@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct HostosVersion {
     version_id: String,
 }
@@ -60,7 +60,7 @@ impl TryFrom<String> for HostosVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct HostosVersionParseError(pub(crate) String);
 
 impl fmt::Display for HostosVersionParseError {

@@ -14,7 +14,7 @@ pub(crate) const LABEL_URL_PARSE: &str = "url_parse";
 pub(crate) const LABEL_UPLOAD: &str = "up";
 pub(crate) const LABEL_DOWNLOAD: &str = "down";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct AdapterMetrics {
     /// The number of requests served by adapter.
     pub requests: IntCounter,

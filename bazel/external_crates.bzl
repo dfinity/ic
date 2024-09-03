@@ -630,7 +630,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
-                rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3",
+                rev = "3be26b5a2c71bf56e05b910951c1935a1ac550c4",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -989,7 +989,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.11.3",
+                version = "^0.11.4",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
