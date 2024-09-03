@@ -289,7 +289,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \

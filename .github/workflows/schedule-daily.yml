@@ -301,8 +301,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
