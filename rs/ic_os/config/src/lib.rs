@@ -59,32 +59,33 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
     // Per PFOPS - this will never not be 64
     let ipv6_subnet = 64_u8;
 
-    let ipv6_prefix = match config_map.get("ipv6_prefix") {
-        Some(ipv6_prefix) => {
+    let ipv6_prefix = config_map
+        .get("ipv6_prefix")
+        .map(|prefix| {
             // Prefix should have a max length of 19 ("1234:6789:1234:6789")
             // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
-            if !is_valid_ipv6_prefix(ipv6_prefix) {
-                bail!("Invalid ipv6 prefix: {}", ipv6_prefix);
+            if !is_valid_ipv6_prefix(prefix) {
+                bail!("Invalid IPv6 prefix: {}", prefix);
             }
-            let ipv6_prefix: Ipv6Addr = format!("{ipv6_prefix}::").parse::<Ipv6Addr>()?;
-            Some(ipv6_prefix)
-        }
-        None => None,
-    };
+            format!("{}::", prefix)
+                .parse::<Ipv6Addr>()
+                .context(format!("Failed to parse IPv6 prefix: {}", prefix))
+        })
+        .transpose()?;
 
     // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
-    let ipv6_address = match config_map.get("ipv6_address") {
-        Some(address) => {
+    let ipv6_address = config_map
+        .get("ipv6_address")
+        .map(|address| {
             // ipv6_address might be formatted with the trailing suffix. Remove it.
-            let ipv6_subnet = format!("/{}", ipv6_subnet);
-            let address = address.strip_suffix(&ipv6_subnet).unwrap_or(address);
-            let address: Ipv6Addr = address
+            let address = address
+                .strip_suffix(&format!("/{}", ipv6_subnet))
+                .unwrap_or(address);
+            address
                 .parse::<Ipv6Addr>()
-                .context(format!("Invalid ipv6 address: {}", address))?;
-            Some(address)
-        }
-        None => None,
-    };
+                .context(format!("Invalid IPv6 address: {}", address))
+        })
+        .transpose()?;
 
     if ipv6_address.is_none() && ipv6_prefix.is_none() {
         bail!("Missing config parameter: need at least one of ipv6_prefix or ipv6_address");
@@ -92,48 +93,43 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
 
     let ipv6_gateway = config_map
         .get("ipv6_gateway")
-        .context("Missing config parameter: ipv6_gateway")?;
-    let ipv6_gateway: Ipv6Addr = ipv6_gateway
+        .context("Missing config parameter: ipv6_gateway")?
         .parse::<Ipv6Addr>()
-        .context(format!("Invalid ipv6 address: {}", ipv6_gateway))?;
+        .context("Invalid IPv6 gateway address")?;
 
-    let ipv4_address = match config_map.get("ipv4_address") {
-        Some(address) => {
-            let address = address
+    let ipv4_address = config_map
+        .get("ipv4_address")
+        .map(|address| {
+            address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 address: {}", address))?;
-            Some(address)
-        }
-        None => None,
-    };
+                .context(format!("Invalid IPv4 address: {}", address))
+        })
+        .transpose()?;
 
-    let ipv4_gateway = match config_map.get("ipv4_gateway") {
-        Some(address) => {
-            let address = address
+    let ipv4_gateway = config_map
+        .get("ipv4_gateway")
+        .map(|address| {
+            address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 gateway: {}", address))?;
-            Some(address)
-        }
-        None => None,
-    };
+                .context(format!("Invalid IPv4 gateway: {}", address))
+        })
+        .transpose()?;
 
-    let ipv4_prefix_length = match config_map.get("ipv4_prefix_length") {
-        Some(prefix) => {
+    let ipv4_prefix_length = config_map
+        .get("ipv4_prefix_length")
+        .map(|prefix| {
             let prefix = prefix
                 .parse::<u8>()
                 .context(format!("Invalid IPv4 prefix length: {}", prefix))?;
-
             if prefix > 32 {
-                return Err(anyhow::anyhow!(
+                bail!(
                     "IPv4 prefix length must be between 0 and 32, got {}",
                     prefix
-                ));
+                );
             }
-
-            Some(prefix)
-        }
-        None => None,
-    };
+            Ok(prefix)
+        })
+        .transpose()?;
 
     let domain = config_map.get("domain").cloned();
 
@@ -147,8 +143,10 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
         domain,
     };
 
-    let verbose = config_map.get("verbose").cloned();
-    let verbose = matches!(&verbose, Some(s) if s.eq_ignore_ascii_case("true"));
+    let verbose = config_map
+        .get("verbose")
+        .map(|s| s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
 
     Ok((networking, verbose))
 }
