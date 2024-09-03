@@ -256,6 +256,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Build IC
         id: build-ic
         shell: bash
