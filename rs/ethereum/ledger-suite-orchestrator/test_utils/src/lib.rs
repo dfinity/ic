@@ -5,8 +5,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
-    OrchestratorArg, OrchestratorInfo, UpgradeArg,
+    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, LedgerInitArg,
+    ManageInstalledCanisters, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
@@ -185,6 +185,22 @@ impl LedgerSuiteOrchestrator {
             &OrchestratorArg::AddErc20Arg(params.clone()),
         );
         AddErc20TokenFlow { setup, params }
+    }
+
+    pub fn manage_installed_canisters(
+        self,
+        manage_installed_canister: Vec<ManageInstalledCanisters>,
+    ) -> Self {
+        self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
+            UpgradeArg {
+                git_commit_hash: None,
+                ledger_compressed_wasm_hash: None,
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: None,
+                cycles_management: None,
+                manage_installed_canisters: Some(manage_installed_canister),
+            },
+        ))
     }
 
     pub fn upgrade_ledger_suite_orchestrator(
@@ -414,6 +430,27 @@ pub fn usdt_erc20_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
         address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
+    }
+}
+
+pub fn cketh_installed_canisters() -> ManageInstalledCanisters {
+    ManageInstalledCanisters {
+        erc20_contract: Erc20Contract {
+            chain_id: 1_u8.into(),
+            address: "0x0000000000000000000000000000000000000000".to_string(),
+        },
+        ckerc20_token_symbol: "ckETH".to_string(),
+        ledger: InstalledCanister {
+            canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+            installed_wasm_hash: "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+                .to_string(),
+        },
+        index: InstalledCanister {
+            canister_id: "s3zol-vqaaa-aaaar-qacpa-cai".parse().unwrap(),
+            installed_wasm_hash: "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+                .to_string(),
+        },
+        archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
     }
 }
 
