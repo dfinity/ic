@@ -65,9 +65,13 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
-    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
-    WASM_SHA=$(sha_256 "$WASM_GZ")
+    assert_that_a_prebuilt_nns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
     CAPITALIZED_CANISTER_NAME="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_NAME:0:1})${CANISTER_NAME:1}"
+
     LAST_WASM_HASH=$(nns_canister_hash ic "$CANISTER_NAME")
 
     IC_REPO=$(repo_root)
@@ -83,40 +87,84 @@ generate_nns_upgrade_proposal_text() {
     fi
 
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Upgrade the $CAPITALIZED_CANISTER_NAME Canister
-### Proposer: DFINITY Foundation
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA$([ ! -z "$ARGS_HASH" ] && echo $'\n'"### Upgrade Args Hash: $ARGS_HASH")
-### Target canister: $(nns_canister_id "$CANISTER_NAME")
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Upgrade the $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: ${PROPOSER}\\
+__Source Code__: [$NEXT_COMMIT][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+
+## Features, Fixes, and Optimizations
+
+TODO TO BE FILLED OUT BY THE PROPOSER
+
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
-\`\`\`
-$([ ! -z "$CANDID_ARGS" ] && echo "## Candid Post Upgrade Args
+\`\`\`$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
+
+
+## Upgrade Arguments
+
 \`\`\`candid
 $CANDID_ARGS
 \`\`\`
-### Validating Candid Args
-Verify that the encoded version of the plaintext args matches the \`arg_hex\` field in the proposal.
-\`didc encode '$CANDID_ARGS'\`
-")
-## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
-\`\`\`
-git fetch
-git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
-\`\`\`
+"
+        fi)
+
+
 ## Current Version
+
 - Current Git Hash: $LAST_COMMIT
 - Current Wasm Hash: $LAST_WASM_HASH
-EOF
+
+
+## WASM Verification
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+
+\`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
+git fetch
+git checkout $NEXT_COMMIT
+
+# 2. Build canisters.
+./gitlab-ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
+\`\`\`
+
+This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
+
+
+## Upgrade Arguments Verification
+
+[\`didc\`][latest-didc] is required.
+
+[latest-didc]: https://github.com/dfinity/candid/releases/latest
+
+\`\`\`
+didc encode '$CANDID_ARGS'
+
+\`\`\`
+
+This should match the \`arg_hex\` field of this proposal.
+"
+        fi)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -135,8 +183,11 @@ generate_sns_bless_wasm_proposal_text() {
     local CANISTER_TYPE=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
-    WASM_SHA=$(sha_256 "$WASM_GZ")
+    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_TYPE" "$NEXT_COMMIT"
+
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
     CAPITALIZED_CANISTER_TYPE="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_TYPE:0:1})${CANISTER_TYPE:1}"
 
     IC_REPO=$(repo_root)
@@ -146,29 +197,51 @@ generate_sns_bless_wasm_proposal_text() {
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Publish the SNS $CAPITALIZED_CANISTER_TYPE Canister WASM to SNS-W
-### Proposer: DFINITY Foundation
-### Canister Type: $CANISTER_TYPE
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: $PROPOSER\\
+__Source Code__: [$NEXT_COMMIT][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+
+## Features, Fixes, and Optimizations
+
+TODO TO BE FILLED OUT BY THE PROPOSER
+
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
+
+
 ## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+
 \`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
 git fetch
 git checkout $NEXT_COMMIT
+
+# 2. Build canisters.
 ./gitlab-ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
-EOF
+
+This should match \`wasm\` field of this proposal.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -449,9 +522,23 @@ _base_validate_version_wasm_sha() {
 #### User interaction helper for proposals
 
 confirm_submit_proposal_command() {
-    echo "Would you like to run the following command?"
+    print_green "Would you like to run the following command?"
     echo
-    print_blue "$@" | sed 's/pin=[0-9]*/pin=\*\*\*\*\*\*/' | fold -w 120 -s | sed -e "s|^|     |g"
+
+    # Preview the command.
+    first=true
+    for arg in "$@"; do
+        # Indent, except the first line.
+        if [ "$first" == false ]; then
+            echo -n '    '
+        fi
+        first=false
+
+        # Quote arguments (in case there is a space).
+        printf '%q \\\n' "$arg" \
+            | sed 's~pin=.*~pin=******~'
+    done
     echo
+
     confirm
 }

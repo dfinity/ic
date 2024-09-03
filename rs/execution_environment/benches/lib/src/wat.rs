@@ -229,9 +229,9 @@ impl Module {
             LoopIterations::Mi => format!(
                 r#"
                 (loop $loop
-                    (if (i32.lt_s (get_local $i) (i32.const {LOOP_ITERATIONS}))
+                    (if (i32.lt_s (local.get $i) (i32.const {LOOP_ITERATIONS}))
                         (then
-                            (set_local $i (i32.add (get_local $i) (i32.const 1)))
+                            (local.set $i (i32.add (local.get $i) (i32.const 1)))
 
                             {LOOP_BODY}
 

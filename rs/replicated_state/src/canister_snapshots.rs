@@ -1,10 +1,12 @@
 use crate::{
-    canister_state::execution_state::Memory,
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
-    PageMap,
+    canister_state::execution_state::{Global, Memory},
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore,
+    CanisterState, NumWasmPages, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
 use std::{
@@ -16,8 +18,9 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterSnapshots {
+    #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
@@ -249,9 +252,10 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
+    #[validate_eq(Ignore)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -275,18 +279,26 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
+    #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModule,
+    /// The Wasm global variables.
+    /// Note: The hypervisor instrumentations exports all global variables,
+    /// including originally internal global variables.
+    #[validate_eq(Ignore)]
+    pub exported_globals: Vec<Global>,
     /// Snapshot of stable memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: PageMemory,
     /// Snapshot of wasm memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
@@ -299,7 +311,9 @@ pub struct CanisterSnapshot {
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
+    #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
+    #[validate_eq(CompareWithValidateEq)]
     execution_snapshot: ExecutionStateSnapshot,
 }
 
@@ -336,6 +350,7 @@ impl CanisterSnapshot {
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
+            exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
         };
@@ -383,6 +398,10 @@ impl CanisterSnapshot {
         &self.execution_snapshot.wasm_binary
     }
 
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.execution_snapshot.exported_globals
+    }
+
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
     }
@@ -426,7 +445,7 @@ pub enum CanisterSnapshotError {
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SnapshotOperation {
     Delete(SnapshotId),
     Backup(CanisterId, SnapshotId),
@@ -448,6 +467,7 @@ mod tests {
     ) -> (SnapshotId, CanisterSnapshot) {
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: CanisterModule::new(vec![1, 2, 3]),
+            exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
             stable_memory: PageMemory {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),

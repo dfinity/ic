@@ -2,8 +2,8 @@
 
 use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::{
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{
@@ -51,7 +51,7 @@ use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UpgradeContent {
     All,
     Orchestrator,
@@ -683,8 +683,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         sender,
         neuron_id,
         NnsFunction::ReviseElectedHostosVersions,
-        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
-        UpdateElectedHostosVersionsPayload {
+        ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -725,8 +724,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         sender,
         neuron_id,
         NnsFunction::DeployHostosToSomeNodes,
-        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),
         },

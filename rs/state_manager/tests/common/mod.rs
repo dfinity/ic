@@ -35,7 +35,7 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
 
-const EMPTY_WASM: &[u8] = &[
+pub const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
     0x01, 0x00,
 ];
@@ -380,7 +380,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
         .wasm_binary = WasmBinary::new(wasm);
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateSyncErrorCode {
     MetaManifestVerificationFailed,
     ManifestVerificationFailed,

@@ -20,6 +20,8 @@ use ic_types::{
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
 use std::collections::BTreeSet;
@@ -29,7 +31,7 @@ use std::time::Duration;
 
 use self::execution_state::NextScheduledMethod;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
     /// The last full round that a canister got the chance to execute. This
@@ -109,9 +111,10 @@ impl SchedulerState {
 }
 
 /// The full state of a single canister.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub system_state: SystemState,
 
     /// See `ExecutionState` for documentation.
@@ -120,9 +123,11 @@ pub struct CanisterState {
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
     /// ICP; temporarily when they are being upgraded, etc.
+    #[validate_eq(CompareWithValidateEq)]
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub scheduler_state: SchedulerState,
 }
 
@@ -608,7 +613,7 @@ impl CanisterState {
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
 ///   `install_code` subnet message and will continue it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum NextExecution {
     None,
     StartNew,
@@ -623,10 +628,6 @@ pub type NumWasmPages = AmountOf<NumWasmPagesTag, usize>;
 
 pub const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * 1024; // 64KB
 
-/// A session is represented by an array of bytes and a monotonic
-/// offset and is unique for each execution.
-pub type SessionNonce = ([u8; 32], u64);
-
 pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
     let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
     if overflow {
@@ -636,5 +637,5 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 }

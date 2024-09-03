@@ -3,15 +3,11 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use either::Either;
 use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl,
-    certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl,
-    idkg_pool::IDkgPoolImpl,
-    ingress_pool::{IngressPoolImpl, IngressPrioritizer},
+    canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
@@ -30,7 +26,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -45,7 +41,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::DummyUdpSocket;
+use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
@@ -121,7 +117,6 @@ pub fn setup_consensus_and_p2p(
     UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
-    let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
 
     let (ingress_pool, ingress_sender, join_handles, mut p2p_consensus) = start_consensus(
@@ -148,17 +143,22 @@ pub fn setup_consensus_and_p2p(
         cycles_account_manager,
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
-        time_source.clone(),
         max_certified_height_tx,
     );
 
-    // StateSync
+    // StateSync receive side => handler definition
     let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
         state_sync_client.clone(),
         log.clone(),
         metrics_registry,
     );
 
+    // Consensus receive side => handler definition
+
+    // Merge all receive side handlers => router
+    let p2p_router = state_sync_router
+        .merge(p2p_consensus.router())
+        .layer(TraceLayer::new_for_http());
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
         log.clone(),
@@ -174,9 +174,7 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let p2p_router = state_sync_router
-        .merge(p2p_consensus.router())
-        .layer(TraceLayer::new_for_http());
+
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
@@ -185,9 +183,11 @@ pub fn setup_consensus_and_p2p(
         registry_client.clone(),
         node_id,
         topology_watcher.clone(),
-        Either::<_, DummyUdpSocket>::Left(transport_addr),
+        create_udp_socket(rt_handle, transport_addr),
         p2p_router,
     ));
+
+    // Start the main event loops for StateSync and Consensus
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
         log,
@@ -232,7 +232,6 @@ fn start_consensus(
     cycles_account_manager: Arc<CyclesAccountManager>,
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
-    time_source: Arc<dyn TimeSource>,
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
@@ -240,6 +239,7 @@ fn start_consensus(
     Vec<Box<dyn JoinGuard>>,
     ConsensusManagerBuilder,
 ) {
+    let time_source = Arc::new(SysTimeSource::new());
     let mut new_p2p_consensus: ic_consensus_manager::ConsensusManagerBuilder =
         ic_consensus_manager::ConsensusManagerBuilder::new(
             log.clone(),
@@ -357,7 +357,7 @@ fn start_consensus(
     };
 
     let ingress_sender = {
-        let ingress_prioritizer = Arc::new(IngressPrioritizer::new(time_source.clone()));
+        let ingress_bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
 
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(
@@ -373,7 +373,7 @@ fn start_consensus(
             log.clone(),
             rt_handle.clone(),
             artifact_pools.ingress_pool.clone(),
-            ingress_prioritizer,
+            ingress_bouncer,
             metrics_registry.clone(),
         );
         new_p2p_consensus.add_client(ingress_rx, client.clone(), assembler);
@@ -460,7 +460,6 @@ fn start_consensus(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
-            metrics_registry.clone(),
         ));
 
         let (client, jh) = create_artifact_handler(

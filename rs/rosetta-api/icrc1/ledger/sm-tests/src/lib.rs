@@ -10,6 +10,7 @@ use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -79,7 +80,7 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -95,13 +96,13 @@ pub struct InitArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
@@ -109,12 +110,11 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct ChangeArchiveOptions {
     pub trigger_threshold: Option<usize>,
     pub num_blocks_to_archive: Option<usize>,
@@ -127,7 +127,7 @@ pub struct ChangeArchiveOptions {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
@@ -789,6 +789,17 @@ where
     let canister_id = install_ledger(&env, ledger_wasm, encode_init_args, initial_balances);
 
     (env, canister_id)
+}
+
+pub fn test_ledger_http_request_decoding_quota<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    test_http_request_decoding_quota(&env, canister_id);
 }
 
 pub fn test_balance_of<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

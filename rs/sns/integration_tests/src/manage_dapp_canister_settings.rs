@@ -93,7 +93,7 @@ fn test_manage_dapp_canister_settings_successful() {
 
     // Step 1.6: Make sure the Dapp canister has the right settings.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -146,7 +146,7 @@ fn test_manage_dapp_canister_settings_successful() {
 
     // Step 3: Verify that the Dapp canister settings have been changed.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -223,7 +223,7 @@ fn test_manage_dapp_canister_settings_failure() {
 
     // Step 1.5: Make sure the Dapp canister has the right settings.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -243,7 +243,7 @@ fn test_manage_dapp_canister_settings_failure() {
     // Step 1.6: Get the canister status of the ledger canister.
     let original_ledger_canister_status = state_machine
         .canister_status_as(
-            canister_ids.ledger_canister_id.get(),
+            canister_ids.root_canister_id.get(),
             canister_ids.ledger_canister_id,
         )
         .unwrap()
@@ -296,7 +296,7 @@ fn test_manage_dapp_canister_settings_failure() {
 
     // Step 3.2: Verify that the Dapp canister settings have not been changed.
     let dapp_canister_status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -316,7 +316,7 @@ fn test_manage_dapp_canister_settings_failure() {
     // Step 3.3: Verify that the ledger canister settings have not been changed.
     let new_ledger_canister_status = state_machine
         .canister_status_as(
-            canister_ids.ledger_canister_id.get(),
+            canister_ids.root_canister_id.get(),
             canister_ids.ledger_canister_id,
         )
         .unwrap()

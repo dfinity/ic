@@ -688,20 +688,11 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::ProposalActionRequest::SetDefaultFollowees(v) => {
-                pb::proposal::Action::SetDefaultFollowees(v.into())
-            }
             pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
             pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
-            }
-            pb_api::ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
-                pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
-            }
-            pb_api::ProposalActionRequest::OpenSnsTokenSwap(v) => {
-                pb::proposal::Action::OpenSnsTokenSwap(v.into())
             }
             pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
@@ -1897,7 +1888,6 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
@@ -1926,7 +1916,6 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
@@ -2900,7 +2889,12 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         let wasm_module_hash = item
             .wasm_module
             .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
-        let arg_hash = item.arg.map(|arg| super::calculate_hash(&arg).to_vec());
+        let arg = item.arg.unwrap_or_default();
+        let arg_hash = if arg.is_empty() {
+            Some(vec![])
+        } else {
+            Some(super::calculate_hash(&arg).to_vec())
+        };
 
         Self {
             canister_id: item.canister_id,
@@ -4827,6 +4821,14 @@ impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
             pb_api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
             pb_api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
             pb_api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
+        }
+    }
+}
+
+impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
+    fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
+        Self {
+            delta_s: value.delta_s,
         }
     }
 }

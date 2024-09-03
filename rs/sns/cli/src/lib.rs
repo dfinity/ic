@@ -3,9 +3,10 @@ use crate::{
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
+use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -26,7 +27,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{exit, Command, Output},
+    process::{Command, Output},
     str::FromStr,
     sync::Once,
     time::{SystemTime, UNIX_EPOCH},
@@ -35,10 +36,13 @@ use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod list;
 pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
+mod table;
 pub mod unit_helpers;
+mod utils;
 
 #[cfg(test)]
 mod tests;
@@ -76,6 +80,14 @@ pub enum SubCommand {
     Propose(ProposeArgs),
     /// Converts a Neuron ID to a blob for use in ManageNeuron.
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
+    /// List SNSes
+    List(list::ListArgs),
+}
+
+impl CliArgs {
+    pub fn agent(&self) -> Result<Agent> {
+        crate::utils::get_mainnet_agent()
+    }
 }
 
 /// The arguments used to configure a SNS testflight deployment
@@ -137,9 +149,7 @@ pub struct AddSnsWasmForTestsArgs {
     pub network: String,
 }
 
-pub(crate) fn generate_sns_init_payload(
-    path: &Path,
-) -> Result<SnsInitPayload, std::string::String> {
+pub(crate) fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload> {
     let configuration = read_create_service_nervous_system_from_init_yaml(path)?;
 
     SnsInitPayload::try_from(configuration)
@@ -150,31 +160,27 @@ pub(crate) fn generate_sns_init_payload(
         // The reason Err should be impossible is
         // try_convert_to_create_service_nervous_system itself call
         // SnsInitPayload::try_from as part of its validation.
-        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))
+        .map_err(|err| anyhow!("Invalid configuration in {:?}: {}", path, err))
 }
 
 fn read_create_service_nervous_system_from_init_yaml(
     path: &Path,
-) -> Result<ic_nns_governance::pb::v1::CreateServiceNervousSystem, String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
+) -> Result<ic_nns_governance::pb::v1::CreateServiceNervousSystem> {
+    let contents = std::fs::read_to_string(path).context(format!("Unable to read {path:?}"))?;
     let configuration =
         serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
-            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
-    let base_path = path.parent().ok_or_else(|| {
-        format!(
-            "Configuration file path ({:?}) has no parent, it seems.",
-            path,
-        )
-    })?;
+            .map_err(|err| anyhow!("Unable to parse contents of {:?}: {}", path, err))?;
+    let base_path = path.parent().context(format!(
+        "Configuration file path ({path:?}) has no parent, it seems."
+    ))?;
     let configuration = configuration
         .try_convert_to_create_service_nervous_system(base_path)
-        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
+        .context(format!("Invalid configuration in {path:?}"))?;
     Ok(configuration)
 }
 
 impl DeployTestflightArgs {
-    pub(crate) fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
+    pub(crate) fn generate_sns_init_payload(&self) -> Result<SnsInitPayload> {
         match &self.init_config_file {
             Some(init_config_file) => {
                 let mut create_service_nervous_system =
@@ -222,7 +228,7 @@ impl DeployTestflightArgs {
                     // try_convert_to_create_service_nervous_system itself call
                     // SnsInitPayload::try_from as part of its validation.
                     .map_err(|err| {
-                        format!("Invalid configuration in {:?}: {}", init_config_file, err)
+                        anyhow!("Invalid configuration in {:?}: {}", init_config_file, err)
                     })
             }
             None => {
@@ -243,18 +249,14 @@ impl AddSnsWasmForTestsArgs {
 
 /// Deploy an SNS with the given DeployTestflightArgs, skipping sns-wasm.
 /// The SNS canisters remain controlled by the developer after deployment.
-pub fn deploy_testflight(args: DeployTestflightArgs) {
-    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
-        eprintln!(
-            "Error encountered when generating the SnsInitPayload: {}",
-            err
-        );
-        exit(1);
-    });
-    DirectSnsDeployerForTests::new_testflight(args, sns_init_payload).deploy()
+pub fn deploy_testflight(args: DeployTestflightArgs) -> Result<()> {
+    let sns_init_payload = args
+        .generate_sns_init_payload()
+        .context("Could not generate the SnsInitPayload")?;
+    DirectSnsDeployerForTests::new_testflight(args, sns_init_payload)?.deploy()
 }
 
-pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
+pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
     let sns_wasm_bytes = args.get_wasm_file_bytes();
     let sns_wasm_hash = {
         let mut state = Sha256::new();
@@ -305,6 +307,8 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         &sns_wasms_canister_id.to_string(),
         "add_wasm",
     ]);
+
+    Ok(())
 }
 
 /// Return the `PrincipalId` of the given dfx identity
@@ -356,7 +360,7 @@ impl Drop for SaveOriginalDfxIdentityAndRestoreOnExit {
 /// identity.
 fn use_test_neuron_1_owner_identity(
     _caller_must_checkpoint: &SaveOriginalDfxIdentityAndRestoreOnExit,
-) -> Result<(), String> {
+) -> Result<()> {
     import_test_neuron_1_owner()?;
 
     let (_stdout, _stderr) = run_command(&[
@@ -365,22 +369,21 @@ fn use_test_neuron_1_owner_identity(
         "use",
         TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME,
     ])
-    .map_err(|err| err.new_report())?;
+    .map_err(|err| anyhow!("{}", err.new_report()))?;
 
     Ok(())
 }
 
-fn import_test_neuron_1_owner() -> Result<(), String> {
+fn import_test_neuron_1_owner() -> Result<()> {
     // Step 1: Save secret key belonging to TEST_NEURON_1_OWNER to a (temporary) pem file.
     let contents: String = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
-    let mut pem_file = NamedTempFile::new().expect("Unable to create a temporary file.");
+    let mut pem_file = NamedTempFile::new().context("Unable to create a temporary file.")?;
     pem_file
         .write_all(contents.as_bytes())
-        .map_err(|err| format!("{}\n\nUnable to write to (temporary) file.", err))?;
-    let pem_file_path = pem_file
-        .path()
-        .to_str()
-        .ok_or("Unable to convert path of TEST_NEURON_1_OWNER's pem file to a String?!")?;
+        .map_err(|err| anyhow!("{}\n\nUnable to write to (temporary) file.", err))?;
+    let pem_file_path = pem_file.path().to_str().ok_or(anyhow!(
+        "Unable to convert path of TEST_NEURON_1_OWNER's pem file to a String?!"
+    ))?;
 
     // Step 2: Call dfx identity import.
     let command = [
@@ -398,7 +401,7 @@ fn import_test_neuron_1_owner() -> Result<(), String> {
 
     // Step 3: Convert result.
     result.map(|_ok| ()).map_err(|err| {
-        format!(
+        anyhow!(
             "{}\n\
              \n\
              Unable to import test-neuron-1-owner dfx identity from pem file.",
@@ -563,7 +566,7 @@ impl NnsGovernanceCanister {
     }
 }
 
-fn fetch_canister_controllers_or_exit(network: &str, canister_id: PrincipalId) -> Vec<PrincipalId> {
+fn fetch_canister_controllers(network: &str, canister_id: PrincipalId) -> Result<Vec<PrincipalId>> {
     let command = [
         "dfx",
         "canister",
@@ -572,10 +575,7 @@ fn fetch_canister_controllers_or_exit(network: &str, canister_id: PrincipalId) -
         "info",
         &canister_id.to_string(),
     ];
-    let (stdout, _stderr) = run_command(&command).unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        std::process::exit(1);
-    });
+    let (stdout, _stderr) = run_command(&command).map_err(|err| anyhow!("{}", err))?;
 
     // Parse dfx output. More precisely, look for a line that begins with
     // "Controllers:".
@@ -589,26 +589,27 @@ fn fetch_canister_controllers_or_exit(network: &str, canister_id: PrincipalId) -
             .trim()
             .split(' ')
             .map(|controller_principal_id| {
-                PrincipalId::from_str(controller_principal_id.trim()).unwrap_or_else(|err| {
-                    eprintln!(
+                PrincipalId::from_str(controller_principal_id.trim()).map_err(|err| {
+                    anyhow!(
                         "stdout:\n\
                          {}\n\
                          Unable to parse {:?} as a principal ID from the `Controllers:` \
                          output line of dfx canister info. err = {:?}",
-                        stdout, controller_principal_id, err,
-                    );
-                    std::process::exit(1);
+                        stdout,
+                        controller_principal_id,
+                        err,
+                    )
                 })
             })
-            .collect();
+            .collect::<Result<_>>();
     }
 
     // No lines in stdout matched -> fail :(
-    eprintln!(
+    bail!(
         "Unable to determine controllers of {} based on output of dfx:\n{}",
-        canister_id, stdout,
-    );
-    std::process::exit(1);
+        canister_id,
+        stdout,
+    )
 }
 
 enum RunCommandError<'a> {
@@ -780,7 +781,7 @@ fn all_arguments_have_description() {
             if arg.get_help().is_none() && arg.get_long_help().is_none() {
                 let arg_name = arg.get_id().to_string();
                 panic!(
-                    "Argument '{}' in command '{}' doesn't have a description",
+                    "Argument '{}' in command '{}' doesn't have a description. Add one (probably as a doc comment of the field).",
                     arg_name, path
                 );
             }

@@ -43,7 +43,7 @@ rust_library(
         # Keep sorted.
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/crypto/sha3",
         "//rs/ethereum/evm-rpc-client",
         "//rs/ethereum/types",
@@ -146,7 +146,7 @@ rust_test(
         ":minter",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/ethereum/types",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",

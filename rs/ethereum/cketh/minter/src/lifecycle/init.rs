@@ -10,7 +10,7 @@ use candid::{CandidType, Deserialize};
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
-#[derive(CandidType, Deserialize, Clone, Debug, Encode, Decode, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Decode, Deserialize, Encode)]
 pub struct InitArg {
     #[n(0)]
     pub ethereum_network: EthereumNetwork,

@@ -144,7 +144,6 @@ type UpgradeArgs = record {
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
     feature_flags : opt FeatureFlags;
-    maximum_number_of_accounts: opt nat64;
     accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
 };
