@@ -44,6 +44,10 @@ type UpgradeArg = record {
 
    // Update the cycles management of the canisters managed by the orchestrator.
    cycles_management: opt UpdateCyclesManagement;
+
+   // Add already installed canisters to the canisters managed by the orchestrator.
+   // This assumes that the orchestrator is a controller of all the canisters in the list.
+   manage_canisters: opt vec ManagedCanisters;
 };
 
 type AddErc20Arg = record {
