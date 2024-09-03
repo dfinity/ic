@@ -20,13 +20,13 @@ use ic_ledger_hash_of::HashOf;
 /// The memo to use for balances burned and approvals reset to 0 during trimming
 const TRIMMED_MEMO: u64 = u64::MAX;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TransactionInfo<TransactionType> {
     pub block_timestamp: TimeStamp,
     pub transaction_hash: HashOf<TransactionType>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum TxApplyError<Tokens> {
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
@@ -190,7 +190,7 @@ pub trait LedgerData: LedgerContext {
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TransferError<Tokens> {
     BadFee { expected_fee: Tokens },
     BadBurn { min_burn_amount: Tokens },

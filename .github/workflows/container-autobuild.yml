@@ -48,10 +48,10 @@ jobs:
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
-          if grep "$IMAGE_TAG" gitlab-ci/container/TAG_GH; then
+          if grep "$IMAGE_TAG" gitlab-ci/container/TAG; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify gitlab-ci/container/TAG_GH with random string to trigger new build."
+            echo "Modify gitlab-ci/container/TAG with random string to trigger new build."
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
@@ -93,7 +93,7 @@ jobs:
           IMG_NAME=${{ github.repository_owner }}/ic-build
           IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ env.IMAGE_SHA }}"
 
-          echo "$IMAGE_TAG" > gitlab-ci/container/TAG_GH
+          echo "$IMAGE_TAG" > gitlab-ci/container/TAG
           pushd .devcontainer
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
           popd

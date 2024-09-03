@@ -1,5 +1,5 @@
 /// The primary container for errors
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ErrorFactory {
     /// The body payload was too large
     #[error(r#"The body payload was too large"#)]

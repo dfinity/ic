@@ -99,13 +99,8 @@ impl From<ProposalActionRequest> for Action {
             ProposalActionRequest::ApproveGenesisKyc(v) => Action::ApproveGenesisKyc(v),
             ProposalActionRequest::AddOrRemoveNodeProvider(v) => Action::AddOrRemoveNodeProvider(v),
             ProposalActionRequest::RewardNodeProvider(v) => Action::RewardNodeProvider(v),
-            ProposalActionRequest::SetDefaultFollowees(v) => Action::SetDefaultFollowees(v),
             ProposalActionRequest::RewardNodeProviders(v) => Action::RewardNodeProviders(v),
             ProposalActionRequest::RegisterKnownNeuron(v) => Action::RegisterKnownNeuron(v),
-            ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
-                Action::SetSnsTokenSwapOpenTimeWindow(v)
-            }
-            ProposalActionRequest::OpenSnsTokenSwap(v) => Action::OpenSnsTokenSwap(v),
             ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 Action::CreateServiceNervousSystem(v)
             }

@@ -35,11 +35,16 @@ use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::models::Secp256k1KeyPair;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
+
+pub fn path_from_env(var: &str) -> PathBuf {
+    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
+        .unwrap()
+}
 
 pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
     PublicKey {

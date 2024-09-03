@@ -68,13 +68,13 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
-#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub enum Priority {
     P0,
     P1,
 }
 
-#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub priority: Priority,
@@ -84,19 +84,19 @@ pub struct LogEntry {
     pub counter: u64,
 }
 
-#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
 pub struct Log {
     pub entries: Vec<LogEntry>,
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct MinterInfo {
     pub min_confirmations: u32,
     pub retrieve_btc_min_amount: u64,
     pub kyt_fee: u64,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
@@ -893,7 +893,7 @@ pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum BuildTxError {
     /// The minter does not have enough UTXOs to make the transfer
     /// Try again later after pending transactions have settled.

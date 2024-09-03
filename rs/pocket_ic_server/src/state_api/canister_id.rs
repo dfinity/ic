@@ -14,7 +14,7 @@ use std::sync::Arc;
 // ADAPTED from ic-gateway
 
 /// Result of a domain lookup
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct DomainLookup {
     pub domain: FQDN,
     pub canister_id: Option<Principal>,
@@ -119,7 +119,7 @@ impl ResolvesDomain for DomainResolver {
 
 // ADAPTED from icx-proxy
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct QueryParam(pub Principal);
 
 #[async_trait]
@@ -156,7 +156,7 @@ impl FromRequestParts<DomainResolver> for QueryParam {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct HostHeader(pub Principal);
 
 #[async_trait]
@@ -198,7 +198,7 @@ impl FromRequestParts<DomainResolver> for HostHeader {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct RefererHeaderHost(pub Principal);
 
 #[async_trait]
@@ -237,7 +237,7 @@ impl FromRequestParts<DomainResolver> for RefererHeaderHost {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct RefererHeaderQueryParam(pub Principal);
 
 #[async_trait]

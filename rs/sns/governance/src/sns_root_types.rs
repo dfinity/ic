@@ -3,58 +3,58 @@
 // TODO(NNS1-1589): Remove all these types after dependency cycle is fixed.
 
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct RegisterDappCanisterRequest {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct RegisterDappCanisterResponse {}
 /// This message has an identical message defined in governace.proto, both need to be changed together
 /// TODO(NNS1-1589)
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct RegisterDappCanistersRequest {
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct RegisterDappCanistersResponse {}
 /// Change control of the listed canisters to the listed principal id.
 /// Same proto in governance.proto. TODO(NNS1-1589)
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct SetDappControllersRequest {
     #[prost(message, optional, tag = "1")]
@@ -65,12 +65,12 @@ pub struct SetDappControllersRequest {
 /// Nested message and enum types in `SetDappControllersRequest`.
 pub mod set_dapp_controllers_request {
     #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        comparable::Comparable,
         Clone,
         PartialEq,
         ::prost::Message,
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
     )]
     pub struct CanisterIds {
         #[prost(message, repeated, tag = "1")]
@@ -78,12 +78,12 @@ pub mod set_dapp_controllers_request {
     }
 }
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct SetDappControllersResponse {
     #[prost(message, repeated, tag = "1")]
@@ -92,12 +92,12 @@ pub struct SetDappControllersResponse {
 /// Nested message and enum types in `SetDappControllersResponse`.
 pub mod set_dapp_controllers_response {
     #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        comparable::Comparable,
         Clone,
         PartialEq,
         ::prost::Message,
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
     )]
     pub struct FailedUpdate {
         #[prost(message, optional, tag = "1")]
@@ -107,12 +107,12 @@ pub mod set_dapp_controllers_response {
     }
 }
 #[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
 )]
 pub struct CanisterCallError {
     #[prost(int32, optional, tag = "1")]
@@ -122,18 +122,18 @@ pub struct CanisterCallError {
 }
 
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub enum LogVisibility {

@@ -9,7 +9,7 @@ use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use std::collections::HashMap;
 
 /// Metrics calculated based on neurons in the neuron store.
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct NeuronMetrics {
     pub(crate) dissolving_neurons_count: u64,
     // This maps floor(dissolve delay / 6 months) to total e8s.
@@ -93,7 +93,7 @@ impl NeuronMetrics {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct NeuronSubsetMetrics {
     pub count: u64,
 

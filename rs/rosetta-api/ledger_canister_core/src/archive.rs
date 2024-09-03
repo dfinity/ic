@@ -16,7 +16,7 @@ fn default_cycles_for_archive_creation() -> u64 {
     0
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ArchiveOptions {
     /// The number of blocks which, when exceeded, will trigger an archiving
     /// operation.
@@ -99,7 +99,7 @@ pub trait ArchiveCanisterWasm {
     fn archive_wasm() -> Cow<'static, [u8]>;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes.

@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -17,9 +16,6 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
@@ -43,7 +39,15 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+  docker-login: &docker-login
+    name: Login to Dockerhub
+    shell: bash
+    run: ./ci/scripts/docker-login.sh
+    env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 jobs:
 
@@ -93,7 +97,7 @@ jobs:
         id: rust-benchmarks
         shell: bash
         run: |
-          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+          ./ci/scripts/rust-benchmarks.sh
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"
@@ -112,6 +116,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -135,10 +140,11 @@ jobs:
   fi-tests-nightly:
     name: Bazel Test FI Nightly
     <<: *dind-large-setup
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run FI Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -168,6 +174,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -197,6 +204,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Set Benchmark Targets
         shell: bash
         run: |
@@ -233,7 +241,7 @@ jobs:
     env:
       SHELL_WRAPPER: "/usr/bin/time"
       CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION : "20"
+      DEFAULT_NODE_VERSION: "20"
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

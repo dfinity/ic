@@ -4,8 +4,8 @@ use cycles_minting_canister::{
     CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyMintCyclesArg,
     NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
-    UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, CYCLES_LEDGER_CANISTER_ID,
-    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
+    MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -22,7 +22,8 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
@@ -781,7 +782,7 @@ fn notify_mint_cycles(
 fn cycles_ledger_balance_of(state_machine: &StateMachine, account: Account) -> u128 {
     if let WasmResult::Reply(res) = state_machine
         .execute_ingress(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID,
             "icrc1_balance_of",
             Encode!(&account).unwrap(),
         )
