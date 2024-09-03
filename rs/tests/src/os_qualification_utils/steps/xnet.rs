@@ -66,8 +66,4 @@ impl Step for XNet {
         });
         rt.block_on(threaded).map_err(anyhow::Error::from)
     }
-
-    fn total_runs(&self) -> usize {
-        3
-    }
 }

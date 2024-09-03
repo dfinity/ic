@@ -22,8 +22,4 @@ impl Step for Workload {
         )
         .map(|_| ())
     }
-
-    fn total_runs(&self) -> usize {
-        3
-    }
 }
