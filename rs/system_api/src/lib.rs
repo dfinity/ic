@@ -1880,7 +1880,7 @@ impl SystemApi for SystemApiImpl {
                     let payload_size = data.len().saturating_add(size) as u64;
                     if payload_size > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}.",
+                            "ic0.msg_reply_data_append: message payload size ({}) cannot be larger than {}.",
                             payload_size,
                             max_reply_size,
                         );
@@ -1922,9 +1922,9 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
-                        size, max_reply_size
-                    );
+                            "ic0.msg_reject: message payload size ({}) cannot be larger than {}.",
+                            size, max_reply_size
+                        );
                         return Err(UserContractViolation {
                             error: string,
                             suggestion: "Try truncating the error messages that are too long."
