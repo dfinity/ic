@@ -134,7 +134,7 @@ fn call_maker() {
 
 impl StructCanister {
     #[tla_update_method(my_f_desc())]
-    pub async fn my_method(&mut self) -> () {
+    pub async fn my_method(&mut self) {
         self.counter += 1;
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
@@ -144,7 +144,7 @@ impl StructCanister {
         // Note that this would not be necessary (and would be an error) if
         // we defined my_local in default_end_locals in my_f_desc
         tla_log_locals! {my_local: my_local};
-        return ();
+        return;
     }
 }
 
@@ -158,7 +158,7 @@ fn set_java_path() {
 fn struct_test() {
     unsafe {
         let canister = &mut *addr_of_mut!(GLOBAL);
-        let _res = tokio_test::block_on(canister.my_method());
+        tokio_test::block_on(canister.my_method());
     }
     let trace = &TLA_TRACES.read().unwrap()[0];
     assert_eq!(
