@@ -69,14 +69,12 @@ impl Pools {
         };
 
         // Double check it is indeed a Block Proposal
-        let block_proposal = match consensus_artifact {
-            ConsensusMessage::BlockProposal(block_proposal) => block_proposal,
-            _ => return Err(PoolsAccessError::NotABlockProposal),
+        let ConsensusMessage::BlockProposal(block_proposal) = consensus_artifact else {
+            return Err(PoolsAccessError::NotABlockProposal);
         };
 
-        let data_payload = match block_proposal.as_ref().payload.as_ref() {
-            BlockPayload::Summary(_) => return Err(PoolsAccessError::SummaryBlock),
-            BlockPayload::Data(data_payload) => data_payload,
+        let BlockPayload::Data(data_payload) = block_proposal.as_ref().payload.as_ref() else {
+            return Err(PoolsAccessError::SummaryBlock);
         };
 
         data_payload
