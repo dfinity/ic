@@ -62,18 +62,23 @@ ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
 RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
     echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
     tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/dfx
+    chmod +x /usr/local/bin/dfx \
+    rm -rf /tmp/sdk
 
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
-RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
-    echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
-    chmod +x /usr/local/bin/mkcert
+RUN mkdir -p /tmp/mkcert && curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /tmp/mkcert/mkcert && \
+    echo "$mkcert_sha /tmp/mkcert/mkcert" | sha256sum --check && \
+    mv /tmp/mkcert/mkcert /usr/local/bin/mkcert && \
+    chmod +x /usr/local/bin/mkcert && \
+    rm -rf /tmp/mkcert
 
 ARG bazelisk_sha=d28b588ac0916abd6bf02defb5433f6eddf7cba35ffa808eabb65a44aab226f7
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
-    echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
-    chmod 777 /usr/bin/bazel
+RUN mkdir -p /tmp/bazel && curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -o /tmp/bazel/bazel && \
+    echo "$bazelisk_sha /tmp/bazel/bazel" | sha256sum --check && \
+    mv /tmp/bazel/bazel /usr/bin/bazelisk && \
+    chmod +x /usr/bin/bazelisk && \
+    rm -rf /tmp/bazel
 
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_nns_dapp_node_version=18.17.1
