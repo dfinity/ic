@@ -40,6 +40,9 @@ def launch_bare_metal(name, image_zst_file):
             "$(location //ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh)",
             "--benchmark_runner_script",
             "$(location //ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh)",
+            "--benchmark_tools",
+            "$(location //ic-os/dev-tools/hw_validation:stress.sh)",
+            "$(location //ic-os/dev-tools/hw_validation:benchmark.sh)",
         ],
         data = [
             ":" + binary_name,
@@ -48,6 +51,8 @@ def launch_bare_metal(name, image_zst_file):
             "@python_deps_idracredfishsupport//:IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh",
+            "//ic-os/dev-tools/hw_validation:stress.sh",
+            "//ic-os/dev-tools/hw_validation:benchmark.sh",
         ],
         tags = ["manual"],
     )
