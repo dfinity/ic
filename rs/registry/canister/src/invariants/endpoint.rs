@@ -402,7 +402,12 @@ mod tests {
             .encode_to_vec(),
         );
 
-        assert_eq!(check_endpoint_invariants(&snapshot, true), Ok(()));
+        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
+            panic!(
+                "Expected Ok result from registry invariant check, got {:?}",
+                err
+            );
+        }
 
         // Add a node with conflicting sockets
         let node_id = NodeId::from(PrincipalId::new_node_test_id(2));
@@ -427,10 +432,17 @@ mod tests {
             .encode_to_vec(),
         );
 
-        assert_eq!(check_endpoint_invariants(&snapshot, true), Err(InvariantCheckError {
-            msg: "<TODO: Insert expected error test here>".to_string(),
-            source: None,
-        }));
+        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
+            assert_eq!(
+                err.msg,
+                "Invariant violation detected among 2 node records (checking failed for node \
+                 gfvbo-licaa-aaaaa-aaaap-2ai): Duplicate endpoints detected across nodes; \
+                 new_valid_endpoints = (200.1.1.1, 9001) (new), (200.1.1.3, 9000) (duplicate)"
+                    .to_string()
+            );
+        } else {
+            panic!("Expected Err result from registry invariant check, got Ok.");
+        }
 
         snapshot.remove(&key);
 
