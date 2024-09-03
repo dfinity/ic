@@ -120,7 +120,7 @@ class Args:
     benchmark_runner_script: Optional[str] = "./benchmark_runner.sh"
 
     # Paths to any benchmark tool scripts.
-    benchmark_tools: Optional[List[str]] = None
+    benchmark_tools: Optional[List[str]] = list["../hw_validation/stress.sh", "../hw_validation/benchmark.sh"]
 
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
