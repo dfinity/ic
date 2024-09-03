@@ -27,9 +27,14 @@ rust_test(
     srcs = glob(["tla_instrumentation/tests/**/*.rs"]),
     data = [
         ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:contents",
     ],
+    env = {
+        "JAVABASE": "$(JAVABASE)",
+    },
     proc_macro_deps = [":proc_macros"],
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         ":local_key",
         ":tla_instrumentation",

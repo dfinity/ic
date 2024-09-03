@@ -148,6 +148,12 @@ impl StructCanister {
     }
 }
 
+fn set_java_path() {
+    let p = std::env::var("PATH").unwrap();
+    let j = std::env::var("JAVABASE").unwrap();
+    std::env::set_var("PATH", format!("{p}:{j}/bin"));
+}
+
 #[test]
 fn struct_test() {
     unsafe {
@@ -262,6 +268,7 @@ fn struct_test() {
 
     let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
+    set_java_path();
     // Construct paths to the data files
     let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
     let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/tla_instrumentation/tla");
