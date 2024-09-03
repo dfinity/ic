@@ -57,7 +57,7 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 nix = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 reqwest = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }

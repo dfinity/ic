@@ -3,7 +3,7 @@ use embedders_bench::PostSetupAction;
 
 const HEAP_WAT: &[u8] = include_bytes!("test-data/heap.wat");
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum Source {
     Checkpoint,
     PageDelta,

@@ -46,7 +46,7 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
 
 /// A section of a neuron represents a part of neuron that can potentially be large, and when a
 /// neuron is read, the caller can specify which sections of the neuron they want to read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub(crate) struct NeuronSections {
     pub hot_keys: bool,
     pub recent_ballots: bool,
@@ -740,7 +740,7 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), NeuronSt
 // StableBTreeMap Compound Keys
 // ----------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct FolloweesKey {
     follower_id: NeuronId,
     topic: Topic,

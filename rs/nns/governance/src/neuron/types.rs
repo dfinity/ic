@@ -28,7 +28,7 @@ use std::collections::{BTreeSet, HashMap};
 /// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Neuron {
     /// The id of the neuron.
     id: NeuronId,
@@ -1273,7 +1273,7 @@ impl From<DecomposedNeuron> for Neuron {
 /// Builder of a neuron before it gets added into NeuronStore. This allows us to construct a neuron
 /// with private fields. Only fields that are possible to be set at creation time are defined in the
 /// builder.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NeuronBuilder {
     // Required fields.
     id: NeuronId,
@@ -1536,7 +1536,7 @@ impl NeuronBuilder {
 }
 
 /// An intermediate struct to represent a neuron's dissolve state and age on the storage layer.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(crate) struct StoredDissolveStateAndAge {
     pub dissolve_state: Option<NeuronDissolveState>,
     pub aging_since_timestamp_seconds: u64,

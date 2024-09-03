@@ -52,7 +52,7 @@ const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,

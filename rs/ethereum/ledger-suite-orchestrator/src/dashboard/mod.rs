@@ -34,7 +34,7 @@ pub struct DashboardTemplate {
     wasm_store: Vec<DashboardStoredWasm>,
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct CanistersDashboardData {
     pub canisters: Vec<CanisterDashboardData>,
     pub ckerc20_token_symbol: String,
@@ -49,7 +49,7 @@ impl<'a> IntoIterator for &'a CanistersDashboardData {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct CanisterDashboardData {
     pub canister_type: String,
     pub canister_id: String,

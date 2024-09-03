@@ -63,7 +63,7 @@ use tokio::{runtime, sync::mpsc};
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
 pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,
@@ -267,7 +267,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -286,7 +286,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -1428,13 +1428,13 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SignalsValidationResult {
     Valid,
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SliceValidationResult {
     /// Slice is valid.
     Valid {

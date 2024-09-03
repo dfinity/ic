@@ -63,7 +63,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
     pub old_wasm_hash: Option<[u8; 32]>,
@@ -95,7 +95,7 @@ pub(crate) enum DtsInstallCodeResult {
 }
 
 /// The different return types from `stop_canister()` function below.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum StopCanisterResult {
     /// The call failed.  The error and the unconsumed cycles are returned.
     Failure {
@@ -109,7 +109,7 @@ pub(crate) enum StopCanisterResult {
     RequestAccepted,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
@@ -1958,44 +1958,20 @@ impl CanisterManager {
                         .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
-        let message_memory = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
-        let reveal_top_up = canister.controllers().contains(&sender);
+        // Charge for taking a snapshot of the canister.
         let instructions = self.config.canister_snapshot_baseline_instructions
             + NumInstructions::new(new_snapshot_size.get());
-
-        // Charge for the take snapshot of the canister.
-        let prepaid_cycles = match self
-            .cycles_account_manager
-            .prepay_execution_cycles(
-                &mut canister.system_state,
-                new_memory_usage,
-                message_memory,
-                compute_allocation,
-                instructions,
-                subnet_size,
-                reveal_top_up,
-            )
-            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)
-        {
-            Ok(c) => c,
-            Err(err) => return (Err(err), NumInstructions::new(0)),
-        };
-
-        // To keep the invariant that `prepay_execution_cycles` is always paired
-        // with `refund_unused_execution_cycles` we refund zero immediately.
-        self.cycles_account_manager.refund_unused_execution_cycles(
-            &mut canister.system_state,
-            NumInstructions::from(0),
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
             instructions,
-            prepaid_cycles,
-            // This counter is incremented if we refund more
-            // instructions than initially charged, which is impossible
-            // here.
-            &IntCounter::new("no_op", "no_op").unwrap(),
             subnet_size,
-            &self.log,
-        );
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                0.into(),
+            );
+        };
 
         // Create new snapshot.
         let new_snapshot = match CanisterSnapshot::from_canister(canister, state.time())
@@ -2119,8 +2095,21 @@ impl CanisterManager {
             }
         }
 
-        let (_old_execution_state, mut system_state, scheduler_state) =
-            canister.clone().into_parts();
+        // All basic checks have passed, charge baseline instructions.
+        let mut canister_clone = canister.clone();
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            &mut canister_clone,
+            self.config.canister_snapshot_baseline_instructions,
+            subnet_size,
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                0.into(),
+            );
+        };
+
+        let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
             let execution_snapshot = snapshot.execution_snapshot();
@@ -2151,6 +2140,7 @@ impl CanisterManager {
                 }
             };
 
+            new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
             new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
             new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
             (instructions_used, Some(new_execution_state))
@@ -2175,46 +2165,19 @@ impl CanisterManager {
             );
         }
 
-        let compute_allocation = new_canister.compute_allocation();
-        let message_memory = canister.message_memory_usage();
-        let reveal_top_up = canister.controllers().contains(&sender);
-        let instructions = self.config.canister_snapshot_baseline_instructions
-            + instructions_used
-            + NumInstructions::new(snapshot.size().get());
-
         // Charge for loading the snapshot of the canister.
-        let prepaid_cycles = match self.cycles_account_manager.prepay_execution_cycles(
-            &mut new_canister.system_state,
-            new_memory_usage,
-            message_memory,
-            compute_allocation,
-            instructions,
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            &mut new_canister,
+            instructions_used + NumInstructions::new(snapshot.size().get()),
             subnet_size,
-            reveal_top_up,
         ) {
-            Ok(prepaid_cycles) => prepaid_cycles,
-            Err(err) => {
-                return (
-                    Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
-                    instructions_used,
-                )
-            }
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                instructions_used,
+            );
         };
 
-        // To keep the invariant that `prepay_execution_cycles` is always paired
-        // with `refund_unused_execution_cycles` we refund zero immediately.
-        self.cycles_account_manager.refund_unused_execution_cycles(
-            &mut new_canister.system_state,
-            NumInstructions::from(0),
-            instructions,
-            prepaid_cycles,
-            // This counter is incremented if we refund more
-            // instructions than initially charged, which is impossible
-            // here.
-            &IntCounter::new("no_op", "no_op").unwrap(),
-            subnet_size,
-            &self.log,
-        );
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
         new_canister.system_state.add_canister_change(
@@ -2319,7 +2282,7 @@ impl CanisterManager {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
     CanisterInvalidController {
         canister_id: CanisterId,

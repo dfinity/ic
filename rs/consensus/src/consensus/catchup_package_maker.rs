@@ -14,7 +14,7 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_transcript, crypto::ConsensusCrypto,
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
@@ -235,9 +235,8 @@ impl CatchUpPackageMaker {
                     registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
-                if let Some(transcript) = active_high_threshold_transcript(pool.as_cache(), height)
-                {
-                    match self.crypto.sign(&content, my_node_id, transcript.dkg_id) {
+                if let Some(dkg_id) = active_high_threshold_nidkg_id(pool.as_cache(), height) {
+                    match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => {
                             // Caution: The log string below is checked in replica_determinism_test.
                             // Changing the string might break the test.
