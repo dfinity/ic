@@ -45,7 +45,7 @@ const RESOURCE_STREAM: &str = "stream";
 const RESOURCE_STREAMS: &str = "streams";
 const RESOURCE_UNKNOWN: &str = "unknown";
 
-const XNET_ENDPOINT_NUM_WORKER_THREADS: usize = 4;
+const XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS: usize = 4;
 
 impl XNetEndpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -138,7 +138,7 @@ impl XNetEndpoint {
                 let ctx = Context {
                     log: log.clone(),
                     metrics: Arc::clone(&metrics),
-                    semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_NUM_WORKER_THREADS)),
+                    semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS)),
                 };
 
                 fn ok<T>(t: T) -> Result<T, Infallible> {
@@ -258,7 +258,7 @@ impl XNetEndpoint {
     }
 
     pub fn num_workers() -> usize {
-        XNET_ENDPOINT_NUM_WORKER_THREADS
+        XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS
     }
 
     /// Returns the port that the HTTP server is listening on.
