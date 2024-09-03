@@ -129,7 +129,7 @@ fn should_change_cycles_for_canister_creation() {
                     cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
                     ..Default::default()
                 }),
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         ))
         .unwrap();
@@ -275,7 +275,7 @@ fn should_reject_upgrade_with_invalid_args() {
         index_compressed_wasm_hash: None,
         archive_compressed_wasm_hash: None,
         cycles_management: None,
-        manage_canisters: None,
+        manage_installed_canisters: None,
     };
 
     test_upgrade_with_invalid_args(
@@ -508,7 +508,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
             index_compressed_wasm_hash: None,
             archive_compressed_wasm_hash: None,
             cycles_management: None,
-            manage_canisters: None,
+            manage_installed_canisters: None,
         },
     );
 
@@ -620,7 +620,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         );
 
@@ -700,7 +700,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         );
         orchestrator.advance_time_for_upgrade();
@@ -795,7 +795,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         );
 
@@ -866,7 +866,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         );
 
@@ -928,7 +928,7 @@ mod upgrade {
                     index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                     archive_compressed_wasm_hash: None,
                     cycles_management: None,
-                    manage_canisters: None,
+                    manage_installed_canisters: None,
                 },
             );
 
@@ -1000,7 +1000,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         );
 

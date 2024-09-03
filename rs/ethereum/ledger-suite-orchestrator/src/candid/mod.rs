@@ -26,7 +26,7 @@ pub struct UpgradeArg {
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
     pub cycles_management: Option<UpdateCyclesManagement>,
-    pub manage_canisters: Option<Vec<ManagedCanisters>>,
+    pub manage_installed_canisters: Option<Vec<ManageInstalledCanisters>>,
 }
 
 impl UpgradeArg {

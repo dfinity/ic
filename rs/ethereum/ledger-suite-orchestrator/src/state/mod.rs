@@ -4,8 +4,9 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::candid::{CyclesManagement, InitArg};
-use crate::scheduler::{Erc20Token, Task};
+use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
 use crate::storage::memory::{state_memory, StableMemory};
+use crate::storage::WasmHashError;
 use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::{storable::Bound, Cell, Storable};
@@ -15,6 +16,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::once;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -251,16 +253,11 @@ impl Canisters {
         &self.archives
     }
 
-    pub fn collect_principals(&self) -> Vec<Principal> {
-        let mut result: Vec<Principal> = vec![];
-        if let Some(ledger_principal) = self.ledger_canister_id() {
-            result.push(*ledger_principal);
-        }
-        if let Some(index_principal) = self.index_canister_id() {
-            result.push(*index_principal);
-        }
-        result.extend(self.archives.clone());
-        result
+    pub fn principals_iter(&self) -> impl Iterator<Item = &Principal> {
+        self.ledger_canister_id()
+            .into_iter()
+            .chain(self.index_canister_id())
+            .chain(self.archive_canister_ids().iter())
     }
 }
 
@@ -449,10 +446,9 @@ impl State {
         self.managed_canisters.canisters.iter()
     }
 
-    pub fn managed_principals(&self) -> BTreeSet<Principal> {
+    pub fn managed_principals(&self) -> impl Iterator<Item = &Principal> {
         self.managed_canisters_iter()
-            .flat_map(|(_, canisters)| canisters.collect_principals())
-            .collect()
+            .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
     pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
@@ -492,6 +488,18 @@ impl State {
     {
         self.managed_canisters(contract)
             .and_then(|c| c.get().map(|c| &c.status))
+    }
+
+    pub fn record_manage_installed_canisters(&mut self, canisters: ManageInstalledCanisters) {
+        self.record_new_erc20_token(canisters.erc20_token.clone(), canisters.metadata);
+        self.record_created_canister::<Ledger>(&canisters.erc20_token, canisters.ledger);
+        self.record_installed_canister::<Ledger>(
+            &canisters.erc20_token,
+            canisters.ledger_wasm_hash,
+        );
+        self.record_created_canister::<Index>(&canisters.erc20_token, canisters.index);
+        self.record_installed_canister::<Index>(&canisters.erc20_token, canisters.index_wasm_hash);
+        self.record_archives(&canisters.erc20_token, canisters.archives);
     }
 
     pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
@@ -703,4 +711,72 @@ pub fn init_state(state: State) {
             .set(ConfigState::Initialized(state))
             .expect("failed to initialize state in stable cell")
     });
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct ManageInstalledCanisters {
+    erc20_token: Erc20Token,
+    metadata: CanistersMetadata,
+    ledger: Principal,
+    ledger_wasm_hash: WasmHash,
+    index: Principal,
+    index_wasm_hash: WasmHash,
+    archives: Vec<Principal>,
+}
+
+impl ManageInstalledCanisters {
+    pub fn validate(
+        state: &State,
+        args: crate::candid::ManageInstalledCanisters,
+    ) -> Result<ManageInstalledCanisters, InvalidManageInstalledCanistersError> {
+        let erc20_token = Erc20Token::try_from(args.erc20_contract).map_err(|e| {
+            InvalidManageInstalledCanistersError::InvalidErc20Contract(e.to_string())
+        })?;
+        if let Some(_canisters) = state.managed_canisters(&erc20_token) {
+            return Err(
+                InvalidManageInstalledCanistersError::Erc20ContractAlreadyManaged(erc20_token),
+            );
+        }
+        let ledger = args.ledger.canister_id;
+        let ledger_wasm_hash = args.ledger.installed_wasm_hash.parse().map_err(|e| {
+            InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
+        })?;
+        let index = args.index.canister_id;
+        let index_wasm_hash = args.index.installed_wasm_hash.parse().map_err(|e| {
+            InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
+        })?;
+        let archives = args.archives.unwrap_or_default();
+
+        let installed_principals: BTreeSet<_> = once(&ledger)
+            .chain(once(&index))
+            .chain(archives.iter())
+            .collect();
+        let managed_principals: BTreeSet<_> = state.managed_principals().collect();
+        let overlapping_principals: BTreeSet<_> = managed_principals
+            .intersection(&installed_principals)
+            .collect();
+        if !overlapping_principals.is_empty() {
+            return Err(
+                InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(
+                    overlapping_principals
+                        .into_iter()
+                        .cloned()
+                        .cloned()
+                        .collect(),
+                ),
+            );
+        }
+        let metadata = CanistersMetadata {
+            ckerc20_token_symbol: args.ckerc20_token_symbol,
+        };
+        Ok(ManageInstalledCanisters {
+            erc20_token,
+            metadata,
+            ledger,
+            ledger_wasm_hash,
+            index,
+            index_wasm_hash,
+            archives,
+        })
+    }
 }

@@ -123,7 +123,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_canisters: None,
+                manage_installed_canisters: None,
             },
         ))
     }

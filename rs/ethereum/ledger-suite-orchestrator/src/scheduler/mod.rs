@@ -10,9 +10,8 @@ use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
-    mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index,
-    IndexCanister, Ledger, LedgerCanister, LedgerSuiteVersion, ManageSingleCanister,
-    ManagedCanisterStatus, State, WasmHash,
+    mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
+    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
 };
 use crate::storage::{
     read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
@@ -35,7 +34,6 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
-use std::iter::once;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -60,7 +58,6 @@ pub enum Task {
         erc20_token: Erc20Token,
         minter_id: Principal,
     },
-    ManageAlreadyInstalledLedgerSuite(ManageInstalledCanisters),
 }
 
 impl Task {
@@ -71,7 +68,6 @@ impl Task {
             Task::NotifyErc20Added { .. } => false,
             Task::DiscoverArchives => true,
             Task::UpgradeLedgerSuite(_) => false,
-            Task::ManageAlreadyInstalledLedgerSuite(_) => false,
         }
     }
 }
@@ -726,15 +722,12 @@ impl TaskExecution {
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
             Task::DiscoverArchives => Ok(discover_archives(select_all(), runtime).await?),
             Task::UpgradeLedgerSuite(upgrade) => Ok(upgrade_ledger_suite(upgrade, runtime).await?),
-            Task::ManageAlreadyInstalledLedgerSuite(args) => {
-                Ok(manage_already_installed_ledger_suite(args, runtime).await?)
-            }
         }
     }
 }
 
 async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
-    let managed_principals: BTreeSet<Principal> = read_state(|s| s.managed_principals());
+    let managed_principals: BTreeSet<_> = read_state(|s| s.managed_principals().cloned().collect());
     if managed_principals.is_empty() {
         log!(INFO, "[maybe_top_up]: No managed canisters to top-up");
         return Ok(());
@@ -779,7 +772,7 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
     .await;
     assert!(!results.is_empty());
 
-    for (canister_id, cycles_result) in managed_principals.iter().zip(results) {
+    for (canister_id, cycles_result) in managed_principals.into_iter().zip(results) {
         match cycles_result {
             Ok(balance) => {
                 match (
@@ -803,7 +796,7 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
                             DEBUG,
                             "[maybe_top_up] Sending {top_up_amount} cycles to canister {canister_id} with current balance {balance}"
                         );
-                        match runtime.send_cycles(*canister_id, top_up_amount) {
+                        match runtime.send_cycles(canister_id, top_up_amount) {
                             Ok(()) => {
                                 orchestrator_cycle_balance -= top_up_amount;
                             }
@@ -1320,79 +1313,12 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
     Ok(())
 }
 
-async fn manage_already_installed_ledger_suite<R: CanisterRuntime>(
-    _upgrade_ledger_suite: &ManageInstalledCanisters,
-    _runtime: &R,
-) -> Result<(), ManageAlreadyInstalledLedgerSuiteError> {
-    // TODO XC-189: logic
-    Ok(())
-}
-
-pub struct ManageInstalledCanisters {
-    erc20_token: Erc20Token,
-    metadata: CanistersMetadata,
-    ledger: LedgerCanister,
-    index: IndexCanister,
-    archives: Vec<Principal>,
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum InvalidManageInstalledCanistersError {
     InvalidErc20Contract(String),
     Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashError(WasmHashError),
     AlreadyManagedPrincipals(BTreeSet<Principal>),
-}
-
-impl ManageInstalledCanisters {
-    fn validate(
-        state: &State,
-        args: crate::candid::ManageInstalledCanisters,
-    ) -> Result<ManageInstalledCanisters, InvalidManageInstalledCanistersError> {
-        let erc20_token = Erc20Token::try_from(args.erc20_contract).map_err(|e| {
-            InvalidManageInstalledCanistersError::InvalidErc20Contract(e.to_string())
-        })?;
-        if let Some(_canisters) = state.managed_canisters(&erc20_token) {
-            return Err(
-                InvalidManageInstalledCanistersError::Erc20ContractAlreadyManaged(erc20_token),
-            );
-        }
-        let ledger = args
-            .ledger
-            .try_into_canister()
-            .map_err(InvalidManageInstalledCanistersError::WasmHashError)?;
-        let index = args
-            .index
-            .try_into_canister()
-            .map_err(InvalidManageInstalledCanistersError::WasmHashError)?;
-        let archives = args.archives.unwrap_or_default();
-
-        let installed_principals: BTreeSet<Principal> = once(ledger.canister_id().clone())
-            .chain(once(index.canister_id().clone()))
-            .chain(archives.clone().into_iter())
-            .collect();
-        let overlapping_principals: BTreeSet<_> = state
-            .managed_principals()
-            .intersection(&installed_principals)
-            .collect();
-        if !overlapping_principals.is_empty() {
-            return Err(
-                InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(
-                    overlapping_principals,
-                ),
-            );
-        }
-        let metadata = CanistersMetadata {
-            ckerc20_token_symbol: args.ckerc20_token_symbol,
-        };
-        Ok(ManageInstalledCanisters {
-            erc20_token,
-            metadata,
-            ledger,
-            index,
-            archives,
-        })
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
