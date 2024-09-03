@@ -25,7 +25,6 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
@@ -51,8 +50,14 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+  docker-login: &docker-login
+    name: Login to Dockerhub
+    shell: bash
+    run: ./gitlab-ci/src/ci-scripts/docker-login.sh
     env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 jobs:
@@ -67,6 +72,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -95,6 +101,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -123,6 +130,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -159,6 +167,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
