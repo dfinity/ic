@@ -1,8 +1,8 @@
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
-use serde::{Serialize, Deserialize};
 
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]

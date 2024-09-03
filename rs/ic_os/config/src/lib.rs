@@ -49,7 +49,7 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
 
     let normalized_file_contents = file_contents
         .replace("\r\n", "\n") // Convert CRLF to LF
-        .replace("\r", "\n");  // Convert remaining CR to LF
+        .replace("\r", "\n"); // Convert remaining CR to LF
 
     Ok(normalized_file_contents
         .lines()

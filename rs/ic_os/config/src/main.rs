@@ -1,11 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{default_deployment_values, parse_config_ini};
-use std::path::Path;
-use utils::deployment::read_deployment_file;
 use std::fs::File;
 use std::io::Write;
-use serde_json;
+use std::path::Path;
+use utils::deployment::read_deployment_file;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -106,12 +105,16 @@ pub fn main() -> Result<()> {
             let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
 
             // Write serialized data to the file
-            let mut config_file = File::create(default_config_object_path)
-                .expect("Failed to create config file");
-            config_file.write_all(serialized_config.as_bytes())
+            let mut config_file =
+                File::create(default_config_object_path).expect("Failed to create config file");
+            config_file
+                .write_all(serialized_config.as_bytes())
                 .expect("Failed to write to config file");
 
-            println!("SetuposConfig has been written to {}", default_config_object_path.display());
+            println!(
+                "SetuposConfig has been written to {}",
+                default_config_object_path.display()
+            );
 
             dbg!(setupos_config);
 
