@@ -5,7 +5,7 @@ set -o pipefail
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
-CONFIG_DIR="/var/ic/config"
+CONFIG_DIR="/config"
 
 function mount_config_partition() {
     echo "* Mounting hostOS config partition..."

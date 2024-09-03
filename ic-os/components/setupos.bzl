@@ -5,7 +5,6 @@ Enumerate every component file dependency for SetupOS
 component_files = {
     # setupos-scripts
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
-    Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",
     Label("setupos-scripts/devices.sh"): "/opt/ic/bin/devices.sh",
     Label("setupos-scripts/disk.sh"): "/opt/ic/bin/disk.sh",
     Label("setupos-scripts/functions.sh"): "/opt/ic/bin/functions.sh",

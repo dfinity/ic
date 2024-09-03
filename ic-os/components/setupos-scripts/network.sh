@@ -6,7 +6,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
+CONFIG="${CONFIG:=/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
 
 function read_variables() {

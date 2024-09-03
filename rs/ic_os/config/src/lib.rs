@@ -16,12 +16,12 @@ pub type ConfigMap = HashMap<String, String>;
 pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "/config/config.json";
 // pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "/tmp/config/config.json";
 
-pub static DEFAULT_SETUPOS_CONFIG_FILE_PATH: &str = "/var/ic/config/config.ini";
+pub static DEFAULT_SETUPOS_CONFIG_FILE_PATH: &str = "/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
-pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/var/ic/config/ssh_authorized_keys";
+pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/config/ssh_authorized_keys";
 pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
-    "/var/ic/config/node_operator_private_key.pem";
+    "/config/node_operator_private_key.pem";
 
 //todo: delete
 pub static DEFAULT_HOSTOS_CONFIG_FILE_PATH: &str = "/boot/config/config.ini";
