@@ -24,6 +24,7 @@ use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use url::ParseError;
 pub struct RosettaClient {
     pub url: Url,
@@ -49,7 +50,7 @@ impl RosettaClient {
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
     }
 
-    async fn call_endpoint<T: Serialize + ?Sized, R: for<'a> Deserialize<'a>>(
+    async fn call_endpoint<T: Serialize + ?Sized + Debug, R: for<'a> Deserialize<'a>>(
         &self,
         path: &str,
         arg: &T,
@@ -68,8 +69,7 @@ impl RosettaClient {
                 .json::<rosetta_core::miscellaneous::Error>()
                 .await
                 .unwrap();
-            println!("Failed to call endpoint: {:?}", error);
-            bail!("Failed to call endpoint: {:?}", error);
+            bail!("Failed to call endpoint: {:?}, Request: {:?}", error, arg);
         } else {
             Ok(response
                 .json()

@@ -6,7 +6,8 @@ use ic_agent::Agent;
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use icp_ledger::{GetBlocksArgs, QueryBlocksResponse};
+use icp_ledger::GetBlocksArgs;
+use icp_ledger::QueryEncodedBlocksResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
 use url::Url;
@@ -82,15 +83,15 @@ pub fn bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
 /// This function calls the 'query_blocks' endpoint on the ledger canister.
 /// The user can specify the maximum block height and the number of blocks to query.
 /// If the maximum block height is not specified then the current chain tip index will be used.
-pub async fn query_blocks(
+pub async fn query_encoded_blocks(
     agent: &Agent,
     // If this is left None then the whatever the currently highest block is will be used.
     max_block_height: Option<u64>,
     num_blocks: u64,
-) -> QueryBlocksResponse {
+) -> QueryEncodedBlocksResponse {
     let response = Decode!(
         &agent
-            .query(&LEDGER_CANISTER_ID.into(), "query_blocks")
+            .query(&LEDGER_CANISTER_ID.into(), "query_encoded_blocks")
             .with_arg(
                 Encode!(&GetBlocksArgs {
                     start: 0,
@@ -101,7 +102,7 @@ pub async fn query_blocks(
             .call()
             .await
             .unwrap(),
-        QueryBlocksResponse
+        QueryEncodedBlocksResponse
     )
     .unwrap();
 
@@ -115,14 +116,15 @@ pub async fn query_blocks(
         ),
         length: std::cmp::min(num_blocks, response.chain_length) as usize,
     };
+    println!("Querying blocks: {:?}", block_request);
     Decode!(
         &agent
-            .query(&LEDGER_CANISTER_ID.into(), "query_blocks")
+            .query(&LEDGER_CANISTER_ID.into(), "query_encoded_blocks")
             .with_arg(Encode!(&block_request).unwrap())
             .call()
             .await
             .unwrap(),
-        QueryBlocksResponse
+        QueryEncodedBlocksResponse
     )
     .unwrap()
 }

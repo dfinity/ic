@@ -1,11 +1,12 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
 use crate::common::utils::get_test_agent;
-use crate::common::utils::query_blocks;
+use crate::common::utils::query_encoded_blocks;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use ic_ledger_core::block::BlockType;
+use ic_rosetta_api::convert::to_hash;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
@@ -63,17 +64,21 @@ fn test_block_synchronization() {
                         .network_status(rosetta_testing_environment.network_identifier.clone())
                         .await
                         .unwrap();
-                    let ledger_tip: icp_ledger::Block = query_blocks(&agent, None, 1)
-                        .await
-                        .blocks
-                        .last()
-                        .unwrap()
-                        .clone()
-                        .try_into()
-                        .unwrap();
+                    let encoded_blocks = query_encoded_blocks(&agent, None, 1).await;
+                    println!("Encoded blocks: {:?}", encoded_blocks);
+                    assert_eq!(encoded_blocks.blocks.len(), 1);
+                    let ledger_tip = encoded_blocks.blocks[0].clone();
+
+                    println!(
+                        "Block timestamp: {:?}",
+                        network_status.current_block_timestamp
+                    );
                     assert_eq!(
-                        network_status.current_block_identifier.hash,
-                        icp_ledger::Block::block_hash(&ledger_tip.encode()).to_string()
+                        to_hash(&network_status.current_block_identifier.hash).unwrap(),
+                        icp_ledger::Block::block_hash(&ledger_tip),
+                        "Block hashes do not match: Expected Block {:?} but got Block {:?}",
+                        network_status.current_block_identifier,
+                        ledger_tip
                     );
                 });
 
