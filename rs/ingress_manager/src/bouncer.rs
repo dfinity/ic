@@ -8,6 +8,7 @@ use ic_interfaces::{
 };
 use ic_types::artifact::IngressMessageId;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// BouncerFactory implementation for the ingress pool(s).
 pub struct IngressBouncer {
@@ -45,7 +46,7 @@ impl<Pool: IngressPoolThrottler> BouncerFactory<IngressMessageId, Pool> for Ingr
         })
     }
 
-    fn refresh_period(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(3)
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
