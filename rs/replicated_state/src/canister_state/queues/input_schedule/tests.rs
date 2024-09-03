@@ -168,13 +168,13 @@ fn test_reschedule_while_in_other_queue(input_queue_type: InputQueueType) {
     let mut schedule = InputSchedule::default();
 
     schedule.schedule(sender, input_queue_type);
-    schedule.reschedule(
-        sender,
-        match input_queue_type {
-            LocalSubnet => RemoteSubnet,
-            RemoteSubnet => LocalSubnet,
-        },
-    );
+    // `sender` is enqueued in `input_queue_type`, so `reschedule()` will panic
+    // because it expects `sender` to be in the other queue.
+    let other_input_queue_type = match input_queue_type {
+        LocalSubnet => RemoteSubnet,
+        RemoteSubnet => LocalSubnet,
+    };
+    schedule.reschedule(sender, other_input_queue_type);
 }
 
 #[test]

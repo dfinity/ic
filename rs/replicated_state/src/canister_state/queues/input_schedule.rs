@@ -36,7 +36,7 @@ mod tests;
 ///    the two schedules on the one hand and `scheduled_senders` on the other.
 ///
 /// All of the above occurrences would be detected from critical errors or other
-/// alerting. Thay are also exceedingly unlikely to result in a crash loop,
+/// alerting. They are also exceedingly unlikely to result in a crash loop,
 /// unlike the use of `assert!()` to enforce hard invariants.
 ///
 /// As a result, we rely on defensive programming and validation to check the
