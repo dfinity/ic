@@ -1,5 +1,5 @@
 {
-  "checksum": "bd90295750d16f41b5e661bb913d207abdf13b9e61b58ff37e208fd27701ccdc",
+  "checksum": "e40578031b29c66c54191b900be82e11c7b5af2697d138729fa00a2701fc4622",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18584,6 +18584,10 @@
             {
               "id": "rusty-fork 0.3.0",
               "target": "rusty_fork"
+            },
+            {
+              "id": "scale-info 2.11.3",
+              "target": "scale_info"
             },
             {
               "id": "schemars 0.8.21",
@@ -56417,8 +56421,10 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "derive",
-            "scale-info-derive"
+            "scale-info-derive",
+            "std"
           ],
           "selects": {}
         },
@@ -77962,6 +77968,7 @@
     "rustls-pki-types 1.8.0",
     "rustversion 1.0.17",
     "rusty-fork 0.3.0",
+    "scale-info 2.11.3",
     "schemars 0.8.21",
     "schnorr_fun 0.10.0",
     "scoped_threadpool 0.1.9",

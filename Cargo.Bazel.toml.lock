@@ -3250,6 +3250,7 @@ dependencies = [
  "rustls-pki-types",
  "rustversion",
  "rusty-fork",
+ "scale-info",
  "schemars",
  "schnorr_fun",
  "scoped_threadpool",
@@ -9563,6 +9564,7 @@ version = "2.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eca070c12893629e2cc820a9761bedf6ce1dcddc9852984d1dc734b8bd9bd024"
 dependencies = [
+ "bitvec",
  "cfg-if 1.0.0",
  "derive_more",
  "parity-scale-codec",

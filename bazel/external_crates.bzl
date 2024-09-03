@@ -1101,6 +1101,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rusty-fork": crate.spec(
                 version = "^0.3.0",
             ),
+            "scale-info": crate.spec(
+                version = "^2.11.3",
+            ),
             "schemars": crate.spec(
                 version = "^0.8.16",
             ),
