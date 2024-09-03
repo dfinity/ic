@@ -55,7 +55,7 @@ anchors:
   docker-login: &docker-login
     name: Login to Dockerhub
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+    run: ./ci/scripts/docker-login.sh
     env:
       DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
