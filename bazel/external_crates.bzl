@@ -104,6 +104,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
             },
         )],
+        "scale-info": [crate.annotation(
+            build_script_env = {
+                "CARGO": "cargo",
+            },
+        )],
         "prost-build": [crate.annotation(
             build_script_env = {
                 "PROTOC_NO_VENDOR": "1",

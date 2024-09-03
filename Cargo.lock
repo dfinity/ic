@@ -13049,7 +13049,7 @@ name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
  "bytes",
- "hyper 0.14.26",
+ "hyper 0.14.30",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
