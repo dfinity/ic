@@ -10,7 +10,7 @@ COPY ${PACKAGE_FILE} /tmp/
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install --no-install-recommends $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
-    rm "/tmp/$(basename $PACKAGE_FILE)" \
+    rm "/tmp/$(basename $PACKAGE_FILE)" && \
     rm -rf /var/lib/apt/lists/*
 
 ARG motoko_version=0.9.1
