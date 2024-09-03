@@ -203,7 +203,11 @@ message IngressIdOffset {
   uint64 offset = 3;
 }
 
+message IngressMessage {
+  bytes content = 1;
+}
+
 message IngressPayload {
-  repeated IngressIdOffset id_and_pos = 1;
-  bytes buffer = 2;
+  reserved 1, 2;
+  repeated IngressMessage ingress_messages = 3;
 }

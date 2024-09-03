@@ -1,44 +1,41 @@
 use crate::{
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, Time,
+    messages::{SignedIngress, SignedRequestBytes},
+    CountBytes,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::TryFrom,
-    io::{Cursor, Write},
-};
+use std::convert::TryFrom;
 
 /// Payload that contains Ingress messages
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
-    /// Pairs of MessageId and its serialized byte position in the buffer.
-    id_and_pos: Vec<(IngressMessageId, u64)>,
-    /// All messages are serialized in a single byte buffer, so individual
-    /// deserialization is delayed. This allows faster deserialization of
-    /// IngressPayload when individual message is not needed (e.g. in
-    /// ingress payload deduplication).
-    #[serde(with = "serde_bytes")]
-    buffer: Vec<u8>,
+    ingress_messages: Vec<SignedIngress>,
+}
+
+fn proto_to_ingress(proto: pb::IngressMessage) -> Result<SignedIngress, ProxyDecodeError> {
+    SignedIngress::try_from(SignedRequestBytes::from(proto.content))
+        .map_err(|err| ProxyDecodeError::Other(err.to_string()))
+}
+
+fn ingress_to_proto(ingress: SignedIngress) -> pb::IngressMessage {
+    pb::IngressMessage {
+        content: ingress.binary().as_ref().to_vec(),
+    }
 }
 
 impl From<&IngressPayload> for pb::IngressPayload {
     fn from(ingress_payload: &IngressPayload) -> Self {
         Self {
-            id_and_pos: ingress_payload
-                .id_and_pos
+            ingress_messages: ingress_payload
+                .ingress_messages
                 .iter()
-                .map(|(msg_id, offset)| pb::IngressIdOffset {
-                    expiry: msg_id.expiry().as_nanos_since_unix_epoch(),
-                    message_id: msg_id.message_id.as_bytes().to_vec(),
-                    offset: *offset,
-                })
+                .cloned()
+                .map(ingress_to_proto)
                 .collect(),
-            buffer: ingress_payload.buffer.clone(),
         }
     }
 }
@@ -47,22 +44,13 @@ impl TryFrom<pb::IngressPayload> for IngressPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(payload: pb::IngressPayload) -> Result<Self, Self::Error> {
-        Ok(Self {
-            id_and_pos: payload
-                .id_and_pos
-                .iter()
-                .map(|ingress_offset| {
-                    Ok((
-                        IngressMessageId::new(
-                            Time::from_nanos_since_unix_epoch(ingress_offset.expiry),
-                            MessageId::try_from(ingress_offset.message_id.as_slice())?,
-                        ),
-                        ingress_offset.offset,
-                    ))
-                })
-                .collect::<Result<Vec<_>, Self::Error>>()?,
-            buffer: payload.buffer,
-        })
+        let ingress_messages = payload
+            .ingress_messages
+            .into_iter()
+            .map(proto_to_ingress)
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self { ingress_messages })
     }
 }
 
@@ -84,93 +72,49 @@ pub enum IngressPayloadError {
 impl IngressPayload {
     /// Return the number of ingress messages contained in this payload
     pub fn message_count(&self) -> usize {
-        self.id_and_pos.len()
+        self.ingress_messages.len()
     }
 
     /// Return all MessageIds in the payload.
     pub fn message_ids(&self) -> Vec<IngressMessageId> {
-        self.id_and_pos
+        self.ingress_messages
             .iter()
-            .map(|(id, _)| id.clone())
-            .collect::<Vec<_>>()
+            .map(IngressMessageId::from)
+            .collect()
     }
 
     /// Return true if the payload is empty.
     pub fn is_empty(&self) -> bool {
-        self.id_and_pos.is_empty()
-    }
-
-    /// Return the ingress message at a given index, which is expected to be
-    /// less than `message_count`.
-    pub fn get(
-        &self,
-        index: usize,
-    ) -> Result<(IngressMessageId, SignedIngress), IngressPayloadError> {
-        self.id_and_pos
-            .get(index)
-            .ok_or(IngressPayloadError::IndexOutOfBound(index))
-            .and_then(|(id, pos)| {
-                // Return error if pos is out of bound.
-                if *pos > self.buffer.len() as u64 {
-                    Err(IngressPayloadError::IngressPositionOutOfBound(index, *pos))
-                } else {
-                    let end = {
-                        if index == self.id_and_pos.len() - 1 {
-                            self.buffer.len()
-                        } else {
-                            self.id_and_pos[index + 1].1 as usize
-                        }
-                    };
-                    let ingress = SignedIngress::try_from(SignedRequestBytes::from(Vec::from(
-                        &self.buffer[*pos as usize..end],
-                    )))
-                    .map_err(|e| IngressPayloadError::DeserializationFailure(e.to_string()))?;
-                    let ingress_id = IngressMessageId::from(&ingress);
-                    if *id == ingress_id {
-                        Ok((ingress_id, ingress))
-                    } else {
-                        Err(IngressPayloadError::MismatchedMessageIdAtIndex(index))
-                    }
-                }
-            })
+        self.ingress_messages.is_empty()
     }
 }
 
 impl CountBytes for IngressPayload {
     fn count_bytes(&self) -> usize {
-        self.buffer.len() + self.id_and_pos.len() * EXPECTED_MESSAGE_ID_LENGTH
+        self.ingress_messages
+            .iter()
+            .map(CountBytes::count_bytes)
+            .sum()
     }
 }
 
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
-        let mut buf = Cursor::new(Vec::new());
-        let mut id_and_pos = Vec::new();
-        for ingress in msgs {
-            let id = IngressMessageId::from(&ingress);
-            let pos = buf.position();
-            // This panic will only happen when we run out of memory.
-            buf.write_all(ingress.binary().as_ref())
-                .unwrap_or_else(|err| panic!("SignedIngress serialization error: {:?}", err));
-
-            id_and_pos.push((id, pos));
-        }
-        IngressPayload {
-            id_and_pos,
-            buffer: buf.into_inner(),
+        Self {
+            ingress_messages: msgs,
         }
     }
 }
 
-impl TryFrom<IngressPayload> for Vec<SignedIngress> {
-    type Error = IngressPayloadError;
-    fn try_from(payload: IngressPayload) -> Result<Vec<SignedIngress>, Self::Error> {
-        payload
-            .id_and_pos
-            .iter()
-            .enumerate()
-            .map(|(i, _)| payload.get(i).map(|m| m.1))
-            .collect::<Result<_, _>>()
+impl From<IngressPayload> for Vec<SignedIngress> {
+    fn from(payload: IngressPayload) -> Vec<SignedIngress> {
+        payload.ingress_messages
+    }
+}
+
+impl AsRef<[SignedIngress]> for IngressPayload {
+    fn as_ref(&self) -> &[SignedIngress] {
+        &self.ingress_messages
     }
 }
 
@@ -228,7 +172,7 @@ mod tests {
             .map(|msg| SignedIngress::try_from(msg).unwrap())
             .collect();
         let ingress_payload = IngressPayload::from(signed_ingresses.clone());
-        let signed_ingresses1 = Vec::<SignedIngress>::try_from(ingress_payload).unwrap();
+        let signed_ingresses1 = Vec::<SignedIngress>::from(ingress_payload);
         assert_eq!(signed_ingresses, signed_ingresses1);
     }
 }
