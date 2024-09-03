@@ -1,13 +1,9 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
-use crate::common::utils::get_test_agent;
-use crate::common::utils::query_blocks;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_icrc1_test_utils::account_strategy;
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
-use ic_ledger_core::block::BlockType;
+use ic_icrc1_test_utils::{minter_identity, DEFAULT_TRANSFER_FEE};
 use ic_rosetta_api::models::ConstructionDeriveRequest;
 use ic_rosetta_api::models::ConstructionMetadataRequest;
 use ic_rosetta_api::models::ConstructionMetadataResponse;
@@ -22,7 +18,6 @@ use rosetta_core::objects::Amount;
 use rosetta_core::objects::Currency;
 use rosetta_core::objects::PublicKey;
 use std::sync::Arc;
-use std::time::SystemTime;
 use tokio::runtime::Runtime;
 
 lazy_static! {
