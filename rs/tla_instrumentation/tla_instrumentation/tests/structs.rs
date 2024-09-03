@@ -144,7 +144,6 @@ impl StructCanister {
         // Note that this would not be necessary (and would be an error) if
         // we defined my_local in default_end_locals in my_f_desc
         tla_log_locals! {my_local: my_local};
-        return;
     }
 }
 
