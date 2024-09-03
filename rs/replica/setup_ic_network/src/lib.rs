@@ -5,11 +5,8 @@
 
 use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl,
-    certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl,
-    idkg_pool::IDkgPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
@@ -29,7 +26,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{IngressManager, RandomStateKind, bouncer::IngressBouncer};
+use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
