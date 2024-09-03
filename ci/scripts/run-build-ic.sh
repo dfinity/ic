@@ -3,7 +3,7 @@
 set -euo pipefail
 VERSION=$(git rev-parse HEAD)
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_TARGETS_AND_UPLOAD]"* ]]; then
     RUN_ON_DIFF_ONLY="false"
 fi
 

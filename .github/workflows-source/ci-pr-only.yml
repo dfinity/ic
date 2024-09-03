@@ -158,3 +158,16 @@ jobs:
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           cd gitlab-ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
+  pr-title-check:
+    name: Check PR Title for Deprecated Flags
+    runs-on: ubuntu-latest
+    steps:
+      - <<: *checkout
+      - name: Check PR Title
+        id: check-pr-title
+        run: |
+          if [[ "$CI_MERGE_REQUEST_TITLE" == *"[RUN_ALL_BAZEL_TARGETS]"* || "$CI_MERGE_REQUEST_TITLE" == *"[S3_UPLOAD]"* ]]; then
+            echo "Error: The flags [RUN_ALL_BAZEL_TARGETS] or [S3_UPLOAD] are deprecated. Please use [RUN_ALL_TARGETS_AND_UPLOAD] instead."
+            exit 1
+          fi

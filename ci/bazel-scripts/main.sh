@@ -23,11 +23,9 @@ fi
 # - target branch is not rc--*
 # - uploading to S3 has not been requested
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_TARGETS_AND_UPLOAD]"* ]]; then
     RUN_ON_DIFF_ONLY="false"
-    if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
-        s3_upload="True"
-    fi
+    s3_upload="True"
 fi
 
 if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
