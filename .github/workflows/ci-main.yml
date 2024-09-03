@@ -17,6 +17,7 @@ concurrency:
 permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
+  CI_COMMIT_BRANCH: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   CI_JOB_NAME: ${{ github.job }}
