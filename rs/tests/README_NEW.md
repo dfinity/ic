@@ -70,7 +70,7 @@ In order to launch `basic_health_test`, firstly enter the `nix-shell` environmen
 ```
 Secondly, specify GuestOS image (replica) version. For example, take the latest available one:
 ```
-[nix-shell:~/ic]$ export IC_VERSION_ID=$(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)
+[nix-shell:~/ic]$ export IC_VERSION_ID=$(./ci/src/artifacts/newest_sha_with_disk_image.sh master)
 ```
 Finally, execute `basic_health_test` (which resides in the `hourly` suite) via python [run-system-tests.py](https://github.com/dfinity/ic/blob/master/rs/tests/run-system-tests.py) script:
 ```
