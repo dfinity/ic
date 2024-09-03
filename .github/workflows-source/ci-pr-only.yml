@@ -110,7 +110,7 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
+        run: ./ci/scripts/lock-generate.sh
 
   pre-commit:
     name: Pre Commit Test
@@ -122,7 +122,7 @@ jobs:
       - name: Pre-Commit
         id: pre-commit
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
+        run: ./ci/scripts/pre-commit.sh
 
   dependencies-check:
     name: Dependency Scan for PR
