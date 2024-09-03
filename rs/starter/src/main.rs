@@ -198,7 +198,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Parser)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Parser, Serialize)]
 #[clap(name = "ic-starter", about = "Starter.", version)]
 struct CliArgs {
     /// Path the to replica binary.

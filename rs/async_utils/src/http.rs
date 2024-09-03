@@ -13,7 +13,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::time::timeout;
 
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Eq, PartialEq, Debug, Error)]
 pub enum BodyReceiveError {
     #[error("body is too large `{0}`")]
     TooLarge(String),

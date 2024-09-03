@@ -1,7 +1,7 @@
 use anyhow::{bail, Error};
 use candid::Principal;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CanisterAlias {
     pub id: String,
     pub principal: Principal,

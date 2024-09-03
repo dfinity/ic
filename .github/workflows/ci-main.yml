@@ -30,7 +30,6 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
@@ -52,8 +51,17 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+>>>>>>> master
         env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
@@ -115,14 +123,17 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+>>>>>>> master
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -158,11 +169,15 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - name: Before script
-        id: before-script
+      - name: Login to Dockerhub
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
+=======
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+>>>>>>> master
         env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
@@ -209,14 +224,17 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+>>>>>>> master
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -249,14 +267,17 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+>>>>>>> master
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -317,9 +338,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+>>>>>>> master
       - name: Run Build IC
         id: build-ic
         shell: bash

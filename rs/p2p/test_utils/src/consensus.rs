@@ -14,7 +14,7 @@ use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct U64Artifact(Vec<u8>);
 
 impl IdentifiableArtifact for U64Artifact {
@@ -58,7 +58,7 @@ struct PeerPool {
     pool: HashSet<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum PoolEvent {
     Insert(u64),
     Remove(u64),

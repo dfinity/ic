@@ -2,6 +2,17 @@ type tx_id = text;
 
 type bitcoin_address = text;
 
+type CheckAddressArgs = record {
+    // Bitcoin address to be checked.
+    address: bitcoin_address;
+};
+
+type CheckAddressResponse = variant { Passed; Failed };
+
 service : {
     get_inputs: (tx_id) -> (vec bitcoin_address);
+
+    // Return `Passed` if the given bitcoin address passes the KYT check, or `Failed` otherwise.
+    // May throw error (trap) if the given address is malformed or not a mainnet address.
+    check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
 }

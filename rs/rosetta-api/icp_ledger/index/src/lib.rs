@@ -6,12 +6,12 @@ use serde_bytes::ByteBuf;
 
 pub mod logs;
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
 }
 
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetBlocksResponse {
     // The length of the chain indexed.
     pub chain_length: u64,
@@ -19,7 +19,7 @@ pub struct GetBlocksResponse {
     // The blocks in the requested range.
     pub blocks: Vec<EncodedBlock>,
 }
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetAccountIdentifierTransactionsArgs {
     pub account_identifier: AccountIdentifier,
     // The txid of the last transaction seen by the client.
@@ -31,7 +31,7 @@ pub struct GetAccountIdentifierTransactionsArgs {
     pub max_results: u64,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct SettledTransaction {
     pub operation: Operation,
     pub memo: Memo,
@@ -55,13 +55,13 @@ impl From<Block> for SettledTransaction {
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct SettledTransactionWithId {
     pub id: BlockIndex,
     pub transaction: SettledTransaction,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetAccountIdentifierTransactionsResponse {
     pub balance: u64,
     pub transactions: Vec<SettledTransactionWithId>,
@@ -69,7 +69,7 @@ pub struct GetAccountIdentifierTransactionsResponse {
     pub oldest_tx_id: Option<BlockIndex>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetAccountIdentifierTransactionsError {
     pub message: String,
 }
@@ -78,18 +78,18 @@ pub type GetAccountIdentifierTransactionsResult =
     Result<GetAccountIdentifierTransactionsResponse, GetAccountIdentifierTransactionsError>;
 pub type GetAccountTransactionsResult = GetAccountIdentifierTransactionsResult;
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Status {
     pub num_blocks_synced: BlockIndex,
 }
 
-#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub enum Priority {
     P0,
     P1,
 }
 
-#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub priority: Priority,
@@ -98,7 +98,7 @@ pub struct LogEntry {
     pub message: String,
 }
 
-#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
 pub struct Log {
     pub entries: Vec<LogEntry>,
 }

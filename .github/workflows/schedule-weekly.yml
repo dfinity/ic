@@ -25,7 +25,12 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
+<<<<<<< HEAD
         run: ./ci/scripts/before-script.sh
+=======
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+>>>>>>> master
       - name: Load Service Account Key to file
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}

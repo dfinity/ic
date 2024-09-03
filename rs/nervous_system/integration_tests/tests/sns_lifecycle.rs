@@ -52,7 +52,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 struct DirectParticipantConfig {
     pub use_ticketing_system: bool,
 }

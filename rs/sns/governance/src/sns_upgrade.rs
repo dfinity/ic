@@ -459,7 +459,7 @@ impl From<SnsVersion> for Version {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The request type accepted by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionRequest {
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
@@ -467,7 +467,7 @@ pub(crate) struct GetNextSnsVersionRequest {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The response type returned by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
     pub next_version: ::core::option::Option<SnsVersion>,
@@ -476,7 +476,7 @@ pub(crate) struct GetNextSnsVersionResponse {
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround.
 /// Avoid using outside of tests and the functions in this file.
 /// Specifies the version of an SNS.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Eq, PartialEq, Hash, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct SnsVersion {
     /// The hash of the Root canister WASM.
     #[prost(bytes = "vec", tag = "1")]
@@ -499,7 +499,7 @@ pub(crate) struct SnsVersion {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryRequest {
     /// If set to true, root will update the list of canisters it owns before building the
     /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
@@ -508,7 +508,7 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -520,7 +520,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -528,14 +528,14 @@ pub(crate) struct CanisterSummary {
 
 ///Copied from ic-sns-wasm.
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Copied from ic-sns-wasm.
 /// The response for get_wasm, which returns a WASM if it is found, or None.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
@@ -543,7 +543,7 @@ pub(crate) struct GetWasmResponse {
 
 /// Copied from ic-sns-wasm.
 /// The representation of a WASM along with its target canister type
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
     #[serde(with = "serde_bytes")]
@@ -556,17 +556,17 @@ pub(crate) struct SnsWasm {
 /// Copied from ic-sns-wasm
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub(crate) enum SnsCanisterType {

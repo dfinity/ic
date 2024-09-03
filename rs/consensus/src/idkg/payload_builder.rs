@@ -1,8 +1,4 @@
 //! This module implements the IDKG payload builder.
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::enum_variant_names)]
-#![allow(clippy::result_large_err)]
-
 use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
 use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
@@ -565,6 +561,7 @@ pub(crate) fn create_data_payload_helper(
     Ok(Some(idkg_payload))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
