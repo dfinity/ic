@@ -6,7 +6,7 @@ use ic_types::{
 use std::fmt;
 
 /// Describes errors that can happen when encoding a certified stream slice.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum EncodeStreamError {
     NoStreamForSubnet(SubnetId),
     InvalidSliceBegin {
@@ -48,7 +48,7 @@ impl fmt::Display for EncodeStreamError {
 impl std::error::Error for EncodeStreamError {}
 
 /// Describes errors that can happen when decoding a certified stream slice.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum DecodeStreamError {
     InvalidSignature(SubnetId),
     InvalidDestination {

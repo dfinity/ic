@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat};
 use ic_base_types::PrincipalId;
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TvlArgs {
     pub governance_id: Option<PrincipalId>,
     pub xrc_id: Option<PrincipalId>,
@@ -9,43 +9,43 @@ pub struct TvlArgs {
 }
 
 // Timeseries types.
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TimeseriesEntry {
     pub time_sec: Nat,
     pub value: Nat,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TimeseriesResult {
     pub timeseries: Vec<TimeseriesEntry>,
 }
 
 // TVL types.
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TvlResultError {
     pub message: String,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TvlResult {
     pub time_sec: Nat,
     pub tvl: Nat,
 }
 
 // XRC types.
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub enum AssetClass {
     Cryptocurrency,
     FiatCurrency,
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct Asset {
     pub symbol: String,
     pub class: AssetClass,
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct GetExchangeRateRequest {
     pub base_asset: Asset,
     pub quote_asset: Asset,
@@ -53,7 +53,7 @@ pub struct GetExchangeRateRequest {
     pub timestamp: Option<u64>,
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct ExchangeRateMetadata {
     pub decimals: u32,
     pub base_asset_num_received_rates: u64,
@@ -64,7 +64,7 @@ pub struct ExchangeRateMetadata {
     pub forex_timestamp: Option<u64>,
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct ExchangeRate {
     pub base_asset: Asset,
     pub quote_asset: Asset,
@@ -73,7 +73,7 @@ pub struct ExchangeRate {
     pub metadata: ExchangeRateMetadata,
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub enum ExchangeRateError {
     // Returned when the canister receives a call from the anonymous principal.
     AnonymousPrincipalNotAllowed,
@@ -112,7 +112,7 @@ pub enum ExchangeRateError {
     },
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub enum GetExchangeRateResult {
     // Successfully retrieved the exchange rate from the cache or API calls.
     Ok(ExchangeRate),
@@ -120,7 +120,7 @@ pub enum GetExchangeRateResult {
     Err(ExchangeRateError),
 }
 
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
 pub struct GovernanceCachedMetrics {
     pub timestamp_seconds: u64,
     pub total_supply_icp: u64,
@@ -142,7 +142,7 @@ pub struct GovernanceCachedMetrics {
     pub total_locked_e8s: u64,
 }
 
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
 pub struct GovernanceError {
     pub error_type: i32,
     pub error_message: String,

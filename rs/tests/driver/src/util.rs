@@ -984,7 +984,7 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum EndpointsStatus {
     AllHealthy,
     AllUnhealthy,
