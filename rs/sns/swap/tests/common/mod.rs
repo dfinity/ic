@@ -245,7 +245,7 @@ pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
             #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(i)),
-                hotkey_principal: PrincipalId::new_user_test_id(i).to_string(),
+                hotkey_principal: String::new(),
                 cf_neurons: vec![CfNeuron::try_new(
                     i,
                     E8,
