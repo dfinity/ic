@@ -10,7 +10,7 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl,
     dkg_pool::DkgPoolImpl,
     idkg_pool::IDkgPoolImpl,
-    ingress_pool::{IngressPoolImpl, IngressPrioritizer},
+    ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
@@ -29,7 +29,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_ingress_manager::{IngressManager, RandomStateKind, bouncer::IngressBouncer};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -362,7 +362,7 @@ fn start_consensus(
     };
 
     let ingress_sender = {
-        let ingress_prioritizer = Arc::new(IngressPrioritizer::new(time_source.clone()));
+        let ingress_prioritizer = Arc::new(IngressBouncer::new(time_source.clone()));
 
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(

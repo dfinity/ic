@@ -6,7 +6,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/constants",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -22,7 +21,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
@@ -40,6 +38,7 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/constants",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
@@ -75,6 +74,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":artifact_pool",
+        "@crate_index//:serde_json",
         "@crate_index//:serde-bytes-repr",
     ],
 )
