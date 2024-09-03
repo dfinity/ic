@@ -85,11 +85,7 @@ pub fn main() -> Result<()> {
 
             let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
 
-            // call SetuposConfig constructor (pass None for all none options)
-            // todo: refactor and simplify
-            let setupos_config = types::SetuposConfig::new(
-                vm_memory,
-                vm_cpu,
+            let ic_config = types::IcConfig::new(
                 nns_public_key_path.to_path_buf(),
                 nns_url,
                 elasticsearch_hosts,
@@ -116,6 +112,9 @@ pub fn main() -> Result<()> {
                 None,
                 None,
             );
+
+            let setupos_config = types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
+
 
             dbg!(setupos_config);
 
