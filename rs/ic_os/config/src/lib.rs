@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::read_to_string;
-use std::path::Path;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::path::Path;
 
 use anyhow::bail;
 use anyhow::{Context, Result};
@@ -49,8 +49,11 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
         .collect())
 }
 
-// todo: look into better way of storing this. As a networking constructor?
-pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, Option<String>)> {
+fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
+    ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
+}
+
+pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
     // Per PFOPS - this will never not be 64
@@ -144,12 +147,12 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, Option<S
     };
 
     let verbose = config_map.get("verbose").cloned();
+    let verbose = match &verbose {
+        Some(s) if s.eq_ignore_ascii_case("true") => true,
+        _ => false,
+    };
 
     Ok((networking, verbose))
-}
-
-fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
-    ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
 }
 
 pub fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{config_map_from_path, parse_config_ini, default_deployment_values};
+use config::{default_deployment_values, parse_config_ini};
 use std::path::Path;
 use utils::deployment::read_deployment_file;
 
@@ -60,15 +60,21 @@ pub fn main() -> Result<()> {
             let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) = match &deployment {
                 Ok(deployment_json) => (
                     deployment_json.resources.memory,
-                    deployment_json.resources.cpu.clone().unwrap_or("kvm".to_string()),
+                    deployment_json
+                        .resources
+                        .cpu
+                        .clone()
+                        .unwrap_or("kvm".to_string()),
                     deployment_json.nns.url.clone(),
                     deployment_json.deployment.name.to_string(),
                     deployment_json.logging.hosts.to_string(),
                 ),
                 Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing with default values");
+                    eprintln!(
+                        "Error retrieving deployment file: {e}. Continuing with default values"
+                    );
                     default_deployment_values()
-                },
+                }
             };
 
             let node_operator_private_key_path = if node_operator_private_key_path.exists() {
@@ -97,11 +103,11 @@ pub fn main() -> Result<()> {
                 networking.ipv4_gateway,
                 networking.ipv4_prefix_length,
                 networking.domain,
+                ssh_authorized_keys_path,
                 verbose,
                 None,
                 None,
                 None,
-                ssh_authorized_keys_path,
                 None,
                 None,
                 None,
