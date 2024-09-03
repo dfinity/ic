@@ -13,6 +13,15 @@ rust_library(
     ],
 )
 
+rust_library(
+    name = "local_key",
+    srcs = glob(["local_key/src/**/*.rs"]),
+    crate_name = "local_key",
+    deps = [
+        "@crate_index//:pin-project-lite",
+    ],
+)
+
 rust_test(
     name = "tla_instrumentation_test",
     srcs = glob(["tla_instrumentation/tests/**/*.rs"]),
@@ -22,9 +31,9 @@ rust_test(
     ],
     proc_macro_deps = [":proc_macros"],
     deps = [
+        ":local_key",
         ":tla_instrumentation",
         "@crate_index//:candid",
-        "@crate_index//:tokio",
         "@crate_index//:tokio-test",
     ],
 )

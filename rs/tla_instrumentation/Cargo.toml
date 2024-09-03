@@ -1,4 +1,8 @@
 [workspace]
 
-members = ["tla_instrumentation", "tla_instrumentation_proc_macros"]
+members = [
+    "tla_instrumentation",
+    "tla_instrumentation_proc_macros",
+    "local_key",
+]
 resolver = "2"
