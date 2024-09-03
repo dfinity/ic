@@ -157,9 +157,6 @@ impl XNetEndpoint {
                     );
 
                     async move {
-                        let ctx = ctx.clone();
-                        let certified_stream_store = certified_stream_store.clone();
-                        let base_url = base_url.clone();
                         ok(service_fn({
                             move |request: Request<Body>| {
                                 let ctx = ctx.clone();
@@ -167,7 +164,7 @@ impl XNetEndpoint {
                                 let base_url = base_url.clone();
 
                                 async move {
-                                    let _permit = match ctx.semaphore.try_acquire_owned() {
+                                    let owned_permit = match ctx.semaphore.try_acquire_owned() {
                                         Ok(permit) => permit,
                                         Err(_) => {
                                             ctx.metrics
@@ -188,7 +185,7 @@ impl XNetEndpoint {
                                     let log = ctx.log.clone();
 
                                     Ok(tokio::task::spawn_blocking(move || {
-                                        let _permit = _permit;
+                                        let _permit = owned_permit;
 
                                         handle_http_request(
                                             request,
