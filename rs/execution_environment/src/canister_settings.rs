@@ -313,7 +313,7 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory limit expected to be in the range of [0..2^48-1], got {}",
+                    "Wasm memory limit expected to be in the range of [0..2^48], got {}",
                     provided
                 ),
             ),

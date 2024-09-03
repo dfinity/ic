@@ -8038,3 +8038,25 @@ fn ic0_mint_cycles_u64() {
             >= 2 * (1 << 64) - 10_000_000
     );
 }
+
+#[test]
+fn wasm_memory_limit_range() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = "(module)";
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    let err = test
+        .canister_update_wasm_memory_limit(canister_id, NumBytes::new((1 << 48) + 1))
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("Wasm memory limit expected to be in the range of [0..2^48]"),
+        "{}",
+        err.description()
+    );
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1 << 48))
+        .unwrap();
+}
