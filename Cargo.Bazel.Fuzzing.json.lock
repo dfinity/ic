@@ -1,5 +1,5 @@
 {
-  "checksum": "e40578031b29c66c54191b900be82e11c7b5af2697d138729fa00a2701fc4622",
+  "checksum": "287136f8ba3ca8dd489f9d074a57f77f3011aca459634d65c23be92bb65158a3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18586,10 +18586,6 @@
               "target": "rusty_fork"
             },
             {
-              "id": "scale-info 2.11.3",
-              "target": "scale_info"
-            },
-            {
               "id": "schemars 0.8.21",
               "target": "schemars"
             },
@@ -19006,6 +19002,10 @@
             {
               "id": "rustversion 1.0.17",
               "target": "rustversion"
+            },
+            {
+              "id": "scale-info-derive 2.11.2",
+              "target": "scale_info_derive"
             },
             {
               "id": "strum_macros 0.26.4",
@@ -21385,7 +21385,7 @@
               "target": "impl_serde"
             },
             {
-              "id": "scale-info 2.11.3",
+              "id": "scale-info 2.11.2",
               "target": "scale_info"
             },
             {
@@ -21476,7 +21476,7 @@
               "target": "primitive_types"
             },
             {
-              "id": "scale-info 2.11.3",
+              "id": "scale-info 2.11.2",
               "target": "scale_info"
             },
             {
@@ -48195,7 +48195,7 @@
               "target": "impl_serde"
             },
             {
-              "id": "scale-info 2.11.3",
+              "id": "scale-info 2.11.2",
               "target": "scale_info",
               "alias": "scale_info_crate"
             },
@@ -48303,6 +48303,58 @@
         "MPL-2.0"
       ],
       "license_file": null
+    },
+    "proc-macro-crate 1.3.1": {
+      "name": "proc-macro-crate",
+      "version": "1.3.1",
+      "package_url": "https://github.com/bkchr/proc-macro-crate",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-crate/1.3.1/download",
+          "sha256": "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "proc_macro_crate",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_crate",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "toml_edit 0.19.15",
+              "target": "toml_edit"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.3.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "proc-macro-crate 3.2.0": {
       "name": "proc-macro-crate",
@@ -56390,14 +56442,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "scale-info 2.11.3": {
+    "scale-info 2.11.2": {
       "name": "scale-info",
-      "version": "2.11.3",
+      "version": "2.11.2",
       "package_url": "https://github.com/paritytech/scale-info",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/scale-info/2.11.3/download",
-          "sha256": "eca070c12893629e2cc820a9761bedf6ce1dcddc9852984d1dc734b8bd9bd024"
+          "url": "https://static.crates.io/crates/scale-info/2.11.2/download",
+          "sha256": "7c453e59a955f81fb62ee5d596b450383d699f152d350e9d23a0db2adb78e4c0"
         }
       },
       "targets": [
@@ -56421,10 +56473,8 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "derive",
-            "scale-info-derive",
-            "std"
+            "scale-info-derive"
           ],
           "selects": {}
         },
@@ -56450,13 +56500,13 @@
               "target": "derive_more"
             },
             {
-              "id": "scale-info-derive 2.11.3",
+              "id": "scale-info-derive 2.11.2",
               "target": "scale_info_derive"
             }
           ],
           "selects": {}
         },
-        "version": "2.11.3"
+        "version": "2.11.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -56464,14 +56514,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "scale-info-derive 2.11.3": {
+    "scale-info-derive 2.11.2": {
       "name": "scale-info-derive",
-      "version": "2.11.3",
+      "version": "2.11.2",
       "package_url": "https://github.com/paritytech/scale-info",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/scale-info-derive/2.11.3/download",
-          "sha256": "2d35494501194174bda522a32605929eefc9ecf7e0a326c26db1fdd85881eb62"
+          "url": "https://static.crates.io/crates/scale-info-derive/2.11.2/download",
+          "sha256": "18cf6c6447f813ef19eb450e985bcce6705f9ce7660db221b59093d15c79c4b7"
         }
       },
       "targets": [
@@ -56493,10 +56543,17 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "docs"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "proc-macro-crate 3.2.0",
+              "id": "proc-macro-crate 1.3.1",
               "target": "proc_macro_crate"
             },
             {
@@ -56515,7 +56572,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.11.3"
+        "version": "2.11.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -66664,6 +66721,68 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "toml_edit 0.19.15": {
+      "name": "toml_edit",
+      "version": "0.19.15",
+      "package_url": "https://github.com/toml-rs/toml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/toml_edit/0.19.15/download",
+          "sha256": "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_edit",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "toml_edit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.5.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "toml_datetime 0.6.8",
+              "target": "toml_datetime"
+            },
+            {
+              "id": "winnow 0.5.40",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.19.15"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "toml_edit 0.22.20": {
       "name": "toml_edit",
       "version": "0.22.20",
@@ -75063,6 +75182,52 @@
       ],
       "license_file": "license-apache-2.0"
     },
+    "winnow 0.5.40": {
+      "name": "winnow",
+      "version": "0.5.40",
+      "package_url": "https://github.com/winnow-rs/winnow",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/winnow/0.5.40/download",
+          "sha256": "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winnow",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "winnow",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.40"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "winnow 0.6.18": {
       "name": "winnow",
       "version": "0.6.18",
@@ -77968,7 +78133,7 @@
     "rustls-pki-types 1.8.0",
     "rustversion 1.0.17",
     "rusty-fork 0.3.0",
-    "scale-info 2.11.3",
+    "scale-info-derive 2.11.2",
     "schemars 0.8.21",
     "schnorr_fun 0.10.0",
     "scoped_threadpool 0.1.9",
