@@ -76,7 +76,7 @@ thread_local! {
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]

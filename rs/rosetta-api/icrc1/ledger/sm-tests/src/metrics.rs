@@ -122,7 +122,7 @@ pub fn assert_existence_of_ledger_total_transactions_metric<T>(
 
 pub fn assert_ledger_upgrade_instructions_consumed_metric_set<T, U>(
     ledger_wasm: Vec<u8>,
-    ledger_wasm_upgradetomemorymanager: Option<Vec<u8>>,
+    ledger_wasm_nextmigrationversionmemorymanager: Option<Vec<u8>>,
     encode_init_args: fn(InitArgs) -> T,
     encode_upgrade_args: fn() -> U,
 ) where
@@ -163,9 +163,11 @@ pub fn assert_ledger_upgrade_instructions_consumed_metric_set<T, U>(
     };
 
     test_upgrade(ledger_wasm.clone());
-    if let Some(ledger_wasm_upgradetomemorymanager) = ledger_wasm_upgradetomemorymanager {
-        test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
-        test_upgrade(ledger_wasm_upgradetomemorymanager);
+    if let Some(ledger_wasm_nextmigrationversionmemorymanager) =
+        ledger_wasm_nextmigrationversionmemorymanager
+    {
+        test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
+        test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
     }
     test_upgrade(ledger_wasm);
 }

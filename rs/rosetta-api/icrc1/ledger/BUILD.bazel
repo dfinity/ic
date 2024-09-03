@@ -157,17 +157,17 @@ package(default_visibility = ["//visibility:public"])
             ],
         ),
         (
-            "_upgradetomemorymanager",
-            ["upgrade-to-memory-manager"],
+            "_nextmigrationversionmemorymanager",
+            ["next-migration-version-memory-manager"],
             [
                 ":ledger",
                 "//rs/rosetta-api/icrc1/tokens_u64",
             ],
         ),
         (
-            "_u256_upgradetomemorymanager",
+            "_u256_nextmigrationversionmemorymanager",
             [
-                "upgrade-to-memory-manager",
+                "next-migration-version-memory-manager",
                 "u256-tokens",
             ],
             [
@@ -198,7 +198,7 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
-            ":ledger_canister" + name_suffix + "_upgradetomemorymanager.wasm",
+            ":ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -213,7 +213,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_upgradetomemorymanager.wasm)",
+            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
         },
         deps = [
             # Keep sorted.

@@ -85,7 +85,7 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -101,13 +101,13 @@ pub struct InitArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
@@ -119,7 +119,7 @@ pub struct UpgradeArgs {
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct ChangeArchiveOptions {
     pub trigger_threshold: Option<usize>,
     pub num_blocks_to_archive: Option<usize>,
@@ -132,7 +132,7 @@ pub struct ChangeArchiveOptions {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
@@ -2489,7 +2489,7 @@ fn apply_arg_with_caller(
 pub fn test_upgrade_serialization(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_upgradetomemorymanager: Option<Vec<u8>>,
+    ledger_wasm_nextmigrationversionmemorymanager: Option<Vec<u8>>,
     init_args: Vec<u8>,
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
@@ -2549,13 +2549,13 @@ pub fn test_upgrade_serialization(
                 test_upgrade(ledger_wasm_current.clone());
                 // Test the new wasm serialization
                 test_upgrade(ledger_wasm_current.clone());
-                if let Some(ledger_wasm_upgradetomemorymanager) =
-                    ledger_wasm_upgradetomemorymanager.clone()
+                if let Some(ledger_wasm_nextmigrationversionmemorymanager) =
+                    ledger_wasm_nextmigrationversionmemorymanager.clone()
                 {
                     // Test serializing to the memory manager
-                    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
-                    test_upgrade(ledger_wasm_upgradetomemorymanager);
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
 
                     // Current mainnet wasm cannot deserialize from memory manager
                     match env.upgrade_canister(
@@ -2594,7 +2594,7 @@ pub fn test_upgrade_serialization(
 pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_upgradetomemorymanager: Vec<u8>,
+    ledger_wasm_nextmigrationversionmemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2689,9 +2689,15 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // Test the new wasm serialization
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test serializing to the memory manager
-    test_upgrade(ledger_wasm_upgradetomemorymanager.clone(), balances.clone());
+    test_upgrade(
+        ledger_wasm_nextmigrationversionmemorymanager.clone(),
+        balances.clone(),
+    );
     // Test upgrade to memory manager again
-    test_upgrade(ledger_wasm_upgradetomemorymanager, balances.clone());
+    test_upgrade(
+        ledger_wasm_nextmigrationversionmemorymanager,
+        balances.clone(),
+    );
     // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current, balances.clone());
 

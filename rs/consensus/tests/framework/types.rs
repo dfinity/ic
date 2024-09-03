@@ -271,7 +271,7 @@ pub(crate) struct BouncerState<Artifact: IdentifiableArtifact> {
 }
 
 impl<Artifact: IdentifiableArtifact> BouncerState<Artifact> {
-    pub fn new<Pool, Producer: BouncerFactory<Artifact, Pool>>(
+    pub fn new<Pool, Producer: BouncerFactory<Artifact::Id, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
@@ -286,7 +286,7 @@ impl<Artifact: IdentifiableArtifact> BouncerState<Artifact> {
     }
 
     /// Compute a new bouncer function
-    pub fn refresh<Pool, Producer: BouncerFactory<Artifact, Pool>>(
+    pub fn refresh<Pool, Producer: BouncerFactory<Artifact::Id, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,

@@ -17,7 +17,7 @@ impl ToMilliseconds for Duration {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 struct MS(f64);
 impl From<Duration> for MS {
     fn from(d: Duration) -> MS {
@@ -168,7 +168,7 @@ impl DurationStats {
 }
 
 /// Represents the statistics around a given set of facts.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Summary {
     average: Duration,
     median: Duration,

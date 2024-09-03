@@ -6,6 +6,8 @@ set -o pipefail
 
 # Fetch configuration property
 
+source /opt/ic/bin/logging.sh
+
 SCRIPT="$(basename $0)[$$]"
 
 # Get keyword arguments

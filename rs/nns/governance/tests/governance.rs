@@ -10955,7 +10955,7 @@ async fn test_known_neurons() {
     assert!(gov.neuron_store.contains_known_neuron_name("Zwei"));
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ExpectedCallCanisterMethodCallArguments<'a> {
     target: CanisterId,
     method_name: &'a str,
