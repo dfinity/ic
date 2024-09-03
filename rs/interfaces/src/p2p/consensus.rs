@@ -118,7 +118,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn disassemble_message(&self, msg: A1) -> A2;
     /// Reconstruct message A1 from wire message. `peers` is the set of peers that
     /// have the message. Note that it is possible that the peer set changes over time.
-    fn assemble_message<P: Peers + Send + 'static>(
+    fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
         artifact: Option<(A2, NodeId)>,

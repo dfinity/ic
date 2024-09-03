@@ -13,13 +13,11 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/types/types",
     "//rs/xnet/hyper",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
-    "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
