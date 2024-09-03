@@ -51,15 +51,11 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-=======
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
->>>>>>> master
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -123,14 +119,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-=======
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
->>>>>>> master
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -171,11 +161,7 @@ jobs:
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
       - name: Login to Dockerhub
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-=======
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
->>>>>>> master
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -224,14 +210,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-=======
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
->>>>>>> master
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
@@ -267,14 +247,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-=======
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
->>>>>>> master
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
@@ -338,14 +312,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-<<<<<<< HEAD
-        run: ./ci/scripts/before-script.sh
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-=======
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
->>>>>>> master
       - name: Run Build IC
         id: build-ic
         shell: bash
