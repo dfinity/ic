@@ -513,7 +513,7 @@ path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
 
 [[bin]]
 name = "guest-os-qualification"
-path = "qualification/guest_os_qualification.rs"
+path = "os_qualification/guest_os_qualification.rs"
 
 # TODO: wait for clap upgrade in the workspace or downgrade clap
 # [[bin]]
