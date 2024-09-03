@@ -76,7 +76,6 @@ use dfn_core::api::spawn;
 use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -3290,16 +3289,12 @@ impl Governance {
 
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
-        let child_controller = &disburse_to_neuron
-            .new_controller
-            .as_ref()
-            .ok_or_else(|| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "Must specify a new controller for disburse to neuron.",
-                )
-            })?
-            .clone();
+        let child_controller = disburse_to_neuron.new_controller.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Must specify a new controller for disburse to neuron.",
+            )
+        })?;
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount();
@@ -3308,14 +3303,10 @@ impl Governance {
         // the owner on the ledger. There is no need to length-prefix the
         // principal since the nonce is constant length, and so there is no risk
         // of ambiguity.
-        let to_subaccount = Subaccount({
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-split");
-            state.write(child_controller.as_slice());
-            state.write(&disburse_to_neuron.nonce.to_be_bytes());
-            state.finish()
-        });
+        let to_subaccount = Subaccount(ledger::compute_neuron_disburse_subaccount_bytes(
+            child_controller,
+            disburse_to_neuron.nonce,
+        ));
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -3350,7 +3341,7 @@ impl Governance {
         let child_neuron = NeuronBuilder::new(
             child_nid,
             to_subaccount,
-            *child_controller,
+            child_controller,
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds: created_timestamp_seconds,
