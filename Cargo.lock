@@ -17757,6 +17757,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-secp256k1",
  "ic-types",
+ "icp-ledger",
  "icrc-ledger-types",
  "num-bigint 0.4.6",
  "proptest",

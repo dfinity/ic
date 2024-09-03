@@ -190,6 +190,41 @@ pub struct ConstructionMetadataRequest {
     pub public_keys: Option<Vec<PublicKey>>,
 }
 
+impl ConstructionMetadataRequest {
+    pub fn builder(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder::new(network_identifier)
+    }
+}
+
+pub struct ConstructionMetadataRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    options: Option<ObjectMap>,
+    public_keys: Option<Vec<PublicKey>>,
+}
+
+impl ConstructionMetadataRequestBuilder {
+    pub fn new(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder {
+            network_identifier,
+            options: None,
+            public_keys: None,
+        }
+    }
+
+    pub fn with_options(mut self, options: ObjectMap) -> Self {
+        self.options = Some(options);
+        self
+    }
+
+    pub fn build(self) -> ConstructionMetadataRequest {
+        ConstructionMetadataRequest {
+            network_identifier: self.network_identifier,
+            options: self.options,
+            public_keys: self.public_keys,
+        }
+    }
+}
+
 /// ConstructionPayloadsRequest is the request to `/construction/payloads`. It
 /// contains the network, a slice of operations, and arbitrary metadata that was
 /// returned by the call to `/construction/metadata`.  Optionally, the request
@@ -335,8 +370,18 @@ impl AccountBalanceRequestBuilder {
         }
     }
 
-    pub fn with_block_identifier(mut self, block_identifier: PartialBlockIdentifier) -> Self {
-        self.block_identifier = Some(block_identifier);
+    pub fn with_block_index(mut self, block_index: u64) -> Self {
+        match self.block_identifier {
+            Some(ref mut block_identifier) => {
+                block_identifier.index = Some(block_index);
+            }
+            None => {
+                self.block_identifier = Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                });
+            }
+        }
         self
     }
 
