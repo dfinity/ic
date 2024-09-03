@@ -56,11 +56,7 @@ pub struct Networking {
 }
 
 impl SetuposConfig {
-    pub fn new(
-        vm_memory: u32,
-        vm_cpu: String,
-        ic_config: IcConfig,
-    ) -> Self {
+    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
         let hostos_config = HostOSConfig::new(vm_memory, vm_cpu, ic_config);
         SetuposConfig { hostos_config }
     }
@@ -78,19 +74,13 @@ impl HostOSConfig {
 
 impl IcConfig {
     pub fn new(
+        networking: Networking,
         nns_public_key_path: PathBuf,
         nns_url: Vec<Url>,
         elasticsearch_hosts: String,
         elasticsearch_tags: Option<String>,
         hostname: String,
         node_operator_private_key_path: Option<PathBuf>,
-        ipv6_prefix: Option<String>,
-        ipv6_address: Option<Ipv6Addr>,
-        ipv6_gateway: Ipv6Addr,
-        ipv4_address: Option<Ipv4Addr>,
-        ipv4_gateway: Option<Ipv4Addr>,
-        ipv4_prefix_length: Option<u8>,
-        domain: Option<String>,
         ssh_authorized_keys_path: Option<PathBuf>,
         verbose: bool,
         ic_crypto_path: Option<PathBuf>,
@@ -104,16 +94,6 @@ impl IcConfig {
         jaeger_addr: Option<String>,
         socks_proxy: Option<String>,
     ) -> Self {
-        let networking = Networking::new(
-            ipv6_prefix,
-            ipv6_address,
-            ipv6_gateway,
-            ipv4_address,
-            ipv4_gateway,
-            ipv4_prefix_length,
-            domain,
-        );
-
         IcConfig {
             networking,
             nns_public_key_path,

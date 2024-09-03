@@ -7,8 +7,8 @@ use anyhow::bail;
 use anyhow::{Context, Result};
 use url::Url;
 
-mod types;
-use types::Networking;
+pub mod types;
+use crate::types::Networking;
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -136,7 +136,7 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
 
     let domain = config_map.get("domain").cloned();
 
-    let networking = Networking {
+    let networking = crate::types::Networking {
         ipv6_prefix,
         ipv6_address,
         ipv6_gateway,
@@ -147,10 +147,7 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
     };
 
     let verbose = config_map.get("verbose").cloned();
-    let verbose = match &verbose {
-        Some(s) if s.eq_ignore_ascii_case("true") => true,
-        _ => false,
-    };
+    let verbose = matches!(&verbose, Some(s) if s.eq_ignore_ascii_case("true"));
 
     Ok((networking, verbose))
 }

@@ -4,8 +4,6 @@ use config::{default_deployment_values, parse_config_ini};
 use std::path::Path;
 use utils::deployment::read_deployment_file;
 
-mod types;
-
 #[derive(Subcommand)]
 pub enum Commands {
     /// Creates SetuposConfig object
@@ -85,20 +83,14 @@ pub fn main() -> Result<()> {
 
             let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
 
-            let ic_config = types::IcConfig::new(
+            let ic_config = config::types::IcConfig::new(
+                networking,
                 nns_public_key_path.to_path_buf(),
                 nns_url,
                 elasticsearch_hosts,
                 None,
                 hostname,
                 node_operator_private_key_path,
-                networking.ipv6_prefix,
-                networking.ipv6_address,
-                networking.ipv6_gateway,
-                networking.ipv4_address,
-                networking.ipv4_gateway,
-                networking.ipv4_prefix_length,
-                networking.domain,
                 ssh_authorized_keys_path,
                 verbose,
                 None,
@@ -113,8 +105,7 @@ pub fn main() -> Result<()> {
                 None,
             );
 
-            let setupos_config = types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
-
+            let setupos_config = config::types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
 
             dbg!(setupos_config);
 
