@@ -169,8 +169,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Check PR Title
         id: check-pr-title
-        run: |-
-          if [[ "$CI_MERGE_REQUEST_TITLE" == *"[RUN_ALL_BAZEL_TARGETS]"* || "$CI_MERGE_REQUEST_TITLE" == *"[S3_UPLOAD]"* ]]; then
-            echo "Error: The flags [RUN_ALL_BAZEL_TARGETS] or [S3_UPLOAD] are deprecated. Please use [RUN_ALL_TARGETS_AND_UPLOAD] instead."
+        run: |
+          if [[ "$CI_MERGE_REQUEST_TITLE" == *"[S3_UPLOAD]"* ]]; then
+            echo "Error: The [S3_UPLOAD] flag has been deprecated. Please use [RUN_ALL_BAZEL_TARGETS] instead. It will automatically upload to S3."
             exit 1
           fi
