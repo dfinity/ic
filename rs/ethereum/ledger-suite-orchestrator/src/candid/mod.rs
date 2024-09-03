@@ -1,5 +1,6 @@
 use crate::scheduler::Erc20Token;
 use crate::state::{Canister, Canisters};
+use crate::storage::WasmHashError;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use std::fmt::{Display, Formatter};
 
@@ -183,6 +184,34 @@ impl<T> From<&Canister<T>> for ManagedCanisterStatus {
                 installed_wasm_hash: installed_wasm_hash.to_string(),
             },
         }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ManageInstalledCanisters {
+    pub erc20_contract: Erc20Contract,
+    pub ckerc20_token_symbol: String,
+    pub ledger: InstalledCanister,
+    pub index: InstalledCanister,
+    pub archives: Option<Vec<Principal>>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct InstalledCanister {
+    pub canister_id: Principal,
+    pub installed_wasm_hash: String,
+}
+
+impl InstalledCanister {
+    pub fn try_into_canister<T>(self) -> Result<Canister<T>, WasmHashError> {
+        let status = crate::state::ManagedCanisterStatus::Installed {
+            canister_id: self.canister_id,
+            installed_wasm_hash: self
+                .installed_wasm_hash
+                .parse()
+                .map_err(WasmHashError::Invalid)?,
+        };
+        Ok(Canister::new(status))
     }
 }
 

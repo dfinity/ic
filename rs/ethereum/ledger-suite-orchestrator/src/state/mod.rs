@@ -449,6 +449,12 @@ impl State {
         self.managed_canisters.canisters.iter()
     }
 
+    pub fn managed_principals(&self) -> BTreeSet<Principal> {
+        self.managed_canisters_iter()
+            .flat_map(|(_, canisters)| canisters.collect_principals())
+            .collect()
+    }
+
     pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
         self.managed_canisters.canisters.keys()
     }
