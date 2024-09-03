@@ -22,9 +22,11 @@ mod basic;
 mod helper;
 mod simd;
 
-const WASM64_ENABLED: bool = true;
+use crate::common::Wasm64;
 
 pub fn wasm_instructions_bench(c: &mut Criterion) {
+    let WASM64_ENABLED = Wasm64::Enabled;
+
     // List of benchmarks to run.
     let mut benchmarks = vec![];
     benchmarks.extend(basic::benchmarks(WASM64_ENABLED));

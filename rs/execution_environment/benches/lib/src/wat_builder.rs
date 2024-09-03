@@ -19,6 +19,8 @@ pub const CONFIRMATION_LOOP_ITERATIONS: usize = 1_000_000;
 /// Note, the maximum compilation complexity is 15K.
 pub const CONFIRMATION_REPEAT_TIMES: usize = 14_000;
 
+use crate::common::Wasm64;
+
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
 
@@ -71,7 +73,7 @@ impl Block {
     }
 
     /// Define variables and functions used in the `code` snippet.
-    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: bool) -> Self {
+    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: Wasm64) -> Self {
         for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
@@ -97,8 +99,8 @@ impl Block {
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
-    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: bool) -> &mut Self {
-        let memory_var_address = if wasm64_enabled {
+    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: Wasm64) -> &mut Self {
+        let memory_var_address = if wasm64_enabled == Wasm64::Enabled {
             // The address should be somewhere beyond 4 GiB.
             // This is 5 GB.
             "5368709120"
@@ -155,8 +157,8 @@ pub struct Func {
 
 impl Func {
     /// Transform the function into a test module WAT representation.
-    pub fn into_test_module_wat(self, wasm64_enabled: bool) -> String {
-        let memory = if wasm64_enabled {
+    pub fn into_test_module_wat(self, wasm64_enabled: Wasm64) -> String {
+        let memory = if wasm64_enabled == Wasm64::Enabled {
             "(memory $mem i64 131072)"
         } else {
             "(memory $mem 1)"
