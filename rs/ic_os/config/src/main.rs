@@ -3,6 +3,9 @@ use clap::{Parser, Subcommand};
 use config::{default_deployment_values, parse_config_ini};
 use std::path::Path;
 use utils::deployment::read_deployment_file;
+use std::fs::File;
+use std::io::Write;
+use serde_json;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -97,11 +100,21 @@ pub fn main() -> Result<()> {
 
             let setupos_config = config::types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
 
+            let serialized_config = serde_json::to_string_pretty(&setupos_config)
+                .expect("Failed to serialize SetuposConfig");
+
+            let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
+
+            // Write serialized data to the file
+            let mut config_file = File::create(default_config_object_path)
+                .expect("Failed to create config file");
+            config_file.write_all(serialized_config.as_bytes())
+                .expect("Failed to write to config file");
+
+            println!("SetuposConfig has been written to {}", default_config_object_path.display());
+
             dbg!(setupos_config);
 
-            // todo: write serialized setupOS json object to config /var (or wherever)
-
-            //todo: fix return type
             Ok(())
         }
         None => Ok(()),

@@ -2356,6 +2356,8 @@ dependencies = [
  "anyhow",
  "clap 4.4.6",
  "ic-types",
+ "serde",
+ "serde_json",
  "url",
  "utils",
 ]

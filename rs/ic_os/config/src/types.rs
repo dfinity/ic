@@ -2,9 +2,10 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
+use serde::{Serialize, Deserialize};
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SetuposConfig {
     hostos_config: HostOSConfig,
 }
@@ -16,7 +17,7 @@ impl SetuposConfig {
     }
 }
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct HostOSConfig {
     vm_memory: u32,
     vm_cpu: String,
@@ -33,7 +34,7 @@ impl HostOSConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Networking {
     pub ipv6_prefix: Option<Ipv6Addr>,
     pub ipv6_address: Option<Ipv6Addr>,
@@ -45,13 +46,14 @@ pub struct Networking {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct IcConfig {
     networking: Networking,
     nns_public_key_path: PathBuf,
     nns_url: Vec<Url>,
     elasticsearch_hosts: String,
-    elasticsearch_tags: Option<String>, //help: elasticsearch_tags is a dev field?
+    // help: elasticsearch_tags is a dev field?
+    elasticsearch_tags: Option<String>,
     hostname: String,
     node_operator_private_key_path: Option<PathBuf>,
 
@@ -67,7 +69,7 @@ pub struct IcConfig {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct IcConfigDev {
     backup_retention_time_seconds: Option<String>,
     backup_purging_interval_seconds: Option<String>,

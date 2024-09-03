@@ -13,6 +13,8 @@ use crate::types::Networking;
 pub type ConfigMap = HashMap<String, String>;
 
 // todo: update naming once config variables start applying to all config partitions
+pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "config/config.json";
+
 pub static DEFAULT_SETUPOS_CONFIG_FILE_PATH: &str = "/var/ic/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
