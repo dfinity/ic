@@ -386,8 +386,6 @@ pub fn load_canister_state(
         })?;
     durations.insert("canister_state_bits", starting_time.elapsed());
 
-    let session_nonce = None;
-
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
@@ -420,7 +418,6 @@ pub fn load_canister_state(
                     .raw_path();
             Some(ExecutionState {
                 canister_root,
-                session_nonce,
                 wasm_binary,
                 wasm_memory,
                 stable_memory,
