@@ -4366,14 +4366,33 @@ impl Governance {
             .neurons
             .values()
             .filter_map(|neuron| {
-                let id = neuron.id.as_ref()?;
+                let id = match neuron.id.as_ref() {
+                    Some(id) => id,
+                    None => {
+                        log!(
+                            ERROR,
+                            "NeuronId is not set for neuron. This should never happen. \
+                             Cannot disburse."
+                        );
+                        return None;
+                    }
+                };
+                // The first entry is the oldest one, check whether it can be completed.
                 let first_disbursement = neuron.disburse_maturity_in_progress.first()?;
-                if first_disbursement
-                    .finalize_disbursement_timestamp_seconds
-                    .is_some_and(|finalize_disbursement_timestamp_seconds| {
-                        finalize_disbursement_timestamp_seconds > now_seconds
-                    })
-                {
+                let finalize_disbursement_timestamp_seconds =
+                    match first_disbursement.finalize_disbursement_timestamp_seconds {
+                        Some(finalize_disbursement_timestamp_seconds) => {
+                            finalize_disbursement_timestamp_seconds
+                        }
+                        None => {
+                            log!(
+                                ERROR,
+                                "Finalize disbursement timestamp is not set. Cannot disburse."
+                            );
+                            return None;
+                        }
+                    };
+                if now_seconds >= finalize_disbursement_timestamp_seconds {
                     Some((id.clone(), first_disbursement.clone()))
                 } else {
                     None
