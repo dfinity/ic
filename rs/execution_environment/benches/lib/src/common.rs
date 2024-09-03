@@ -47,6 +47,13 @@ pub const USER_ID: u64 = 0;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
 
+/// Enables Wasm64 benchmarks.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Wasm64 {
+    Enabled,
+    Disabled,
+}
+
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
         SUBNET_MEMORY_CAPACITY,
@@ -213,7 +220,7 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        println!("    WAT: {}", wat.as_ref());
+                        //println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
@@ -247,7 +254,7 @@ pub fn run_benchmarks<G, R>(
     group: G,
     benchmarks: &[Benchmark],
     routine: R,
-    wasm64_enabled: bool,
+    wasm64_enabled: Wasm64,
 ) where
     G: AsRef<str>,
     R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
@@ -266,7 +273,7 @@ pub fn run_benchmarks<G, R>(
         subnet_configs.cycles_account_manager_config,
     ));
     let mut embedders_config = EmbeddersConfig::default();
-    if wasm64_enabled {
+    if wasm64_enabled == Wasm64::Enabled {
         embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         // Set up larger heap, of 8GB.
         embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);

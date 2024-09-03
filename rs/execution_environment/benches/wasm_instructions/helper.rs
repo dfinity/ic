@@ -1,5 +1,6 @@
 //! Helper Functions
 
+use crate::common::Wasm64;
 use execution_environment_bench::{
     common,
     wat_builder::{
@@ -27,7 +28,7 @@ pub fn first_or_all<'a>(all: &'a [&'a str]) -> &'a [&'a str] {
 pub fn benchmark_with_confirmation(
     name: &str,
     code: &str,
-    wasm64_enabled: bool,
+    wasm64_enabled: Wasm64,
 ) -> Vec<common::Benchmark> {
     let i = DEFAULT_LOOP_ITERATIONS;
     let r = DEFAULT_REPEAT_TIMES;
@@ -45,7 +46,7 @@ pub fn benchmark_with_confirmation(
 pub fn benchmark_with_loop_confirmation(
     name: &str,
     code: &str,
-    wasm64_enabled: bool,
+    wasm64_enabled: Wasm64,
 ) -> Vec<common::Benchmark> {
     let i = DEFAULT_LOOP_ITERATIONS;
     let c = CONFIRMATION_LOOP_ITERATIONS;
@@ -62,7 +63,7 @@ pub fn benchmark(
     i: usize,
     r: usize,
     repeat_code: &str,
-    wasm64_enabled: bool,
+    wasm64_enabled: Wasm64,
 ) -> common::Benchmark {
     common::Benchmark(
         name.into(),

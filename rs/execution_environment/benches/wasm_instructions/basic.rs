@@ -3,13 +3,14 @@
 //! References:
 //! * https://www.w3.org/TR/wasm-core-2/
 
+use crate::common::Wasm64;
 use crate::helper::{benchmark_with_confirmation, benchmark_with_loop_confirmation, first_or_all};
 use execution_environment_bench::{
     common::Benchmark,
     wat_builder::{dst_type, src_type},
 };
 
-pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
+pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
 
@@ -24,7 +25,7 @@ pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
         wasm64_enabled,
     ));
 
-    let address = if wasm64_enabled {
+    let address = if wasm64_enabled == Wasm64::Enabled {
         "address_i64"
     } else {
         "address_i32"
@@ -455,7 +456,7 @@ pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~0.2 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.size",
-        if wasm64_enabled {
+        if wasm64_enabled == Wasm64::Enabled {
             "(global.set $x_i64 (memory.size))"
         } else {
             "(global.set $x_i32 (memory.size))"
@@ -465,7 +466,7 @@ pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~0.006 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.grow",
-        if wasm64_enabled {
+        if wasm64_enabled == Wasm64::Enabled {
             "(global.set $x_i64 (memory.grow (local.get $zero_i64)))"
         } else {
             "(global.set $x_i32 (memory.grow (local.get $zero_i32)))"
@@ -475,7 +476,7 @@ pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~0.03 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.fill",
-        if wasm64_enabled {
+        if wasm64_enabled == Wasm64::Enabled {
             "(memory.fill (local.get $zero_i64) (local.get $zero_i32) (local.get $zero_i64))"
         } else {
             "(memory.fill (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))"
@@ -485,7 +486,7 @@ pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~0.02 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.copy",
-        if wasm64_enabled {
+        if wasm64_enabled == Wasm64::Enabled {
             "(memory.copy (local.get $zero_i64) (local.get $zero_i64) (local.get $zero_i64))"
         } else {
             "(memory.copy (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))"

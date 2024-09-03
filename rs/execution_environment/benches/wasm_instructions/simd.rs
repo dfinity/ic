@@ -4,6 +4,7 @@
 //! * https://www.w3.org/TR/wasm-core-2/
 //! * https://github.com/WebAssembly/simd/blob/main/proposals/simd/SIMD.md
 
+use crate::common::Wasm64;
 use crate::helper::{benchmark_with_confirmation, first_or_all};
 use execution_environment_bench::{common::Benchmark, wat_builder::dst_type};
 
@@ -17,7 +18,7 @@ const Z_V128: &str = "(local.get $z_v128)";
 const ADDRESS_I32: &str = "(local.get $address_i32)";
 const UNALIGNED_ADDRESS_I32: &str = "(local.get $one_i32)";
 
-pub fn benchmarks(wasm64_enabled: bool) -> Vec<Benchmark> {
+pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // List of benchmarks to run.
     let mut benchmarks = vec![];
 
