@@ -23,7 +23,8 @@ use super::{
     metrics::FetchStrippedConsensusArtifactMetrics,
     stripper::Strippable,
     types::stripped::{
-        MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+        MaybeStrippedConsensusMessage, MaybeStrippedIngress, StrippedBlockProposal,
+        StrippedConsensusMessageId,
     },
 };
 
@@ -230,9 +231,17 @@ pub(crate) enum AssemblyError {}
 
 impl StrippedBlockProposal {
     /// Returns the list of [`IngressMessageId`]s which have been stripped from the block.
-    // TODO(kpop): Implement this
     pub(crate) fn missing_ingress_messages(&self) -> Vec<IngressMessageId> {
-        unimplemented!()
+        self.payload
+            .ingress
+            .ingress_messages
+            .iter()
+            .filter_map(|maybe_ingress| match maybe_ingress {
+                MaybeStrippedIngress::Full(_, _) => None,
+                MaybeStrippedIngress::Stripped(ingress_message_id) => Some(ingress_message_id),
+            })
+            .cloned()
+            .collect()
     }
 
     /// Tries to insert a missing ingress message into the block.
@@ -250,5 +259,80 @@ impl StrippedBlockProposal {
     // TODO(kpop): Implement this
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
         unimplemented!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_types::{
+        consensus::ConsensusMessageHash,
+        crypto::{CryptoHash, CryptoHashOf},
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+        time::expiry_time_from_now,
+        Height,
+    };
+
+    use crate::fetch_stripped_artifact::types::stripped::{
+        StrippedDataPayload, StrippedIngressPayload,
+    };
+
+    use super::*;
+
+    #[test]
+    fn missing_ingress_messages_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1),
+            MaybeStrippedIngress::Stripped(ingress_2_id.clone()),
+        ]);
+
+        assert_eq!(
+            stripped_block_proposal.missing_ingress_messages(),
+            vec![ingress_2_id]
+        );
+    }
+
+    fn fake_stripped_block_proposal_with_ingresses(
+        ingress_messages: Vec<MaybeStrippedIngress>,
+    ) -> StrippedBlockProposal {
+        StrippedBlockProposal {
+            payload: StrippedDataPayload {
+                ingress: StrippedIngressPayload { ingress_messages },
+            },
+            unstripped_consensus_message_id: fake_consensus_message_id(),
+        }
+    }
+
+    fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
+        let ingress_expiry = expiry_time_from_now();
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(vec![42; 8]),
+                method_name: method_name.to_string(),
+                arg: Blob(b"".to_vec()),
+                sender: Blob(vec![0x05]),
+                nonce: Some(Blob(vec![1, 2, 3, 4])),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            },
+        };
+        let ingress = HttpRequestEnvelope::<HttpCallContent> {
+            content,
+            sender_pubkey: Some(Blob(vec![2; 32])),
+            sender_sig: Some(Blob(vec![1; 32])),
+            sender_delegation: None,
+        }
+        .try_into()
+        .unwrap();
+        let ingress_id = IngressMessageId::from(&ingress);
+
+        (ingress, ingress_id)
+    }
+
+    fn fake_consensus_message_id() -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(vec![]))),
+            height: Height::new(42),
+        }
     }
 }
