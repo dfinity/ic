@@ -95,7 +95,7 @@ exports_files(
 
 BUILDIFIER_EXCLUDES = [
     "./.git/*",
-    "./gitlab-ci/src/git_changes/test_data/**",
+    "./ci/src/git_changes/test_data/**",
 ]
 
 buildifier(
