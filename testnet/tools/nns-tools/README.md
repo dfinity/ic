@@ -367,10 +367,8 @@ Next, we test the upgrade
 * `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
 * `<TARGET_VERSION>` is the git hash of the version that has canisters available
   on the build system. You can find a suitable value by looking at the
-  [commits page](https://gitlab.com/dfinity-lab/public/ic/-/commits/master?ref_type=heads)
-  in Gitlab. In one of the columns towards the right, you will see some red Xs
-  and green checkmarks. If you click on the clipboard icon next to a green checkmark,
-  you will copy a suitable value.
+  [commits page](https://github.com/dfinity/ic/commits/master/)
+  in GitHub. You can copy the commit revision that has green checkmark.
 
 For example:
 

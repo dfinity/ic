@@ -23,7 +23,8 @@ cp /config/bitcoin.conf /tmp/bitcoin.conf
 docker run  --name=bitcoind-node -d \
   --net=host \
   -v /tmp:/bitcoin/.bitcoin \
-  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind -rpcbind=[::]:8332 -rpcallowip=::/0
+  kylemanna/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1 \
+  -rpcbind=[::]:8332 -rpcallowip=::/0
 ";
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
