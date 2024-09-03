@@ -54,7 +54,6 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
-    fs::File,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -1310,16 +1309,13 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
-    if create_file_atomically(started_file_path).is_ok() {
-        let mut cmd = Command::new(PathBuf::from(bin_path));
-        cmd.arg("--pid").arg(parent_pid.to_string());
-        if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-            cmd.stdout(std::process::Stdio::null());
-            cmd.stderr(std::process::Stdio::null());
-        }
-        cmd.spawn().expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path));
+    cmd.arg("--pid").arg(parent_pid.to_string());
+    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
     }
+    cmd.spawn().expect("Failed to start PocketIC binary");
 
     let start = Instant::now();
     loop {
@@ -1337,13 +1333,4 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-}
-
-// Ensures atomically that this file was created freshly, and gives an error otherwise.
-fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
-    File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&file_path)
 }
