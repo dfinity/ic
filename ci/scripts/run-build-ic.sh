@@ -3,19 +3,17 @@
 set -euo pipefail
 VERSION=$(git rev-parse HEAD)
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
     RUN_ON_DIFF_ONLY="false"
 fi
 
 cd "$CI_PROJECT_DIR"
 
-if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] \
-    || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
+# run build with release on protected branches or if a pull_request is targeting an rc branch
+if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
-elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
-    && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
-    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+# if on a pull_request, only run build on targets that have changed
+elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]; then
 
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
@@ -40,6 +38,7 @@ elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
         exit 0
     fi
     gitlab-ci/container/build-ic.sh "${ARGS[@]}"
+# otherwise run full build but with no release
 else
     gitlab-ci/container/build-ic.sh -i -c -b --no-release
 fi
