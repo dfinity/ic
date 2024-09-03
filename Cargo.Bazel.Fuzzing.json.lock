@@ -1,5 +1,5 @@
 {
-  "checksum": "f1518bf4230b431ecdd514fbd3286677dbd209cfc2ffdb88633742647aff72e3",
+  "checksum": "206aebf485734d45a83a4afb3ec4d808a458a12a36a093f7d55becbae5feba6b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5257,109 +5257,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "axum-server 0.5.1": {
-      "name": "axum-server",
-      "version": "0.5.1",
-      "package_url": "https://github.com/programatik29/axum-server",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/axum-server/0.5.1/download",
-          "sha256": "447f28c85900215cc1bea282f32d4a2f22d55c5a300afdfbc661c8d6a632e063"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "axum_server",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "axum_server",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "arc-swap",
-            "default",
-            "pin-project-lite",
-            "rustls",
-            "rustls-pemfile",
-            "tls-rustls",
-            "tokio-rustls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "arc-swap 1.7.1",
-              "target": "arc_swap"
-            },
-            {
-              "id": "bytes 1.7.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "http-body 0.4.6",
-              "target": "http_body"
-            },
-            {
-              "id": "hyper 0.14.30",
-              "target": "hyper"
-            },
-            {
-              "id": "pin-project-lite 0.2.14",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls"
-            },
-            {
-              "id": "rustls-pemfile 1.0.4",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-rustls 0.24.1",
-              "target": "tokio_rustls"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "axum-server 0.6.0": {
       "name": "axum-server",
@@ -17807,13 +17704,8 @@
               "target": "axum_extra"
             },
             {
-              "id": "axum-server 0.5.1",
-              "target": "axum_server"
-            },
-            {
               "id": "axum-server 0.6.0",
-              "target": "axum_server",
-              "alias": "axum_server_0_6_0"
+              "target": "axum_server"
             },
             {
               "id": "backoff 0.4.0",
@@ -18119,11 +18011,6 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.6",
-              "target": "http_body",
-              "alias": "http_body_0_4_6"
-            },
-            {
               "id": "http-body 1.0.1",
               "target": "http_body"
             },
@@ -18151,11 +18038,6 @@
             {
               "id": "hyper 1.4.1",
               "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls",
-              "alias": "hyper_rustls_0_24_2"
             },
             {
               "id": "hyper-rustls 0.27.2",
@@ -18632,11 +18514,6 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.11.27",
-              "target": "reqwest",
-              "alias": "reqwest_0_11_27"
-            },
-            {
               "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
@@ -18687,11 +18564,6 @@
             {
               "id": "rustc-hash 1.1.0",
               "target": "rustc_hash"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rustls_0_21_12"
             },
             {
               "id": "rustls 0.23.12",
@@ -18906,11 +18778,6 @@
               "target": "tokio_metrics"
             },
             {
-              "id": "tokio-rustls 0.24.1",
-              "target": "tokio_rustls",
-              "alias": "tokio_rustls_0_24_1"
-            },
-            {
               "id": "tokio-rustls 0.26.0",
               "target": "tokio_rustls"
             },
@@ -18945,11 +18812,6 @@
             {
               "id": "tower 0.4.13",
               "target": "tower"
-            },
-            {
-              "id": "tower-http 0.4.4",
-              "target": "tower_http",
-              "alias": "tower_http_0_4_4"
             },
             {
               "id": "tower-http 0.5.2",
@@ -27070,44 +26932,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "http-range-header 0.3.1": {
-      "name": "http-range-header",
-      "version": "0.3.1",
-      "package_url": "https://github.com/MarcusGrass/parse-range-headers",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/http-range-header/0.3.1/download",
-          "sha256": "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "http_range_header",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "http_range_header",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.3.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "httparse 1.9.4": {
       "name": "httparse",
       "version": "1.9.4",
@@ -27812,7 +27636,6 @@
             "acceptor",
             "default",
             "http1",
-            "http2",
             "log",
             "logging",
             "native-tokio",
@@ -52908,18 +52731,12 @@
             "gzip",
             "hyper-rustls",
             "json",
-            "mime_guess",
-            "multipart",
             "rustls",
             "rustls-tls",
             "rustls-tls-webpki-roots",
             "serde_json",
-            "socks",
-            "stream",
             "tokio-rustls",
-            "tokio-socks",
             "tokio-util",
-            "wasm-streams",
             "webpki-roots"
           ],
           "selects": {}
@@ -52945,10 +52762,6 @@
             {
               "id": "http 0.2.12",
               "target": "http"
-            },
-            {
-              "id": "mime_guess 2.0.5",
-              "target": "mime_guess"
             },
             {
               "id": "serde 1.0.209",
@@ -53042,10 +52855,6 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-socks 0.5.2",
-                "target": "tokio_socks"
-              },
-              {
                 "id": "tokio-util 0.7.11",
                 "target": "tokio_util"
               },
@@ -53066,10 +52875,6 @@
               {
                 "id": "wasm-bindgen-futures 0.4.43",
                 "target": "wasm_bindgen_futures"
-              },
-              {
-                "id": "wasm-streams 0.4.0",
-                "target": "wasm_streams"
               },
               {
                 "id": "web-sys 0.3.70",
@@ -66147,7 +65952,6 @@
         ],
         "crate_features": {
           "common": [
-            "dangerous_configuration",
             "default",
             "early-data",
             "logging",
@@ -67248,133 +67052,6 @@
         },
         "edition": "2018",
         "version": "0.4.13"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "tower-http 0.4.4": {
-      "name": "tower-http",
-      "version": "0.4.4",
-      "package_url": "https://github.com/tower-rs/tower-http",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.4.4/download",
-          "sha256": "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tower_http",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tower_http",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-compression",
-            "compression-br",
-            "compression-deflate",
-            "compression-full",
-            "compression-gzip",
-            "compression-zstd",
-            "default",
-            "request-id",
-            "tokio",
-            "tokio-util",
-            "tower",
-            "trace",
-            "tracing",
-            "util",
-            "uuid"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "async-compression 0.4.12",
-              "target": "async_compression"
-            },
-            {
-              "id": "bitflags 2.6.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "bytes 1.7.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-core 0.3.30",
-              "target": "futures_core"
-            },
-            {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "http-body 0.4.6",
-              "target": "http_body"
-            },
-            {
-              "id": "http-range-header 0.3.1",
-              "target": "http_range_header"
-            },
-            {
-              "id": "pin-project-lite 0.2.14",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-util 0.7.11",
-              "target": "tokio_util"
-            },
-            {
-              "id": "tower 0.4.13",
-              "target": "tower"
-            },
-            {
-              "id": "tower-layer 0.3.3",
-              "target": "tower_layer"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            },
-            {
-              "id": "tracing 0.1.40",
-              "target": "tracing"
-            },
-            {
-              "id": "uuid 1.10.0",
-              "target": "uuid"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -78058,7 +77735,6 @@
     "async-trait 0.1.82",
     "axum 0.7.5",
     "axum-extra 0.9.3",
-    "axum-server 0.5.1",
     "axum-server 0.6.0",
     "backoff 0.4.0",
     "backon 0.4.4",
@@ -78136,7 +77812,6 @@
     "hmac 0.12.1",
     "http 0.2.12",
     "http 1.1.0",
-    "http-body 0.4.6",
     "http-body 1.0.1",
     "http-body-util 0.1.2",
     "httptest 0.15.5",
@@ -78144,7 +77819,6 @@
     "humantime-serde 1.1.1",
     "hyper 0.14.30",
     "hyper 1.4.1",
-    "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.7",
@@ -78268,7 +77942,6 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.10.6",
-    "reqwest 0.11.27",
     "reqwest 0.12.7",
     "rgb 0.8.50",
     "ring 0.17.8",
@@ -78283,7 +77956,6 @@
     "rust_decimal 1.36.0",
     "rust_decimal_macros 1.36.0",
     "rustc-hash 1.1.0",
-    "rustls 0.21.12",
     "rustls 0.23.12",
     "rustls-native-certs 0.7.3",
     "rustls-pemfile 2.1.3",
@@ -78340,7 +78012,6 @@
     "tokio 1.40.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
-    "tokio-rustls 0.24.1",
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.2",
@@ -78350,7 +78021,6 @@
     "tonic 0.11.0",
     "tonic-build 0.11.0",
     "tower 0.4.13",
-    "tower-http 0.4.4",
     "tower-http 0.5.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",

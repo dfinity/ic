@@ -251,7 +251,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Some(
             setup_https(
                 router,
-                server_opts.clone(),
+                server_opts,
                 &cli,
                 &metrics_registry,
                 http_metrics.clone(),
@@ -595,11 +595,11 @@ fn setup_https(
     let rustls_config = tls::prepare_server_config(
         resolver,
         session_storage,
-        &vec![http::ALPN_ACME.to_vec()],
+        &[http::ALPN_ACME.to_vec()],
         // TODO add CLI
         Duration::from_secs(9 * 3600),
         &[&rustls::version::TLS13],
-        &registry,
+        registry,
     );
 
     let server_https = http::Server::new(

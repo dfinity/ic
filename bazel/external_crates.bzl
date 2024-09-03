@@ -191,13 +191,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.5.1",
-                features = [
-                    "tls-rustls",
-                ],
-            ),
-            "axum-server_0_6_0": crate.spec(
-                package = "axum-server",
                 version = "^0.6.0",
                 features = [
                     "tls-rustls",
@@ -497,10 +490,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-body": crate.spec(
                 version = "^1.0.1",
             ),
-            "http_body_0_4_6": crate.spec(
-                package = "http-body",
-                version = "^0.4.6",
-            ),
             "http-body-util": crate.spec(
                 version = "^0.1.2",
             ),
@@ -542,13 +531,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.7",
                 features = [
                     "full",
-                ],
-            ),
-            "hyper_rustls_0_24_2": crate.spec(
-                version = "^0.24.2",
-                package = "hyper-rustls",
-                features = [
-                    "http2",
                 ],
             ),
             "hyper-rustls": crate.spec(
@@ -1032,19 +1014,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "regex": crate.spec(
                 version = "^1.10.6",
             ),
-            "reqwest_0_11_27": crate.spec(
-                package = "reqwest",
-                version = "^0.11.27",
-                default_features = False,
-                features = [
-                    "blocking",
-                    "json",
-                    "multipart",
-                    "rustls-tls-webpki-roots",
-                    "socks",
-                    "stream",
-                ],
-            ),
             "reqwest": crate.spec(
                 version = "^0.12.7",
                 default_features = False,
@@ -1099,13 +1068,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
-            ),
-            "rustls_0_21_12": crate.spec(
-                package = "rustls",
-                version = "^0.21.12",
-                features = [
-                    "dangerous_configuration",
-                ],
             ),
             "rustls": crate.spec(
                 version = "^0.23.12",
@@ -1320,13 +1282,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tokio-metrics": crate.spec(
                 version = "^0.3.1",
             ),
-            "tokio_rustls_0_24_1": crate.spec(
-                package = "tokio-rustls",
-                version = "^0.24.1",
-                features = [
-                    "dangerous_configuration",
-                ],
-            ),
             "tokio-rustls": crate.spec(
                 version = "^0.26.0",
                 default_features = False,
@@ -1367,16 +1322,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tower": crate.spec(
                 version = "^0.4.13",
                 features = ["full"],
-            ),
-            "tower_http_0_4_4": crate.spec(
-                version = "^0.4.4",
-                package = "tower-http",
-                features = [
-                    "trace",
-                    "request-id",
-                    "util",
-                    "compression-full",
-                ],
             ),
             "tower-http": crate.spec(
                 version = "^0.5.2",
