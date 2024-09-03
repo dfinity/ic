@@ -33,6 +33,7 @@ env:
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  LABELS: ${{ github.event.pull_request.labels.*.name }}
 jobs:
   bazel-test-all:
     name: Bazel Test All
