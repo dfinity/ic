@@ -1145,7 +1145,7 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
         } = value;
         let hotkeys = hotkeys.unwrap_or_default().principals;
         let Some(controller) = controller else {
-            return Err("NeuronsFundNeuron.Controller must be specified".to_string());
+            return Err("NeuronsFundNeuron.controller must be specified".to_string());
         };
 
         match (nns_neuron_id, amount_icp_e8s, is_capped) {

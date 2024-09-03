@@ -3467,7 +3467,10 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 investor: Some(Investor::CommunityFund(CfInvestment {
                     controller: Some(*TEST_USER2_PRINCIPAL),
                     hotkeys: Some(Principals::from(vec![*TEST_USER3_PRINCIPAL])),
-                    hotkey_principal: String::new(),
+                    hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                        "hotkey_principal",
+                        Some("controller"),
+                    ),
                     nns_neuron_id: 100,
                 })),
                 sns: Some(TransferableAmount {
@@ -3953,7 +3956,10 @@ fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_nf_pa
         cf_participants: vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(1001)),
-                hotkey_principal: String::new(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron {
                     nns_neuron_id: 1,
                     amount_icp_e8s: 50 * E8,
@@ -3963,7 +3969,10 @@ fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_nf_pa
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(1002)),
-                hotkey_principal: String::new(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron {
                     nns_neuron_id: 2,
                     amount_icp_e8s: 50 * E8,
@@ -4019,7 +4028,10 @@ fn test_create_sns_neuron_recipes_includes_hotkeys() {
         neurons_fund_participation_icp_e8s: Some(100 * E8),
         cf_participants: vec![CfParticipant {
             controller: Some(PrincipalId::new_user_test_id(1001)),
-            hotkey_principal: String::new(),
+            hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                "hotkey_principal",
+                Some("controller"),
+            ),
             cf_neurons: vec![CfNeuron {
                 nns_neuron_id: 1,
                 amount_icp_e8s: 50 * E8,
