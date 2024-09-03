@@ -23,7 +23,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:0b56ffd9789574402f561f16232343601e137661c933057088700c6b81828ebd
       options: >-
         -e NODE_NAME
     steps:
@@ -69,7 +69,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:0b56ffd9789574402f561f16232343601e137661c933057088700c6b81828ebd
       options: >-
         -e NODE_NAME
     steps:
@@ -108,7 +108,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:0b56ffd9789574402f561f16232343601e137661c933057088700c6b81828ebd
       options: >-
         -e NODE_NAME
     steps:
@@ -125,7 +125,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:0b56ffd9789574402f561f16232343601e137661c933057088700c6b81828ebd
       options: >-
         -e NODE_NAME
     timeout-minutes: 60
