@@ -8,7 +8,7 @@ use candid::Principal;
 use clap::Args;
 use std::path::{Path, PathBuf, StripPrefixError};
 
-#[derive(Debug, Clone, Args)]
+#[derive(Clone, Debug, Args)]
 pub struct IcAdminArgs {
     /// Use an HSM to sign calls.
     #[clap(long)]

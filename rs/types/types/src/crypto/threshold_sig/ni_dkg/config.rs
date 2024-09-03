@@ -21,7 +21,7 @@ pub mod receivers;
 /// A validated configuration for non-interactive DKG. This configuration can
 /// only exist if all configuration invariants are satisfied. See
 /// `NiDkgConfig::new` for a description of the invariants.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgConfig {
     pub(crate) dkg_id: NiDkgId,
     max_corrupt_dealers: NumberOfNodes,
@@ -107,7 +107,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
 
 /// The non-validated config parameter object to be passed to the `NiDkgConfig`
 /// constructor.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgConfigData {
     pub dkg_id: NiDkgId,
     pub max_corrupt_dealers: NumberOfNodes,
@@ -310,7 +310,7 @@ impl fmt::Display for NiDkgConfig {
 
 /// The minimum number of nodes required to generate a valid threshold
 /// signature.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgThreshold {
     threshold: NumberOfNodes,
 }
