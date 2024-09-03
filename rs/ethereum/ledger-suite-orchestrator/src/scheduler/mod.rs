@@ -58,6 +58,7 @@ pub enum Task {
         erc20_token: Erc20Token,
         minter_id: Principal,
     },
+    ManageAlreadyInstalledLedgerSuite(ManageAlreadyInstalledLedgerSuite),
 }
 
 impl Task {
@@ -68,6 +69,7 @@ impl Task {
             Task::NotifyErc20Added { .. } => false,
             Task::DiscoverArchives => true,
             Task::UpgradeLedgerSuite(_) => false,
+            Task::ManageAlreadyInstalledLedgerSuite(_) => false,
         }
     }
 }
@@ -607,6 +609,7 @@ pub enum TaskError {
     InsufficientCyclesToTopUp { required: u128, available: u128 },
     DiscoverArchivesError(DiscoverArchivesError),
     UpgradeLedgerSuiteError(UpgradeLedgerSuiteError),
+    ManageAlreadyInstalledLedgerSuiteError(ManageAlreadyInstalledLedgerSuiteError),
 }
 
 impl TaskError {
@@ -624,6 +627,7 @@ impl TaskError {
             TaskError::InsufficientCyclesToTopUp { .. } => false, //top-up task is periodic, will retry on next interval
             TaskError::DiscoverArchivesError(e) => e.is_recoverable(),
             TaskError::UpgradeLedgerSuiteError(e) => e.is_recoverable(),
+            TaskError::ManageAlreadyInstalledLedgerSuiteError(e) => e.is_recoverable(),
         }
     }
 }
@@ -684,6 +688,21 @@ impl From<UpgradeLedgerSuiteError> for TaskError {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub enum ManageAlreadyInstalledLedgerSuiteError {}
+
+impl ManageAlreadyInstalledLedgerSuiteError {
+    fn is_recoverable(&self) -> bool {
+        todo!("Implement this")
+    }
+}
+
+impl From<ManageAlreadyInstalledLedgerSuiteError> for TaskError {
+    fn from(value: ManageAlreadyInstalledLedgerSuiteError) -> Self {
+        TaskError::ManageAlreadyInstalledLedgerSuiteError(value)
+    }
+}
+
 fn is_recoverable(e: &CallError) -> bool {
     match &e.reason {
         Reason::OutOfCycles => true,
@@ -705,6 +724,9 @@ impl TaskExecution {
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
             Task::DiscoverArchives => Ok(discover_archives(select_all(), runtime).await?),
             Task::UpgradeLedgerSuite(upgrade) => Ok(upgrade_ledger_suite(upgrade, runtime).await?),
+            Task::ManageAlreadyInstalledLedgerSuite(args) => {
+                Ok(manage_already_installed_ledger_suite(args, runtime).await?)
+            }
         }
     }
 }
@@ -1298,6 +1320,23 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
         wasm_hash
     );
     Ok(())
+}
+
+async fn manage_already_installed_ledger_suite<R: CanisterRuntime>(
+    _upgrade_ledger_suite: &ManageAlreadyInstalledLedgerSuite,
+    _runtime: &R,
+) -> Result<(), ManageAlreadyInstalledLedgerSuiteError> {
+    // TODO XC-189: logic
+    Ok(())
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct ManageAlreadyInstalledLedgerSuite {
+    token: Erc20Token,
+    metadata: CanistersMetadata,
+    ledger: Option<Principal>,
+    index: Option<Principal>,
+    archives: Vec<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]

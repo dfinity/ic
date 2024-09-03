@@ -224,7 +224,7 @@ pub struct Canisters {
     pub metadata: CanistersMetadata,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct CanistersMetadata {
     pub ckerc20_token_symbol: String,
 }
