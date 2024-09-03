@@ -143,9 +143,9 @@ fn test_graceful_shutdown() {
                 tokio::time::sleep(Duration::from_millis(250)).await;
 
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-                let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
+                let node_1_reachable_from_node_2 = transport_2.rpc(&NODE_1, request).await.is_ok();
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-                let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
+                let node_2_reachable_from_node_1 = transport_1.rpc(&NODE_2, request).await.is_ok();
                 if node_2_reachable_from_node_1 && node_1_reachable_from_node_2 {
                     break;
                 }
@@ -157,7 +157,7 @@ fn test_graceful_shutdown() {
         rt.block_on(async move {
             Arc::get_mut(&mut transport_2).unwrap().shutdown().await;
             let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-            assert!(transport_2.push(&NODE_1, request).await.is_err());
+            assert!(transport_2.rpc(&NODE_1, request).await.is_err());
         });
     })
 }
@@ -220,9 +220,9 @@ fn test_real_socket() {
                 tokio::time::sleep(Duration::from_millis(250)).await;
 
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-                let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
+                let node_1_reachable_from_node_2 = transport_2.rpc(&NODE_1, request).await.is_ok();
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-                let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
+                let node_2_reachable_from_node_1 = transport_1.rpc(&NODE_2, request).await.is_ok();
                 if node_2_reachable_from_node_1 && node_1_reachable_from_node_2 {
                     break;
                 }
@@ -292,9 +292,9 @@ fn test_real_socket_large_msg() {
                     .uri("/Ping")
                     .body(Bytes::from(vec![0; 100_000_000]))
                     .unwrap();
-                let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
+                let node_1_reachable_from_node_2 = transport_2.rpc(&NODE_1, request).await.is_ok();
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-                let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
+                let node_2_reachable_from_node_1 = transport_1.rpc(&NODE_2, request).await.is_ok();
                 if node_2_reachable_from_node_1 && node_1_reachable_from_node_2 {
                     break;
                 }
@@ -341,7 +341,7 @@ fn test_sending_large_message() {
             async move {
                 loop {
                     let _ = transport
-                        .push(&NODE_2, Request::new(Bytes::from(vec![0; 50_000_000])))
+                        .rpc(&NODE_2, Request::new(Bytes::from(vec![0; 50_000_000])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
@@ -352,7 +352,7 @@ fn test_sending_large_message() {
             async move {
                 loop {
                     let _ = transport
-                        .push(&NODE_1, Request::new(Bytes::from(vec![0; 50_000_000])))
+                        .rpc(&NODE_1, Request::new(Bytes::from(vec![0; 50_000_000])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }

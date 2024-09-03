@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 const INVALID_NEURON_ID: u64 = 0;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct TestNeuronOwner {
     pub principal_id: PrincipalId,
     pub neuron_id: NeuronId,

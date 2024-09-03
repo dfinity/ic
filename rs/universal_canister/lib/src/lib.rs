@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
+    hex!("65b035adf05770b69d68be0a5bec39df4d2ac5fc1dccb8397766120270159e6b");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -362,6 +362,13 @@ impl PayloadBuilder {
         self = self.push_int64(high_amount);
         self = self.push_int64(low_amount);
         self.0.push(Ops::CallCyclesAdd128 as u8);
+        self
+    }
+
+    pub fn call_cycles_add128_up_to(mut self, high_amount: u64, low_amount: u64) -> Self {
+        self = self.push_int64(high_amount);
+        self = self.push_int64(low_amount);
+        self.0.push(Ops::CallCyclesAdd128UpTo as u8);
         self
     }
 

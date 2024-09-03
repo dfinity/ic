@@ -28,4 +28,4 @@ serde_with = { workspace = true }
 icp-ledger = { path = "../icp_ledger" }
 
 [dev-dependencies]
-proptest = "1.0"
+proptest = { workspace = true }

@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct NetworkIdentifier {
     pub blockchain: String,
 
@@ -47,7 +47,7 @@ impl TryFrom<&NetworkIdentifier> for CanisterId {
 /// In blockchains with sharded state, the SubNetworkIdentifier is required to
 /// query some object on a specific shard. This identifier is optional for all
 /// non-sharded blockchains.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SubNetworkIdentifier {
     pub network: String,
 
@@ -65,7 +65,7 @@ impl SubNetworkIdentifier {
 }
 
 /// The block_identifier uniquely identifies a block in a particular network.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BlockIdentifier {
     /// This is also known as the block height.
     pub index: u64,
@@ -103,7 +103,7 @@ impl TryFrom<BlockIdentifier> for ByteBuf {
 /// When fetching data by BlockIdentifier, it may be possible to only specify
 /// the index or hash. If neither property is specified, it is assumed that the
 /// client is making a request at the current block.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct PartialBlockIdentifier {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index: Option<u64>,
@@ -137,7 +137,7 @@ impl From<BlockIdentifier> for PartialBlockIdentifier {
 ///
 /// The transaction_identifier uniquely identifies a transaction in a particular
 /// network and block or in the mempool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block event) should use the hash of the block as the identifier. This should be normalized according to the case specified in the transaction_hash_case in network options.
     pub hash: String,
@@ -168,7 +168,7 @@ impl TryFrom<TransactionIdentifier> for ByteBuf {
 
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique
     /// identifier within a transaction. This index is only relative to the
@@ -198,7 +198,7 @@ impl OperationIdentifier {
 /// The account_identifier uniquely identifies an account within a network. All
 /// fields in the account_identifier are utilized to determine this uniqueness
 /// (including the metadata field, if populated).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct AccountIdentifier {
     /// The address may be a cryptographic public key (or some encoding of it)
     /// or a provided username.
@@ -278,7 +278,7 @@ impl TryFrom<AccountIdentifier> for icp_ledger::AccountIdentifier {
 /// An account may have state specific to a contract address (ERC-20 token)
 /// and/or a stake (delegated balance). The sub_account_identifier should
 /// specify which state (if applicable) an account instantiation refers to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SubAccountIdentifier {
     /// The SubAccount address may be a cryptographic value or some other
     /// identifier (ex: bonded) that uniquely specifies a SubAccount.
@@ -293,7 +293,7 @@ pub struct SubAccountIdentifier {
 }
 
 /// CoinIdentifier uniquely identifies a Coin.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CoinIdentifier {
     /// Identifier should be populated with a globally unique identifier of a
     /// Coin. In Bitcoin, this identifier would be transaction_hash:index.

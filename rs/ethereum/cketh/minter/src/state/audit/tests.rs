@@ -531,7 +531,7 @@ impl GetEventsFile {
             Decode!(&raw_result, GetEventsResult).unwrap()
         }
 
-        #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+        #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
         pub struct GetEventsArg {
             pub start: u64,
             pub length: u64,
