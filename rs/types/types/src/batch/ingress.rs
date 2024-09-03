@@ -60,7 +60,7 @@ impl TryFrom<pb::IngressPayload> for IngressPayload {
                         ingress_offset.offset,
                     ))
                 })
-                .collect::<Result<Vec<_>, Self::Error>>()?,
+                .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
             buffer: payload.buffer,
         })
     }
@@ -98,6 +98,20 @@ impl IngressPayload {
     /// Return true if the payload is empty.
     pub fn is_empty(&self) -> bool {
         self.id_and_pos.is_empty()
+    }
+
+    // TODO(kpop): run some benchmarks and see if it makes sense to change the type of
+    // `[IngressPayload::id_and_pos]`
+    pub fn get_by_id(&self, ingress_message_id: &IngressMessageId) -> Option<SignedIngress> {
+        let (index, _) = self
+            .id_and_pos
+            .iter()
+            .enumerate()
+            .find(|(_, (id, _))| id == ingress_message_id)?;
+
+        self.get(index)
+            .map(|(_, ingress_message)| ingress_message)
+            .ok()
     }
 
     /// Return the ingress message at a given index, which is expected to be
