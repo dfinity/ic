@@ -9,12 +9,28 @@ pub struct SetuposConfig {
     hostos_config: HostOSConfig,
 }
 
+impl SetuposConfig {
+    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
+        let hostos_config = HostOSConfig::new(vm_memory, vm_cpu, ic_config);
+        SetuposConfig { hostos_config }
+    }
+}
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct HostOSConfig {
     vm_memory: u32,
     vm_cpu: String,
     ic_config: IcConfig,
+}
+
+impl HostOSConfig {
+    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
+        HostOSConfig {
+            vm_memory,
+            vm_cpu,
+            ic_config,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -41,35 +57,6 @@ pub struct IcConfig {
     bitcoind_addr: Option<String>,
     jaeger_addr: Option<String>,
     socks_proxy: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct Networking {
-    pub ipv6_prefix: Option<String>,
-    pub ipv6_address: Option<Ipv6Addr>,
-    pub ipv6_gateway: Ipv6Addr,
-    pub ipv4_address: Option<Ipv4Addr>,
-    pub ipv4_gateway: Option<Ipv4Addr>,
-    pub ipv4_prefix_length: Option<u8>,
-    pub domain: Option<String>,
-}
-
-impl SetuposConfig {
-    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
-        let hostos_config = HostOSConfig::new(vm_memory, vm_cpu, ic_config);
-        SetuposConfig { hostos_config }
-    }
-}
-
-impl HostOSConfig {
-    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
-        HostOSConfig {
-            vm_memory,
-            vm_cpu,
-            ic_config,
-        }
-    }
 }
 
 impl IcConfig {
@@ -116,6 +103,17 @@ impl IcConfig {
             socks_proxy,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Networking {
+    pub ipv6_prefix: Option<String>,
+    pub ipv6_address: Option<Ipv6Addr>,
+    pub ipv6_gateway: Ipv6Addr,
+    pub ipv4_address: Option<Ipv4Addr>,
+    pub ipv4_gateway: Option<Ipv4Addr>,
+    pub ipv4_prefix_length: Option<u8>,
+    pub domain: Option<String>,
 }
 
 impl Networking {
