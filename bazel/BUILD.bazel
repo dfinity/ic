@@ -66,7 +66,7 @@ ic_version_or_git_sha(
     tags = ["no-cache"],
     visibility = [
         "__subpackages__",
-        "//ci/srccts:uploaders",
+        "//ci/src/artifacts:uploaders",
     ],
 )
 
