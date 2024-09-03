@@ -241,7 +241,6 @@ fn can_recover_from_a_checkpoint() {
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
         let execution_state = ExecutionState {
             canister_root: "NOT_USED".into(),
-            session_nonce: None,
             wasm_binary: WasmBinary::new(wasm.clone()),
             wasm_memory: wasm_memory.clone(),
             stable_memory,

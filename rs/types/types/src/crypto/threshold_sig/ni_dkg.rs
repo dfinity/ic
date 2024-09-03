@@ -32,7 +32,7 @@ mod tests;
 /// Allows to distinguish protocol executions in high and low threshold
 /// settings.
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, EnumIter,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
 )]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
@@ -50,7 +50,7 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
 }
 
 /// The subnet for which the DKG generates keys.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTargetSubnet {
     /// `Local` means the subnet creates keys for itself.
@@ -70,7 +70,7 @@ pub enum NiDkgTargetSubnet {
 ///
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an
 /// explanation of why this is needed.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgTargetId([u8; NiDkgTargetId::SIZE]);
 ic_crypto_internal_types::derive_serde!(NiDkgTargetId, NiDkgTargetId::SIZE);
@@ -115,7 +115,7 @@ impl TryFrom<i32> for NiDkgTag {
 }
 
 /// A dealer's contribution (called dealing) to distributed key generation.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealing {
     pub internal_dealing: CspNiDkgDealing,
 }
@@ -148,14 +148,14 @@ impl From<NiDkgDealing> for CspNiDkgDealing {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum ThresholdSigPublicKeyError {
     #[error("threshold signature public key coefficients empty")]
     CoefficientsEmpty,
 }
 
 /// Summarizes a distributed key generation.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgTranscript {
     pub dkg_id: NiDkgId,
     pub threshold: NiDkgThreshold,

@@ -12,6 +12,7 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, RegisterVote},
     manage_neuron_response,
     proposal::Action,
+    ListProposalInfo,
     MakeProposalRequest,
     // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
     // this file, because we simply use a constant of that type
@@ -138,7 +139,7 @@ fn test_several_proposals() {
     // Step 3.1: Inspect proposals.
 
     // There should only be two proposals of type CreateServiceNervousSystem.
-    let final_proposals = nns_list_proposals(&state_machine)
+    let final_proposals = nns_list_proposals(&state_machine, ListProposalInfo::default())
         .proposal_info
         .into_iter()
         .filter_map(

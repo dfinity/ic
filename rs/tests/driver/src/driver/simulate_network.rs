@@ -116,7 +116,7 @@ sudo tc qdisc show dev {DEVICE_NAME}
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FixedNetworkSimulation {
     packet_loss: Option<f64>,
     latency: Option<Duration>,

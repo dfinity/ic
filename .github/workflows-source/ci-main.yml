@@ -21,6 +21,7 @@ permissions: read-all
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
+  CI_COMMIT_BRANCH: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   CI_JOB_NAME: ${{ github.job }}
@@ -34,13 +35,13 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:15e5856161f4904d6b2597d673b3552de4a460380b5b8c72c93ff325af93d1a7
+    image: ghcr.io/dfinity/ic-build@sha256:748d5cd92d982531a25cd6c4f247bb6c0e484c9ac654164341f59a7d57d1fffc
+
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -61,8 +62,14 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+  docker-login: &docker-login
+    name: Login to Dockerhub
+    shell: bash
+    run: ./ci/scripts/docker-login.sh
     env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
@@ -106,6 +113,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
         run: |
@@ -139,11 +147,10 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -167,7 +174,7 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
@@ -196,8 +203,6 @@ jobs:
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -223,8 +228,6 @@ jobs:
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -242,9 +245,9 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
-          cd gitlab-ci/src
+          cd ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
@@ -255,6 +258,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Build IC
         id: build-ic
         shell: bash
@@ -265,7 +269,7 @@ jobs:
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
+              "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
           RUN_ON_DIFF_ONLY: "true"
@@ -323,7 +327,7 @@ jobs:
         run: |
           set -eExuo pipefail
           sudo apt update && sudo apt install -y curl
-          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}
@@ -357,7 +361,7 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
+              "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux

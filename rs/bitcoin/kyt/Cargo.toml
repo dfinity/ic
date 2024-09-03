@@ -15,7 +15,9 @@ bitcoin = { version = "0.32.2", default-features = false }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 pocket-ic = { path = "../../../packages/pocket-ic" } 

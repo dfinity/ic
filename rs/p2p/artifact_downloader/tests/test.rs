@@ -45,6 +45,9 @@ async fn priority_from_stash_to_fetch() {
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::Wants))
         .in_sequence(&mut seq);
+    mock_pfn
+        .expect_refresh_period()
+        .returning(|| std::time::Duration::from_secs(3));
 
     let mut mock_transport = MockTransport::new();
     mock_transport.expect_rpc().returning(|_, _| {
@@ -107,6 +110,9 @@ async fn fetch_to_stash_to_fetch() {
         };
         Box::new(move |_| p)
     });
+    mock_pfn
+        .expect_refresh_period()
+        .returning(|| std::time::Duration::from_secs(3));
     let mut mock_transport = MockTransport::new();
     mock_transport.expect_rpc().returning(move |_, _| {
         if return_artifact_clone.load(Ordering::SeqCst) {
@@ -190,6 +196,9 @@ async fn invalid_artifact_not_accepted() {
     mock_pfn
         .expect_new_bouncer()
         .returning(|_| Box::new(|_| BouncerValue::Wants));
+    mock_pfn
+        .expect_refresh_period()
+        .returning(|| std::time::Duration::from_secs(3));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
         Handle::current(),
@@ -230,6 +239,9 @@ async fn priority_from_stash_to_drop() {
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::Unwanted))
         .in_sequence(&mut seq);
+    mock_pfn
+        .expect_refresh_period()
+        .returning(|| std::time::Duration::from_secs(3));
 
     let mut mock_transport = MockTransport::new();
     mock_transport.expect_rpc().returning(|_, _| {

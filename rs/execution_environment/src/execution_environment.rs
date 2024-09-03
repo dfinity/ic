@@ -243,7 +243,7 @@ pub fn log_dirty_pages(
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
@@ -309,7 +309,7 @@ struct PausedExecutionRegistry {
 }
 
 // The replies that can be returned for a `stop_canister` request.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum StopCanisterReply {
     // The stop request was completed successfully.
     Completed,
@@ -339,7 +339,7 @@ pub struct ExecutionEnvironment {
 
 /// This is a helper enum that indicates whether the current DTS execution of
 /// install_code is the first execution or not.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum DtsInstallCodeStatus {
     StartingFirstExecution,
     ResumingPausedOrAbortedExecution,
@@ -1500,7 +1500,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.delete_canister_snapshot(*msg.sender(), &mut state, args)
+                        self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
                     });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
@@ -2193,6 +2193,7 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
+        round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2208,7 +2209,13 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .delete_canister_snapshot(sender, &mut canister, args.get_snapshot_id(), state)
+            .delete_canister_snapshot(
+                sender,
+                &mut canister,
+                args.get_snapshot_id(),
+                state,
+                round_limits,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
 
@@ -3586,7 +3593,7 @@ impl ExecutionEnvironment {
 /// for compilation costs even when they aren't counted against the round
 /// limits. Only public for testing.
 #[doc(hidden)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompilationCostHandling {
     CountReducedAmount,
     CountFullAmount,
