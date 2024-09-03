@@ -11,15 +11,12 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
-    "//rs/nervous_system/common",
-    "//rs/nns/common",
-    "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister/api",
     "//rs/registry/keys",
@@ -48,6 +45,16 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:url",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants",
+    "//rs/nns/common:common",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants:constants--test_feature",
+    "//rs/nns/common:common--test_feature",
 ]
 
 DEV_DEPENDENCIES = [
@@ -123,6 +130,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "canister--test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_name = "registry_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_canister(

@@ -10,16 +10,12 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
-    "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
@@ -30,6 +26,20 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:prost",
     "@crate_index//:serde",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/root",
+    "//rs/sns/swap",  # TODO[NNS1-2282]
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients:clients--test_feature",
+    "//rs/nervous_system/common:common--test_feature",
+    "//rs/nervous_system/root:root--test_feature",
+    "//rs/sns/swap:swap--test_feature",  # TODO[NNS1-2282]
 ]
 
 MACRO_DEPENDENCIES = [
@@ -66,6 +76,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "root--test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_name = "ic_sns_root",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_canister(

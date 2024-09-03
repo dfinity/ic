@@ -8,11 +8,9 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
-    "//rs/nervous_system/common",
-    "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/transport",
@@ -29,6 +27,16 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:sha2",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/common",
+    "//rs/nns/constants",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/common:common--test_feature",
+    "//rs/nns/constants:constants--test_feature",
 ]
 
 DEV_DEPENDENCIES = [
@@ -56,7 +64,7 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_nns_common",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 generated_files_check(
