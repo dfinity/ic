@@ -67,14 +67,12 @@ go_deps.bzl               @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/finint
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
+/ci/src/dependencies/                                                    @dfinity/product-security
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
 /pre-commit/                                                            @dfinity/idx
 /gitlab-ci/                                                             @dfinity/idx
-/gitlab-ci/src/std-fs-check/                                            @dfinity/node
-/gitlab-ci/src/dependencies/                                            @dfinity/product-security
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
