@@ -66,7 +66,8 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
             if !is_valid_ipv6_prefix(ipv6_prefix) {
                 bail!("Invalid ipv6 prefix: {}", ipv6_prefix);
             }
-            Some(ipv6_prefix.clone())
+            let ipv6_prefix: Ipv6Addr = format!("{ipv6_prefix}::").parse::<Ipv6Addr>()?;
+            Some(ipv6_prefix)
         }
         None => None,
     };

@@ -35,7 +35,7 @@ impl HostOSConfig {
 
 #[derive(Debug)]
 pub struct Networking {
-    pub ipv6_prefix: Option<String>,
+    pub ipv6_prefix: Option<Ipv6Addr>,
     pub ipv6_address: Option<Ipv6Addr>,
     pub ipv6_gateway: Ipv6Addr,
     pub ipv4_address: Option<Ipv4Addr>,
