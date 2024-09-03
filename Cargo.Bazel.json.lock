@@ -1,5 +1,5 @@
 {
-  "checksum": "ac1c62b1aa8765069fac707b993d83133ec1b3fd9b6e022800e40be611f0b242",
+  "checksum": "43421cb7868eee4d12d2265f9fcfd7e4b438ace3d0639ec3ce38f6ffaa6d9461",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18294,6 +18294,10 @@
               "target": "priority_queue"
             },
             {
+              "id": "proc-macro-crate 1.3.1",
+              "target": "proc_macro_crate"
+            },
+            {
               "id": "proc-macro2 1.0.86",
               "target": "proc_macro2"
             },
@@ -18856,6 +18860,10 @@
               "target": "minicbor_derive"
             },
             {
+              "id": "parity-scale-codec-derive 3.6.4",
+              "target": "parity_scale_codec_derive"
+            },
+            {
               "id": "paste 1.0.15",
               "target": "paste"
             },
@@ -18872,7 +18880,7 @@
               "target": "rustversion"
             },
             {
-              "id": "scale-info-derive 2.11.2",
+              "id": "scale-info-derive 2.9.0",
               "target": "scale_info_derive"
             },
             {
@@ -21253,7 +21261,7 @@
               "target": "impl_serde"
             },
             {
-              "id": "scale-info 2.11.2",
+              "id": "scale-info 2.9.0",
               "target": "scale_info"
             },
             {
@@ -21344,7 +21352,7 @@
               "target": "primitive_types"
             },
             {
-              "id": "scale-info 2.11.2",
+              "id": "scale-info 2.9.0",
               "target": "scale_info"
             },
             {
@@ -32324,7 +32332,7 @@
         "deps": {
           "common": [
             {
-              "id": "parity-scale-codec 3.6.12",
+              "id": "parity-scale-codec 3.6.4",
               "target": "parity_scale_codec"
             }
           ],
@@ -44300,14 +44308,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "parity-scale-codec 3.6.12": {
+    "parity-scale-codec 3.6.4": {
       "name": "parity-scale-codec",
-      "version": "3.6.12",
+      "version": "3.6.4",
       "package_url": "https://github.com/paritytech/parity-scale-codec",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/parity-scale-codec/3.6.12/download",
-          "sha256": "306800abfa29c7f16596b5970a588435e3d5b3149683d00c12b699cc19f895ee"
+          "url": "https://static.crates.io/crates/parity-scale-codec/3.6.4/download",
+          "sha256": "dd8e946cc0cc711189c0b0249fb8b599cbeeab9784d83c415719368bb8d4ac64"
         }
       },
       "targets": [
@@ -44365,13 +44373,13 @@
               "target": "impl_trait_for_tuples"
             },
             {
-              "id": "parity-scale-codec-derive 3.6.12",
+              "id": "parity-scale-codec-derive 3.6.4",
               "target": "parity_scale_codec_derive"
             }
           ],
           "selects": {}
         },
-        "version": "3.6.12"
+        "version": "3.6.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -44379,14 +44387,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "parity-scale-codec-derive 3.6.12": {
+    "parity-scale-codec-derive 3.6.4": {
       "name": "parity-scale-codec-derive",
-      "version": "3.6.12",
+      "version": "3.6.4",
       "package_url": null,
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/parity-scale-codec-derive/3.6.12/download",
-          "sha256": "d830939c76d294956402033aee57a6da7b438f2294eb94864c37b0569053a42c"
+          "url": "https://static.crates.io/crates/parity-scale-codec-derive/3.6.4/download",
+          "sha256": "2a296c3079b5fefbc499e1de58dc26c09b1b9a5952d26694ee89f04a43ebbb3e"
         }
       },
       "targets": [
@@ -44417,7 +44425,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro-crate 3.2.0",
+              "id": "proc-macro-crate 1.3.1",
               "target": "proc_macro_crate"
             },
             {
@@ -44436,7 +44444,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.6.12"
+        "version": "3.6.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -48041,7 +48049,7 @@
               "target": "impl_serde"
             },
             {
-              "id": "scale-info 2.11.2",
+              "id": "scale-info 2.9.0",
               "target": "scale_info",
               "alias": "scale_info_crate"
             },
@@ -56288,14 +56296,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "scale-info 2.11.2": {
+    "scale-info 2.9.0": {
       "name": "scale-info",
-      "version": "2.11.2",
+      "version": "2.9.0",
       "package_url": "https://github.com/paritytech/scale-info",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/scale-info/2.11.2/download",
-          "sha256": "7c453e59a955f81fb62ee5d596b450383d699f152d350e9d23a0db2adb78e4c0"
+          "url": "https://static.crates.io/crates/scale-info/2.9.0/download",
+          "sha256": "35c0a159d0c45c12b20c5a844feb1fe4bea86e28f17b92a5f0c42193634d3782"
         }
       },
       "targets": [
@@ -56331,7 +56339,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "parity-scale-codec 3.6.12",
+              "id": "parity-scale-codec 3.6.4",
               "target": "parity_scale_codec",
               "alias": "scale"
             }
@@ -56346,13 +56354,13 @@
               "target": "derive_more"
             },
             {
-              "id": "scale-info-derive 2.11.2",
+              "id": "scale-info-derive 2.9.0",
               "target": "scale_info_derive"
             }
           ],
           "selects": {}
         },
-        "version": "2.11.2"
+        "version": "2.9.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -56360,14 +56368,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "scale-info-derive 2.11.2": {
+    "scale-info-derive 2.9.0": {
       "name": "scale-info-derive",
-      "version": "2.11.2",
+      "version": "2.9.0",
       "package_url": "https://github.com/paritytech/scale-info",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/scale-info-derive/2.11.2/download",
-          "sha256": "18cf6c6447f813ef19eb450e985bcce6705f9ce7660db221b59093d15c79c4b7"
+          "url": "https://static.crates.io/crates/scale-info-derive/2.9.0/download",
+          "sha256": "912e55f6d20e0e80d63733872b40e1227c0bce1e1ab81ba67d696339bfd7fd29"
         }
       },
       "targets": [
@@ -56418,7 +56426,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.11.2"
+        "version": "2.9.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -77900,6 +77908,7 @@
     "opentelemetry_sdk 0.23.0",
     "p256 0.13.2",
     "pairing 0.23.0",
+    "parity-scale-codec-derive 3.6.4",
     "parking_lot 0.12.3",
     "paste 1.0.15",
     "pathdiff 0.2.1",
@@ -77914,6 +77923,7 @@
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.4.0",
+    "proc-macro-crate 1.3.1",
     "proc-macro2 1.0.86",
     "procfs 0.9.1",
     "prometheus 0.13.4",
@@ -77957,7 +77967,7 @@
     "rustls-pki-types 1.8.0",
     "rustversion 1.0.17",
     "rusty-fork 0.3.0",
-    "scale-info-derive 2.11.2",
+    "scale-info-derive 2.9.0",
     "schemars 0.8.21",
     "schnorr_fun 0.10.0",
     "scoped_threadpool 0.1.9",

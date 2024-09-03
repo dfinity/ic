@@ -826,6 +826,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "num_cpus": crate.spec(
                 version = "^1.13.1",
             ),
+            "num_enum": crate.spec(
+                version = "=0.6.1",
+            ),
             "once_cell": crate.spec(
                 version = "^1.8",
             ),
@@ -866,6 +869,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "opentelemetry-prometheus_0_13_0": crate.spec(
                 package = "opentelemetry-prometheus",
                 version = "^0.13.0",
+            ),
+            "parity-scale-codec-derive": crate.spec(
+                version = "=3.6.4",
             ),
             "p256": crate.spec(
                 version = "^0.13.2",
@@ -932,6 +938,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "proc-macro2": crate.spec(
                 version = "^1.0",
+            ),
+            "proc-macro-crate": crate.spec(
+                version = "=1.3.1",
             ),
             "procfs": crate.spec(
                 version = "^0.9",
@@ -1097,7 +1106,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "scale-info-derive": crate.spec(
-                version = "=2.11.2",
+                version = "=2.9.0",
             ),
             "schemars": crate.spec(
                 version = "^0.8.16",
