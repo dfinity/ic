@@ -199,7 +199,7 @@ impl XNetEndpoint {
                                         )
                                     })
                                     .await
-                                    .expect("Processing http request paniced!"))
+                                    .expect("Processing http request panicked!"))
                                 }
                             }
                         }))
