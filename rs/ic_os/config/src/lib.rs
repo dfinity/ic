@@ -49,7 +49,7 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
 }
 
 // todo: look into better way of storing this. As a networking constructor?
-pub fn parse_config_ini(config_file_path: &Path) -> Result<Networking> {
+pub fn parse_config_ini_networking(config_file_path: &Path) -> Result<Networking> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
     // Per PFOPS - this will never not be 64

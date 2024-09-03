@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{config_map_from_path, parse_config_ini};
+use config::{config_map_from_path, parse_config_ini_networking};
 use std::path::Path;
 use url::Url;
 use utils::deployment::read_deployment_file;
@@ -53,7 +53,7 @@ pub fn main() -> Result<()> {
             let node_operator_private_key_path = Path::new(&node_operator_private_key_path);
 
             // get config.ini variables
-            let networking = parse_config_ini(config_ini_path)?;
+            let networking = parse_config_ini_networking(config_ini_path)?;
             let config_ini_variables = config_map_from_path(config_ini_path)?;
             let verbose = config_ini_variables.get("verbose").cloned();
 
