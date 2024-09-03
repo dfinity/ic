@@ -83,27 +83,17 @@ pub fn main() -> Result<()> {
 
             let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
 
-            let ic_config = config::types::IcConfig::new(
-                networking,
-                nns_public_key_path.to_path_buf(),
-                nns_url,
-                elasticsearch_hosts,
-                None,
-                hostname,
-                node_operator_private_key_path,
-                ssh_authorized_keys_path,
-                verbose,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            );
+            let ic_config = config::types::IcConfigBuilder::new()
+                .networking(networking)
+                .nns_public_key_path(nns_public_key_path.to_path_buf())
+                .nns_url(nns_url)
+                .elasticsearch_hosts(elasticsearch_hosts)
+                .hostname(hostname)
+                .node_operator_private_key_path(node_operator_private_key_path)
+                .ssh_authorized_keys_path(ssh_authorized_keys_path)
+                .verbose(verbose)
+                .build()
+                .expect("Failed to build IcConfig");
 
             let setupos_config = config::types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
 
