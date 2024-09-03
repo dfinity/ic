@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:bincode",
     "@crate_index//:byteorder",
-    "@crate_index//:clap_3_2_25",
     "@crate_index//:lmdb-rkv",
     "@crate_index//:lmdb-rkv-sys",
     "@crate_index//:nix",
@@ -74,6 +73,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":artifact_pool",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:serde_json",
         "@crate_index//:serde-bytes-repr",
     ],
