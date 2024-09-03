@@ -275,8 +275,10 @@ mod tests {
         let (mutate_request, source_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1, source_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let (mutate_request, destination_node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(2, destination_subnet.nodes_count);
+        let (mutate_request, destination_node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1 + source_subnet.nodes_count as u8,
+            destination_subnet.nodes_count,
+        );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnets to the registry
