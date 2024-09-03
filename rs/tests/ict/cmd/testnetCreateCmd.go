@@ -243,7 +243,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 				return err
 			}
 			if err = DeleteTestnet(group); err != nil {
-				cmd.PrintErrln("failed to delete testnet: %v", err)
+				cmd.PrintErrf("failed to delete testnet: %v", err)
 				return err
 			}
 			cmd.PrintErrln(GREEN + "Testnet was deleted successfully" + NC)
