@@ -150,6 +150,10 @@ impl Neuron {
             return Some(Visibility::Public);
         }
 
+        if is_private_neuron_enforcement_enabled() {
+            return self.visibility.or(Some(Visibility::Private));
+        }
+
         self.visibility
     }
 
@@ -965,7 +969,11 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let visibility = visibility.map(|visibility| visibility as i32);
+        let mut visibility = visibility.map(|visibility| visibility as i32);
+
+        if is_private_neuron_enforcement_enabled() {
+            visibility = visibility.or(Some(Visibility::Private as i32));
+        }
 
         NeuronProto {
             id,
