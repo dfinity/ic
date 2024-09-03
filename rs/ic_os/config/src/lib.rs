@@ -158,6 +158,12 @@ pub fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
             Url::parse("https://ic0.app").unwrap(),
         ],
         "mainnet".to_string(),
-        "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string(),
+        [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" "),
     )
 }

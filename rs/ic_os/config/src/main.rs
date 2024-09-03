@@ -2,7 +2,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{config_map_from_path, parse_config_ini_networking, default_deployment_values};
 use std::path::Path;
-use url::Url;
 use utils::deployment::read_deployment_file;
 
 mod types;
