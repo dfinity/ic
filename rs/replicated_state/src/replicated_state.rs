@@ -194,7 +194,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
             // `next()` may consume an arbitrary number of stale references.
             self.size -= canister_iterator.size();
             let next = canister_iterator.next();
@@ -225,9 +225,8 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
-    /// Peeks into the iterator and returns a reference to the item that `next()`
-    /// would return.
-    fn peek(&self) -> Option<&RequestOrResponse>;
+    /// Peeks into the iterator, returning the message that `next()` would return.
+    fn peek(&mut self) -> Option<RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
@@ -240,8 +239,29 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<&RequestOrResponse> {
-        self.canister_iterators.front()?.peek()
+    fn peek(&mut self) -> Option<RequestOrResponse> {
+        while let Some(canister_iterator) = self.canister_iterators.front_mut() {
+            // `peek()` may consume an arbitrary number of stale references.
+            debug_assert!(self.size >= canister_iterator.size());
+            self.size -= canister_iterator.size();
+
+            let msg = match canister_iterator.peek() {
+                // Return a clone, to avoid the borrow checker making us call `peek()` again.
+                Some(msg) => msg.clone(),
+
+                // `canister_iterator` was consumed, so remove it from the iteration.
+                None => {
+                    self.canister_iterators.pop_front();
+                    continue;
+                }
+            };
+
+            self.size += canister_iterator.size();
+            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+
+            return Some(msg);
+        }
+        None
     }
 
     fn exclude_queue(&mut self) {

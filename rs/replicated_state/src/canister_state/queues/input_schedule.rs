@@ -167,8 +167,8 @@ impl InputSchedule {
     /// builds.
     ///
     /// Checks that the canister IDs of all input queues that contain at least one
-    /// message are found exactly once in either the local sender schedule or in the
-    /// remote sender schedule.
+    /// reference are found exactly once in either the local sender schedule or in
+    /// the remote sender schedule.
     ///
     /// Time complexity: `O(n * log(n))`.
     pub(super) fn test_invariants<'a>(

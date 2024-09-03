@@ -971,7 +971,7 @@ proptest! {
                     // Popping the front of the requests will amount to the same as ignoring as
                     // we use queues of size one in this test.
                     let popped = requests.pop_front().unwrap();
-                    prop_assert_eq!(msg, &popped);
+                    prop_assert_eq!(&msg, &popped);
                     output_iter.exclude_queue();
                     ignored_requests.push(popped);
                     // We push the queue to the front as the canister gets another chance if one

@@ -141,7 +141,7 @@ pub struct CanisterQueues {
 /// Additional operations compared to a standard iterator:
 ///  * peeking (returning a reference to the next message without consuming it);
 ///    and
-///  * excluding whole queues from iteration while retaining their messages
+///  * excluding whole queues from iteration while retaining them in the state
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
@@ -152,6 +152,7 @@ pub struct CanisterOutputQueuesIterator<'a> {
     pool: &'a mut MessagePool,
 
     /// Number of (potentially stale) messages left in the iterator.
+    // TODO: Consider using `pool.message_stats().outbound_message_count`` instead.
     size: usize,
 }
 
@@ -173,35 +174,48 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         CanisterOutputQueuesIterator { queues, pool, size }
     }
 
-    /// Returns the first message from the next queue.
-    pub fn peek(&self) -> Option<&RequestOrResponse> {
-        let item = self.queues.front()?.1.peek().unwrap();
+    /// Returns the first message from the next queue hat has one.
+    pub fn peek(&mut self) -> Option<&RequestOrResponse> {
+        while let Some((_, queue)) = self.queues.front_mut() {
+            debug_assert!(self.size >= queue.len());
+            self.size -= queue.len();
 
-        let msg = self.pool.get(item.id());
-        assert!(msg.is_some(), "stale reference at the head of output queue");
-        msg
+            let msg @ Some(_) = peek_first_non_stale(queue, |id| self.pool.get(id)) else {
+                self.queues.pop_front();
+                continue;
+            };
+
+            self.size += queue.len();
+            debug_assert_eq!(Self::compute_size(&self.queues), self.size);
+
+            return msg;
+        }
+        None
     }
 
-    /// Pops the first message from the next queue.
+    /// Pops the first non-stale message from the first queue that contains one.
     ///
-    /// Advances the queue to the next non-stale message. If such a message exists,
-    /// the queue is moved to the back of the iteration order, else it is dropped.
+    /// Consumes all encountered stale references and all empty / emptied output
+    /// queues. The output queue that the message was popped from is moved to
+    /// the back of the iteration order iff it has not been emptied.
     pub fn pop(&mut self) -> Option<RequestOrResponse> {
-        let (receiver, queue) = self.queues.pop_front()?;
-        debug_assert!(self.size >= queue.len());
-        self.size -= queue.len();
+        while let Some((receiver, queue)) = self.queues.pop_front() {
+            debug_assert!(self.size >= queue.len());
+            self.size -= queue.len();
 
-        // Queue must be non-empty and message at the head of queue non-stale.
-        let msg = pop_and_advance(queue, self.pool).unwrap();
-        debug_assert_eq!(Ok(()), canister_queue_ok(queue, self.pool, receiver));
+            let msg @ Some(_) = pop_first_non_stale(queue, |id| self.pool.take(id)) else {
+                continue;
+            };
 
-        if queue.len() > 0 {
-            self.size += queue.len();
-            self.queues.push_back((receiver, queue));
+            if queue.len() > 0 {
+                self.size += queue.len();
+                self.queues.push_back((receiver, queue));
+            }
+            debug_assert_eq!(Self::compute_size(&self.queues), self.size);
+
+            return msg;
         }
-        debug_assert_eq!(Self::compute_size(&self.queues), self.size);
-
-        Some(msg)
+        None
     }
 
     /// Permanently excludes from iteration the next queue (i.e. all messages
@@ -211,17 +225,17 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Returns the number of (potentially stale) messages left in the just excluded
     /// queue.
     pub fn exclude_queue(&mut self) -> usize {
-        let ignored = self
+        let excluded = self
             .queues
             .pop_front()
             .map(|(_, q)| q.len())
             .unwrap_or_default();
 
-        debug_assert!(self.size >= ignored);
-        self.size -= ignored;
+        debug_assert!(self.size >= excluded);
+        self.size -= excluded;
         debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-        ignored
+        excluded
     }
 
     /// Checks if the iterator has finished.
@@ -236,7 +250,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
     /// Computes the number of (potentially stale) messages left in `queues`.
     ///
-    /// Time complexity: O(N).
+    /// Time complexity: `O(N)``.
     fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>) -> usize {
         queues.iter().map(|(_, q)| q.len()).sum()
     }
@@ -282,10 +296,6 @@ impl CanisterQueues {
     /// All messages that `f` returned `Ok` for, are popped. Messages that `f`
     /// returned `Err` for and all those following them in the respective output
     /// queue are retained.
-    ///
-    /// Do note that because a queue can only be skipped over if `f` returns `Err`
-    /// on a non-stale message, queues are always either fully consumed or left with
-    /// a non-stale reference at the front.
     pub(crate) fn output_queues_for_each<F>(&mut self, mut f: F)
     where
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
@@ -419,16 +429,16 @@ impl CanisterQueues {
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
     fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
-        // It is possible for an input schedule to contain an empty or garbage collected
-        // input queue if all messages in said queue have expired / were shed since it
-        // was scheduled. Meaning that iteration may be required.
+        // It is possible for an input schedule to contain an all-stale, empty or
+        // garbage collected input queue if all messages in said queue have expired /
+        // were shed since it was scheduled. Meaning that iteration may be required.
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
                 self.input_schedule.pop(input_queue_type).unwrap();
                 continue;
             };
-            let msg = pop_and_advance(input_queue, &mut self.pool);
+            let msg = pop_first_non_stale(input_queue, |id| self.pool.take(id));
 
             // If the input queue is non-empty, re-enqueue the sender at the back of the
             // input schedule queue.
@@ -458,15 +468,13 @@ impl CanisterQueues {
     /// queue in the input schedule, to achieve amortized `O(1)` time complexity.
     fn peek_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
-            if let Some(item) = self
+            if let Some(msg) = self
                 .canister_queues
-                .get(sender)
-                .and_then(|(input_queue, _)| input_queue.peek())
+                .get_mut(sender)
+                .and_then(|(input_queue, _)| {
+                    peek_first_non_stale(input_queue, |id| self.pool.get(id))
+                })
             {
-                let msg = self
-                    .pool
-                    .get(item.id())
-                    .expect("stale reference at the head of input queue");
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
                 return Some(msg.clone().into());
@@ -488,8 +496,10 @@ impl CanisterQueues {
             // input schedule queue.
             if self
                 .canister_queues
-                .get(sender)
-                .map(|(input_queue, _)| input_queue.len() != 0)
+                .get_mut(sender)
+                .map(|(input_queue, _)| {
+                    peek_first_non_stale(input_queue, |id| self.pool.get(id)).is_some()
+                })
                 .unwrap_or(false)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
@@ -658,6 +668,8 @@ impl CanisterQueues {
 
     /// Returns the number of output requests that can be pushed to each
     /// canister before either the respective input or output queue is full.
+    ///
+    /// Time complexity: O(N).
     pub fn available_output_request_slots(&self) -> BTreeMap<CanisterId, usize> {
         // When pushing a request we need to reserve a slot on the input
         // queue for the eventual reply. So we are limited by the amount of
@@ -702,12 +714,9 @@ impl CanisterQueues {
 
     /// Returns a reference to the (non-stale) message at the head of the respective
     /// output queue, if any.
-    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
-        let output_queue = &self.canister_queues.get(canister_id)?.1;
-
-        let msg = self.pool.get(output_queue.peek()?.id());
-        assert!(msg.is_some(), "stale reference at the head of output queue");
-        msg
+    pub(super) fn peek_output(&mut self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
+        let output_queue = &mut self.canister_queues.get_mut(canister_id)?.1;
+        peek_first_non_stale(output_queue, |id| self.pool.get(id))
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -724,10 +733,15 @@ impl CanisterQueues {
             .get_mut(&own_canister_id)
             .expect("Output queue existed above so lookup should not fail.")
             .1;
-        pop_and_advance(queue, &mut self.pool)
-            .expect("Message peeked above so pop should not fail.");
+        let item = queue
+            .pop()
+            .expect("Message peeked above so pop should not fail");
+        self.pool
+            .take(item.id())
+            .expect("Message peeked above so take should not fail.");
 
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
         Ok(())
     }
 
@@ -878,6 +892,7 @@ impl CanisterQueues {
             return;
         }
 
+        // TODO: Consider flushing stale messages from the fronts of queues first.
         self.canister_queues
             .retain(|_canister_id, (input_queue, output_queue)| {
                 input_queue.has_used_slots() || output_queue.has_used_slots()
@@ -964,7 +979,7 @@ impl CanisterQueues {
             Outbound => msg.receiver(),
         };
         let (input_queue, output_queue) = self.canister_queues.get_mut(&remote).unwrap();
-        let (queue, reverse_queue) = match context {
+        let (_queue, reverse_queue) = match context {
             Inbound => (input_queue, output_queue),
             Outbound => (output_queue, input_queue),
         };
@@ -976,10 +991,10 @@ impl CanisterQueues {
         // `on_message_dropped()` call if multiple messages expired at once (e.g. given
         // a queue containing references `[1, 2]`; `1` and `2` expire  as part of the
         // same `time_out_messages()` call; `on_message_dropped(1)` will also pop `2`).
-        if queue.peek() == Some(&CanisterQueueItem::Reference(id)) {
-            queue.pop();
-            queue.pop_while(|item| self.pool.get(item.id()).is_none());
-        }
+        // if queue.peek() == Some(&CanisterQueueItem::Reference(id)) {
+        //     queue.pop();
+        //     queue.pop_while(|item| self.pool.get(item.id()).is_none());
+        // }
 
         // Release the response slot, generate reject responses or remember shed inbound
         // responses, as necessary.
@@ -1042,7 +1057,7 @@ impl CanisterQueues {
     /// `debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn))`.
     ///
     /// Checks that the canister IDs of all input queues that contain at least one
-    /// message are enqueued exactly once in the input schedule.
+    /// references are enqueued exactly once in the input schedule.
     ///
     /// Time complexity: `O(n * log(n))`.
     fn schedules_ok(
@@ -1066,10 +1081,10 @@ impl CanisterQueues {
     fn test_invariants(&self) -> Result<(), String> {
         // Invariant: all canister queues (input or output) are either empty or start
         // with a non-stale reference.
-        for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            canister_queue_ok(input_queue, &self.pool, canister_id)?;
-            canister_queue_ok(output_queue, &self.pool, canister_id)?;
-        }
+        // for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
+        //     canister_queue_ok(input_queue, &self.pool, canister_id)?;
+        //     canister_queue_ok(output_queue, &self.pool, canister_id)?;
+        // }
 
         // Reserved slot stats match the actual number of reserved slots.
         let calculated_stats = Self::calculate_queue_stats(
@@ -1123,6 +1138,33 @@ fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<
     let msg = pool.take(item.id());
     assert!(msg.is_some(), "stale reference at the head of queue");
     msg
+}
+
+/// Pops and returns the first non-stale item in the queue; else returns `None`.
+fn pop_first_non_stale<T, F>(queue: &mut CanisterQueue, mut pop: F) -> Option<T>
+where
+    F: FnMut(message_pool::Id) -> Option<T>,
+{
+    while let Some(item) = queue.pop() {
+        if let msg @ Some(_) = pop(item.id()) {
+            return msg;
+        }
+    }
+    None
+}
+
+/// Peeks the first non-stale item in the queue; else returns `None`.
+fn peek_first_non_stale<T, F>(queue: &mut CanisterQueue, peek: F) -> Option<T>
+where
+    F: Fn(message_pool::Id) -> Option<T>,
+{
+    while let Some(item) = queue.peek() {
+        if let msg @ Some(_) = peek(item.id()) {
+            return msg;
+        }
+        queue.pop();
+    }
+    None
 }
 
 /// Helper function for concisely validating the hard invariant that a canister
@@ -1545,7 +1587,7 @@ pub mod testing {
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
             let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
-            super::pop_and_advance(queue, &mut self.pool)
+            super::pop_first_non_stale(queue, |id| self.pool.take(id))
         }
 
         fn output_queues_len(&self) -> usize {
