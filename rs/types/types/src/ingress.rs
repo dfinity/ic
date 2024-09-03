@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::{convert::TryFrom, fmt};
 
 /// The inner state of an ingress message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IngressState {
     /// The message was successfully inducted into the input queue of
     /// the receiver and should eventually execute.
@@ -56,7 +56,7 @@ impl IngressState {
 }
 
 /// The status of an ingress message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IngressStatus {
     /// The system has knowledge of this message, its status is
     /// described by state
@@ -141,7 +141,7 @@ impl IngressStatus {
 }
 
 /// A list of hashsets that implements IngressSetQuery.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct IngressSets {
     hash_sets: Vec<Arc<HashSet<IngressMessageId>>>,
     min_block_time: Time,
@@ -166,7 +166,7 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case

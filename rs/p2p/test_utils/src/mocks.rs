@@ -42,12 +42,6 @@ mock! {
             request: Request<Bytes>,
         ) -> Result<Response<Bytes>, anyhow::Error>;
 
-        async fn push(
-            &self,
-            peer_id: &NodeId,
-            request: Request<Bytes>,
-        ) -> Result<(), anyhow::Error>;
-
         fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }
 }

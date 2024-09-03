@@ -7,7 +7,7 @@ use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UpgradeArgs {
     constructor_types: Vec<Type>,
     upgrade_args: String,

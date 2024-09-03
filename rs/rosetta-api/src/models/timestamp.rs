@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// The timestamp of the block in milliseconds since the Unix Epoch. The
 /// timestamp is stored in milliseconds because some blockchains produce blocks
 /// more often than once a second.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct Timestamp(pub i64);
 
 pub fn from_system_time(timestamp: SystemTime) -> Result<Timestamp, ApiError> {

@@ -46,9 +46,8 @@ message SnsRootCanister {
   // controllers beyond SNS root are allowed when registering a dapp.
   bool testflight = 8;
 
-  // Set to `true` if the framework canisters' memory limit doesn't need to be changed
-  // TODO(NNS1-3286): remove
-  optional bool updated_framework_canisters_memory_limit = 9;
+  reserved "updated_framework_canisters_memory_limit";
+  reserved 9;
 }
 
 message RegisterDappCanisterRequest {

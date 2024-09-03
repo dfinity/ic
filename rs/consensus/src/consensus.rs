@@ -68,7 +68,7 @@ use std::{
 };
 use strum_macros::AsRefStr;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, AsRefStr)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {
     Notary,

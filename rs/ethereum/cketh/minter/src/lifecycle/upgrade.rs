@@ -8,7 +8,7 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
 
-#[derive(CandidType, Deserialize, Clone, Debug, Default, Encode, Decode, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Decode, Deserialize, Encode)]
 pub struct UpgradeArg {
     #[cbor(n(0), with = "crate::cbor::nat::option")]
     pub next_transaction_nonce: Option<Nat>,

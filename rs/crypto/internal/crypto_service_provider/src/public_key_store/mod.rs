@@ -137,7 +137,7 @@ pub trait PublicKeyStore: Send + Sync {
 }
 
 /// Timestamps of when public keys were generated.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PublicKeyGenerationTimestamps {
     /// Timestamp of when the node signing public key was generated.
     pub node_signing_public_key: Option<Time>,

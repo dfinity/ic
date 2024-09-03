@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:rustls",
     "@crate_index//:slog",
     "@crate_index//:socket2",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-util",

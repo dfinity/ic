@@ -783,6 +783,7 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
+        .http2_prior_knowledge()
         .danger_accept_invalid_certs(true);
 
     let builder = match (
@@ -983,7 +984,7 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum EndpointsStatus {
     AllHealthy,
     AllUnhealthy,
