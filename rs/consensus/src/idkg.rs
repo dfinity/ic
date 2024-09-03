@@ -432,16 +432,16 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgGossipImpl` implements the bouncer function and other gossip related
+/// `IDkgBouncer` implements the bouncer function and other gossip related
 /// functionality
-pub struct IDkgGossipImpl {
+pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
-impl IDkgGossipImpl {
-    /// Builds a new IDkgGossipImpl component
+impl IDkgBouncer {
+    /// Builds a new IDkgBouncer component
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -472,7 +472,7 @@ impl IDkgBouncerArgs {
     }
 }
 
-impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgGossipImpl {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;

@@ -83,9 +83,6 @@ pub struct DkgImpl {
     metrics: Metrics,
 }
 
-/// `DkgGossipImpl` is a placeholder for gossip related DKG interfaces.
-pub struct DkgGossipImpl {}
-
 impl DkgImpl {
     /// Build a new DKG component
     pub fn new(
@@ -380,13 +377,16 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
     }
 }
 
+/// `DkgBouncer` is a placeholder for gossip related DKG interfaces.
+pub struct DkgBouncer;
+
 // The NiDKG component does not implement custom `get_filter` function
 // because it doesn't require artifact retransmission. Nodes participating
 // in NiDKG would create artifacts depending on their own consensus state.
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
     fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id| {

@@ -5,7 +5,7 @@ use ic_artifact_pool::{
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
-    consensus::{ConsensusGossipImpl, ConsensusImpl},
+    consensus::{ConsensusBouncer, ConsensusImpl},
     dkg, idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
@@ -347,7 +347,7 @@ pub fn apply_modifier_idkg(
 pub struct ConsensusDriver<'a> {
     pub(crate) consensus:
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
-    pub(crate) consensus_gossip: ConsensusGossipImpl,
+    pub(crate) consensus_gossip: ConsensusBouncer,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) idkg: Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
