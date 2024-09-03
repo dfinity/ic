@@ -32,7 +32,7 @@ if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file

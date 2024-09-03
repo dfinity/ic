@@ -5293,6 +5293,7 @@ dependencies = [
  "backoff",
  "bytes",
  "futures",
+ "http-body-util",
  "ic-base-types",
  "ic-consensus-manager",
  "ic-interfaces",
@@ -5301,7 +5302,9 @@ dependencies = [
  "ic-p2p-test-utils",
  "ic-protobuf",
  "ic-quic-transport",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
  "mockall",
@@ -5311,6 +5314,7 @@ dependencies = [
  "rand 0.8.5",
  "slog",
  "tokio",
+ "tower",
  "tracing",
 ]
 
@@ -12932,7 +12936,6 @@ name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
  "bytes",
- "crossbeam-channel",
  "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
@@ -12959,7 +12962,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "threadpool",
  "tokio",
  "url",
 ]
@@ -16844,9 +16846,9 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.11.3"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
+checksum = "a2d2fb862b7ba45e615c1429def928f2e15f815bdf933b27a2d3824e224c1f46"
 dependencies = [
  "bytes",
  "pin-project-lite",

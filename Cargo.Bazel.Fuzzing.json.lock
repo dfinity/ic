@@ -1,5 +1,5 @@
 {
-  "checksum": "50d3f0f01533c5727291c07f5098a83bb372ca285dc77b301fa92d1ae856f821",
+  "checksum": "78eea62df2bc566c12ff628f2434e8e7e975a218e19e97ba9ac6e796e5febb94",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18339,7 +18339,7 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.3",
+              "id": "quinn 0.11.4",
               "target": "quinn"
             },
             {
@@ -49074,14 +49074,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.3": {
+    "quinn 0.11.4": {
       "name": "quinn",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.3/download",
-          "sha256": "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
+          "url": "https://static.crates.io/crates/quinn/0.11.4/download",
+          "sha256": "a2d2fb862b7ba45e615c1429def928f2e15f815bdf933b27a2d3824e224c1f46"
         }
       },
       "targets": [
@@ -49123,7 +49123,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn-proto 0.11.6",
+              "id": "quinn-proto 0.11.7",
               "target": "quinn_proto",
               "alias": "proto"
             },
@@ -49160,7 +49160,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.3"
+        "version": "0.11.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -49169,14 +49169,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-proto 0.11.6": {
+    "quinn-proto 0.11.7": {
       "name": "quinn-proto",
-      "version": "0.11.6",
+      "version": "0.11.7",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-proto/0.11.6/download",
-          "sha256": "ba92fb39ec7ad06ca2582c0ca834dfeadcaf06ddfc8e635c80aa7e1c05315fdd"
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.7/download",
+          "sha256": "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
         }
       },
       "targets": [
@@ -49248,7 +49248,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.6"
+        "version": "0.11.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78008,7 +78008,7 @@
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
-    "quinn 0.11.3",
+    "quinn 0.11.4",
     "quinn-udp 0.5.4",
     "quote 1.0.35",
     "rand 0.8.5",

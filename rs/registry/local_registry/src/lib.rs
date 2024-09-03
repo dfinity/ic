@@ -239,7 +239,7 @@ impl RegistryClient for LocalRegistry {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 struct RootSubnetInfo {
     registry_version: RegistryVersion,
     urls_and_pubkey: (Vec<Url>, ThresholdSigPublicKey),
@@ -265,7 +265,7 @@ fn registry_result_to_local_registry_error<T>(
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum LocalRegistryError {
     #[error("The provided registry is at version 0 (empty)")]
     EmptyRegistry,

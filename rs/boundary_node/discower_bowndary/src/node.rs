@@ -1,7 +1,7 @@
 use ic_agent::agent::ApiBoundaryNode;
 use url::Url;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Node {
     pub domain: String,
 }

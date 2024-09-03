@@ -24,7 +24,7 @@ struct RequestStatuses {
     request_status: Option<BTreeMap<MessageId, RequestStatus>>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize)]
 pub struct RequestStatus {
     pub status: String,
     pub reply: Option<Vec<u8>>,
