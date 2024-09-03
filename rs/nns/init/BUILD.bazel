@@ -2,11 +2,10 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/interfaces/registry",
-    "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/test_utils",
@@ -23,6 +22,14 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:url",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/common",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/common:common--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -45,6 +52,17 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "init--test_feature",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_nns_init",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 rust_binary(

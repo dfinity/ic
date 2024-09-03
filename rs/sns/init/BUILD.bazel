@@ -12,13 +12,11 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
-    "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:base64",
     "@crate_index//:candid",
@@ -33,14 +31,18 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/sns/governance",
+    "//rs/sns/root",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/common:common--test_feature",
     "//rs/nns/constants:constants--test_feature",
     "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]
 

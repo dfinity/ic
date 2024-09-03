@@ -26,7 +26,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nervous_system/common:common--test_feature",
-    "//rs/sns/governance:governance--test_feature",
+    # "//rs/sns/governance:governance--test_feature",
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [

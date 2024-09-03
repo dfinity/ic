@@ -2,10 +2,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
-    "//rs/nervous_system/clients",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/management_canister_types",
@@ -13,6 +12,14 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/clients:clients--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -31,6 +38,16 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "root--test_feature",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_nervous_system_root",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 rust_test(
