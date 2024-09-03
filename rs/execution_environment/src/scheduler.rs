@@ -1875,7 +1875,7 @@ impl Scheduler for SchedulerImpl {
 
                 self.metrics
                     .canister_snapshots_memory_usage
-                    .observe(final_state.canister_snapshots.memory_taken().get() as f64);
+                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
                 self.metrics
                     .num_canister_snapshots
                     .set(final_state.canister_snapshots.count() as i64);

@@ -18,7 +18,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, UserError,
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
-use ic_test_utilities_metrics::{fetch_gauge, fetch_histogram_stats, fetch_int_counter};
+use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
 use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_gt, assert_le, assert_lt};
@@ -839,13 +839,13 @@ fn canister_snapshot_metrics_are_observed() {
     env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap();
 
-    let stats = fetch_histogram_stats(
+    let gauge = fetch_gauge(
         env.metrics_registry(),
         "scheduler_canister_snapshots_memory_usage_bytes",
     )
     .unwrap();
     // The canister is using at least 30 MiB of memory (plus some more for the Wasm module etc).
-    assert_gt!(stats.sum, (30 * MIB) as f64);
+    assert_gt!(gauge, (30 * MIB) as f64);
 
     let gauge = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
     assert_eq!(gauge, 1.0);
