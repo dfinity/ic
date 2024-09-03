@@ -50,7 +50,7 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
 }
 
 // todo: look into better way of storing this. As a networking constructor?
-pub fn parse_config_ini_networking(config_file_path: &Path) -> Result<Networking> {
+pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, Option<String>)> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
     // Per PFOPS - this will never not be 64
@@ -133,7 +133,7 @@ pub fn parse_config_ini_networking(config_file_path: &Path) -> Result<Networking
 
     let domain = config_map.get("domain").cloned();
 
-    Ok(Networking {
+    let networking = Networking {
         ipv6_prefix,
         ipv6_address,
         ipv6_gateway,
@@ -141,7 +141,11 @@ pub fn parse_config_ini_networking(config_file_path: &Path) -> Result<Networking
         ipv4_gateway,
         ipv4_prefix_length,
         domain,
-    })
+    };
+
+    let verbose = config_map.get("verbose").cloned();
+
+    Ok((networking, verbose))
 }
 
 fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
