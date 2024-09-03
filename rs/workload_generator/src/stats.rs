@@ -337,7 +337,10 @@ impl fmt::Display for Summary {
         writeln!(f, "  Data:      {}", self.content_length)?;
         writeln!(f)?;
         writeln!(f, "Status codes:")?;
-        writeln!(f, "https://github.com/dfinity/ic/tree/master/rs/workload_generator#summary-status-counts")?;
+        writeln!(
+            f,
+            "https://github.com/dfinity/ic/tree/master/rs/workload_generator#summary-status-counts"
+        )?;
         let mut status_counts: Vec<(&u16, &u32)> = self.status_counts.iter().collect();
         status_counts.sort_by(|&(&code_a, _), &(&code_b, _)| code_a.cmp(&code_b));
         for (k, v) in status_counts {
