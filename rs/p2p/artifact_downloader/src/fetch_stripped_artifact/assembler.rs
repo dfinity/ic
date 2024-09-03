@@ -8,9 +8,12 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
+    batch::IngressPayload,
     consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
     NodeId,
@@ -229,14 +232,16 @@ pub(crate) enum InsertionError {
     AlreadyInserted,
 }
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum AssemblyError {}
+#[derive(Debug)]
+pub(crate) enum AssemblyError {
+    Missing(IngressMessageId),
+    DeserializationFailed(ProxyDecodeError),
+}
 
 impl StrippedBlockProposal {
     /// Returns the list of [`IngressMessageId`]s which have been stripped from the block.
     pub(crate) fn missing_ingress_messages(&self) -> Vec<IngressMessageId> {
-        self.payload
-            .ingress
+        self.stripped_ingress_payload
             .ingress_messages
             .iter()
             .filter_map(|maybe_ingress| match maybe_ingress {
@@ -255,8 +260,7 @@ impl StrippedBlockProposal {
         let ingress_message_id = IngressMessageId::from(&ingress_message);
 
         let ingress = self
-            .payload
-            .ingress
+            .stripped_ingress_payload
             .ingress_messages
             .iter_mut()
             .find(|ingress| match ingress {
@@ -277,9 +281,34 @@ impl StrippedBlockProposal {
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some ingress messages missing.
-    // TODO(kpop): Implement this
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        unimplemented!()
+        let Self {
+            block_proposal_without_ingresses_proto: mut reconstructed_block_proposal_proto,
+            stripped_ingress_payload,
+            unstripped_consensus_message_id,
+        } = self;
+
+        let ingresses = stripped_ingress_payload
+            .ingress_messages
+            .into_iter()
+            .map(|msg| match msg {
+                MaybeStrippedIngress::Full(_, message) => Ok(message),
+                MaybeStrippedIngress::Stripped(id) => Err(AssemblyError::Missing(id)),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let reconstructed_ingress_payload = IngressPayload::from(ingresses);
+
+        let reconstructed_ingress_payload_proto =
+            pb::IngressPayload::from(&reconstructed_ingress_payload);
+
+        reconstructed_block_proposal_proto
+            .value
+            .as_mut()
+            .map(|block| block.ingress_payload = Some(reconstructed_ingress_payload_proto));
+
+        reconstructed_block_proposal_proto
+            .try_into()
+            .map_err(AssemblyError::DeserializationFailed)
     }
 }
 
@@ -293,9 +322,7 @@ mod tests {
         Height,
     };
 
-    use crate::fetch_stripped_artifact::types::stripped::{
-        StrippedDataPayload, StrippedIngressPayload,
-    };
+    use crate::fetch_stripped_artifact::types::stripped::StrippedIngressPayload;
 
     use super::*;
 
@@ -366,9 +393,8 @@ mod tests {
         ingress_messages: Vec<MaybeStrippedIngress>,
     ) -> StrippedBlockProposal {
         StrippedBlockProposal {
-            payload: StrippedDataPayload {
-                ingress: StrippedIngressPayload { ingress_messages },
-            },
+            block_proposal_without_ingresses_proto: pb::BlockProposal::default(),
+            stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
             unstripped_consensus_message_id: fake_consensus_message_id(),
         }
     }

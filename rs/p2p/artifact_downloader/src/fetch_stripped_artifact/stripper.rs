@@ -1,6 +1,16 @@
-use ic_types::consensus::{BlockProposal, ConsensusMessage};
+use ic_protobuf::types::v1 as pb;
+use ic_types::{
+    artifact::IdentifiableArtifact,
+    batch::IngressPayload,
+    consensus::{BlockPayload, BlockProposal, ConsensusMessage},
+};
 
-use super::types::stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal};
+use super::types::stripped::{
+    MaybeStrippedConsensusMessage, MaybeStrippedIngress, StrippedBlockProposal,
+    StrippedIngressPayload,
+};
+
+const INGRESS_MESSAGE_SIZE_STRIPPING_THRESHOLD_BYTES: usize = 1024;
 
 /// Provides functionality for stripping objects of given information.
 ///
@@ -32,8 +42,45 @@ impl Strippable for ConsensusMessage {
 impl Strippable for BlockProposal {
     type Output = StrippedBlockProposal;
 
-    // TODO(kpop): implement this
     fn strip(self) -> Self::Output {
-        unimplemented!()
+        let unstripped_consensus_message_id = ConsensusMessage::BlockProposal(self.clone()).id();
+        let mut proto = pb::BlockProposal::from(&self);
+
+        // Remove the ingress payload from the proto.
+        proto
+            .value
+            .as_mut()
+            .map(|block| block.ingress_payload = None);
+
+        let stripped_ingress_payload = match self.content.as_ref().payload.as_ref() {
+            BlockPayload::Data(data) => data.batch.ingress.clone().strip(),
+            // Summary block has no ingress messages
+            BlockPayload::Summary(_) => StrippedIngressPayload {
+                ingress_messages: vec![],
+            },
+        };
+
+        Self::Output {
+            block_proposal_without_ingresses_proto: proto,
+            stripped_ingress_payload,
+            unstripped_consensus_message_id,
+        }
+    }
+}
+
+impl Strippable for IngressPayload {
+    type Output = StrippedIngressPayload;
+
+    fn strip(self) -> Self::Output {
+        let stripped_ingresses = self
+            .message_ids()
+            .into_iter()
+            // TODO(kpop): use threshold
+            .map(MaybeStrippedIngress::Stripped)
+            .collect();
+
+        Self::Output {
+            ingress_messages: stripped_ingresses,
+        }
     }
 }

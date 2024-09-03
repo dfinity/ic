@@ -4,12 +4,8 @@ use ic_protobuf::{
 };
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
-    batch::{SelfValidatingPayload, ValidationContext, XNetPayload},
-    consensus::{dkg, idkg, Block, BlockMetadata, ConsensusMessage, Rank},
-    crypto::CryptoHashOf,
+    consensus::ConsensusMessage,
     messages::SignedIngress,
-    signature::BasicSignature,
-    Height, ReplicaVersion,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -25,30 +21,11 @@ pub(crate) struct StrippedIngressPayload {
     pub(crate) ingress_messages: Vec<MaybeStrippedIngress>,
 }
 
-/// Stripped version of the [`DataPayload`].
-#[derive(Debug)]
-pub(crate) struct StrippedDataPayload {
-    pub(crate) ingress: StrippedIngressPayload,
-    //xnet: XNetPayload,
-    //self_validating: SelfValidatingPayload,
-    //canister_http: Vec<u8>,
-    //query_stats: Vec<u8>,
-    //dealings: dkg::Dealings,
-    //idkg: idkg::Payload,
-}
-
 /// Stripped version of the [`BlockProposal`].
 #[derive(Debug)]
 pub struct StrippedBlockProposal {
-    //pub(crate) version: ReplicaVersion,
-    //pub(crate) parent: CryptoHashOf<Block>,
-    pub(crate) payload: StrippedDataPayload,
-    //pub(crate) height: Height,
-    //pub(crate) rank: Rank,
-    //pub(crate) context: ValidationContext,
-    //pub(crate) unstripped_id: ConsensusMessageId,
-    //pub(crate) block_hash: CryptoHashOf<Block>,
-    //pub(crate) signature: BasicSignature<BlockMetadata>,
+    pub(crate) block_proposal_without_ingresses_proto: pb::BlockProposal,
+    pub(crate) stripped_ingress_payload: StrippedIngressPayload,
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
 }
 
