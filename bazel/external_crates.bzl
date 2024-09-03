@@ -804,7 +804,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "nftables": crate.spec(
-                version = "^0.4",
+                version = "^0.4.1",
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
