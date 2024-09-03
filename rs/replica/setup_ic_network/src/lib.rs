@@ -359,7 +359,7 @@ fn start_consensus(
     };
 
     let ingress_sender = {
-        let ingress_prioritizer = Arc::new(IngressBouncer::new(time_source.clone()));
+        let ingress_bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
 
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(
@@ -375,7 +375,7 @@ fn start_consensus(
             log.clone(),
             rt_handle.clone(),
             artifact_pools.ingress_pool.clone(),
-            ingress_prioritizer,
+            ingress_bouncer,
             metrics_registry.clone(),
         );
         new_p2p_consensus.add_client(ingress_rx, client.clone(), assembler);
