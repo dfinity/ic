@@ -32,7 +32,7 @@ if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file
@@ -51,9 +51,7 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 
 # add aws credentials file if it's set
-if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
-    ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
-elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+if [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
     echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
 fi
 

@@ -146,7 +146,7 @@ fn get_exported_globals<T>(
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMemoryType {
     Heap,
     Stable,

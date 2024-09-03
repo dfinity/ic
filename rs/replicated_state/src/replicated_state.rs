@@ -44,7 +44,7 @@ use strum_macros::{EnumCount, EnumIter};
 pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
 
 /// Input queue type: local or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum InputQueueType {
     /// Local subnet input messages.
     LocalSubnet,
@@ -54,7 +54,7 @@ pub enum InputQueueType {
 
 /// Next input source: round-robin across local subnet canister messages;
 /// ingress messages; and remote subnet canister messages.
-#[derive(Clone, Copy, Eq, EnumCount, EnumIter, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumCount, EnumIter)]
 pub enum InputSource {
     /// Local subnet input messages.
     #[default]
@@ -87,7 +87,7 @@ impl From<NextInputQueue> for InputSource {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
@@ -365,7 +365,7 @@ impl MemoryTaken {
 //
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
-#[derive(Clone, Debug, PartialEq, ValidateEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     #[validate_eq(CompareWithValidateEq)]

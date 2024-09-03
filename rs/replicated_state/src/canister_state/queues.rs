@@ -42,7 +42,7 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
     #[validate_eq(CompareWithValidateEq)]
@@ -96,7 +96,7 @@ pub struct CanisterQueues {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct NewCanisterQueues {
     /// Queue of ingress (user) messages.
     #[validate_eq(CompareWithValidateEq)]
@@ -1502,7 +1502,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for New
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct InputQueuesStats {
     /// Count of messages in input queues.
     message_count: usize,
@@ -1566,7 +1566,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 }
 
 /// Running stats across output queues.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct OutputQueuesStats {
     /// Number of actual messages in output queues.
     message_count: usize,
@@ -1616,7 +1616,7 @@ impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, Eq)]
+#[derive(Clone, Eq, Debug, Default)]
 struct MemoryUsageStats {
     /// Sum total of the byte size of every response across input and output
     /// queues.
@@ -1743,7 +1743,7 @@ impl PartialEq for MemoryUsageStats {
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #[allow(dead_code)]
 struct QueueStats {

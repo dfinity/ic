@@ -47,10 +47,10 @@ use crate::{
 const DAY: Duration = Duration::from_secs(24 * 3600);
 
 // Public + Private key pair
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TLSCert(pub String, pub String);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ProvisionResult {
     StillValid(TLSCert),
     Issued(TLSCert),
