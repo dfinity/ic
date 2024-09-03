@@ -13,7 +13,8 @@ use crate::types::Networking;
 pub type ConfigMap = HashMap<String, String>;
 
 // todo: update naming once config variables start applying to all config partitions
-pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "config/config.json";
+pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "/config/config.json";
+// pub static DEFAULT_CONFIG_OBJECT_PATH: &str = "/tmp/config/config.json";
 
 pub static DEFAULT_SETUPOS_CONFIG_FILE_PATH: &str = "/var/ic/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
@@ -45,7 +46,12 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
 pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
     let file_contents = read_to_string(config_file_path)
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
-    Ok(file_contents
+
+    let normalized_file_contents = file_contents
+        .replace("\r\n", "\n") // Convert CRLF to LF
+        .replace("\r", "\n");  // Convert remaining CR to LF
+
+    Ok(normalized_file_contents
         .lines()
         .filter_map(parse_config_line)
         .collect())
