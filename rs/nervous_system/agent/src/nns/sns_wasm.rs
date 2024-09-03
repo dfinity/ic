@@ -1,9 +1,10 @@
+use crate::sns::Sns;
 use anyhow::{anyhow, Result};
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_wasm::pb::v1::{
-    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-    ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest,
+    ListUpgradeStepsResponse,
 };
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
@@ -41,8 +42,14 @@ pub async fn get_git_version_for_sns_hash(
     Ok(git_commit_id)
 }
 
-pub async fn list_deployed_snses(agent: &Agent) -> Result<ListDeployedSnsesResponse> {
-    call(agent, SNS_WASM_CANISTER_ID, ListDeployedSnsesRequest {}).await
+pub async fn list_deployed_snses(agent: &Agent) -> Result<Vec<Sns>> {
+    let response = call(agent, SNS_WASM_CANISTER_ID, ListDeployedSnsesRequest {}).await?;
+    let snses = response
+        .instances
+        .into_iter()
+        .filter_map(|deployed_sns| crate::sns::Sns::try_from(deployed_sns).ok())
+        .collect::<Vec<_>>();
+    Ok(snses)
 }
 
 async fn write_wasm_to_temp_file(

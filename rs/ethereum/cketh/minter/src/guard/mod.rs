@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 pub const MAX_CONCURRENT: usize = 100;
 pub const MAX_PENDING: usize = 100;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum GuardError {
     AlreadyProcessing,
     TooManyConcurrentRequests,
@@ -21,7 +21,7 @@ pub trait RequestsGuardedByPrincipal {
     fn pending_requests_count(state: &State) -> usize;
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct PendingWithdrawalRequests;
 
 impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
@@ -37,7 +37,7 @@ impl RequestsGuardedByPrincipal for PendingWithdrawalRequests {
 /// Guards a block from executing twice when called by the same user and from being
 /// executed [MAX_CONCURRENT] or more times in parallel.
 #[must_use]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Guard<PR: RequestsGuardedByPrincipal> {
     principal: Principal,
     _marker: PhantomData<PR>,
@@ -80,12 +80,12 @@ pub fn retrieve_withdraw_guard(
     Guard::new(principal)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum TimerGuardError {
     AlreadyProcessing,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct TimerGuard {
     task: TaskType,
 }

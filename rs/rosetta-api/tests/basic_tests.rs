@@ -311,11 +311,11 @@ async fn blocks_test() {
     );
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            Some(trans.transaction_identifier.clone()),
-            None,
-        ))
+        .search_transactions(
+            SearchTransactionsRequest::builder(req_handler.network_id())
+                .with_transaction_identifier(trans.transaction_identifier.clone())
+                .build(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -328,11 +328,7 @@ async fn blocks_test() {
     assert_eq!(resp.total_count, 1);
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            None,
-            None,
-        ))
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
         .await
         .unwrap();
 
@@ -340,7 +336,7 @@ async fn blocks_test() {
     assert_eq!(resp.transactions.len(), scribe.blockchain.len());
     assert_eq!(resp.next_offset, None);
 
-    let mut req = SearchTransactionsRequest::new(req_handler.network_id(), None, None);
+    let mut req = SearchTransactionsRequest::builder(req_handler.network_id()).build();
     req.max_block = Some(100);
     req.limit = Some(10);
     req.offset = Some(30);
@@ -397,11 +393,11 @@ async fn blocks_test() {
         let resp = req_handler.block_transaction(msg).await.unwrap();
         assert_eq!(resp.transaction, transactions[0]);
         let resp = req_handler
-            .search_transactions(SearchTransactionsRequest::new(
-                req_handler.network_id(),
-                Some(transaction.transaction_identifier),
-                None,
-            ))
+            .search_transactions(
+                SearchTransactionsRequest::builder(req_handler.network_id())
+                    .with_transaction_identifier(transaction.transaction_identifier)
+                    .build(),
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -520,11 +516,9 @@ async fn query_search_transactions(
     offset: Option<i64>,
     limit: Option<i64>,
 ) -> Result<SearchTransactionsResponse, ApiError> {
-    let mut msg = SearchTransactionsRequest::new(
-        req_handler.network_id(),
-        None,
-        Some(ic_rosetta_api::convert::to_model_account_identifier(acc)),
-    );
+    let mut msg = SearchTransactionsRequest::builder(req_handler.network_id())
+        .with_account_identifier(ic_rosetta_api::convert::to_model_account_identifier(acc))
+        .build();
     msg.max_block = max_block;
     msg.offset = offset;
     msg.limit = limit;
@@ -735,11 +729,7 @@ async fn load_from_store_test() {
     verify_account_search(&scribe, &req_handler, 11, last_verified).await;
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            None,
-            None,
-        ))
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
         .await
         .unwrap();
 

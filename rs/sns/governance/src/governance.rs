@@ -459,7 +459,7 @@ impl GovernanceProto {
 
 /// This follows the following pattern:
 /// https://willcrichton.net/rust-api-type-patterns/witnesses.html
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ValidGovernanceProto(GovernanceProto);
 
 impl ValidGovernanceProto {
@@ -5521,7 +5521,7 @@ fn err_if_another_upgrade_is_in_progress(
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }

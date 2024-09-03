@@ -2,21 +2,12 @@
 
 set -e
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t "${SCRIPT}" "${message}"
-}
 
 get_version_noreport() {
     if [ -r "${VERSION_FILE}" ]; then

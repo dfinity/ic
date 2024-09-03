@@ -22,7 +22,7 @@ mod tests;
 
 /// Describes an error that occurred during parsing and validation of the result
 /// of a `RegistryCanister::get_certified_changes_since()` method call.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum CertificateValidationError {
     /// Failed to deserialize some part of the certificate.
     DeserError(String),
@@ -139,12 +139,12 @@ fn verify_certified_data_internal(
     certified_data: &[u8],
     use_signature_cache: bool,
 ) -> Result<Time, CertificateValidationError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct CanisterView {
         certified_data: Blob,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct ReplicaState {
         time: Leb128EncodedU64,
         canister: BTreeMap<CanisterId, CanisterView>,
@@ -310,13 +310,13 @@ fn verify_delegation_certificate(
     canister_id: Option<&CanisterId>,
     use_signature_cache: bool,
 ) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct SubnetView {
         canister_ranges: Blob,
         public_key: Blob,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct SubnetCertificateData {
         #[allow(unused)] // currently delegation timestamps are not checked
         time: Leb128EncodedU64,

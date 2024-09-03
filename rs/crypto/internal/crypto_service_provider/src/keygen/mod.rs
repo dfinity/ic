@@ -73,7 +73,7 @@ pub mod utils {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug)]
     pub enum MEGaPublicKeyFromProtoError {
         UnsupportedAlgorithm {
             algorithm_id: Option<AlgorithmIdProto>,

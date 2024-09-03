@@ -8,7 +8,7 @@ use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
 use spec_compliance::run_ic_ref_test;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 const LOCALHOST: &str = "127.0.0.1";
@@ -65,16 +65,15 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
         .stderr(Stdio::inherit())
         .spawn()
         .expect("httpbin binary crashed");
-    let start = Instant::now();
     let httpbin_url = loop {
         let port_string = std::fs::read_to_string(port_file_path.clone())
             .expect("Failed to read port from port file");
         if !port_string.is_empty() {
-            let port: u16 = port_string.parse().expect("Failed to parse port to number");
+            let port: u16 = port_string
+                .trim_end()
+                .parse()
+                .expect("Failed to parse port to number");
             break format!("{}:{}", LOCALHOST, port);
-        }
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start httpbin service in time");
         }
         std::thread::sleep(Duration::from_millis(20));
     };

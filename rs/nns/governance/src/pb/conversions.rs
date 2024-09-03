@@ -688,20 +688,11 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::ProposalActionRequest::SetDefaultFollowees(v) => {
-                pb::proposal::Action::SetDefaultFollowees(v.into())
-            }
             pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
             pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
-            }
-            pb_api::ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
-                pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
-            }
-            pb_api::ProposalActionRequest::OpenSnsTokenSwap(v) => {
-                pb::proposal::Action::OpenSnsTokenSwap(v.into())
             }
             pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
