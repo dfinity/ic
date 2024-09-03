@@ -33,7 +33,7 @@ http = "1.1"
 http-body = "1.0.1"
 humantime = "2.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "e2d99aaa84f6b74d25303f3f59ca1b08a3d34129" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "678f9e8f881bb39feca56f6ce9d240018ee4fab1" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }

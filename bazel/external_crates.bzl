@@ -347,8 +347,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "cloudflare": crate.spec(
-                git = "https://github.com/dfinity/cloudflare-rs.git",
-                rev = "a6538a036926bd756986c9c0a5de356daef48881",
+                git = "https://github.com/cloudflare/cloudflare-rs.git",
+                rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae",
                 default_features = False,
                 features = [
                     "rustls-tls",
@@ -572,7 +572,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "e2d99aaa84f6b74d25303f3f59ca1b08a3d34129",
+                rev = "678f9e8f881bb39feca56f6ce9d240018ee4fab1",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",

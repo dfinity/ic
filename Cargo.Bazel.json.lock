@@ -1,5 +1,5 @@
 {
-  "checksum": "c4578ce70d705adb62f68c9780235d657cea27de36d1665d69063b5708a7db6f",
+  "checksum": "51ae9a1a3d65c3bf11215435cf373e57c1d9f946100f845ea5e29979caedac63",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12532,9 +12532,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/dfinity/cloudflare-rs.git",
+          "remote": "https://github.com/cloudflare/cloudflare-rs.git",
           "commitish": {
-            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
+            "Rev": "f14720e42184ee176a97676e85ef2d2d85bc3aae"
           },
           "strip_prefix": "cloudflare"
         }
@@ -28763,7 +28763,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "e2d99aaa84f6b74d25303f3f59ca1b08a3d34129"
+            "Rev": "678f9e8f881bb39feca56f6ce9d240018ee4fab1"
           }
         }
       },
@@ -52950,11 +52950,7 @@
           "common": [
             "__rustls",
             "__tls",
-            "async-compression",
             "blocking",
-            "brotli",
-            "deflate",
-            "gzip",
             "hyper-rustls",
             "json",
             "rustls",
@@ -52962,7 +52958,6 @@
             "rustls-tls-webpki-roots",
             "serde_json",
             "tokio-rustls",
-            "tokio-util",
             "webpki-roots"
           ],
           "selects": {}
@@ -53016,10 +53011,6 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -53079,10 +53070,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.11",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -53166,9 +53153,6 @@
             "__rustls-ring",
             "__tls",
             "blocking",
-            "brotli",
-            "deflate",
-            "gzip",
             "h2",
             "hickory-dns",
             "http2",
@@ -53235,10 +53219,6 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
-              {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
               {
                 "id": "futures-channel 0.3.30",
                 "target": "futures_channel"

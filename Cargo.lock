@@ -2006,7 +2006,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "clap 4.4.6",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
+ "cloudflare",
  "flate2",
  "futures",
  "http 1.1.0",
@@ -2323,25 +2323,7 @@ dependencies = [
 [[package]]
 name = "cloudflare"
 version = "0.12.0"
-source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
-dependencies = [
- "chrono",
- "http 0.2.12",
- "percent-encoding",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "thiserror",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "cloudflare"
-version = "0.12.0"
-source = "git+https://github.com/cloudflare/cloudflare-rs.git#f14720e42184ee176a97676e85ef2d2d85bc3aae"
+source = "git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae#f14720e42184ee176a97676e85ef2d2d85bc3aae"
 dependencies = [
  "chrono",
  "http 0.2.12",
@@ -5654,7 +5636,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=e2d99aaa84f6b74d25303f3f59ca1b08a3d34129#e2d99aaa84f6b74d25303f3f59ca1b08a3d34129"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=678f9e8f881bb39feca56f6ce9d240018ee4fab1#678f9e8f881bb39feca56f6ce9d240018ee4fab1"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5666,7 +5648,7 @@ dependencies = [
  "bytes",
  "chacha20poly1305",
  "chrono",
- "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git)",
+ "cloudflare",
  "derive-new",
  "fqdn",
  "futures",
@@ -17580,7 +17562,6 @@ version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
- "async-compression",
  "base64 0.21.5",
  "bytes",
  "encoding_rs",
@@ -17607,7 +17588,6 @@ dependencies = [
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
- "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -17623,7 +17603,6 @@ version = "0.12.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8f4955649ef5c38cc7f9e8aa41761d48fb9677197daea9984dc54f56aad5e63"
 dependencies = [
- "async-compression",
  "base64 0.22.0",
  "bytes",
  "futures-channel",
