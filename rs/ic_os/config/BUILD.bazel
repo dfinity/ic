@@ -11,10 +11,6 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 ALIASES = {}
 
 rust_library(
