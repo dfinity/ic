@@ -5356,6 +5356,7 @@ dependencies = [
  "backoff",
  "bytes",
  "futures",
+ "http-body-util",
  "ic-base-types",
  "ic-consensus-manager",
  "ic-interfaces",
@@ -5364,7 +5365,9 @@ dependencies = [
  "ic-p2p-test-utils",
  "ic-protobuf",
  "ic-quic-transport",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
  "mockall 0.13.0",
@@ -5374,6 +5377,7 @@ dependencies = [
  "rand 0.8.5",
  "slog",
  "tokio",
+ "tower",
  "tracing",
 ]
 
@@ -13045,8 +13049,7 @@ name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
  "bytes",
- "crossbeam-channel",
- "hyper 0.14.30",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -13072,7 +13075,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "threadpool",
  "tokio",
  "url",
 ]

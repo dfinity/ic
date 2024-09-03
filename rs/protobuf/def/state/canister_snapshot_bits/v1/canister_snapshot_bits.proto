@@ -15,4 +15,5 @@ message CanisterSnapshotBits {
   uint64 stable_memory_size = 8;
   uint64 wasm_memory_size = 9;
   uint64 total_size = 10;
+  repeated canister_state_bits.v1.Global exported_globals = 11;
 }
