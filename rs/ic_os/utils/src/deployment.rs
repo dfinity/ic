@@ -36,6 +36,7 @@ pub struct Resources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
 }
 
@@ -96,11 +97,25 @@ mod test {
     }"#;
 
     static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu: Some("kvm".to_string()) },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://dfinity.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+            },
         }
     });
 
@@ -139,11 +154,25 @@ mod test {
 }"#;
 
     static DEPLOYMENT_STRUCT_NO_CPU: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu: None },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://dfinity.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: None,
+            },
         }
     });
 
@@ -164,11 +193,25 @@ mod test {
 }"#;
 
     static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu: Some("qemu".to_string()) },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://dfinity.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("qemu".to_string()),
+            },
         }
     });
 
@@ -203,12 +246,30 @@ mod test {
 }"#;
 
     static MULTI_URL_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-          deployment: Deployment { name: "mainnet".to_string() },
-          logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-          nns: Nns { url: vec![Url::parse("http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080").unwrap(), Url::parse("http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080").unwrap(), Url::parse("http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080").unwrap()] },
-          resources: Resources { memory: 490, cpu: None },
-      }
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![
+                    Url::parse("http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080").unwrap(),
+                    Url::parse("http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080").unwrap(),
+                    Url::parse("http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080").unwrap(),
+                ],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: None,
+            },
+        }
     });
 
     #[test]

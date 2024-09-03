@@ -5,15 +5,10 @@ use ic_icp_rosetta_runner::start_rosetta;
 use ic_icp_rosetta_runner::RosettaOptions;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
 use pocket_ic::PocketIcBuilder;
-use std::path::PathBuf;
 use tokio::runtime::Runtime;
-
-fn path_from_env(var: &str) -> PathBuf {
-    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
-        .unwrap()
-}
 
 // only test_health is in here to check that the client works
 // as intended. All the other tests are in the rosetta tests.
