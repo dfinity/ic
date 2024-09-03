@@ -148,7 +148,10 @@ impl rustls::client::danger::ServerCertVerifier for DangerAcceptInvalidCerts {
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![rustls::SignatureScheme::ECDSA_NISTP256_SHA256]
+        vec![
+            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            rustls::SignatureScheme::RSA_PSS_SHA256,
+        ]
     }
 }
 
