@@ -69,7 +69,7 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 // Defined in Rust instead of PB, because we want CanisterStatusResultV2
 // (defined in management_canister_types) to be in the response, but CSRV2 doesn't have a
 // corresponding PB definition.
-#[derive(Default, PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {
     /// If set to true, root will update the list of canisters it owns before building the
     /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
@@ -78,7 +78,7 @@ pub struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -119,7 +119,7 @@ impl GetSnsCanistersSummaryResponse {
     }
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -142,7 +142,7 @@ impl CanisterSummary {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 struct ValidatedManageDappCanisterSettingsRequest {
     canister_ids: Vec<PrincipalId>,
     settings: CanisterSettings,
@@ -920,14 +920,14 @@ mod tests {
 
     const NOW: u64 = 123_456_789;
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     enum LedgerCanisterClientCall {
         Archives {
             result: Result<Vec<ArchiveInfo>, CanisterCallError>,
         },
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     struct MockLedgerCanisterClient {
         calls: Arc<futures::lock::Mutex<VecDeque<LedgerCanisterClientCall>>>,
     }
@@ -953,7 +953,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     enum EnvironmentCall {
         CallCanister {
             expected_canister: CanisterId,

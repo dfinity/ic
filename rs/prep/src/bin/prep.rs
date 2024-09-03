@@ -251,7 +251,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ValidatedArgs {
     pub working_dir: PathBuf,
     pub replica_version_id: Option<ReplicaVersion>,
@@ -450,7 +450,7 @@ fn load_json<T: DeserializeOwned, P: AsRef<Path> + Copy>(path: P) -> Result<T> {
 }
 
 /// List of whitelisted principal ids.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 struct ProvisionalWhitelistFile {
     pub provisional_whitelist: Vec<String>,
 }

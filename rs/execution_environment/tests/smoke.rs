@@ -67,18 +67,18 @@ fn sha256() {
     assert_eq!(reply, WasmResult::Reply(EmptyBlob.encode()));
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 struct Classification {
     label: String,
     score: f32,
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 struct ClassificationError {
     message: String,
 }
 
-#[derive(CandidType, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 enum ClassificationResult {
     Ok(Vec<Classification>),
     Err(ClassificationError),

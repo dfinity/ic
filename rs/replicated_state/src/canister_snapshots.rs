@@ -18,7 +18,7 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterSnapshots {
     #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
@@ -252,7 +252,7 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
     #[validate_eq(Ignore)]
@@ -279,7 +279,7 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
     #[validate_eq(Ignore)]
@@ -293,7 +293,7 @@ pub struct ExecutionStateSnapshot {
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
@@ -435,7 +435,7 @@ pub enum CanisterSnapshotError {
 }
 
 /// Describes the types of unflushed changes that can be stored by the `SnapshotManager`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SnapshotOperation {
     Delete(SnapshotId),
     Backup(CanisterId, SnapshotId),

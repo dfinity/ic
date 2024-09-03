@@ -22,7 +22,7 @@ pub fn chunk_size() -> NumBytes {
     NumBytes::from(CHUNK_SIZE)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ChunkInfo {
     /// Corresponds to an index in the list of chunks. The starting byte in the
     /// `PageMap` can be calculated by multiplying the index by the fixed size of
@@ -36,7 +36,7 @@ struct ChunkInfo {
 
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct WasmChunkStore {
     #[validate_eq(Ignore)]
     data: PageMap,
@@ -185,7 +185,7 @@ impl WasmChunkStore {
 
 /// Mapping from chunk hash to location in the store. It is cheap to clone
 /// because the size is limited to 100 entries.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct WasmChunkStoreMetadata {
     /// Maps each chunk to its chunk index and length.
     chunks: BTreeMap<WasmChunkHash, ChunkInfo>,

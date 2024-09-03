@@ -40,7 +40,7 @@ impl std::error::Error for XNetAuthParseError {}
 ///
 /// This type provides convenience methods to parse/encode the data
 /// into URI authority section.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct XNetAuthority {
     /// The node we are pulling streams from.
     pub node_id: NodeId,
