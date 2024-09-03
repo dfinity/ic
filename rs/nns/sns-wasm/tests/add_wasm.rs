@@ -148,6 +148,8 @@ fn test_sns_w_saves_metadata_on_upgrade() {
     // Check that the metadata is populated.
     {
         let response = get_wasm_metadata(&machine, sns_wasm_canister_id, &root_hash);
+
+        // Unwrap response.
         let GetWasmMetadataResponse {
             result: Some(Result::Ok(Ok { sections })),
         } = response
@@ -157,6 +159,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
                 response
             );
         };
+
         assert_eq!(sections, expected_metadata);
     }
 
