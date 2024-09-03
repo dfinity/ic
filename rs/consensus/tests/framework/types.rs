@@ -347,7 +347,7 @@ pub fn apply_modifier_idkg(
 pub struct ConsensusDriver<'a> {
     pub(crate) consensus:
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
-    pub(crate) consensus_gossip: ConsensusBouncer,
+    pub(crate) consensus_bouncer: ConsensusBouncer,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) idkg: Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:

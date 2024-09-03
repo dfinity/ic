@@ -618,7 +618,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
@@ -680,7 +680,7 @@ mod tests {
             Arc::new(FakeMessageRouting::new()),
             state_manager,
             time_source.clone(),
-            Duration::from_secs(0),
+            0,
             MaliciousFlags::default(),
             metrics_registry,
             no_op_logger(),

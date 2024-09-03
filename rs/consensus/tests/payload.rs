@@ -141,7 +141,7 @@ fn consensus_produces_expected_batches() {
 
         let (dummy_watcher, _) = watch::channel(Height::from(0));
 
-        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
+        let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&membership) as Arc<_>,
@@ -157,11 +157,12 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time_source) as Arc<_>,
+            0,
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
-            0,
         );
+        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(router.clone());
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -194,7 +195,7 @@ fn consensus_produces_expected_batches() {
             replica_config.node_id,
             pool_config,
             Box::new(consensus),
-            consensus_gossip,
+            consensus_bouncer,
             dkg,
             Box::new(idkg),
             Box::new(certifier),

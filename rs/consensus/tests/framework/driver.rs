@@ -28,7 +28,7 @@ impl<'a> ConsensusDriver<'a> {
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
         consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
-        consensus_gossip: ConsensusBouncer,
+        consensus_bouncer: ConsensusBouncer,
         dkg: ic_consensus::dkg::DkgImpl,
         idkg: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
         certifier: Box<
@@ -48,10 +48,10 @@ impl<'a> ConsensusDriver<'a> {
             metrics_registry,
         )));
         let consensus_priority =
-            BouncerState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
+            BouncerState::new(&consensus_bouncer, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
-            consensus_gossip,
+            consensus_bouncer,
             dkg,
             idkg,
             certifier,
