@@ -291,7 +291,7 @@ jobs:
           set -xeuo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
-          cd gitlab-ci/src
+          cd ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
