@@ -224,7 +224,10 @@ async fn get_or_fetch<P: Peers>(
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum InsertionError {}
+pub(crate) enum InsertionError {
+    NotNeeded,
+    AlreadyInserted,
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum AssemblyError {}
@@ -245,12 +248,30 @@ impl StrippedBlockProposal {
     }
 
     /// Tries to insert a missing ingress message into the block.
-    // TODO(kpop): Implement this
     pub(crate) fn try_insert_ingress_message(
         &mut self,
-        _ingress_message: SignedIngress,
+        ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
-        unimplemented!()
+        let ingress_message_id = IngressMessageId::from(&ingress_message);
+
+        let ingress = self
+            .payload
+            .ingress
+            .ingress_messages
+            .iter_mut()
+            .find(|ingress| match ingress {
+                MaybeStrippedIngress::Full(id, _) => *id == ingress_message_id,
+                MaybeStrippedIngress::Stripped(id) => *id == ingress_message_id,
+            })
+            .ok_or(InsertionError::NotNeeded)?;
+
+        match &ingress {
+            MaybeStrippedIngress::Full(_, _) => Err(InsertionError::AlreadyInserted),
+            MaybeStrippedIngress::Stripped(_) => {
+                *ingress = MaybeStrippedIngress::Full(ingress_message_id, ingress_message);
+                Ok(())
+            }
+        }
     }
 
     /// Tries to reassemble a block.
@@ -290,6 +311,54 @@ mod tests {
         assert_eq!(
             stripped_block_proposal.missing_ingress_messages(),
             vec![ingress_2_id]
+        );
+    }
+
+    #[test]
+    fn ingress_payload_insertion_works_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1),
+            MaybeStrippedIngress::Stripped(ingress_2_id),
+        ]);
+
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_2)
+            .expect("Should successfully insert the missing ingress");
+
+        assert!(stripped_block_proposal
+            .missing_ingress_messages()
+            .is_empty());
+    }
+
+    #[test]
+    fn ingress_payload_insertion_existing_fails_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1.clone()),
+            MaybeStrippedIngress::Stripped(ingress_2_id),
+        ]);
+
+        assert_eq!(
+            stripped_block_proposal.try_insert_ingress_message(ingress_1),
+            Err(InsertionError::AlreadyInserted)
+        );
+    }
+
+    #[test]
+    fn ingress_payload_insertion_unknown_fails_test() {
+        let (ingress_1, _ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal =
+            fake_stripped_block_proposal_with_ingresses(vec![MaybeStrippedIngress::Stripped(
+                ingress_2_id,
+            )]);
+
+        assert_eq!(
+            stripped_block_proposal.try_insert_ingress_message(ingress_1),
+            Err(InsertionError::NotNeeded)
         );
     }
 
