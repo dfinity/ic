@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{config_map_from_path, parse_config_ini_networking};
+use config::{config_map_from_path, parse_config_ini_networking, default_deployment_values};
 use std::path::Path;
 use url::Url;
 use utils::deployment::read_deployment_file;
@@ -59,38 +59,19 @@ pub fn main() -> Result<()> {
 
             // get deployment.json variables
             let deployment = read_deployment_file(deployment_json_path);
-            let vm_memory: u32;
-            let vm_cpu: String;
-            let nns_url: Vec<Url>;
-            let hostname: String;
-            let elasticsearch_hosts: String;
-            match &deployment {
-                Ok(deployment_json) => {
-                    vm_memory = deployment_json.resources.memory;
-                    vm_cpu = deployment_json
-                        .resources
-                        .cpu
-                        .clone()
-                        .unwrap_or("kvm".to_string());
-                    nns_url = deployment_json.nns.url.clone();
-                    hostname = deployment_json.deployment.name.to_string();
-                    elasticsearch_hosts = deployment_json.logging.hosts.to_string();
-                }
+            let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) = match &deployment {
+                Ok(deployment_json) => (
+                    deployment_json.resources.memory,
+                    deployment_json.resources.cpu.clone().unwrap_or("kvm".to_string()),
+                    deployment_json.nns.url.clone(),
+                    deployment_json.deployment.name.to_string(),
+                    deployment_json.logging.hosts.to_string(),
+                ),
                 Err(e) => {
-                    eprintln!(
-                        "Error retrieving deployment file: {e}. Continuing with default values"
-                    );
-                    vm_memory = 490;
-                    vm_cpu = "kvm".to_string();
-                    nns_url = vec![
-                        Url::parse("https://icp-api.io").unwrap(),
-                        Url::parse("https://icp0.io").unwrap(),
-                        Url::parse("https://ic0.app").unwrap(),
-                    ];
-                    hostname = "mainnet".to_string();
-                    elasticsearch_hosts= "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string();
-                }
-            }
+                    eprintln!("Error retrieving deployment file: {e}. Continuing with default values");
+                    default_deployment_values()
+                },
+            };
 
             // help: nns_public_key_path is copied to GuestOS (and it's contents are not copied into ic.json)
             let elasticsearch_tags = None;

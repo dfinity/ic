@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::Path;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use anyhow::bail;
 use anyhow::{Context, Result};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use url::Url;
 
 mod types;
 use types::Networking;
@@ -145,4 +146,18 @@ pub fn parse_config_ini_networking(config_file_path: &Path) -> Result<Networking
 
 fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
+}
+
+pub fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
+    (
+        490,
+        "kvm".to_string(),
+        vec![
+            Url::parse("https://icp-api.io").unwrap(),
+            Url::parse("https://icp0.io").unwrap(),
+            Url::parse("https://ic0.app").unwrap(),
+        ],
+        "mainnet".to_string(),
+        "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string(),
+    )
 }
