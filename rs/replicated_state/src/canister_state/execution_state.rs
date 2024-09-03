@@ -1,4 +1,3 @@
-use super::SessionNonce;
 use crate::hash::ic_hashtree_leaf_hash;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
 use ic_protobuf::{
@@ -440,14 +439,6 @@ pub struct ExecutionState {
     #[validate_eq(Ignore)]
     pub canister_root: std::path::PathBuf,
 
-    /// Session state Nonce. If occupied, runtime is already
-    /// processing this execution state. This is being used to refer
-    /// to mutated `MappedState` and globals that reside in the
-    /// sandbox execution process (and not necessarily in memory) and
-    /// enable continuations.
-    #[validate_eq(Ignore)]
-    pub session_nonce: Option<SessionNonce>,
-
     /// The wasm executable associated with this state. It represented here as
     /// a reference-counted object such that:
     /// - it is "shallow-copied" when cloning the execution state
@@ -497,7 +488,6 @@ impl PartialEq for ExecutionState {
         // an error. Hence pointing to appropriate change here.
         let ExecutionState {
             canister_root: _,
-            session_nonce: _,
             wasm_binary,
             wasm_memory,
             stable_memory,
@@ -545,7 +535,6 @@ impl ExecutionState {
     ) -> Self {
         Self {
             canister_root,
-            session_nonce: None,
             wasm_binary,
             exports,
             wasm_memory,
