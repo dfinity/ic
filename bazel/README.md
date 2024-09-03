@@ -229,7 +229,7 @@ Note that if a module is defined with a package dependency, then the test does n
 
 Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
 
-To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/ci//src/docs/HowTo-Developer.adoc).
+To add python packages to the build container for use in a build or test target in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/ci/src/docs/HowTo-Developer.adoc).
 
 
 ## Target Labels
