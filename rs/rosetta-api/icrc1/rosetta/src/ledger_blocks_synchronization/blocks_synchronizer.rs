@@ -15,7 +15,7 @@ use tracing::info;
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct SyncRange {
     index_range: RangeInclusive<u64>,
     leading_block_hash: ByteBuf,

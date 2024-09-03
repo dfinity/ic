@@ -29,7 +29,7 @@ const DEFAULT_XRC_PRINCIPAL: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
 // We query XRC data slightly in the past to be sure to have a price with consensus.
 const XRC_MARGIN_SEC: u64 = 5 * 60;
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq, Ord, PartialOrd, Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, candid::Deserialize)]
 pub enum FiatCurrency {
     USD,
     EUR,
@@ -61,7 +61,7 @@ pub const OTHER_CURRENCIES: [FiatCurrency; 4] = [
     FiatCurrency::GBP,
 ];
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TvlRequest {
     pub currency: FiatCurrency,
 }

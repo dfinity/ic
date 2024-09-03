@@ -866,7 +866,7 @@ impl TransferResult {
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct ScheduledVestingEvent {
     /// The dissolve_delay of the neuron
     pub(crate) dissolve_delay_seconds: u64,

@@ -23,7 +23,7 @@ use crate::routes::{ApiError, ErrorCause, RequestContext};
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
 
 // Reason why the caching was skipped
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum CacheBypassReason {
     Nonce,
     NonAnonymous,
@@ -46,7 +46,7 @@ impl fmt::Display for CacheBypassReason {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum CacheStatus {
     #[default]
     Disabled,

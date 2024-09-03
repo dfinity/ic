@@ -266,7 +266,7 @@ pub struct IcConfig {
     whitelisted_ports: Option<String>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeError {
     #[error("io error: {source}")]
     IoError {

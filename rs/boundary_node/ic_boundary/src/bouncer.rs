@@ -36,7 +36,7 @@ pub trait Firewall: Send + Sync {
 }
 
 // Ban decision for a single IP
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Decision {
     pub ip: IpAddr,
     pub when: Instant,

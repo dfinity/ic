@@ -4,8 +4,9 @@ use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
 };
+use std::time::Duration;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     /// The value defines the strategy to deliver a message to all peers.
@@ -17,7 +18,7 @@ pub struct ArtifactWithOpt<T> {
 }
 
 /// Specifies an addition or removal to the outbound set of messages that are replicated.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ArtifactMutation<T: IdentifiableArtifact> {
     Insert(ArtifactWithOpt<T>),
     Remove(T::Id),
@@ -89,7 +90,7 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
 }
 
 /// Unvalidated artifact
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
@@ -102,7 +103,7 @@ impl<T> AsRef<T> for UnvalidatedArtifact<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Aborted;
 
 pub trait Peers {
@@ -130,7 +131,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 
 /// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BouncerValue {
     /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
     Unwanted,
@@ -142,7 +143,12 @@ pub enum BouncerValue {
 
 /// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh to a newer function.
 /// Invocations of the bouncer closure and factory should happen inside the implentations of the ArtifactAssembler.
-pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
+pub trait BouncerFactory<Id, Pool>: Send + Sync {
     /// Returns a new bouncer function for the given pool.
-    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
+
+    /// The period at which the bouncer should be refreshed.
+    /// Implementors fo the bouncer are well suited for determing the
+    /// refresh period.
+    fn refresh_period(&self) -> Duration;
 }

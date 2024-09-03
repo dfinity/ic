@@ -17,7 +17,7 @@ pub struct StreamIndexTag;
 pub type StreamIndex = AmountOf<StreamIndexTag, u64>;
 
 /// A gap-free `StreamIndex`-ed queue for the messages and signals of a stream.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamIndexedQueue<T> {
     begin: StreamIndex,
     queue: VecDeque<T>,
@@ -161,7 +161,7 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// inducted message; but because most signals are `Accept`we represent that
 /// queue as a combination of `signals_end` (pointing just beyond the last
 /// signal) and a collection of `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamHeader {
     begin: StreamIndex,
     end: StreamIndex,
@@ -180,7 +180,7 @@ pub struct StreamHeader {
 ///
 /// All reason are applicable to `Request`, whereas only `CanisterMigrating` is
 /// applicable to `Response`.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum RejectReason {
     /// Message enqueuing failed due to migrating canister. In contrast to
     /// `CanisterNotFound` this is mapped to `RejectCode::SysTransient`, i.e.
@@ -247,7 +247,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
 }
 
 /// Reject signal for messages who failed to induct.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RejectSignal {
     pub reason: RejectReason,
     pub index: StreamIndex,
@@ -260,7 +260,7 @@ impl RejectSignal {
 }
 
 /// Flags for `Stream`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct StreamFlags {
     /// Indicates that the subnet expects responses only in the reverse stream.
     pub deprecated_responses_only: bool,
@@ -306,7 +306,7 @@ impl StreamHeader {
 
 /// A continuous slice of messages pulled from a remote subnet.  The slice also
 /// includes the header with the communication session metadata.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamSlice {
     header: StreamHeader,
     // Messages coming from a remote subnet, together with their indices.
@@ -363,7 +363,7 @@ impl StreamSlice {
 
 /// A slice of the stream of messages produced by the other subnet together with
 /// a cryptographic proof that the majority of the subnet agrees on it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertifiedStreamSlice {
     /// Serialized part of the state tree containing the stream data.
