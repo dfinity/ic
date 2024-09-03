@@ -47,6 +47,7 @@ pub fn main() -> Result<()> {
         }) => {
             let config_ini_path = Path::new(&config_ini_path);
             let deployment_json_path = Path::new(&deployment_json_path);
+            // help: nns_public_key_path is copied to GuestOS (and it's contents are not copied into ic.json)
             let nns_public_key_path = Path::new(&nns_public_key_path);
             let ssh_authorized_keys_path = Path::new(&ssh_authorized_keys_path);
             let node_operator_private_key_path = Path::new(&node_operator_private_key_path);
@@ -72,25 +73,13 @@ pub fn main() -> Result<()> {
                 },
             };
 
-            // help: nns_public_key_path is copied to GuestOS (and it's contents are not copied into ic.json)
-            let elasticsearch_tags = None;
             let node_operator_private_key_path = if node_operator_private_key_path.exists() {
                 Some(node_operator_private_key_path.to_path_buf())
             } else {
                 None
             };
 
-            let ic_crypto_path = None;
-            let ic_state_path = None;
-            let ic_registry_local_store_path = None;
             let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
-            let backup_retention_time_seconds = None;
-            let backup_purging_interval_seconds = None;
-            let malicious_behavior = None;
-            let query_stats_epoch_length = None;
-            let bitcoind_addr = None;
-            let jaeger_addr = None;
-            let socks_proxy = None;
 
             // call SetuposConfig constructor (pass None for all none options)
             // todo: refactor and simplify
@@ -100,7 +89,7 @@ pub fn main() -> Result<()> {
                 nns_public_key_path.to_path_buf(),
                 nns_url,
                 elasticsearch_hosts,
-                elasticsearch_tags,
+                None,
                 hostname,
                 node_operator_private_key_path,
                 networking.ipv6_prefix,
@@ -111,17 +100,17 @@ pub fn main() -> Result<()> {
                 networking.ipv4_prefix_length,
                 networking.domain,
                 verbose,
-                ic_crypto_path,
-                ic_state_path,
-                ic_registry_local_store_path,
+                None,
+                None,
+                None,
                 ssh_authorized_keys_path,
-                backup_retention_time_seconds,
-                backup_purging_interval_seconds,
-                malicious_behavior,
-                query_stats_epoch_length,
-                bitcoind_addr,
-                jaeger_addr,
-                socks_proxy,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             );
 
             dbg!(setupos_config);
