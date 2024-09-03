@@ -137,6 +137,8 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
+    cp.remove_unverified_checkpoint_marker()?;
+
     Ok((cp, state, has_downgrade))
 }
 
@@ -157,6 +159,21 @@ pub fn load_checkpoint_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )
+}
+
+/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
+pub fn load_checkpoint_parallel_and_mark_verified(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<ReplicatedState, CheckpointError> {
+    let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
+    Ok(state)
 }
 
 /// Loads the node state heighted with `height` using the specified
@@ -469,6 +486,8 @@ pub fn load_canister_state(
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
+        canister_state_bits.snapshots_memory_usage,
+        metrics,
     );
 
     let canister_state = CanisterState {
@@ -560,8 +579,11 @@ pub fn load_snapshot<P: ReadPolicy>(
             .deserialize(canister_snapshot_bits.binary_hash)?;
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
+        let exported_globals = canister_snapshot_bits.exported_globals.clone();
+
         ExecutionStateSnapshot {
             wasm_binary,
+            exported_globals,
             stable_memory,
             wasm_memory,
         }

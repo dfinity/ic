@@ -9,44 +9,36 @@ use std::str::FromStr;
 use std::{fs, iter};
 use tempfile::TempDir;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GitCommitHash(String);
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Hash<const N: usize>([u8; N]);
 
-impl FromStr for GitCommitHash {
+impl<const N: usize> FromStr for Hash<N> {
     type Err = String;
 
-    fn from_str(hash: &str) -> Result<Self, Self::Err> {
-        let hash = hash.trim();
-        if hash.len() > 40 {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        let expected_num_hex_chars = N * 2;
+        if s.len() != expected_num_hex_chars {
             return Err(format!(
-                "invalid git commit hash. Expected at most 40 characters, but got {}",
-                hash
+                "Invalid hash: expected {} characters, got {}",
+                expected_num_hex_chars,
+                s.len()
             ));
         }
-        if hash.chars().any(|c| !c.is_ascii_hexdigit()) {
-            return Err(format!(
-                "invalid git commit hash. Expected only hexadecimal characters, but got {}",
-                hash
-            ));
-        }
-        Ok(Self(hash.to_ascii_lowercase()))
+        let mut bytes = [0u8; N];
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        Ok(Self(bytes))
     }
 }
 
-impl Display for GitCommitHash {
+impl<const N: usize> Display for Hash<N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct CompressedWasmHash(String);
-
-impl Display for CompressedWasmHash {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+pub type GitCommitHash = Hash<20>;
+pub type CompressedWasmHash = Hash<32>;
 
 #[derive(Debug)]
 pub struct GitRepository {
@@ -110,11 +102,12 @@ impl GitRepository {
         from: &GitCommitHash,
         to: &GitCommitHash,
     ) -> ReleaseNotes {
+        const FORMAT_PARAMS: &str = "%C(auto) %h %s";
         let mut git_log = self.git();
         git_log
             .arg("log")
-            .arg("--format=%C(auto) %h %s")
-            .arg(format!("{}..{}", from.0, to.0))
+            .arg(format!("--format={}", FORMAT_PARAMS))
+            .arg(format!("{}..{}", from, to))
             .arg("--");
         for repo_dir in canister.git_log_dirs() {
             git_log.arg(repo_dir);
@@ -126,7 +119,7 @@ impl GitRepository {
             .chain(git_log.get_args())
             .fold(String::new(), |acc, arg| acc + " " + arg.to_str().unwrap())
             .trim()
-            .to_string();
+            .replace(FORMAT_PARAMS, format!("'{}'", FORMAT_PARAMS).as_str());
 
         let output = String::from_utf8_lossy(&log.stdout)
             .lines()
@@ -163,7 +156,7 @@ impl GitRepository {
             .next()
             .unwrap()
             .to_string();
-        CompressedWasmHash(hash)
+        CompressedWasmHash::from_str(&hash).expect("failed to parse sha256sum")
     }
 
     pub fn copy_file(&self, source: &Path, target: &Path) {
@@ -177,7 +170,7 @@ impl GitRepository {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ReleaseNotes {
     pub command: String,
     pub output: String,

@@ -5,7 +5,7 @@ mod sign;
 mod threshold;
 
 pub use canister_threshold::CspCreateMEGaKeyError;
-pub use sign::{CspSigVerifier, CspSigner};
+pub use sign::CspSigner;
 pub use threshold::{
     threshold_sign_error::CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };

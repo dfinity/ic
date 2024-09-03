@@ -40,7 +40,7 @@ use thiserror::Error;
 pub type SubnetIndex = u64;
 pub mod constants;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize)]
 pub enum SubnetRunningState {
     #[default]
     Active,
@@ -119,7 +119,7 @@ pub struct SubnetConfig {
     pub initial_height: u64,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeSubnetError {
     #[error("threshold signature public key: {source}")]
     ThresholdSigPublicKey {

@@ -4,7 +4,7 @@ use crate::rosetta_tests::{
     test_neurons::TestNeurons,
 };
 use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::KnownNeuronData;
+use ic_nns_governance_api::pb::v1::KnownNeuronData;
 use ic_rosetta_api::{
     ledger_client::list_known_neurons_response::ListKnownNeuronsResponse, models::CallResponse,
 };
@@ -24,31 +24,22 @@ pub fn test(env: TestEnv) {
     let mut neurons = TestNeurons::new(0, &mut ledger_balances);
 
     let neuron0 = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "0".to_owned(),
-                description: Some("Neuron 0 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "0".to_owned(),
+            description: Some("Neuron 0 description".to_owned()),
+        })
     });
     let neuron1: NeuronDetails = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "1".to_owned(),
-                description: Some("Neuron 1 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "1".to_owned(),
+            description: Some("Neuron 1 description".to_owned()),
+        })
     });
     let neuron2 = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "2".to_owned(),
-                description: Some("Neuron 2 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "2".to_owned(),
+            description: Some("Neuron 2 description".to_owned()),
+        })
     });
 
     // Create Rosetta and ledger clients.
@@ -61,8 +52,8 @@ pub fn test(env: TestEnv) {
         let mut known_neurons_response =
             ListKnownNeuronsResponse::try_from(Some(known_neurons.result)).unwrap();
         known_neurons_response.known_neurons.sort_by(
-            |a: &ic_nns_governance::pb::v1::KnownNeuron,
-             b: &ic_nns_governance::pb::v1::KnownNeuron| {
+            |a: &ic_nns_governance_api::pb::v1::KnownNeuron,
+             b: &ic_nns_governance_api::pb::v1::KnownNeuron| {
                 a.id.unwrap().partial_cmp(&b.id.unwrap()).unwrap()
             },
         );

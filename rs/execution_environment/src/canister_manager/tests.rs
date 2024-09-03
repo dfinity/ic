@@ -14,7 +14,9 @@ use assert_matches::assert_matches;
 use candid::Decode;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{
-    execution_environment::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    execution_environment::{Config, DEFAULT_WASM_MEMORY_LIMIT},
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -120,10 +122,7 @@ lazy_static! {
         subnet_memory_saturation: ResourceSaturation::default(),
     };
     static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
-        + instruction_to_cost(&wasmparser::Operator::MemoryGrow {
-            mem: 0,
-            mem_byte: 0,
-        })
+        + instruction_to_cost(&wasmparser::Operator::MemoryGrow { mem: 0 })
         + instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
     static ref UNREACHABLE_COST: u64 = instruction_to_cost(&wasmparser::Operator::Unreachable);
 }
@@ -297,6 +296,8 @@ fn canister_manager_config(
         NumBytes::from(10 * 1024 * 1024),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
+        SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
+        DEFAULT_WASM_MEMORY_LIMIT,
     )
 }
 

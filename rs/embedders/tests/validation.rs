@@ -19,8 +19,8 @@ use ic_replicated_state::canister_state::execution_state::{
 };
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
-use wasmtime_environ::WASM_PAGE_SIZE;
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -334,11 +334,9 @@ fn can_validate_duplicate_update_and_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
@@ -353,11 +351,9 @@ fn can_validate_duplicate_update_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
@@ -372,11 +368,9 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
@@ -416,9 +410,10 @@ fn can_validate_too_many_exported_functions() {
     let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
-        ))
+        Err(WasmValidationError::TooManyExports {
+            defined: 1001,
+            allowed: 1000
+        })
     );
 }
 
@@ -462,9 +457,10 @@ fn can_validate_too_large_sum_exported_function_name_lengths() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
-        ))
+        Err(WasmValidationError::ExportedNamesTooLong {
+            total_length: 20001,
+            allowed: 20000
+        })
     );
 }
 
@@ -930,6 +926,7 @@ fn can_validate_module_cycles_u128_related_imports() {
     let wasm = wat2wasm(
         r#"(module
         (import "ic0" "call_cycles_add128" (func $ic0_call_cycles_add128 (param i64 i64)))
+        (import "ic0" "call_cycles_add128_up_to" (func $ic0_call_cycles_add128_up_to (param i64 i64 i32)))
         (import "ic0" "canister_cycle_balance128" (func $ic0_canister_cycle_balance128 (param i32)))
         (import "ic0" "msg_cycles_available128" (func $ic0_msg_cycles_available128 (param i32)))
         (import "ic0" "msg_cycles_refunded128" (func $ic0_msg_cycles_refunded128 (param i32)))

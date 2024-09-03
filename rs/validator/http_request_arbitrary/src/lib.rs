@@ -7,7 +7,7 @@ use ic_types::messages::{
 };
 use std::ops::RangeInclusive;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct AnonymousContent {
     pub canister_id: Blob,
     pub paths: Vec<Path>,

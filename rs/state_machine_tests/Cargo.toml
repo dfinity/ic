@@ -17,11 +17,9 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-crypto-ed25519 = { path = "../crypto/ed25519" }
-ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-constants = { path = "../constants" }
-ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
-ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
+ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
@@ -31,13 +29,14 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment/" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -52,16 +51,18 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-test-state-machine-client = "3.0"
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-ic-test-state-machine-client = "3.0"
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
+maplit = "1.0.2"
 rand = { workspace = true }
+rcgen = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -71,13 +72,11 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-wat = "1.0.52"
-maplit = "1.0.2"
 tower = { workspace = true }
+wat = { workspace = true }
 
 [dev-dependencies]
-proptest = "1.0"
 ic-base-types = { path = "../types/base_types" }
-ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+proptest = { workspace = true }

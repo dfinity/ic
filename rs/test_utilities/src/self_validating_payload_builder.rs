@@ -31,6 +31,7 @@ impl SelfValidatingPayloadBuilder for FakeSelfValidatingPayloadBuilder {
         _validation_context: &ValidationContext,
         _past_payloads: &[&SelfValidatingPayload],
         _byte_limit: NumBytes,
+        _priority: usize,
     ) -> (SelfValidatingPayload, NumBytes) {
         let size: usize = self.0.iter().map(|response| response.count_bytes()).sum();
 

@@ -37,7 +37,7 @@ use strum_macros::{Display, EnumIter};
 mod tests;
 
 /// A cryptographic hash.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl fmt::Debug for CryptoHash {
@@ -50,7 +50,7 @@ impl fmt::Debug for CryptoHash {
 pub type CryptoHashOf<T> = Id<T, CryptoHash>;
 
 /// Signed contains the signed content and its signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct Signed<T, S> {
     pub content: T,
     pub signature: S,
@@ -79,7 +79,7 @@ pub trait SignedBytesWithoutDomainSeparator {
 // data. This means that existing discriminants should never change. Obsolete
 // discriminants should be marked as being never reusable.
 #[derive(
-    Clone, Copy, Debug, Deserialize, EnumIter, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
 pub enum KeyPurpose {
@@ -110,17 +110,17 @@ impl FromStr for KeyPurpose {
 /// An algorithm ID. This is used to specify the signature algorithm associated
 /// with a public key.
 #[derive(
-    Clone,
     Copy,
-    Debug,
-    Deserialize,
-    Display,
-    EnumIter,
+    Clone,
     Eq,
-    Hash,
     PartialEq,
-    PartialOrd,
     Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Display,
+    Deserialize,
+    EnumIter,
     Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
@@ -231,7 +231,7 @@ impl From<i32> for AlgorithmId {
 }
 
 /// A public key of a user interacting with the IC.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct UserPublicKey {
     #[serde(with = "serde_bytes")]
     pub key: Vec<u8>,
@@ -256,7 +256,7 @@ impl CountBytes for UserPublicKey {
 }
 
 /// An error returned by the crypto component.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub enum CryptoError {
     /// The arguments are semantically incorrect.
     /// This error is not retriable.
@@ -596,7 +596,7 @@ impl fmt::Display for CryptoError {
 pub type CryptoResult<T> = std::result::Result<T, CryptoError>;
 
 /// A basic signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct BasicSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl fmt::Display for BasicSig {
@@ -627,7 +627,7 @@ impl<T: CountBytes> CountBytes for BasicSigOf<T> {
 }
 
 /// An individual multi-signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct IndividualMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// An individual multi-signature for content of type `T`
 pub type IndividualMultiSigOf<T> = Id<T, IndividualMultiSig>; // Use newtype instead?
@@ -657,7 +657,7 @@ impl fmt::Debug for IndividualMultiSig {
 }
 
 /// A combined multi-signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct CombinedMultiSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A combined multi-signature for content of type `T`
 pub type CombinedMultiSigOf<T> = Id<T, CombinedMultiSig>; // Use newtype instead?
@@ -687,7 +687,7 @@ impl fmt::Debug for CombinedMultiSig {
 }
 
 /// A threshold signature share.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct ThresholdSigShare(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A threshold signature share for content of type `T`
 pub type ThresholdSigShareOf<T> = Id<T, ThresholdSigShare>; // Use newtype instead?
@@ -705,7 +705,7 @@ impl fmt::Debug for ThresholdSigShare {
 }
 
 /// A combined threshold signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct CombinedThresholdSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A combined threshold signature for content of type `T`
 pub type CombinedThresholdSigOf<T> = Id<T, CombinedThresholdSig>; // Use newtype instead?
@@ -723,7 +723,7 @@ impl fmt::Debug for CombinedThresholdSig {
 }
 
 /// A canister signature (ICCSA).
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct CanisterSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 /// A canister signature for content of type `T`
 pub type CanisterSigOf<T> = Id<T, CanisterSig>;
@@ -740,7 +740,7 @@ impl fmt::Debug for CanisterSig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct CurrentNodePublicKeys {
     pub node_signing_public_key: Option<PublicKey>,
     pub committee_signing_public_key: Option<PublicKey>,

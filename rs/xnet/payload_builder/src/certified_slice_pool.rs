@@ -120,10 +120,11 @@ mod header {
     use super::{CertifiedSliceError, InvalidSlice};
     use ic_canonical_state::encoding;
     use ic_types::xnet::{StreamHeader, StreamIndex};
+    use ic_types::CountBytes;
     use std::convert::TryFrom;
 
     /// Wrapper around serialized header plus transient metadata.
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     pub(super) struct Header {
         /// Serialized stream header.
         bytes: Vec<u8>,
@@ -144,9 +145,11 @@ mod header {
         pub(super) fn signals_end(&self) -> StreamIndex {
             self.decoded.signals_end()
         }
+    }
 
-        pub(super) fn reject_signals_len(&self) -> usize {
-            self.decoded.reject_signals().len()
+    impl CountBytes for Header {
+        fn count_bytes(&self) -> usize {
+            self.bytes.len()
         }
     }
 
@@ -175,7 +178,7 @@ mod messages {
     use super::*;
 
     /// Wrapper around slice messages plus transient metadata.
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     pub(super) struct Messages {
         /// Slice messages.
         ///
@@ -339,7 +342,7 @@ mod messages {
 }
 
 /// Unpacked `CertifiedStreamSlice::payload`, plus transient metadata.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 struct Payload {
     /// The intended destination subnet of this stream slice.
     subnet_id: Label,
@@ -351,15 +354,13 @@ struct Payload {
     messages: Option<Messages>,
 }
 
-/// Mean empty payload byte size: `LabelTree` with `"streams"` and `"header"`
-/// labels; subnet ID; and serialized header (3 variable length encoded
-/// integers).
-const EMPTY_PAYLOAD_BYTES: usize = 62;
+/// Mean empty payload byte size: `LabelTree` with subnet ID, `"streams"` and
+/// `"header"` labels; but excluding the header leaf.
+const EMPTY_PAYLOAD_BYTES: usize = 49;
 
-/// Mean non-empty payload byte size excluding messages: `LabelTree` with
-/// `"streams"` and `"header"` labels; subnet ID; serialized header (3 variable
-/// length encoded integers); plus "messages" node.
-const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 84;
+/// Mean non-empty payload byte size excluding messages and header leaf: `LabelTree`
+/// with subnet ID, `"streams"` and `"header"` labels.
+const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 71;
 
 impl Payload {
     /// Takes a slice prefix whose estimated size meets the given limits.
@@ -378,10 +379,10 @@ impl Payload {
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
         let message_limit = message_limit.unwrap_or(usize::MAX);
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
-        let reject_signals_bytes = self.reject_signals_count_bytes();
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
-        if byte_limit < EMPTY_PAYLOAD_BYTES + reject_signals_bytes + NO_MESSAGES_WITNESS_BYTES {
+        if byte_limit < EMPTY_PAYLOAD_BYTES + self.header.count_bytes() + NO_MESSAGES_WITNESS_BYTES
+        {
             // `byte_limit` smaller than minimum payload size, bail out.
             return Ok((None, Some(self)));
         }
@@ -406,7 +407,7 @@ impl Payload {
             .expect("Non-zero byte size for empty `messages`.");
 
         // Find the rightmost cutoff point that respects the provided limits.
-        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + reject_signals_bytes;
+        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.count_bytes();
         let mut cutoff = None;
         let slice_begin = messages.begin();
         for (i, (label, message)) in messages.iter().enumerate() {
@@ -449,7 +450,7 @@ impl Payload {
         if prefix.len() == 0 {
             debug_assert_eq!(
                 prefix.count_bytes(),
-                EMPTY_PAYLOAD_BYTES + reject_signals_bytes
+                EMPTY_PAYLOAD_BYTES + self.header.count_bytes()
             );
         } else {
             debug_assert_eq!(prefix.count_bytes(), byte_size);
@@ -691,29 +692,15 @@ impl Payload {
             LabeledTree::Leaf(value) => Ok(value),
         }
     }
-
-    fn reject_signals_count_bytes(&self) -> usize {
-        match self.header.reject_signals_len() {
-            0 => 0,
-
-            // 3 bytes (field number, type array, length) plus 1 byte per signal.
-            //
-            // Note that this assumes small deltas between signals. With larger deltas,
-            // signals get encoded as 2 or even 3 bytes, but then we must have much fewer
-            // signals, so they won't have a significant influence on payload size.
-            n => 3 + n,
-        }
-    }
 }
 
 impl CountBytes for Payload {
     fn count_bytes(&self) -> usize {
-        let reject_signals_bytes = self.reject_signals_count_bytes();
         match self.messages.as_ref() {
             Some(messages) => {
-                NON_EMPTY_PAYLOAD_FIXED_BYTES + reject_signals_bytes + messages.count_bytes()
+                NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.count_bytes() + messages.count_bytes()
             }
-            None => EMPTY_PAYLOAD_BYTES + reject_signals_bytes,
+            None => EMPTY_PAYLOAD_BYTES + self.header.count_bytes(),
         }
     }
 }
@@ -756,7 +743,7 @@ impl From<Payload> for Vec<u8> {
 /// An unpacked `CertifiedStreamSlice`: a slice of the stream of messages
 /// produced by a subnet together with a cryptographic proof that the majority
 /// of that subnet agrees on it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct UnpackedStreamSlice {
     /// Stream slice contents.
     payload: Payload,
@@ -995,7 +982,7 @@ pub enum CertifiedSliceError {
 
 /// `CertifiedSliceError::InvalidPayload` and
 /// `CertifiedSliceError::InvalidWitness` detail.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidSlice {
     ExtraContents,
     EmptyMessages,
@@ -1010,7 +997,7 @@ pub enum InvalidSlice {
 }
 
 /// Root cause of `append()` failure.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidAppend {
     DifferentSubnet,
     SignalsEndRegresses,

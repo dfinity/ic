@@ -3,19 +3,13 @@ use std::time::Duration;
 use anyhow::{bail, Error};
 use mockall::predicate;
 use rcgen::{CertificateParams, DistinguishedName, DnType, DnValue, KeyPair};
-use tempfile::NamedTempFile;
 
 use crate::tls::{
     extract_cert_validity, LoadError, MockLoad, MockProvision, MockStore, Provision,
     ProvisionResult, WithLoad, WithStore,
 };
 
-use wiremock::{
-    matchers::{method, path},
-    Mock, MockServer, ResponseTemplate,
-};
-
-use super::{load_or_create_acme_account, TLSCert};
+use super::TLSCert;
 
 fn generate_certificate_chain(
     name: &str,
@@ -262,97 +256,6 @@ async fn with_store_test() -> Result<(), Error> {
         out,
         ProvisionResult::Issued(TLSCert("cert".into(), "pkey".into()))
     );
-
-    Ok(())
-}
-
-// False positive dead_code warning.
-// It doesn't recognize the Drop implementation of its fields.
-// See https://github.com/rust-lang/rust/issues/122833.
-struct AcmeProviderGuard(#[allow(dead_code)] MockServer);
-
-async fn create_acme_provider() -> Result<(AcmeProviderGuard, String), Error> {
-    let mock_server = MockServer::start().await;
-
-    // Directory
-    let mock_server_url = mock_server.uri();
-
-    Mock::given(method("GET"))
-        .and(path("/directory"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
-            r#"{{
-            "newAccount": "{mock_server_url}/new-acct",
-            "newNonce": "{mock_server_url}/new-nonce",
-            "newOrder": "{mock_server_url}/new-order"
-        }}"#,
-        )))
-        .mount(&mock_server)
-        .await;
-
-    // Nonce
-    Mock::given(method("HEAD"))
-        .and(path("/new-nonce"))
-        .respond_with(ResponseTemplate::new(200).append_header(
-            "replay-nonce", // key
-            "nonce",        // value
-        ))
-        .mount(&mock_server)
-        .await;
-
-    // Account
-    Mock::given(method("POST"))
-        .and(path("/new-acct"))
-        .respond_with(ResponseTemplate::new(200).append_header(
-            "Location",   // key
-            "account-id", // value
-        ))
-        .mount(&mock_server)
-        .await;
-
-    let acme_provider_url = format!("{}/directory", mock_server_url);
-
-    Ok((
-        AcmeProviderGuard(mock_server), // guard
-        acme_provider_url,              // acme_provider_url
-    ))
-}
-
-#[tokio::test]
-async fn load_or_create_acme_account_test() -> Result<(), Error> {
-    // Spin-up a mocked ACME provider
-    let (_guard, acme_provider_url) = create_acme_provider().await?;
-
-    // Get a temporary file path
-    let f = NamedTempFile::new()?;
-    let p = f.path().to_path_buf();
-    drop(f);
-
-    // Create an account
-    let account = load_or_create_acme_account(
-        &p,                             // path
-        &acme_provider_url,             // acme_provider_url
-        Box::new(hyper::Client::new()), // http_client
-    )
-    .await?;
-
-    // Serialize the credentials for later comparison
-    let creds = serde_json::to_string(&account.credentials())?;
-
-    // Reload the account
-    let account = load_or_create_acme_account(
-        &p,                             // path
-        &acme_provider_url,             // acme_provider_url
-        Box::new(hyper::Client::new()), // http_client
-    )
-    .await?;
-
-    assert_eq!(
-        creds,                                          // previous
-        serde_json::to_string(&account.credentials())?, // current
-    );
-
-    // Clean up
-    std::fs::remove_file(&p)?;
 
     Ok(())
 }

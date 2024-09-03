@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 futures = { workspace = true }
-ic_consensus_system_test_utils = { path = "../utils" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
 slog = { workspace = true }

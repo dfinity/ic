@@ -14,4 +14,6 @@
         return_content: true
         validate_certs: false
       register: delete_response
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
       failed_when: delete_response.status not in [200, 400, 404]

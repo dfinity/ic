@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-serde = { workspace = true }
 candid = { workspace = true }
-on_wire = { path = "../on_wire" }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = {path="../../types/base_types"}
+on_wire = { path = "../on_wire" }
+serde = { workspace = true }
 
 [[bin]]
 name = "candid-test-canister"

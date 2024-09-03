@@ -5,7 +5,7 @@ use crate::{
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -1365,19 +1365,20 @@ fn query_cache_never_caches_calls_to_management_canister() {
         .call_simple(CanisterId::ic_00(), "raw_rand", call_args())
         .build();
 
-    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
+    let res_1 = test
+        .non_replicated_query(a_id, "query", q.clone())
+        .unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-    let description = format!("Error from Canister {a_id}: Canister violated contract: \"ic0_call_new\" cannot be executed in non replicated query mode");
-    assert_eq!(
-        Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            description
-        )),
-        res_1
+    let description = format!(
+        "Error from Canister {a_id}: Canister violated contract: \
+        \"ic0_call_new\" cannot be executed in non replicated query mode"
     );
+    res_1.assert_contains(ErrorCode::CanisterContractViolation, &description);
 
-    let res_2 = test.non_replicated_query(a_id, "query", q.clone());
+    let res_2 = test
+        .non_replicated_query(a_id, "query", q.clone())
+        .unwrap_err();
     assert_eq!(query_cache_metrics(&test).hits.get(), 1);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
     assert_eq!(res_1, res_2);
@@ -1466,6 +1467,7 @@ fn query_cache_future_proof_test() {
         SystemApiCallId::AcceptMessage
         | SystemApiCallId::CallCyclesAdd
         | SystemApiCallId::CallCyclesAdd128
+        | SystemApiCallId::CallCyclesAdd128UpTo
         | SystemApiCallId::CallDataAppend
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup

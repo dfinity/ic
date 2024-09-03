@@ -21,6 +21,6 @@ x509-parser = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 curve25519-dalek = { workspace = true }
+ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../../test_utils/tls" }
-ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }

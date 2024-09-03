@@ -58,7 +58,7 @@ const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 ///    to checkpoint.
 /// Height(0) is special, it has no corresponding checkpoint to write on top of. That's why the
 /// state of a freshly created TipRequest with empty tip directory is ReadyForPageDeltas(0).
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum TipState {
     Empty,
     ReadyForPageDeltas(Height),
@@ -145,7 +145,7 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum HasDowngrade {
     Yes,
     No,
@@ -204,6 +204,13 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
+                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
+                                        sender
+                                            .send(Err(err))
+                                            .expect("Failed to return TipToCheckpoint error");
+                                        continue;
+                                    }
+
                                     let cp_or_err = state_layout.scratchpad_to_checkpoint(
                                         tip,
                                         height,
@@ -1039,6 +1046,7 @@ fn serialize_canister_to_tip(
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
+            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
         }
         .into(),
     )?;
@@ -1068,6 +1076,7 @@ fn serialize_snapshot_to_tip(
             stable_memory_size: canister_snapshot.stable_memory().size,
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
+            exported_globals: canister_snapshot.exported_globals().clone(),
         }
         .into(),
     )?;
@@ -1208,6 +1217,21 @@ fn handle_compute_manifest_request(
         state_sync_version,
         MAX_SUPPORTED_STATE_SYNC_VERSION
     );
+
+    // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.
+    // Proceeding with manifest computation in such a scenario is risky because replicas might publish the root hash and create a CUP
+    // for an unverified checkpoint, which could then be lost.
+    // Therefore, crashing the replica is the safest option in this case.
+    //
+    // Note: In the future, if we decide to allow manifest computation before removing the unverified marker and introduce a mechanism
+    // to hide the manifest until the checkpoint is verified, this crash behavior should be re-evaluated accordingly.
+    if !checkpoint_layout.is_checkpoint_verified() {
+        fatal!(
+            log,
+            "Trying to compute manifest for unverified checkpoint @{}",
+            checkpoint_layout.height()
+        );
+    }
 
     let start = Instant::now();
     let manifest = crate::manifest::compute_manifest(
@@ -1417,6 +1441,51 @@ mod test {
                     check_files();
                 }
             }
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "compute manifest for unverified checkpoint")]
+    fn should_crash_handle_compute_manifest_request() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout =
+                StateLayout::try_new(log.clone(), root_path, &metrics_registry).unwrap();
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+
+            let height = Height::new(42);
+            let mut tip_handler = state_layout.capture_tip_handler();
+            let tip = tip_handler.tip(height).unwrap();
+
+            // Create a marker in the tip and promote it to a checkpoint.
+            tip.create_unverified_checkpoint_marker().unwrap();
+            let checkpoint_layout = state_layout
+                .scratchpad_to_checkpoint(tip, height, None)
+                .unwrap();
+
+            let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
+                certifications_metadata: Default::default(),
+                states_metadata: Default::default(),
+                snapshots: Default::default(),
+                last_advertised: Height::new(0),
+                fetch_state: None,
+                tip: None,
+            }));
+
+            // Trying to compute manifest for an unverified checkpoint should crash.
+            handle_compute_manifest_request(
+                &mut scoped_threadpool::Pool::new(1),
+                &metrics,
+                &log,
+                &dummy_states,
+                &state_layout,
+                &checkpoint_layout,
+                None,
+                &Default::default(),
+                &Default::default(),
+            );
         });
     }
 }

@@ -25,7 +25,7 @@ sigsegv_handler_checksum = []
 [dev-dependencies]
 criterion = { workspace = true }
 ic-types = { path = "../types/types" }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]

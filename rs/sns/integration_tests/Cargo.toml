@@ -17,33 +17,35 @@ path = "test_canisters/sns_governance_mem_test_canister.rs"
 # Dependencies required to compile the test canisters.
 [dependencies]
 async-trait = { workspace = true }
-canister-test = { path = "../../rust_canisters/canister_test" }
 candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-root = { path = "../root" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 pretty-bytes = "0.2.2"
-proptest = "1.0"
+proptest = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
+serde_bytes = { workspace = true }
 serde_yaml = { workspace = true }
 
 # Dependencies required to compile the tests.
@@ -69,13 +71,13 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
-tokio = { workspace = true }
-wat = "1.0.52"
+pretty_assertions = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
+tokio = { workspace = true }
+wat = { workspace = true }

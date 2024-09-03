@@ -58,13 +58,13 @@ build-info-build = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-proptest = "1.0"
-pretty_assertions = { workspace = true }
+futures = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-futures = { workspace = true }
+pretty_assertions = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

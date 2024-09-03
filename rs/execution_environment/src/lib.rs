@@ -72,7 +72,7 @@ pub enum QueryExecutionType {
 /// This enum indicates whether execution of a non-replicated query
 /// should keep track of the state or not.
 #[doc(hidden)]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
     Stateful { call_origin: CallOrigin },
     Pure { caller: PrincipalId },
@@ -142,6 +142,7 @@ impl ExecutionServices {
             Arc::clone(&fd_factory),
             scheduler_config.heap_delta_rate_limit,
             scheduler_config.upload_wasm_chunk_instructions,
+            scheduler_config.canister_snapshot_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),

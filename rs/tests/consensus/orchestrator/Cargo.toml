@@ -8,11 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-canister_http = { path = "../../networking/canister_http" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+canister_http = { path = "../../networking/canister_http" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic_consensus_system_test_utils = { path = "../utils" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
@@ -21,6 +20,7 @@ ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
 registry-canister = { path = "../../../registry/canister" }
 slog = { workspace = true }
 tempfile = { workspace = true }

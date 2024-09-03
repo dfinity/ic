@@ -251,10 +251,6 @@ impl Init {
             // 19
             obsolete_field_names.push("max_icp_e8s".to_string());
         }
-        if self.neurons_fund_participants.is_some() {
-            // 27
-            obsolete_field_names.push("neurons_fund_participants".to_string());
-        }
         if obsolete_field_names.is_empty() {
             Ok(())
         } else {
@@ -870,7 +866,7 @@ impl TransferResult {
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct ScheduledVestingEvent {
     /// The dissolve_delay of the neuron
     pub(crate) dissolve_delay_seconds: u64,

@@ -7,43 +7,41 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-system-test-driver = { path = "./driver" }
 anyhow = { workspace = true }
-axum = { workspace = true }
 assert-json-diff = "2.0.1"
 assert_matches = { workspace = true }
 async-recursion = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
 bincode = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
-chacha20poly1305 = "0.10.0"
-deterministic_ips = { path = "../ic_os/deterministic_ips" }
-discower_bowndary = { path = "../boundary_node/discower_bowndary" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
+chacha20poly1305 = "0.10.0"
 chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
+deterministic_ips = { path = "../ic_os/deterministic_ips" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
+discower_bowndary = { path = "../boundary_node/discower_bowndary" }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
-humantime = "2.0"
-ic-base-types = { path = "../types/base_types" }
-ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 hex = { workspace = true }
+http = "0.2.12"
+humantime = "2.0"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
 ic-backup = { path = "../backup" }
+ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
-ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
@@ -52,23 +50,24 @@ ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic_consensus_system_test_utils = { path = "./consensus/utils" }
-ic_consensus_threshold_sig_system_test_utils = { path = "./consensus/tecdsa/utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 ic-http-utils = { path = "../http_utils" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
 ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
-ic-ledger-core = { path = "../rosetta-api/ledger_core" }
-rosetta-core = { path = "../rosetta-api/rosetta_core" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-core = { path = "../rosetta-api/ledger_core" }
 ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-message = { path = "./test_canisters/message" }
 ic-nervous-system-clients = { path = "../nervous_system/clients" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
@@ -76,41 +75,40 @@ ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_key
 ic-nervous-system-proto = { path = "../nervous_system/proto" }
 ic-nervous-system-root = { path = "../nervous_system/root" }
 ic-nns-common = { path = "../nns/common" }
-ic-nns-init = { path = "../nns/init" }
-ic-interfaces = { path = "../interfaces" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
 ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-nns-gtc = { path = "../nns/gtc" }
 ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
+ic-nns-init = { path = "../nns/init" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-recovery = { path = "../recovery" }
-ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
+ic-regedit = { path = "../registry/regedit" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
-ic-regedit = { path = "../registry/regedit" }
 ic-replay = { path = "../replay" }
 ic-rosetta-api = { path = "../rosetta-api" }
 ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
-ic-sns-init = { path = "../sns/init" }
-ic-sns-swap = { path = "../sns/swap" }
-ic-sns-root = { path = "../sns/root" }
 ic-sns-governance = { path = "../sns/governance" }
+ic-sns-init = { path = "../sns/init" }
+ic-sns-root = { path = "../sns/root" }
+ic-sns-swap = { path = "../sns/swap" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
+ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-sys = { path = "../sys" }
+ic-system-test-driver = { path = "./driver" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
@@ -119,20 +117,21 @@ ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
+ic_consensus_system_test_utils = { path = "./consensus/utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./consensus/tecdsa/utils" }
+icp-ledger = { path = "../rosetta-api/icp_ledger" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.9"
+itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
 k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
-kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
-http = "0.2.12"
+kube = { workspace = true }
 lazy_static = { workspace = true }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
-libflate = "1.3.0"
+libflate = { workspace = true }
 lifeline = { path = "../nns/handlers/lifeline/impl" }
-itertools = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
@@ -141,7 +140,7 @@ once_cell = "1.18.0"
 openssh-keys = "0.5.0"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
-proptest = "1.0"
+proptest = { workspace = true }
 prost = { workspace = true }
 quickcheck = "1.0.3"
 rand = { workspace = true }
@@ -152,6 +151,7 @@ regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
+rosetta-core = { path = "../rosetta-api/rosetta_core" }
 rsa = { version = "0.9.2", features = ["sha2"] }
 rust_decimal = "1.25"
 schnorr_fun = "0.10"
@@ -170,14 +170,14 @@ strum_macros = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
-walkdir = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 url = { workspace = true }
-wat = "1.0.52"
+walkdir = { workspace = true }
+wat = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
 ic-agent = { workspace = true }

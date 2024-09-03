@@ -8,7 +8,9 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger_validation, DEFAULT_TRANSFER_FEE, E8};
+use ic_nervous_system_common::{
+    ledger_validation, DEFAULT_TRANSFER_FEE, E8, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -66,10 +68,6 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 /// decentralization swap.
 /// Aka, the ceiling for the value `max_direct_participation_icp_e8s`.
 pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
-
-/// Maximum allowed number of SNS neurons for direct swap participants that an SNS may create.
-/// This constant must not exceed `NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING`.
-pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;
 
 /// Minimum allowed number of SNS neurons per neuron basket.
 pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
@@ -277,7 +275,7 @@ impl From<RestrictedCountriesValidationError> for Result<(), String> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronBasketConstructionParametersValidationError {
     ExceedsMaximalDissolveDelay(u64),
     ExceedsU64,
@@ -334,7 +332,7 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronsFundParticipationValidationError {
     Unspecified,
 }
@@ -361,7 +359,7 @@ impl From<NeuronsFundParticipationValidationError> for Result<(), String> {
 }
 
 /// The canister IDs of all SNS canisters
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,
@@ -720,8 +718,6 @@ impl SnsInitPayload {
                 .neurons_fund_participation_constraints
                 .clone(),
             neurons_fund_participation: self.neurons_fund_participation,
-            // Deprecated field
-            neurons_fund_participants: None,
         })
     }
 

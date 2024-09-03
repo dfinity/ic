@@ -76,6 +76,10 @@ pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
 // The number of nanoseconds per second.
 pub const NANO_SECONDS_PER_SECOND: u64 = 1_000_000_000;
 
+/// Maximum allowed number of SNS neurons for direct swap participants that an SNS may create.
+/// This constant must not exceed `NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING`.
+pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;
+
 // The size of a WASM page in bytes, as defined by the WASM specification
 #[cfg(target_arch = "wasm32")]
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
@@ -168,7 +172,7 @@ impl fmt::Debug for NervousSystemError {
 
 /// A more convenient (but explosive) way to do token math. Not suitable for
 /// production use! Only for use in tests.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ExplosiveTokens(Tokens);
 
 impl Display for ExplosiveTokens {
@@ -322,7 +326,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,

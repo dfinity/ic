@@ -5,13 +5,13 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum SubnetPubKeyExtractionError {
     CoefficientsEmpty,
     Deserialization,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ThresholdPubKeyExtractionError {
     CoefficientsEmpty,
 }

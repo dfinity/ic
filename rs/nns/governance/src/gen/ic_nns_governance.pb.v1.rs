@@ -645,13 +645,13 @@ pub mod proposal {
         /// Create a new SNS.
         #[prost(message, tag = "24")]
         CreateServiceNervousSystem(super::CreateServiceNervousSystem),
-        /// Calls install_code for a canister (install, reinstall, or upgrade).
+        /// Install, reinstall or upgrade the code of a canister that is controlled by the NNS.
         #[prost(message, tag = "25")]
         InstallCode(super::InstallCode),
-        /// Stops or starts a canister controlled by Root.
+        /// Stop or start a canister that is controlled by the NNS.
         #[prost(message, tag = "26")]
         StopOrStartCanister(super::StopOrStartCanister),
-        /// Updates canister settings for those controlled by NNS Root.
+        /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
     }
@@ -1434,11 +1434,6 @@ pub struct ProposalData {
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
-    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
-    /// conclude_community_fund_participation Candid method is called to either
-    /// mint ICP, or restore CF neuron maturity.
-    #[prost(message, repeated, tag = "18")]
-    pub cf_participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
     /// This gets set to one of the terminal values (i.e. Committed or Aborted)
     /// when the swap canister calls our conclude_community_fund_participation
     /// Candid method. Initially, it is set to Open, because swap is supposed to
@@ -3364,8 +3359,8 @@ pub mod settle_neurons_fund_participation_request {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -3783,8 +3778,8 @@ pub enum Topic {
     /// creating new subnets, adding and removing subnet nodes, and
     /// splitting subnets.
     SubnetManagement = 7,
-    /// Installing and upgrading “system” canisters that belong to the network.
-    /// For example, upgrading the NNS.
+    /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
+    /// Management or Service Nervous System Management).
     NetworkCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
@@ -3820,11 +3815,11 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
-    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
-    /// protocol, without which the IC will not be able to function properly.
+    /// All proposals to manage protocol canisters, which are considered part of the ICP protocol and
+    /// are essential for its proper functioning.
     ProtocolCanisterManagement = 17,
-    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
-    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    /// All proposals to manage the canisters of service nervous systems (SNS), including upgrading
+    /// relevant canisters and managing SNS framework canister WASMs through SNS-W.
     ServiceNervousSystemManagement = 18,
 }
 impl Topic {

@@ -63,7 +63,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
     pub old_wasm_hash: Option<[u8; 32]>,
@@ -95,7 +95,7 @@ pub(crate) enum DtsInstallCodeResult {
 }
 
 /// The different return types from `stop_canister()` function below.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum StopCanisterResult {
     /// The call failed.  The error and the unconsumed cycles are returned.
     Failure {
@@ -109,7 +109,7 @@ pub(crate) enum StopCanisterResult {
     RequestAccepted,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
@@ -124,6 +124,8 @@ pub(crate) struct CanisterMgrConfig {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     wasm_chunk_store_max_size: NumBytes,
+    canister_snapshot_baseline_instructions: NumInstructions,
+    default_wasm_memory_limit: NumBytes,
 }
 
 impl CanisterMgrConfig {
@@ -143,6 +145,8 @@ impl CanisterMgrConfig {
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
         wasm_chunk_store_max_size: NumBytes,
+        canister_snapshot_baseline_instructions: NumInstructions,
+        default_wasm_memory_limit: NumBytes,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -159,6 +163,8 @@ impl CanisterMgrConfig {
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
             wasm_chunk_store_max_size,
+            canister_snapshot_baseline_instructions,
+            default_wasm_memory_limit,
         }
     }
 }
@@ -758,6 +764,10 @@ impl CanisterManager {
         settings
             .reserved_cycles_limit
             .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
+
+        settings
+            .wasm_memory_limit
+            .get_or_insert(self.config.default_wasm_memory_limit);
 
         // Validate settings before `create_canister_helper` applies them
         match self.validate_settings_for_canister_creation(
@@ -1767,7 +1777,7 @@ impl CanisterManager {
     /// and delete it before creating a new one.
     /// Failure to do so will result in the creation of a new snapshot being unsuccessful.
     ///
-    /// If the new snapshot cannot be created, an appropiate error will be returned.
+    /// If the new snapshot cannot be created, an appropriate error will be returned.
     pub(crate) fn take_canister_snapshot(
         &self,
         subnet_size: usize,
@@ -1777,29 +1787,41 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<CanisterSnapshotResponse, CanisterManagerError> {
+    ) -> (
+        Result<CanisterSnapshotResponse, CanisterManagerError>,
+        NumInstructions,
+    ) {
         // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        if let Err(err) = validate_controller(canister, &sender) {
+            return (Err(err), NumInstructions::new(0));
+        };
 
-        match replace_snapshot {
+        let replace_snapshot_size = match replace_snapshot {
             // Check that replace snapshot ID exists if provided.
             Some(replace_snapshot) => {
                 match state.canister_snapshots.get(replace_snapshot) {
                     None => {
                         // If not found, the operation fails due to invalid parameters.
-                        return Err(CanisterManagerError::CanisterSnapshotNotFound {
-                            canister_id: canister.canister_id(),
-                            snapshot_id: replace_snapshot,
-                        });
+                        return (
+                            Err(CanisterManagerError::CanisterSnapshotNotFound {
+                                canister_id: canister.canister_id(),
+                                snapshot_id: replace_snapshot,
+                            }),
+                            NumInstructions::new(0),
+                        );
                     }
                     Some(snapshot) => {
                         // Verify the provided replacement snapshot belongs to this canister.
                         if snapshot.canister_id() != canister.canister_id() {
-                            return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                                canister_id: canister.canister_id(),
-                                snapshot_id: replace_snapshot,
-                            });
+                            return (
+                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                    canister_id: canister.canister_id(),
+                                    snapshot_id: replace_snapshot,
+                                }),
+                                NumInstructions::new(0),
+                            );
                         }
+                        snapshot.size()
                     }
                 }
             }
@@ -1811,25 +1833,44 @@ impl CanisterManager {
                     .snapshots_count(&canister.canister_id())
                     >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
                 {
-                    return Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
-                        canister_id: canister.canister_id(),
-                        limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-                    });
+                    return (
+                        Err(CanisterManagerError::CanisterSnapshotLimitExceeded {
+                            canister_id: canister.canister_id(),
+                            limit: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+                        }),
+                        NumInstructions::new(0),
+                    );
                 }
+                0.into()
             }
-        }
+        };
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
-                canister_id: canister.canister_id(),
-                value: canister.scheduler_state.heap_delta_debit,
-                limit: self.config.heap_delta_rate_limit,
-            });
+            return (
+                Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
+                    canister_id: canister.canister_id(),
+                    value: canister.scheduler_state.heap_delta_debit,
+                    limit: self.config.heap_delta_rate_limit,
+                }),
+                NumInstructions::new(0),
+            );
         }
 
-        let new_snapshot_size = canister.snapshot_memory_usage();
+        let new_snapshot_size = canister.snapshot_size_bytes();
+        let new_snapshot_increase = NumBytes::from(
+            new_snapshot_size
+                .get()
+                .saturating_sub(replace_snapshot_size.get()),
+        );
+        let new_memory_usage = NumBytes::from(
+            canister
+                .memory_usage()
+                .get()
+                .saturating_add(new_snapshot_size.get())
+                .saturating_sub(replace_snapshot_size.get()),
+        );
 
         {
             // Run the following checks on memory usage and return an error
@@ -1841,7 +1882,7 @@ impl CanisterManager {
 
             // Calculate if any cycles will need to be reserved.
             let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-                new_snapshot_size,
+                new_snapshot_increase,
                 resource_saturation,
                 subnet_size,
             );
@@ -1851,7 +1892,7 @@ impl CanisterManager {
             let threshold = self.cycles_account_manager.freeze_threshold_cycles(
                 canister.system_state.freeze_threshold,
                 canister.memory_allocation(),
-                canister.memory_usage() + new_snapshot_size,
+                new_memory_usage,
                 canister.message_memory_usage(),
                 canister.compute_allocation(),
                 subnet_size,
@@ -1859,19 +1900,22 @@ impl CanisterManager {
             );
 
             if canister.system_state.balance() < threshold + reservation_cycles {
-                return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                    bytes: new_snapshot_size,
-                    available: canister.system_state.balance(),
-                    threshold,
-                });
+                return (
+                    Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                        bytes: new_snapshot_increase,
+                        available: canister.system_state.balance(),
+                        threshold,
+                    }),
+                    NumInstructions::new(0),
+                );
             }
-            // Verify that the subnet has enough memory.
-            round_limits
+            // Verify that the subnet has enough memory for a new snapshot.
+            if let Err(err) = round_limits
                 .subnet_available_memory
-                .check_available_memory(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+                .check_available_memory(new_snapshot_increase, NumBytes::from(0), NumBytes::from(0))
                 .map_err(
                     |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                        requested: new_snapshot_size,
+                        requested: new_snapshot_increase,
                         available: NumBytes::from(
                             round_limits
                                 .subnet_available_memory
@@ -1879,9 +1923,12 @@ impl CanisterManager {
                                 .max(0) as u64,
                         ),
                     },
-                )?;
+                )
+            {
+                return (Err(err), NumInstructions::new(0));
+            };
             // Reserve needed cycles if the subnet is becoming saturated.
-            canister
+            if let Err(err) = canister
                 .system_state
                 .reserve_cycles(reservation_cycles)
                 .map_err(|err| match err {
@@ -1889,35 +1936,74 @@ impl CanisterManager {
                         requested,
                         available,
                     } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes: new_snapshot_size,
+                        bytes: new_snapshot_increase,
                         available,
                         threshold: requested,
                     },
                     ReservationError::ReservedLimitExceed { requested, limit } => {
                         CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                            bytes: new_snapshot_size,
+                            bytes: new_snapshot_increase,
                             requested,
                             limit,
                         }
                     }
-                })?;
-            // Actually deduct memory from the subnet. It's safe to unwrap
-            // here because we already checked the available memory above.
-            round_limits.subnet_available_memory
-                        .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+                })
+            {
+                return (Err(err), NumInstructions::new(0));
+            };
         }
 
+        // Charge for taking a snapshot of the canister.
+        let instructions = self.config.canister_snapshot_baseline_instructions
+            + NumInstructions::new(new_snapshot_size.get());
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            canister,
+            instructions,
+            subnet_size,
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                0.into(),
+            );
+        };
+
         // Create new snapshot.
-        let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
-            .map_err(CanisterManagerError::from)?;
+        let new_snapshot = match CanisterSnapshot::from_canister(canister, state.time())
+            .map_err(CanisterManagerError::from)
+        {
+            Ok(s) => s,
+            Err(err) => return (Err(err), instructions),
+        };
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
-            // Already confirmed that `replace_snapshot` exists.
-            let is_removed = state.canister_snapshots.remove(replace_snapshot);
-            debug_assert!(is_removed.is_some());
+            state.canister_snapshots.remove(replace_snapshot);
+            canister.system_state.snapshots_memory_usage = canister
+                .system_state
+                .snapshots_memory_usage
+                .get()
+                .saturating_sub(replace_snapshot_size.get())
+                .into();
+            // Confirm that `snapshots_memory_usage` is updated correctly.
+            debug_assert_eq!(
+                canister.system_state.snapshots_memory_usage,
+                state
+                    .canister_snapshots
+                    .compute_memory_usage_by_canister(canister.canister_id()),
+            );
+            round_limits.subnet_available_memory.increment(
+                replace_snapshot_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
         }
+
+        // Actually deduct memory from the subnet. It's safe to unwrap
+        // here because we already checked the available memory above.
+        round_limits.subnet_available_memory
+            .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += new_snapshot.heap_delta();
@@ -1929,15 +2015,20 @@ impl CanisterManager {
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        Ok(CanisterSnapshotResponse::new(
-            &snapshot_id,
-            state.time().as_nanos_since_unix_epoch(),
-            new_snapshot_size,
-        ))
+        canister.system_state.snapshots_memory_usage += new_snapshot_size;
+        (
+            Ok(CanisterSnapshotResponse::new(
+                &snapshot_id,
+                state.time().as_nanos_since_unix_epoch(),
+                new_snapshot_size,
+            )),
+            instructions,
+        )
     }
 
     pub(crate) fn load_canister_snapshot(
         &self,
+        subnet_size: usize,
         sender: PrincipalId,
         canister: &CanisterState,
         snapshot_id: SnapshotId,
@@ -1945,23 +2036,23 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         origin: CanisterChangeOrigin,
         long_execution_already_in_progress: &IntCounter,
-    ) -> (NumInstructions, Result<CanisterState, CanisterManagerError>) {
+    ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
         if let Err(err) = validate_controller(canister, &sender) {
-            return (NumInstructions::new(0), Err(err));
+            return (Err(err), NumInstructions::new(0));
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
             return (
-                NumInstructions::new(0),
                 Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
                     canister_id,
                     value: canister.scheduler_state.heap_delta_debit,
                     limit: self.config.heap_delta_rate_limit,
                 }),
+                NumInstructions::new(0),
             );
         }
 
@@ -1970,22 +2061,22 @@ impl CanisterManager {
             None => {
                 // If not found, the operation fails due to invalid parameters.
                 return (
-                    NumInstructions::new(0),
                     Err(CanisterManagerError::CanisterSnapshotNotFound {
                         canister_id,
                         snapshot_id,
                     }),
+                    NumInstructions::new(0),
                 );
             }
             Some(snapshot) => {
                 // Verify the provided snapshot id belongs to this canister.
                 if snapshot.canister_id() != canister_id {
                     return (
-                        NumInstructions::new(0),
                         Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                             canister_id,
                             snapshot_id,
                         }),
+                        NumInstructions::new(0),
                     );
                 }
                 snapshot
@@ -2004,14 +2095,27 @@ impl CanisterManager {
                     "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.", canister_id
                 );
                 return (
-                    NumInstructions::new(0),
                     Err(CanisterManagerError::LongExecutionAlreadyInProgress { canister_id }),
+                    NumInstructions::new(0),
                 );
             }
         }
 
-        let (_old_execution_state, mut system_state, scheduler_state) =
-            canister.clone().into_parts();
+        // All basic checks have passed, charge baseline instructions.
+        let mut canister_clone = canister.clone();
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            &mut canister_clone,
+            self.config.canister_snapshot_baseline_instructions,
+            subnet_size,
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                0.into(),
+            );
+        };
+
+        let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
             let execution_snapshot = snapshot.execution_snapshot();
@@ -2038,10 +2142,11 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (instructions_used, Err(err));
+                    return (Err(err), instructions_used);
                 }
             };
 
+            new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
             new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
             new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
             (instructions_used, Some(new_execution_state))
@@ -2058,13 +2163,26 @@ impl CanisterManager {
         let memory_allocation_given = canister.memory_limit(self.config.max_canister_memory_size);
         if new_memory_usage > memory_allocation_given {
             return (
-                instructions_used,
                 Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                     memory_allocation_given: canister.memory_allocation(),
                     memory_usage_needed: new_memory_usage,
                 }),
+                instructions_used,
             );
         }
+
+        // Charge for loading the snapshot of the canister.
+        if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
+            &sender,
+            &mut new_canister,
+            instructions_used + NumInstructions::new(snapshot.size().get()),
+            subnet_size,
+        ) {
+            return (
+                Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                instructions_used,
+            );
+        };
 
         // Increment canister version.
         new_canister.system_state.canister_version += 1;
@@ -2086,7 +2204,7 @@ impl CanisterManager {
         }
         state.metadata.heap_delta_estimate += new_canister.heap_delta();
 
-        (instructions_used, Ok(new_canister))
+        (Ok(new_canister), instructions_used)
     }
 
     /// Returns the canister snapshots list, or
@@ -2128,6 +2246,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         delete_snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2150,12 +2269,32 @@ impl CanisterManager {
                 }
             }
         }
-        state.canister_snapshots.remove(delete_snapshot_id);
+        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
+        // Already confirmed that `old_snapshot` exists.
+        let old_snapshot_size = old_snapshot.unwrap().size();
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .get()
+            .saturating_sub(old_snapshot_size.get())
+            .into();
+        // Confirm that `snapshots_memory_usage` is updated correctly.
+        debug_assert_eq!(
+            canister.system_state.snapshots_memory_usage,
+            state
+                .canister_snapshots
+                .compute_memory_usage_by_canister(canister.canister_id()),
+        );
+        round_limits.subnet_available_memory.increment(
+            old_snapshot_size,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
         Ok(())
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
     CanisterInvalidController {
         canister_id: CanisterId,
@@ -2257,6 +2396,7 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         limit: usize,
     },
+    CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -2305,6 +2445,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
             | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
             | CanisterManagerError::CanisterSnapshotLimitExceeded { .. }
+            | CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. }
             | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
@@ -2602,6 +2743,12 @@ impl From<CanisterManagerError> for UserError {
                     format!(
                         "Canister {} has reached the maximum number of snapshots allowed: {}.{additional_help}", canister_id, limit,
                     )
+                )
+            }
+            CanisterSnapshotNotEnoughCycles(err) => {
+                Self::new(
+                ErrorCode::CanisterOutOfCycles,
+                    format!("Canister snapshotting failed with `{}`{additional_help}", err),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {

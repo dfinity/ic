@@ -22,13 +22,13 @@ use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
 use ic_wasm_transform::Body;
 use wasmparser::{BlockType, FuncType, Operator, ValType};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use ic_types::NumBytes;
 
 use super::{instrumentation::SpecialIndices, SystemApiFunc};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
@@ -72,7 +72,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I64Const {
                             value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -90,7 +89,6 @@ pub(super) fn replacement_functions(
                         End,
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I32WrapI64,
                         End,
@@ -107,7 +105,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         End,
                     ],
@@ -124,7 +121,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I64ExtendI32U,
@@ -148,7 +144,6 @@ pub(super) fn replacement_functions(
                         I64ExtendI32U,
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -186,7 +181,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I32Const {
@@ -208,7 +202,6 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: 0 },
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -282,7 +275,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -306,7 +298,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -559,7 +550,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -814,7 +804,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -838,7 +827,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -1072,7 +1060,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,

@@ -17,9 +17,11 @@ use ic_crypto_tree_hash::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
+// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, Method, IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
+    IC_00,
 };
 use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
@@ -120,7 +122,7 @@ impl Environment for CanisterEnvironment {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum NotificationStatus {
     /// We are waiting for a reply from ledger to complete the notification processing.
     Processing,
@@ -153,7 +155,7 @@ pub enum NotificationStatus {
 ///                To be safe we don't support this and will panic.
 ///                Instead a hotfix should be performed.
 #[derive(
-    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CandidType,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
 )]
 struct StateVersion(u64);
 
@@ -173,7 +175,7 @@ struct StateVersion(u64);
 ///   because they are no longer needed.
 type State = StateV1;
 
-#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV1 {
     pub ledger_canister_id: CanisterId,
 
@@ -255,7 +257,7 @@ impl StateV1 {
 /// around blocks_notified and last_purged_notification.
 ///
 /// TODO: remove this type once the CMC has upgraded to this version.
-#[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct StateV0 {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
@@ -2176,9 +2178,11 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+            CanisterSettingsArgs::from(
+                Ic00CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![controller_id])
+                    .build(),
+            )
         });
 
     for subnet_id in subnets {
@@ -2187,7 +2191,7 @@ async fn do_create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(canister_settings.clone()),
+                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),

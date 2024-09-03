@@ -21,6 +21,8 @@ use ic_types::messages::{
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::{CanisterId, CountBytes, Cycles, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::ops::{AddAssign, SubAssign};
@@ -30,7 +32,7 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,
@@ -70,12 +72,14 @@ impl CanisterQueuesLoopDetector {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
@@ -108,6 +112,7 @@ pub struct CanisterQueues {
     memory_usage_stats: MemoryUsageStats,
 
     /// Round-robin across ingress and cross-net input queues for pop_input().
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 
@@ -121,16 +126,19 @@ pub struct CanisterQueues {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct NewCanisterQueues {
     /// Queue of ingress (user) messages.
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding all messages in `canister_queues`, with support for time-based
     /// expiration and load shedding.
+    #[validate_eq(Ignore)]
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -158,6 +166,7 @@ pub struct NewCanisterQueues {
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
     /// Round-robin across ingress and cross-net input queues for `pop_input()`.
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 
@@ -1607,7 +1616,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for New
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct InputQueuesStats {
     /// Count of messages in input queues.
     message_count: usize,
@@ -1671,7 +1680,7 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 }
 
 /// Running stats across output queues.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct OutputQueuesStats {
     /// Number of actual messages in output queues.
     message_count: usize,
@@ -1721,7 +1730,7 @@ impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, Eq)]
+#[derive(Clone, Eq, Debug, Default)]
 struct MemoryUsageStats {
     /// Sum total of the byte size of every response across input and output
     /// queues.
@@ -1848,7 +1857,7 @@ impl PartialEq for MemoryUsageStats {
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #[allow(dead_code)]
 struct QueueStats {
@@ -2087,10 +2096,10 @@ pub mod testing {
     }
 
     #[allow(dead_code)]
-    /// Produces `CanisterQueues` together with a `VecDeque` of raw requests
-    /// where the raw requests appear in the same order in the `VecDeque` as
-    /// one would expect them being returned by the iterator.
-    pub fn new_canister_queues_for_test(
+    /// Produces a `CanisterQueues` with requests enqueued in output queues,
+    /// together with a `VecDeque` of raw requests, in the order in which they would
+    /// be returned by `CanisterOutputQueuesIterator`.
+    pub fn new_canister_output_queues_for_test(
         requests: Vec<Request>,
         sender: CanisterId,
         num_receivers: usize,

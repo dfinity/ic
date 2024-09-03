@@ -1,5 +1,8 @@
 use candid::{CandidType, Nat};
-use ic_management_canister_types::CanisterSettingsArgs;
+// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+use ic_management_canister_types::{
+    BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -9,13 +12,6 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-/// `um5iw-rqaaa-aaaaq-qaaba-cai`
-pub const CYCLES_LEDGER_CANISTER_ID: PrincipalId = PrincipalId::new(
-    10,
-    [
-        0, 0, 0, 0, 2, 16, 0, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ],
-);
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
 pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
@@ -30,7 +26,7 @@ pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revi
 pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
 pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum ExchangeRateCanister {
     /// Enables the exchange rate canister with the given canister ID.
     Set(CanisterId),
@@ -48,7 +44,7 @@ impl ExchangeRateCanister {
         }
     }
 }
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CyclesCanisterInitPayload {
     pub ledger_canister_id: Option<CanisterId>,
     pub governance_canister_id: Option<CanisterId>,
@@ -59,14 +55,106 @@ pub struct CyclesCanisterInitPayload {
 }
 
 /// Argument taken by top up notification endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct NotifyTopUp {
     pub block_index: BlockIndex,
     pub canister_id: CanisterId,
 }
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers = 1,
+    #[serde(rename = "public")]
+    Public = 2,
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(log_visibility: LogVisibility) -> Self {
+        match log_visibility {
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(log_visibility: LogVisibilityV2) -> Self {
+        match log_visibility {
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
+        }
+    }
+}
+
+// TODO(EXC-1687): remove temporary copy of management canister types.
+// It was added to overcome dependency on `LogVisibility` while
+// management canister already migrated to `LogVisibilityV2`.
+/// Struct used for encoding/decoding
+/// `(record {
+///     controllers: opt vec principal;
+///     compute_allocation: opt nat;
+///     memory_allocation: opt nat;
+///     freezing_threshold: opt nat;
+///     reserved_cycles_limit: opt nat;
+///     log_visibility : opt log_visibility;
+///     wasm_memory_limit: opt nat;
+///     wasm_memory_threshold: opt nat;
+/// })`
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct CanisterSettingsArgs {
+    pub controllers: Option<BoundedControllers>,
+    pub compute_allocation: Option<candid::Nat>,
+    pub memory_allocation: Option<candid::Nat>,
+    pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
+    pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
+}
+
+impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
+    fn from(settings: CanisterSettingsArgs) -> Self {
+        Ic00CanisterSettingsArgs {
+            controllers: settings.controllers,
+            compute_allocation: settings.compute_allocation,
+            memory_allocation: settings.memory_allocation,
+            freezing_threshold: settings.freezing_threshold,
+            reserved_cycles_limit: settings.reserved_cycles_limit,
+            log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
+            wasm_memory_limit: settings.wasm_memory_limit,
+            wasm_memory_threshold: settings.wasm_memory_threshold,
+        }
+    }
+}
+
+impl From<Ic00CanisterSettingsArgs> for CanisterSettingsArgs {
+    fn from(settings: Ic00CanisterSettingsArgs) -> Self {
+        CanisterSettingsArgs {
+            controllers: settings.controllers,
+            compute_allocation: settings.compute_allocation,
+            memory_allocation: settings.memory_allocation,
+            freezing_threshold: settings.freezing_threshold,
+            reserved_cycles_limit: settings.reserved_cycles_limit,
+            log_visibility: settings.log_visibility.map(LogVisibility::from),
+            wasm_memory_limit: settings.wasm_memory_limit,
+            wasm_memory_threshold: settings.wasm_memory_threshold,
+        }
+    }
+}
+
 /// Argument taken by create canister notification endpoint
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct NotifyCreateCanister {
     pub block_index: BlockIndex,
 
@@ -89,7 +177,7 @@ pub struct NotifyCreateCanister {
 }
 
 /// Error for notify endpoints
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum NotifyError {
     Refunded {
         reason: String,
@@ -105,7 +193,7 @@ pub enum NotifyError {
 }
 
 /// Argument taken by create_canister endpoint
-#[derive(Default, Debug, Clone, CandidType, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CreateCanister {
     #[deprecated(note = "use subnet_selection instead")]
     pub subnet_type: Option<String>,
@@ -114,7 +202,7 @@ pub struct CreateCanister {
 }
 
 /// Error for create_canister endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum CreateCanisterError {
     Refunded {
         refund_amount: u128,
@@ -127,7 +215,7 @@ pub enum CreateCanisterError {
 }
 
 /// Options to select subnets when creating a canister
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum SubnetSelection {
     /// Choose a random subnet that satisfies the specified properties
     Filter(SubnetFilter),
@@ -135,7 +223,7 @@ pub enum SubnetSelection {
     Subnet { subnet: SubnetId },
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SubnetFilter {
     pub subnet_type: Option<String>,
 }
@@ -195,7 +283,7 @@ impl std::fmt::Display for NotifyError {
 pub type NotifyMintCyclesResult = Result<NotifyMintCyclesSuccess, NotifyError>;
 
 /// Argument taken by `notify_mint_cycles` endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct NotifyMintCyclesArg {
     pub block_index: BlockIndex,
     pub to_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
@@ -203,7 +291,7 @@ pub struct NotifyMintCyclesArg {
 }
 
 /// Result of `notify_mint_cycles` in case of success
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct NotifyMintCyclesSuccess {
     /// Cycles ledger block index of deposit
     pub block_index: icrc_ledger_types::icrc1::transfer::BlockIndex,
@@ -214,14 +302,14 @@ pub struct NotifyMintCyclesSuccess {
 }
 
 /// Argument taken by the cycles ledger's `deposit` endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct CyclesLedgerDepositArgs {
     pub to: Account,
     pub memo: Option<Vec<u8>>,
 }
 
 /// Result of the cycles ledger's `deposit` endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct CyclesLedgerDepositResult {
     pub balance: Nat,
     pub block_index: Nat,
@@ -294,25 +382,25 @@ impl TokensToCycles {
 }
 
 /// Argument taken by the set_authorized_subnetwork_list endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct SetAuthorizedSubnetworkListArgs {
     pub who: Option<PrincipalId>,
     pub subnets: Vec<SubnetId>,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct RemoveSubnetFromAuthorizedSubnetListArgs {
     pub subnet: SubnetId,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum UpdateSubnetTypeArgs {
     Add(String),
     Remove(String),
 }
 
 /// Errors that can happen when attempting to update an available subnet type.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum UpdateSubnetTypeError {
     Duplicate(String),
     TypeDoesNotExist(String),
@@ -347,13 +435,13 @@ impl std::fmt::Display for UpdateSubnetTypeError {
 /// The result to a call to `update_subnet_type`.
 pub type UpdateSubnetTypeResult = Result<(), UpdateSubnetTypeError>;
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct SubnetListWithType {
     pub subnets: Vec<SubnetId>,
     pub subnet_type: String,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum ChangeSubnetTypeAssignmentArgs {
     Add(SubnetListWithType),
     Remove(SubnetListWithType),
@@ -361,7 +449,7 @@ pub enum ChangeSubnetTypeAssignmentArgs {
 
 /// Errors that can happen when attempting to change the assignment of a list of
 ///  subnets to a subnet type.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum ChangeSubnetTypeAssignmentError {
     /// The provided type does not exist.
     TypeDoesNotExist(String),
@@ -413,12 +501,12 @@ impl std::fmt::Display for ChangeSubnetTypeAssignmentError {
 /// The result to a call to `change_subnet_type_assignment`.
 pub type ChangeSubnetTypeAssignmentResult = Result<(), ChangeSubnetTypeAssignmentError>;
 
-#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct SubnetTypesToSubnetsResponse {
     pub data: Vec<(String, Vec<SubnetId>)>,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct IcpXdrConversionRate {
     /// The time for which the market data was queried, expressed in UNIX epoch
     /// time in seconds.
@@ -467,14 +555,14 @@ impl From<&UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRate {
     }
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct IcpXdrConversionRateCertifiedResponse {
     pub data: IcpXdrConversionRate,
     pub hash_tree: Vec<u8>,
     pub certificate: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct AuthorizedSubnetsResponse {
     pub data: Vec<(PrincipalId, Vec<SubnetId>)>,
 }

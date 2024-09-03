@@ -16,6 +16,8 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -49,7 +51,7 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
@@ -88,7 +90,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -97,6 +99,7 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub metadata: Option<RequestMetadata>,
     /// If non-zero, this is a best-effort call.
@@ -256,7 +259,7 @@ impl std::fmt::Debug for Request {
 }
 
 /// The context attached when an inter-canister message is rejected.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
     code: RejectCode,
@@ -326,7 +329,7 @@ impl From<UserError> for RejectContext {
 }
 
 /// A union of all possible message payloads.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
@@ -409,13 +412,14 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
@@ -460,11 +464,25 @@ impl Hash for Response {
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
+}
+
+impl ValidateEq for RequestOrResponse {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
+                l.validate_eq(r)
+            }
+            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
+                l.validate_eq(r)
+            }
+            _ => Err("RequestOrResponse enum mismatch".to_string()),
+        }
+    }
 }
 
 impl RequestOrResponse {

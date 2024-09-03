@@ -202,7 +202,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 pub use ic_types::NodeIndex;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterThresholdError {
     CurveMismatch,
     InconsistentCiphertext,
@@ -228,7 +228,7 @@ pub enum CanisterThresholdError {
 
 pub type CanisterThresholdResult<T> = std::result::Result<T, CanisterThresholdError>;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanisterThresholdSerializationError(pub String);
 
 pub type CanisterThresholdSerializationResult<T> =
@@ -240,7 +240,7 @@ pub type CanisterThresholdSerializationResult<T> =
 /// This enumeration identifies what the intended use of an IDKG
 /// instance is.
 ///
-#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter)]
 pub enum IdkgProtocolAlgorithm {
     EcdsaSecp256k1,
     EcdsaSecp256r1,
@@ -329,7 +329,7 @@ pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGa
     (public_key, private_key)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IdkgCreateDealingInternalError {
     UnsupportedAlgorithm,
     InvalidRecipients,
@@ -375,7 +375,7 @@ pub fn create_dealing(
     .map_err(IdkgCreateDealingInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgCreateTranscriptInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -421,7 +421,7 @@ pub fn create_transcript(
     .map_err(IDkgCreateTranscriptInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgVerifyTranscriptInternalError {
     IncorrectTranscript,
     FailedToCreateTranscript(IDkgCreateTranscriptInternalError),
@@ -470,7 +470,7 @@ pub fn verify_transcript(
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgComputeSecretSharesInternalError {
     ComplaintShouldBeIssued,
     InvalidCiphertext(String),
@@ -518,7 +518,7 @@ pub fn compute_secret_shares(
     )
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
     ComplaintShouldBeIssued,
     InsufficientOpenings(usize, usize),
@@ -577,7 +577,7 @@ pub fn compute_secret_shares_with_openings(
     )
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum IDkgVerifyDealingInternalError {
     UnsupportedAlgorithm,
     InvalidCommitment,
@@ -691,7 +691,7 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaGenerateSigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -761,7 +761,7 @@ pub fn create_ecdsa_signature_share(
     .map_err(ThresholdEcdsaGenerateSigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaVerifySigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -826,7 +826,7 @@ pub fn verify_ecdsa_signature_share(
         .map_err(ThresholdEcdsaVerifySigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaCombineSigSharesInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -849,6 +849,9 @@ impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalErro
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 #[allow(clippy::too_many_arguments)]
 pub fn combine_ecdsa_signature_shares(
     derivation_path: &DerivationPath,
@@ -876,7 +879,7 @@ pub fn combine_ecdsa_signature_shares(
     .map_err(ThresholdEcdsaCombineSigSharesInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaVerifySignatureInternalError {
     InvalidSignature,
     InvalidArguments(String),
@@ -935,7 +938,7 @@ pub fn verify_ecdsa_threshold_signature(
         .map_err(ThresholdEcdsaVerifySignatureInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdBip340GenerateSigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -983,7 +986,7 @@ pub fn create_bip340_signature_share(
     .map_err(ThresholdBip340GenerateSigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdBip340VerifySigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -1027,7 +1030,7 @@ pub fn verify_bip340_signature_share(
         .map_err(ThresholdBip340VerifySigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdBip340CombineSigSharesInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -1050,6 +1053,9 @@ impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalErr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1072,7 +1078,7 @@ pub fn combine_bip340_signature_shares(
     .map_err(ThresholdBip340CombineSigSharesInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdBip340VerifySignatureInternalError {
     InvalidSignature,
     UnexpectedCommitmentType,
@@ -1115,7 +1121,7 @@ pub fn verify_threshold_bip340_signature(
         .map_err(ThresholdBip340VerifySignatureInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEd25519GenerateSigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -1163,7 +1169,7 @@ pub fn create_ed25519_signature_share(
     .map_err(ThresholdEd25519GenerateSigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEd25519VerifySigShareInternalError {
     InvalidArguments(String),
     InconsistentCommitments,
@@ -1207,7 +1213,7 @@ pub fn verify_ed25519_signature_share(
         .map_err(ThresholdEd25519VerifySigShareInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEd25519CombineSigSharesInternalError {
     UnsupportedAlgorithm,
     InconsistentCommitments,
@@ -1230,6 +1236,9 @@ impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalEr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_ed25519_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1252,7 +1261,7 @@ pub fn combine_ed25519_signature_shares(
     .map_err(ThresholdEd25519CombineSigSharesInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEd25519VerifySignatureInternalError {
     InvalidSignature,
     UnexpectedCommitmentType,
@@ -1295,7 +1304,7 @@ pub fn verify_threshold_ed25519_signature(
         .map_err(ThresholdEd25519VerifySignatureInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum DeriveThresholdPublicKeyError {
     InvalidArgument(String),
     InternalError(CanisterThresholdError),
@@ -1369,7 +1378,7 @@ pub fn derive_threshold_public_key(
     })
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgGenerateComplaintsInternalError {
     UnsupportedAlgorithm,
     InvalidArguments(String),
@@ -1437,7 +1446,7 @@ pub fn generate_complaints(
     )?)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgVerifyComplaintInternalError {
     UnsupportedAlgorithm,
     InvalidComplaint,
@@ -1542,7 +1551,7 @@ pub fn open_dealing(
     .map_err(ThresholdOpenDealingInternalError::from)
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdVerifyOpeningInternalError {
     InvalidOpening,
     MismatchingType,
@@ -1587,7 +1596,7 @@ pub fn verify_dealing_opening(
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum MEGaKeyVerificationError {
     InvalidPublicKey,
 }

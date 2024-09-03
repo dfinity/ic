@@ -13,12 +13,12 @@ use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_regedit;
+use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
-use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
@@ -50,7 +50,7 @@ pub struct InternetComputer {
     pub with_mainnet_config: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum VmAllocationStrategy {
     #[serde(rename = "distributeToArbitraryHost")]
     DistributeToArbitraryHost,
@@ -399,7 +399,7 @@ impl InternetComputer {
 }
 
 /// A builder for the initial configuration of a subnetwork.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
     pub default_vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -700,7 +700,7 @@ pub enum MemoryKiB {}
 pub enum SizeGiB {}
 
 /// Resources that the VM will use like number of virtual CPUs and memory.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct VmResources {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
@@ -721,7 +721,7 @@ impl VmResources {
 }
 
 /// A builder for the initial configuration of a node.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
     pub vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,

@@ -1,8 +1,9 @@
+use ic_nervous_system_common::MAX_NEURONS_FOR_DIRECT_PARTICIPANTS;
 use ic_nns_governance::governance::MAX_NEURONS_FUND_PARTICIPANTS;
 use ic_sns_governance::pb::v1::NervousSystemParameters;
 use ic_sns_init::{
     distributions::{MAX_AIRDROP_DISTRIBUTION_COUNT, MAX_DEVELOPER_DISTRIBUTION_COUNT},
-    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, MAX_SNS_NEURONS_PER_BASKET,
+    MAX_SNS_NEURONS_PER_BASKET,
 };
 
 // Test that the total number of SNS neurons created by an SNS swap is within the ceiling expected

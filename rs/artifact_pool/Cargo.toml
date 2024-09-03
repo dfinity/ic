@@ -23,13 +23,16 @@ lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2
 nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rocksdb = { version = "0.22.0", optional = true, default-features = false }
 serde = { workspace = true }
 serde-bytes-repr = "0.1.5"
 serde_json = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+
+# Support for rocksdb backend on macos
+[target.'cfg(target_os = "macos")'.dependencies]
+rocksdb = { version = "0.22.0", default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -50,10 +53,6 @@ slog-term = { workspace = true }
 [[bench]]
 name = "load_blocks"
 harness = false
-
-[features]
-default = ["rocksdb_backend"]
-rocksdb_backend = ["rocksdb"]
 
 [[bin]]
 name = "ic-consensus-pool-util"

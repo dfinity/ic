@@ -13,8 +13,6 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 jobs:
@@ -33,7 +31,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -51,6 +50,17 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   lock-generate:
     name: Lock Generate
     timeout-minutes: 30
@@ -69,7 +79,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -87,7 +98,7 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
+        run: ./ci/scripts/lock-generate.sh
   pre-commit:
     name: Pre Commit Test
     timeout-minutes: 30
@@ -105,7 +116,7 @@ jobs:
       - name: Pre-Commit
         id: pre-commit
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
+        run: ./ci/scripts/pre-commit.sh
   dependencies-check:
     name: Dependency Scan for PR
     runs-on:
@@ -135,7 +146,8 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Setup python deps
         id: setup-python-deps
         shell: bash

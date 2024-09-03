@@ -3,7 +3,6 @@ use prometheus::{IntCounter, IntCounterVec};
 
 /// Labels for request errors
 pub(crate) const LABEL_BODY_RECEIVE_SIZE: &str = "body_receive_size";
-pub(crate) const LABEL_BODY_RECEIVE_TIMEOUT: &str = "body_receive_timeout";
 pub(crate) const LABEL_HEADER_RECEIVE_SIZE: &str = "header_receive_size";
 #[cfg(not(feature = "http"))]
 pub(crate) const LABEL_HTTP_SCHEME: &str = "http_scheme";
@@ -15,7 +14,7 @@ pub(crate) const LABEL_URL_PARSE: &str = "url_parse";
 pub(crate) const LABEL_UPLOAD: &str = "up";
 pub(crate) const LABEL_DOWNLOAD: &str = "down";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct AdapterMetrics {
     /// The number of requests served by adapter.
     pub requests: IntCounter,

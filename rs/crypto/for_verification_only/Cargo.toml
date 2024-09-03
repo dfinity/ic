@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-crypto-temp-crypto = { path = "../temp_crypto" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 
 [dev-dependencies]
 ic-crypto-interfaces-sig-verification = { path = "../interfaces/sig_verification" }

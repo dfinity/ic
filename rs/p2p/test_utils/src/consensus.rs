@@ -6,25 +6,23 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority, PriorityFnFactory,
-    UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, BouncerFactory, BouncerValue, ChangeResult,
+    ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct U64Artifact(Vec<u8>);
 
 impl IdentifiableArtifact for U64Artifact {
     const NAME: &'static str = "artifact";
     type Id = u64;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         u64::from_le_bytes(self.0[..8].try_into().unwrap())
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl From<U64Artifact> for Vec<u8> {
@@ -42,9 +40,7 @@ impl PbArtifact for U64Artifact {
     type PbMessage = Vec<u8>;
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
-    type PbAttributeError = Infallible;
     type PbId = u64;
-    type PbAttribute = ();
 }
 
 impl U64Artifact {
@@ -62,7 +58,7 @@ struct PeerPool {
     pool: HashSet<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum PoolEvent {
     Insert(u64),
     Remove(u64),
@@ -139,7 +135,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -147,16 +143,17 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
+        let mut mutations = vec![];
+        mutations.extend(change_set.0.drain(..).map(|m| {
+            ArtifactMutation::Insert(ArtifactWithOpt {
+                artifact: self.id_to_msg(m).into(),
+                is_latency_sensitive: self.latency_sensitive,
+            })
+        }));
+
+        mutations.extend(change_set.1.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
-            purged: change_set.1,
-            artifacts_with_opt: change_set
-                .0
-                .into_iter()
-                .map(|m| ArtifactWithOpt {
-                    artifact: self.id_to_msg(m).into(),
-                    is_latency_sensitive: self.latency_sensitive,
-                })
-                .collect(),
+            mutations,
             poll_immediately,
         }
     }
@@ -286,14 +283,15 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    fn get_priority_function(
+impl BouncerFactory<u64, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_interfaces::p2p::consensus::PriorityFn<
-        <U64Artifact as IdentifiableArtifact>::Id,
-        <U64Artifact as IdentifiableArtifact>::Attribute,
-    > {
-        Box::new(|_, _| Priority::FetchNow)
+    ) -> ic_interfaces::p2p::consensus::Bouncer<u64> {
+        Box::new(|_| BouncerValue::Wants)
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }
