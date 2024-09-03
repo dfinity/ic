@@ -58,7 +58,7 @@ impl Registry {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateUnassignedNodesConfigPayload {
     pub ssh_readonly_access: Option<Vec<String>>,
     pub replica_version: Option<String>,

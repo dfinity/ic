@@ -220,7 +220,7 @@ fn validate_request_target<C: HasCanisterId>(
 }
 
 /// Error in validating an [HttpRequest].
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum RequestValidationError {
     InvalidIngressExpiry(String),
     InvalidDelegationExpiry(String),
@@ -277,7 +277,7 @@ impl fmt::Display for RequestValidationError {
 }
 
 /// Error in verifying the signature or authentication part of a request.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum AuthenticationError {
     InvalidBasicSignature(CryptoError),
     InvalidCanisterSignature(String),
@@ -336,7 +336,7 @@ impl fmt::Display for AuthenticationError {
 /// assert!(subset_canister_ids.contains(&CanisterId::from_u64(1)));
 /// assert!(!subset_canister_ids.contains(&CanisterId::from_u64(2)));
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterIdSet {
     ids: internal::CanisterIdSet,
 }
@@ -345,7 +345,7 @@ mod internal {
     use super::*;
     /// An enum representing a mutable set of canister IDs.
     /// Contrary to `super::CanisterIdSet`, the number of canister IDs is not restricted.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug)]
     pub(super) enum CanisterIdSet {
         /// The entire domain of canister IDs.
         All,
@@ -433,7 +433,7 @@ impl CanisterIdSet {
     }
 }
 
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum CanisterIdSetInstantiationError {
     #[error(
         "Expected at most {} elements but got {0}",

@@ -275,7 +275,7 @@ impl From<RestrictedCountriesValidationError> for Result<(), String> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronBasketConstructionParametersValidationError {
     ExceedsMaximalDissolveDelay(u64),
     ExceedsU64,
@@ -332,7 +332,7 @@ impl From<NeuronBasketConstructionParametersValidationError> for Result<(), Stri
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum NeuronsFundParticipationValidationError {
     Unspecified,
 }
@@ -359,7 +359,7 @@ impl From<NeuronsFundParticipationValidationError> for Result<(), String> {
 }
 
 /// The canister IDs of all SNS canisters
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,

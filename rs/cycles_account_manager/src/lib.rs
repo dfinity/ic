@@ -29,7 +29,8 @@ use ic_types::{
         Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         MAX_RESPONSE_COUNT_BYTES,
     },
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SubnetId,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,7 @@ const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CyclesAccountManagerError {
     /// One of the API contracts that the cycles account manager enforces was
     /// violated.
@@ -77,7 +78,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -160,7 +161,7 @@ pub fn is_delayed_ingress_induction_cost(arg: &[u8]) -> bool {
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManager {
     /// The maximum allowed instructions to be spent on a single message
     /// execution.
@@ -503,6 +504,32 @@ impl CyclesAccountManager {
             system_state.reserved_balance(),
         );
         self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
+    }
+
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions.
+    pub fn consume_cycles_for_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let cycles = self.execution_cost(amount, subnet_size);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            compute_allocation,
+            cycles,
+            subnet_size,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -1149,7 +1176,7 @@ impl CyclesAccountManager {
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCost {
     /// Induction is free.
     Free,
@@ -1168,7 +1195,7 @@ impl IngressInductionCost {
 }
 
 /// Errors returned when computing the cost of receiving an ingress.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCostError {
     /// The requested subnet method is not available.
     UnknownSubnetMethod,

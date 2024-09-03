@@ -25,6 +25,7 @@ component_files = {
     Label("early-boot/initramfs-tools/setupos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
 
     # misc
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",

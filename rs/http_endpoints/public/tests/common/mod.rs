@@ -579,13 +579,13 @@ pub mod test_agent {
             .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Copy, Clone, Debug)]
     pub enum Call {
         V2,
         V3,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub struct IngressMessage {
         canister_id: PrincipalId,
         effective_canister_id: PrincipalId,
