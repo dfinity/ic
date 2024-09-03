@@ -80,7 +80,7 @@ impl Context {
         self.location.0.push(LocationStackElem::Placeholder);
     }
 
-    fn return_from_function(&mut self) -> () {
+    fn return_from_function(&mut self) {
         let _f = self.location.0.pop().expect("No function in call stack");
     }
 
@@ -188,7 +188,7 @@ pub fn log_request(
     let unresolved = StatePair {
         start: start_state,
         end: EndState {
-            global: global,
+            global,
             local: state.context.get_state(),
             requests: vec![RequestBuffer {
                 to,
@@ -219,7 +219,7 @@ pub fn log_response(
         from
     );
     *stage = Stage::End(StartState {
-        global: global,
+        global,
         local,
         responses: vec![ResponseBuffer { from, message }],
     });
@@ -380,6 +380,7 @@ macro_rules! tla_log_response {
 /// It assumes that there are the following two functions in scope:
 /// 1. `tla_get_globals() -> GlobalState`
 /// 2. with_tla_state<F>(f: F) where F: FnOnce(&mut InstrumentationState) -> ()
+///
 /// This macro is normally not called directly; rather, the attribute proc macro tla_update
 /// is used instead.
 #[macro_export]

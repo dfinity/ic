@@ -233,7 +233,7 @@ pub fn check_tla_code_link_raw(
             new_module_prefix, module_name, new_module_suffix
         ));
         fs::write(temp_file_path.clone(), new_module).map_err(|e| e.to_string())?;
-        Ok(temp_file_path.into())
+        Ok(temp_file_path)
     }
 
     let init_predicate = mk_init_predicate(pre_state);
@@ -245,7 +245,7 @@ pub fn check_tla_code_link_raw(
         vec![init_predicate, trans_predicate],
         constant_definitions,
     )
-    .map_err(|e| ApalacheError::SetupError(e))?;
+    .map_err(ApalacheError::SetupError)?;
     run_apalache(
         apalache,
         new_module.as_path(),
