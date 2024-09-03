@@ -315,6 +315,12 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Build IC
         id: build-ic
         shell: bash
