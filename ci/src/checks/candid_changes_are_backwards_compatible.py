@@ -33,7 +33,7 @@ Example usage:
 
   cd "${ic_repo_root}"
   echo "changes" >> existing.did
-  ./gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py existing.did
+  ./ci/src/checks/candid_changes_are_backwards_compatible.py existing.did
 
 Can be run via pre-commit as follows:
 

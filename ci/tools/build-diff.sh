@@ -41,23 +41,6 @@ usage() {
     echo -e "Note: <sha256>/<sha256'> is git revision and must be full, 40 char string."
 }
 
-alert() {
-    # no alert if this is not a scheduled CI job!
-    if [ ${CI_PIPELINE_SOURCE:-} != "schedule" ]; then
-        exit 1
-    fi
-
-    MESSAGE="Release Build Reproducibility Failure in <$CI_JOB_URL|$CI_JOB_NAME>! "
-    MESSAGE+="Follow <http://go/reproducible-builds-incident-runbook|this run-book>! "
-    MESSAGE+="<!subteam^S022UEH2AKE>"
-    # https://stackoverflow.com/questions/54284389/mention-users-group-via-slack-api
-
-    ./gitlab-ci/src/notify_slack/notify_slack.py \
-        "$MESSAGE" --channel "#eng-idx-alerts"
-
-    exit 1
-}
-
 if [ $# -lt 2 ]; then
     usage
     exit 1
