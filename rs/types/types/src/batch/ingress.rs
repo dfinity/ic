@@ -13,7 +13,7 @@ use std::{
 };
 
 /// Payload that contains Ingress messages
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
     /// Pairs of MessageId and its serialized byte position in the buffer.
@@ -72,7 +72,7 @@ type IngressIndex = usize;
 /// Position of serialized ingress message in the payload buffer.
 type BufferPosition = u64;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 /// Possible errors when accessing messages in an [`IngressPayload`].
 pub enum IngressPayloadError {
     IndexOutOfBound(IngressIndex),

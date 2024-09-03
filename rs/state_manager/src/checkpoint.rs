@@ -579,8 +579,11 @@ pub fn load_snapshot<P: ReadPolicy>(
             .deserialize(canister_snapshot_bits.binary_hash)?;
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
+        let exported_globals = canister_snapshot_bits.exported_globals.clone();
+
         ExecutionStateSnapshot {
             wasm_binary,
+            exported_globals,
             stable_memory,
             wasm_memory,
         }

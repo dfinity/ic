@@ -1,5 +1,7 @@
 use anyhow::bail;
 use reqwest::{Client, Url};
+use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::identifiers::PartialBlockIdentifier;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
@@ -59,5 +61,41 @@ impl RosettaClient {
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
+    }
+
+    pub async fn network_status(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<NetworkStatusResponse> {
+        self.call_endpoint(
+            "/network/status",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
+    pub async fn search_transactions(
+        &self,
+        request: &SearchTransactionsRequest,
+    ) -> anyhow::Result<SearchTransactionsResponse> {
+        self.call_endpoint("/search/transactions", request).await
+    }
+
+    pub async fn block(
+        &self,
+        network_identifier: NetworkIdentifier,
+        block_identifier: PartialBlockIdentifier,
+    ) -> anyhow::Result<BlockResponse> {
+        self.call_endpoint(
+            "/block",
+            &BlockRequest {
+                network_identifier,
+                block_identifier,
+            },
+        )
+        .await
     }
 }

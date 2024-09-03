@@ -4,7 +4,7 @@ use std::fmt;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AddressError {
     #[error("index must be between 0x00 and 0x0f")]
     InvalidIndex,
@@ -12,7 +12,7 @@ pub enum AddressError {
     InvalidAddress,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct HwAddr {
     a: u8,
     b: u8,
@@ -44,7 +44,7 @@ impl fmt::Display for HwAddr {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum HwAddrParseError {
     #[error("invalid MAC address")]
     InvalidAddress,
@@ -103,7 +103,7 @@ impl FromStr for HwAddr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 #[non_exhaustive]
 pub enum Deployment {
     Mainnet,
@@ -119,7 +119,7 @@ impl fmt::Display for Deployment {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum IpVariant {
     V4,
     V6,
