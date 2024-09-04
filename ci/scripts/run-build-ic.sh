@@ -14,7 +14,6 @@ if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRA
     gitlab-ci/container/build-ic.sh -i -c -b
 # if run_on_diff_only was requested, only build selected targets
 elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ]; then
-
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 
