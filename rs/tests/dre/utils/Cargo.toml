@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-tests = { path = "../" }
+ic-tests = { path = "../../" }
 ic-system-test-driver = { path = "../../driver" }
 ic-protobuf = { path = "../../../protobuf" }
 tokio.workspace = true
