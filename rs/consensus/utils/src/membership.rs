@@ -1,5 +1,5 @@
 use crate::{
-    active_high_threshold_transcript, active_low_threshold_transcript, registry_version_at_height,
+    active_high_threshold_committee, active_low_threshold_committee, registry_version_at_height,
 };
 use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
@@ -206,8 +206,8 @@ impl Membership {
         node_id: NodeId,
         height: Height,
     ) -> Result<bool, MembershipError> {
-        match active_low_threshold_transcript(self.consensus_cache.as_ref(), height) {
-            Some(transcript) => Ok(transcript.committee.position(node_id).is_some()),
+        match active_low_threshold_committee(self.consensus_cache.as_ref(), height) {
+            Some((_, committee)) => Ok(committee.position(node_id).is_some()),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
     }
@@ -219,8 +219,8 @@ impl Membership {
         node_id: NodeId,
         height: Height,
     ) -> Result<bool, MembershipError> {
-        match active_high_threshold_transcript(self.consensus_cache.as_ref(), height) {
-            Some(transcript) => Ok(transcript.committee.position(node_id).is_some()),
+        match active_high_threshold_committee(self.consensus_cache.as_ref(), height) {
+            Some((_, committee)) => Ok(committee.position(node_id).is_some()),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
     }
@@ -241,8 +241,8 @@ impl Membership {
         &self,
         height: Height,
     ) -> Result<Threshold, MembershipError> {
-        match active_low_threshold_transcript(self.consensus_cache.as_ref(), height) {
-            Some(transcript) => Ok(transcript.threshold.get().get() as usize),
+        match active_low_threshold_committee(self.consensus_cache.as_ref(), height) {
+            Some((threshold, _)) => Ok(threshold),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
     }
@@ -252,8 +252,8 @@ impl Membership {
         &self,
         height: Height,
     ) -> Result<Threshold, MembershipError> {
-        match active_high_threshold_transcript(self.consensus_cache.as_ref(), height) {
-            Some(transcript) => Ok(transcript.threshold.get().get() as usize),
+        match active_high_threshold_committee(self.consensus_cache.as_ref(), height) {
+            Some((threshold, _)) => Ok(threshold),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
     }

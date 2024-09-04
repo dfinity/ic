@@ -1,12 +1,12 @@
 use candid::Encode;
-use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
+use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -52,9 +52,7 @@ impl NnsCanisterUpgrade {
         let module_arg = if nns_canister_name == "cycles-minting" {
             Encode!(
                 &(Some(CyclesCanisterInitPayload {
-                    cycles_ledger_canister_id: Some(
-                        CanisterId::try_from(CYCLES_LEDGER_CANISTER_ID).unwrap()
-                    ),
+                    cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
                     ledger_canister_id: None,
                     governance_canister_id: None,
                     minting_account_id: None,

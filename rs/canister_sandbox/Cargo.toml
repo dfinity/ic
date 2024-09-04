@@ -30,7 +30,7 @@ ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 libc = { workspace = true }
-libflate = "1.1.2"
+libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 once_cell = "1.8"
@@ -55,7 +55,7 @@ mockall = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tempfile = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [features]
 sigsegv_handler_checksum = ["memory_tracker/sigsegv_handler_checksum"]

@@ -53,9 +53,10 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
-        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto},
+        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
         node::v1::{ConnectionEndpoint, NodeRecord},
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
+        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
@@ -69,9 +70,11 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_catch_up_package_contents_key,
-    make_chain_key_signing_subnet_list_key, make_crypto_node_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_blessed_replica_versions_key, make_canister_migrations_record_key,
+    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -127,6 +130,7 @@ use ic_types::{
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
+    ReplicaVersion,
 };
 pub use ic_types::{
     canister_http::{
@@ -146,6 +150,7 @@ use ic_xnet_payload_builder::{
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     XNetSlicePool,
 };
+use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
 
 pub use ic_error_types::RejectCode;
@@ -158,6 +163,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
@@ -235,6 +241,29 @@ pub fn finalize_registry(
             Some(pb_whitelist),
         )
         .unwrap();
+    let replica_version = ReplicaVersion::default();
+    let blessed_replica_version = BlessedReplicaVersions {
+        blessed_version_ids: vec![replica_version.clone().into()],
+    };
+    registry_data_provider
+        .add(
+            &make_blessed_replica_versions_key(),
+            registry_version,
+            Some(blessed_replica_version),
+        )
+        .unwrap();
+    let replica_version_record = ReplicaVersionRecord {
+        release_package_sha256_hex: "".to_string(),
+        release_package_urls: vec![],
+        guest_launch_measurement_sha256_hex: None,
+    };
+    registry_data_provider
+        .add(
+            &make_replica_version_key(replica_version),
+            registry_version,
+            Some(replica_version_record),
+        )
+        .unwrap();
 }
 
 /// Adds subnet-related records to registry.
@@ -282,10 +311,13 @@ fn make_nodes_registry(
     for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
-            xnet: None,
+            xnet: Some(ConnectionEndpoint {
+                ip_addr: node.xnet_ip_addr.to_string(),
+                port: 2497,
+            }),
             http: Some(ConnectionEndpoint {
-                ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
-                port: 1234,
+                ip_addr: node.http_ip_addr.to_string(),
+                port: 8080,
             }),
             hostos_version_id: None,
             chip_id: None,
@@ -299,11 +331,49 @@ fn make_nodes_registry(
                 Some(node_record),
             )
             .unwrap();
+        for (key, key_purpose) in [
+            (node.node_signing_key.clone(), KeyPurpose::NodeSigning),
+            (
+                node.committee_signing_key.clone(),
+                KeyPurpose::CommitteeSigning,
+            ),
+            (
+                node.dkg_dealing_encryption_key.clone(),
+                KeyPurpose::DkgDealingEncryption,
+            ),
+            (
+                node.idkg_mega_encryption_key.clone(),
+                KeyPurpose::IDkgMEGaEncryption,
+            ),
+        ] {
+            let node_pk_proto = PublicKeyProto {
+                algorithm: AlgorithmId::Ed25519 as i32,
+                key_value: key.public_key().serialize_raw().to_vec(),
+                version: 0,
+                proof_data: None,
+                timestamp: None,
+            };
+            registry_data_provider
+                .add(
+                    &make_crypto_node_key(node.node_id, key_purpose),
+                    registry_version,
+                    Some(node_pk_proto.clone()),
+                )
+                .unwrap();
+        }
+        let root_key_pair = KeyPair::generate().unwrap();
+        let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
+            .unwrap()
+            .self_signed(&root_key_pair)
+            .unwrap();
+        let tls_cert = X509PublicKeyCert {
+            certificate_der: root_cert.der().to_vec(),
+        };
         registry_data_provider
             .add(
-                &make_crypto_node_key(node.node_id, KeyPurpose::NodeSigning),
+                &make_crypto_tls_cert_key(node.node_id),
                 registry_version,
-                Some(node.node_pk_proto.clone()),
+                Some(tls_cert),
             )
             .unwrap();
     }
@@ -678,29 +748,35 @@ impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
-    pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ic_crypto_ed25519::PrivateKey,
+    pub node_signing_key: ic_crypto_ed25519::PrivateKey,
+    pub committee_signing_key: ic_crypto_ed25519::PrivateKey,
+    pub dkg_dealing_encryption_key: ic_crypto_ed25519::PrivateKey,
+    pub idkg_mega_encryption_key: ic_crypto_ed25519::PrivateKey,
+    pub http_ip_addr: Ipv6Addr,
+    pub xnet_ip_addr: Ipv6Addr,
 }
 
-impl From<u64> for StateMachineNode {
-    fn from(i: u64) -> Self {
-        let mut bytes = [0; 32];
-        bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
-        let node_pk_proto = PublicKeyProto {
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.public_key().serialize_raw().to_vec(),
-            version: 0,
-            proof_data: None,
-            timestamp: None,
-        };
+impl StateMachineNode {
+    fn new(rng: &mut StdRng) -> Self {
+        let node_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let committee_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let dkg_dealing_encryption_key =
+            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let idkg_mega_encryption_key =
+            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let http_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
+        let xnet_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.public_key().serialize_raw(),
+                &node_signing_key.public_key().serialize_rfc8410_der(),
             )
             .into(),
-            node_pk_proto,
-            signing_key,
+            node_signing_key,
+            committee_signing_key,
+            dkg_dealing_encryption_key,
+            idkg_mega_encryption_key,
+            http_ip_addr,
+            xnet_ip_addr,
         }
     }
 }
@@ -1282,34 +1358,30 @@ impl StateMachine {
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats);
 
-        // Push responses to ECDSA management canister calls into `PayloadBuilder`.
-        let sign_with_ecdsa_contexts = state
+        // Process threshold signing requests.
+        for (id, context) in &state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts();
-        for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
-            let reply = {
-                if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-                    self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
-                {
-                    let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
-                        ecdsa_context.request.sender.get().as_slice(),
-                        &ecdsa_context.derivation_path,
-                    );
-                    let dk = k.derive_subkey(&path).0;
-                    let signature = dk
-                        .sign_digest_with_ecdsa(&ecdsa_context.ecdsa_args().message_hash)
-                        .to_vec();
-                    SignWithECDSAReply { signature }
-                } else {
-                    panic!("No ECDSA key with key id {} found", ecdsa_context.key_id());
+            .sign_with_threshold_contexts
+        {
+            match context.args {
+                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
+                    let response = self.build_sign_with_ecdsa_reply(context);
+                    payload.consensus_responses.push(ConsensusResponse::new(
+                        *id,
+                        MsgPayload::Data(response.encode()),
+                    ));
                 }
-            };
-
-            payload.consensus_responses.push(ConsensusResponse::new(
-                callback,
-                MsgPayload::Data(reply.encode()),
-            ));
+                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
+                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                }
+                _ => {}
+            }
         }
 
         // Finally execute the payload.
@@ -1393,9 +1465,9 @@ impl StateMachine {
                 .schnorr_signature_fee = schnorr_signature_fee;
         }
 
-        let node_offset: u64 = StdRng::from_seed(seed).gen();
-        let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
-            .map(|i| (node_offset + i).into())
+        let mut node_rng = StdRng::from_seed(seed);
+        let nodes: Vec<StateMachineNode> = (0..subnet_size)
+            .map(|_| StateMachineNode::new(&mut node_rng))
             .collect();
         let (ni_dkg_transcript, secret_key) =
             dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
@@ -1597,7 +1669,7 @@ impl StateMachine {
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
-                            public_key: private_key.public_key().serialize_bip340(),
+                            public_key: private_key.public_key().serialize_sec1(true),
                         };
 
                         let private_key = SignatureSecretKey::SchnorrBip340(private_key);
@@ -2039,7 +2111,7 @@ impl StateMachine {
     fn build_sign_with_schnorr_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> SignWithSchnorrReply {
+    ) -> Option<SignWithSchnorrReply> {
         assert!(context.is_schnorr());
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
@@ -2056,7 +2128,11 @@ impl StateMachine {
                         message.copy_from_slice(&context.schnorr_args().message);
                         message
                     } else {
-                        panic!("Currently BIP340 signing of messages != 32 bytes not supported")
+                        error!(
+                            self.replica_logger,
+                            "Currently BIP340 signing of messages != 32 bytes not supported"
+                        );
+                        return None;
                     }
                 };
 
@@ -2076,7 +2152,7 @@ impl StateMachine {
             }
         };
 
-        SignWithSchnorrReply { signature }
+        Some(SignWithSchnorrReply { signature })
     }
 
     /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
@@ -2110,11 +2186,12 @@ impl StateMachine {
                     ));
                 }
                 ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    let response = self.build_sign_with_schnorr_reply(context);
-                    payload.consensus_responses.push(ConsensusResponse::new(
-                        *id,
-                        MsgPayload::Data(response.encode()),
-                    ));
+                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
                 }
                 _ => {}
             }

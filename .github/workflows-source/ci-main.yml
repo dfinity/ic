@@ -4,14 +4,13 @@ on:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  schedule: # Todo: switch to push on master and remove schedule once we have more macos runners
-    - cron: "0 * * * *"
+  push:
+    branches:
+      - master
+      - 'dev-gh-*'
   pull_request:
   # Used as reusable workflow within release-testing workflow
   workflow_call:
-  push:
-    branches:
-      - 'dev-gh-*'
 
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
@@ -35,11 +34,8 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
@@ -66,6 +62,8 @@ anchors:
     id: before-script
     shell: bash
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    env:
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -121,6 +119,8 @@ jobs:
       - name: Run Bazel Test All
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
@@ -142,6 +142,8 @@ jobs:
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -153,29 +155,14 @@ jobs:
           RUN_ON_DIFF_ONLY: false
       - <<: *bazel-bep
 
-  bazel-test-darwin-x86-64:
-    name: Bazel Test Darwin x86-64
+  bazel-test-macos-intel:
+    name: Bazel Test macOS Intel
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ github.event_name != 'merge_group' }}
+    if: ${{ github.ref_protected }} # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
     steps:
       - <<: *checkout
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          filters: |
-            bazel-test-darwin-x86-64:
-              - '.github/workflows/ci-main.yml'
-              - '.bazelrc'
-              - '.bazelversion'
-              - '**/*.bazel'
-              - '**/*.bzl'
-              - '**/*.lock'
-              - '**/*.rs'
-              - '**/*.toml'
       - name: Set PATH
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
@@ -183,8 +170,9 @@ jobs:
       - <<: *before-script
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'true' || github.event_name != 'pull_request'
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
           BAZEL_COMMAND: test
@@ -208,6 +196,8 @@ jobs:
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
@@ -233,6 +223,8 @@ jobs:
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."

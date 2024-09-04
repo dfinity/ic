@@ -1,14 +1,3 @@
-// Note on `candid_method`: each canister method should have a function
-// annotated with `#[candid_method]` that has the arguments and return type
-// expected by the canister method, to be able to generate `governance.did`
-// automatically.
-//
-// This often means we need a function with `#[export_name = "canister_query
-// my_method"]` that doesn't take arguments and doesn't return anything (per IC
-// spec), then another function the actual method arguments and return type,
-// annotated with `#[candid_method(query/update)]` to be able to generate the
-// did definition of the method.
-
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
 use dfn_candid::{candid, candid_one};
@@ -35,7 +24,7 @@ use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
-    pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
+    pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 #[cfg(feature = "test")]
@@ -307,6 +296,21 @@ fn debug_log(s: &str) {
     }
 }
 
+fn panic_with_probability(probability: f64, message: &str) {
+    // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
+    // state, which makes sure that the next time still panics, unless some other operation modifies
+    // the `rng` successfully, such as spawning a neuron.
+    let now_seconds = now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Could not get the duration.")
+        .as_secs();
+    let random = ChaCha20Rng::seed_from_u64(now_seconds).next_u64();
+    let should_panic = (random as f64) / (u64::MAX as f64) < probability;
+    if should_panic {
+        panic!("{}", message);
+    }
+}
+
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
@@ -381,6 +385,7 @@ fn canister_post_upgrade() {
         restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
+    let restored_state = migrate_neurons_fund_audit_info(restored_state);
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -389,6 +394,17 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+}
+
+fn migrate_neurons_fund_audit_info(state: InternalGovernanceProto) -> InternalGovernanceProto {
+    InternalGovernanceProto {
+        proposals: state
+            .proposals
+            .into_iter()
+            .map(|(id, proposal_data)| (id, proposal_data.migrate()))
+            .collect(),
+        ..state
+    }
 }
 
 #[cfg(feature = "test")]
@@ -858,6 +874,10 @@ fn canister_heartbeat() {
 #[export_name = "canister_update manage_neuron_pb"]
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
+    panic_with_probability(
+        0.1,
+        "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
+    );
     over_async(protobuf, manage_neuron_)
 }
 
@@ -876,6 +896,10 @@ fn list_proposals_pb() {
 #[export_name = "canister_query list_neurons_pb"]
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
+    panic_with_probability(
+        0.1,
+        "list_neurons_pb is deprecated. Please use list_neurons instead.",
+    );
     over(protobuf, list_neurons_)
 }
 
@@ -1179,152 +1203,25 @@ fn add_proposal_id_to_add_wasm_request(
     Ok(payload)
 }
 
-// This makes this Candid service self-describing, so that for example Candid
-// UI, but also other tools, can seamlessly integrate with it.
-// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-// works.
-//
-// We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unnecessary
-// runtime computation
-
-#[cfg(not(feature = "test"))]
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("governance.did").to_string())
-}
-
-#[cfg(feature = "test")]
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| {
-        include_str!("governance_test.did").to_string()
+        #[cfg(not(feature = "test"))]
+        let declared_interface = include_str!("governance.did");
+        #[cfg(feature = "test")]
+        let declared_interface = include_str!("governance_test.did");
+
+        declared_interface.to_string()
     })
 }
 
-// When run on native this prints the candid service definition of this
-// canister, from the methods annotated with `candid_method` above.
-//
-// Note that `cargo test` calls `main`, and `export_service` (which defines
-// `__export_service` in the current scope) needs to be called exactly once. So
-// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-#[cfg(not(feature = "test"))]
-#[test]
-fn check_governance_candid_file() {
-    let did_path = std::path::PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-    )
-    .join("canister/governance.did");
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance.did. \
-            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) in \
-            rs/nns/governance to update canister/governance.did."
-        )
-    }
-}
-
-#[cfg(feature = "test")]
-#[test]
-fn check_governance_candid_file() {
-    let did_path = std::path::PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-    )
-    .join("canister/governance_test.did");
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance_test.did. \
-            Run `bazel run :generate_test_did > canister/governance_test.did` (no nix and/or direnv) in \
-            rs/nns/governance to update canister/governance_test.did."
-        )
-    }
-}
-
-#[test]
-fn test_set_time_warp() {
-    let mut environment = CanisterEnv::new();
-
-    let start = environment.now();
-    environment.set_time_warp(GovTimeWarp { delta_s: 1_000 });
-    let delta_s = environment.now() - start;
-
-    assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-    assert!(delta_s < 1005, "delta_s = {}", delta_s);
-}
-
-#[test]
-fn test_get_effective_payload_sets_proposal_id_for_add_wasm() {
-    let mt = gov_pb::NnsFunction::AddSnsWasm;
-    let proposal_id = 42;
-    let wasm = vec![1, 2, 3];
-    let canister_type = 3;
-    let hash = vec![1, 2, 3, 4];
-    let payload = Encode!(&AddWasmRequest {
-        wasm: Some(SnsWasm {
-            proposal_id: None,
-            wasm: wasm.clone(),
-            canister_type,
-        }),
-        hash: hash.clone(),
-    })
-    .unwrap();
-
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
-
-    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
-    assert_eq!(
-        decoded,
-        AddWasmRequest {
-            wasm: Some(SnsWasm {
-                proposal_id: Some(proposal_id), // The proposal_id should be set
-                wasm,
-                canister_type
-            }),
-            hash
-        }
-    );
-}
-
-#[test]
-fn test_get_effective_payload_overrides_proposal_id_for_add_wasm() {
-    let mt = gov_pb::NnsFunction::AddSnsWasm;
-    let proposal_id = 42;
-    let payload = Encode!(&AddWasmRequest {
-        wasm: Some(SnsWasm {
-            proposal_id: Some(proposal_id - 1),
-            ..SnsWasm::default()
-        }),
-        ..AddWasmRequest::default()
-    })
-    .unwrap();
-
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
-
-    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
-    assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
-}
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
+#[cfg(test)]
+mod tests;

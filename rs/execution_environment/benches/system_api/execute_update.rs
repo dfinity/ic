@@ -33,7 +33,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "",
                 Module::render_loop(
                     LoopIterations::Mi,
-                    "(set_local $s (i32.add (get_local $s) (i32.load (i32.const 0))))",
+                    "(local.set $s (i32.add (local.get $s) (i32.load (i32.const 0))))",
                 ),
             )),
             16000006,
@@ -153,6 +153,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "call_new+ic0_call_cycles_add128()".into(),
             Module::CallNewLoop.from_ic0("call_cycles_add128", Params2(0_i64, 100_i64), Result::No),
+            2059000006,
+        ),
+        common::Benchmark(
+            "call_new+ic0_call_cycles_add128_up_to()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_cycles_add128_up_to",
+                Params3(0_i64, 100_i64, 0_i32),
+                Result::No,
+            ),
             2059000006,
         ),
         common::Benchmark(
