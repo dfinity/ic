@@ -143,6 +143,9 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // Stop chatter on all canisters.
     fixture.stop_chatter().unwrap();
+    for canister in fixture.canisters() {
+        fixture.replace_call_weight(canister, 0).unwrap();
+    }
 
     // Keep ticking until all calls are answered.
     for counter in 0.. {

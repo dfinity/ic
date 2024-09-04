@@ -11,6 +11,7 @@ path = "src/main.rs"
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
+ic-error-types = { path = "../../types/error_types" }
 ic-types = { path = "../../types/types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
