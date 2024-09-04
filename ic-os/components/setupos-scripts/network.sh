@@ -199,7 +199,7 @@ function query_nns_nodes() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    read__config_variables
+    read_config_variables
     get_network_settings
     print_network_settings
 
