@@ -446,12 +446,27 @@ impl State {
         &mut self.cycles_management
     }
 
-    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
+    pub fn all_managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
         self.managed_canisters.canisters.iter()
     }
 
-    pub fn managed_principals(&self) -> impl Iterator<Item = &Principal> {
-        self.managed_canisters_iter()
+    pub fn erc20_managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
+        self.managed_canisters
+            .canisters
+            .iter()
+            .filter(|(token, _)| token.address() != &Self::ADDRESS_FOR_NON_ERC20_TOKEN)
+    }
+
+    pub fn other_managed_canisters_iter(&self) -> impl Iterator<Item = &Canisters> {
+        self.managed_canisters
+            .canisters
+            .iter()
+            .filter(|(token, _)| token.address() == &Self::ADDRESS_FOR_NON_ERC20_TOKEN)
+            .map(|(_, canisters)| canisters)
+    }
+
+    pub fn all_managed_principals(&self) -> impl Iterator<Item = &Principal> {
+        self.all_managed_canisters_iter()
             .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
@@ -776,7 +791,7 @@ impl ManageOtherCanisters {
             .chain(once(&index))
             .chain(archives.iter())
             .collect();
-        let managed_principals: BTreeSet<_> = state.managed_principals().collect();
+        let managed_principals: BTreeSet<_> = state.all_managed_principals().collect();
         let overlapping_principals: BTreeSet<_> = managed_principals
             .intersection(&installed_principals)
             .collect();

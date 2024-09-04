@@ -225,6 +225,25 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ManagedOtherCanisters {
+    pub token_symbol: String,
+    pub ledger: Option<ManagedCanisterStatus>,
+    pub index: Option<ManagedCanisterStatus>,
+    pub archives: Vec<Principal>,
+}
+
+impl From<Canisters> for ManagedOtherCanisters {
+    fn from(value: Canisters) -> Self {
+        Self {
+            token_symbol: value.metadata.ckerc20_token_symbol.to_string(),
+            ledger: value.ledger.as_ref().map(ManagedCanisterStatus::from),
+            index: value.index.as_ref().map(ManagedCanisterStatus::from),
+            archives: value.archives.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct LedgerSuiteVersion {
     pub ledger_compressed_wasm_hash: String,
     pub index_compressed_wasm_hash: String,
@@ -248,6 +267,7 @@ pub struct OrchestratorInfo {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
     pub ledger_suite_version: Option<LedgerSuiteVersion>,
+    pub managed_other_canisters: Option<Vec<ManagedOtherCanisters>>,
 }
 
 #[derive(

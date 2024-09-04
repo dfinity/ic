@@ -3,8 +3,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, Erc20Contract, LedgerInitArg, LedgerSuiteVersion,
-    ManagedCanisterStatus, ManagedCanisters, OrchestratorArg, OrchestratorInfo,
+    AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
+    ManagedCanisters, ManagedOtherCanisters, OrchestratorArg, OrchestratorInfo,
     UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
@@ -413,6 +413,7 @@ fn should_retrieve_orchestrator_info() {
                 index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
                 archive_compressed_wasm_hash: embedded_archive_wasm_hash.to_string(),
             }),
+            managed_other_canisters: None,
         }
     );
 
@@ -422,26 +423,18 @@ fn should_retrieve_orchestrator_info() {
 
     assert_eq!(
         OrchestratorInfo {
-            managed_canisters: vec![
-                ManagedCanisters {
-                    erc20_contract: Erc20Contract {
-                        chain_id: 1_u8.into(),
-                        address: "0x0000000000000000000000000000000000000000".to_string(),
-                    },
-                    ckerc20_token_symbol: cketh_canisters.token_symbol,
-                    ledger: Some(ManagedCanisterStatus::Installed {
-                        canister_id: cketh_canisters.ledger.canister_id,
-                        installed_wasm_hash: cketh_canisters.ledger.installed_wasm_hash,
-                    }),
-                    index: Some(ManagedCanisterStatus::Installed {
-                        canister_id: cketh_canisters.index.canister_id,
-                        installed_wasm_hash: cketh_canisters.index.installed_wasm_hash,
-                    }),
-                    archives: cketh_canisters.archives.unwrap(),
-                },
-                ckusdc_managed_canisters,
-                ckusdt_managed_canisters
-            ],
+            managed_other_canisters: Some(vec![ManagedOtherCanisters {
+                token_symbol: cketh_canisters.token_symbol,
+                ledger: Some(ManagedCanisterStatus::Installed {
+                    canister_id: cketh_canisters.ledger.canister_id,
+                    installed_wasm_hash: cketh_canisters.ledger.installed_wasm_hash,
+                }),
+                index: Some(ManagedCanisterStatus::Installed {
+                    canister_id: cketh_canisters.index.canister_id,
+                    installed_wasm_hash: cketh_canisters.index.installed_wasm_hash,
+                }),
+                archives: cketh_canisters.archives.unwrap(),
+            }]),
             ..info
         },
         info_after_managing_cketh

@@ -24,15 +24,25 @@ fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
 #[query]
 fn get_orchestrator_info() -> OrchestratorInfo {
     read_state(|s| OrchestratorInfo {
-        //TODO XC-189: add new fields for non ckERC-20 ledger suites. Filter them out in managed_canisters.
         managed_canisters: s
-            .managed_canisters_iter()
+            .erc20_managed_canisters_iter()
             .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
             .collect(),
         cycles_management: s.cycles_management().clone(),
         more_controller_ids: s.more_controller_ids().to_vec(),
         minter_id: s.minter_id().cloned(),
         ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
+        managed_other_canisters: {
+            let canisters: Vec<_> = s
+                .other_managed_canisters_iter()
+                .map(|canisters| canisters.clone().into())
+                .collect();
+            if canisters.is_empty() {
+                None
+            } else {
+                Some(canisters)
+            }
+        },
     })
 }
 
@@ -195,7 +205,7 @@ fn http_request(
                 read_state(|s| {
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_ledgers",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .filter(|(_erc20, canisters)| canisters.ledger.is_some())
                             .count() as f64,
                         "Total count of ckERC20 ledgers managed by the orchestrator.",
@@ -203,7 +213,7 @@ fn http_request(
 
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_indexes",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .filter(|(_erc20, canisters)| canisters.index.is_some())
                             .count() as f64,
                         "Total count of ckERC20 indexes managed by the orchestrator.",
@@ -211,7 +221,7 @@ fn http_request(
 
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_archives",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .flat_map(|(_erc20, canisters)| &canisters.archives)
                             .count() as f64,
                         "Total count of ckERC20 archives managed by the orchestrator.",

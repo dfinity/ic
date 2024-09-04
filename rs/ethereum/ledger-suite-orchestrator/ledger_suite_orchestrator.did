@@ -138,6 +138,20 @@ type ManagedCanisters = record {
     archives : vec principal;
 };
 
+type ManagedOtherCanisters = record {
+    // Token symbol
+    token_symbol : text;
+
+    // Status of the ledger canister
+    ledger : opt ManagedCanisterStatus;
+
+    // Status of the index canister
+    index : opt ManagedCanisterStatus;
+
+    // List of archive canister ids
+    archives : vec principal;
+};
+
 type OrchestratorInfo = record {
     // List of managed canisters data for each ERC20 contract.
     managed_canisters : vec ManagedCanisters;
@@ -153,6 +167,10 @@ type OrchestratorInfo = record {
 
    // Ledger suite version that will be used to spawn off a new ledger suite (ledger and index canisters) when an ERC-20 token is added.
    ledger_suite_version: opt LedgerSuiteVersion;
+
+   // List of managed canisters that are not ERC-20 tokens
+   // and were not initially installed by the orchestrator
+   managed_other_canisters: opt vec ManagedOtherCanisters;
 };
 
 type LedgerSuiteVersion = record {

@@ -143,7 +143,7 @@ impl DashboardTemplate {
 
         Self {
             managed_canisters: state
-                .managed_canisters_iter()
+                .all_managed_canisters_iter()
                 .map(|(k, v)| {
                     (
                         k.clone(),

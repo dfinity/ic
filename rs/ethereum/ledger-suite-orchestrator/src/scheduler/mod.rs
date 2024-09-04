@@ -710,7 +710,8 @@ impl TaskExecution {
 }
 
 async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
-    let managed_principals: BTreeSet<_> = read_state(|s| s.managed_principals().cloned().collect());
+    let managed_principals: BTreeSet<_> =
+        read_state(|s| s.all_managed_principals().cloned().collect());
     if managed_principals.is_empty() {
         log!(INFO, "[maybe_top_up]: No managed canisters to top-up");
         return Ok(());
@@ -1137,7 +1138,7 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
     runtime: &R,
 ) -> Result<(), DiscoverArchivesError> {
     let ledgers: BTreeMap<_, _> = read_state(|s| {
-        s.managed_canisters_iter()
+        s.all_managed_canisters_iter()
             .filter(|(token, _)| selector(token))
             .filter_map(|(token, canisters)| {
                 canisters
