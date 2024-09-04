@@ -3,7 +3,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
 };
-use ic_tests::os_qualification_utils::{
+use os_qualification_utils::{
     defs::QualificationExecutor,
     steps::{
         ensure_elected_version::EnsureElectedVersion,
@@ -71,7 +71,7 @@ pub fn main() -> anyhow::Result<()> {
 
     SystemTestGroup::new()
         .with_timeout_per_test(OVERALL_TIMEOUT)
-        .with_setup(|env| ic_tests::os_qualification_utils::setup(env, config))
+        .with_setup(|env| os_qualification_utils::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
             move |env| {

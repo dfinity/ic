@@ -1,13 +1,14 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_ENV")
+load("//rs/tests:system_tests.bzl", "system_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-system_test_nns(
+system_test(
     name = "guest_os_qualification",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
+    } | MAINNET_NNS_CANISTER_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
@@ -18,7 +19,18 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS +
+        MAINNET_NNS_CANISTER_RUNTIME_DEPS +
         COUNTER_CANISTER_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests", ":os_qualification_utils"],
+)
+
+rust_library(
+    name = "os_qualification_utils",
+    testonly = True,
+    srcs = glob(["utils/**/*.rs"]),
+    crate_name = "os_qualification_utils",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
