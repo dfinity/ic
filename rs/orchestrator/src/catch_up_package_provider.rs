@@ -290,7 +290,7 @@ impl CatchUpPackageProvider {
                 .map_err(|e| {
                     warn!(
                         self.logger,
-                        "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}", bytes, e
+                        "Failed to deserialize CUP from protobuf: {:?}", e
                     )
                 })
                 .ok()
