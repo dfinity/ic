@@ -3,7 +3,7 @@ use icp_ledger::{AccountIdentifier, Subaccount};
 pub use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla, UpdateTrace};
 
 #[cfg(feature = "tla")]
-use tokio::task_local;
+use local_key::task_local;
 
 use std::sync::RwLock;
 
