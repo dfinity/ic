@@ -1,9 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{get_config_ini_settings, get_deployment_settings};
-use std::fs::{create_dir_all, File};
-use std::io::Write;
+use config::{get_config_ini_settings, get_deployment_settings, write_to_file};
 use std::path::Path;
+use std::fs::File;
 
 use config::types::{SetupOSConfig, HostOSConfig, HostOSSettings, GuestOSSettings, GuestosDevConfig, ICOSSettings};
 
@@ -102,14 +101,7 @@ pub fn main() -> Result<()> {
                 .expect("Failed to serialize SetuposConfig");
 
             let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
-            if let Some(parent) = default_config_object_path.parent() {
-                if !parent.exists() {
-                    create_dir_all(parent).expect("Failed to create directory");
-                }
-            }
-
-            let mut config_file = File::create(default_config_object_path)?;
-            config_file.write_all(serialized_config.as_bytes())?;
+            write_to_file(default_config_object_path, &serialized_config)?;
 
             println!(
                 "SetuposConfig has been written to {}",
@@ -134,14 +126,7 @@ pub fn main() -> Result<()> {
                 .expect("Failed to serialize HostOSConfig");
 
             let output_path = Path::new("/var/ic/config/config-hostos.json");
-            if let Some(parent) = output_path.parent() {
-                if !parent.exists() {
-                    create_dir_all(parent).expect("Failed to create directory");
-                }
-            }
-
-            let mut config_file = File::create(output_path)?;
-            config_file.write_all(serialized_hostos_config.as_bytes())?;
+            write_to_file(output_path, &serialized_hostos_config)?;
 
             println!(
                 "HostOSConfig has been written to {}",
