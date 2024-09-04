@@ -105,3 +105,8 @@ message GetSubnetForCanisterRequest {
 message SubnetForCanister {
     ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }
+
+// The API boundary node id.
+message ApiBoundaryNodeIdRecord {
+    ic_base_types.pb.v1.PrincipalId id = 1;
+}

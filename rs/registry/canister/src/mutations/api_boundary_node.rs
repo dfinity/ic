@@ -36,7 +36,7 @@ impl Registry {
             })
     }
 
-    /// Get all Api boundary nodes IDs.
+    /// Get all API boundary nodes IDs.
     pub fn get_api_boundary_node_ids(&self) -> Vec<NodeId> {
         get_key_family_iter::<ApiBoundaryNodeRecord>(self, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
             .map(|k| {

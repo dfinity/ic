@@ -138,3 +138,11 @@ pub struct SubnetForCanister {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
+/// The API boundary node.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApiBoundaryNodeIdRecord {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}

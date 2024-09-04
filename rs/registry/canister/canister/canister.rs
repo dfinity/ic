@@ -72,8 +72,8 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
-        SubnetForCanister,
+        ApiBoundaryNodeIdRecord, GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards,
+        RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
@@ -549,12 +549,6 @@ fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
-// #[candid_method(update, rename = "add_api_boundary_nodes")]
-// fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
-//     registry_mut().do_add_api_boundary_nodes(payload);
-//     recertify_registry();
-// }
-
 #[export_name = "canister_update remove_api_boundary_nodes"]
 fn remove_api_boundary_nodes() {
     check_caller_is_governance_and_log("remove_api_boundary_nodes");
@@ -890,17 +884,18 @@ fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRe
 
 #[export_name = "canister_query get_api_boundary_node_ids"]
 fn get_api_boundary_node_ids() {
-    over(candid_one, |()| -> Result<Vec<String>, String> {
-        get_api_boundary_node_ids_()
-    })
+    over(
+        candid_one,
+        |()| -> Result<Vec<ApiBoundaryNodeIdRecord>, String> { get_api_boundary_node_ids_() },
+    )
 }
 
 #[candid_method(query, rename = "get_api_boundary_node_ids")]
-fn get_api_boundary_node_ids_() -> Result<Vec<String>, String> {
+fn get_api_boundary_node_ids_() -> Result<Vec<ApiBoundaryNodeIdRecord>, String> {
     let ids = registry()
         .get_api_boundary_node_ids()
         .iter()
-        .map(|k| k.get().to_string())
+        .map(|k| ApiBoundaryNodeIdRecord { id: Some(k.get()) })
         .collect();
     Ok(ids)
 }
