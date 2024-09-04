@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::metrics::{MetricParams, WithMetrics};
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(PartialEq, Debug, Serialize)]
 pub struct Context<'a> {
     pub name: &'a str,
     pub canister_id: &'a str,

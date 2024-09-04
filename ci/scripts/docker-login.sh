@@ -13,8 +13,3 @@ if which docker-bin 2>/dev/null; then
     # save auth to root's .docker/config.json
     sudo docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 fi
-
-# print node name for easier debugging
-if [ -n "${NODE_NAME:-}" ]; then
-    echo "Node: $NODE_NAME"
-fi

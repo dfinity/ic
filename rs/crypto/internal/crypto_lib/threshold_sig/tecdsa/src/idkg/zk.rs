@@ -17,13 +17,13 @@ use serde::{Deserialize, Serialize};
 /// - `a=b`
 ///
 /// Note that this proof does not prove knowledge of `a` and `b`, but just the equality of the openings.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ProofOfEqualOpenings {
     challenge: EccScalar,
     response: EccScalar,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct ProofOfEqualOpeningsInstance {
     curve_type: EccCurveType,
     // Commitment key for simple commitments and first element in the commitment key for Pedersen commitments.
@@ -154,14 +154,14 @@ impl ProofOfEqualOpenings {
 /// Note: in the IDKG protocol it is not necessary to explicitly prove
 /// knowledge of `b`, as in the security proof this is already known
 /// by the simulator.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ProofOfProduct {
     challenge: EccScalar,
     response1: EccScalar,
     response2: EccScalar,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct ProofOfProductInstance {
     curve_type: EccCurveType,
     g: EccPoint,
@@ -318,13 +318,13 @@ impl ProofOfProduct {
 /// Witness = `x` ∈  Zₚ,
 /// such that:
 /// `A = g*x` and `B = h*x`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ProofOfDLogEquivalence {
     pub(crate) challenge: EccScalar,
     pub(crate) response: EccScalar,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct ProofOfDLogEquivalenceInstance {
     curve_type: EccCurveType,
     g: EccPoint,

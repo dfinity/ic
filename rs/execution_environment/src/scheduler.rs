@@ -81,7 +81,7 @@ pub(crate) mod tests;
 
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SchedulerRoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     instructions: RoundInstructions,

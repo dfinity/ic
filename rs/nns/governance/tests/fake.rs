@@ -544,7 +544,7 @@ pub fn register_vote_assert_success(
 
 /// When testing proposals, three different proposal topics available:
 /// Governance, NetworkEconomics, and ExchangeRate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
@@ -553,7 +553,7 @@ pub enum ProposalTopicBehavior {
 
 /// A struct to help setting up tests concisely thanks to a concise format to
 /// specifies who proposes something and who votes on that proposal.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ProposalNeuronBehavior {
     /// Neuron id of the proposer.
     pub proposer: u64,

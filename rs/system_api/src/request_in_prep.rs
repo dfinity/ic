@@ -8,8 +8,13 @@ use ic_types::{
     time::CoarseTime,
     CanisterId, Cycles, NumBytes, PrincipalId,
 };
+use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
+
+const PAYLOAD_SIZE_SUGGESTION: &str = "Check the canister for errors or redesign the target \
+                API to allow shorter messages";
+const PAYLOAD_SIZE_LINK: &str = "canister-made-a-call-with-too-large-payload";
 
 /// Represents an under construction `Request`.
 ///
@@ -29,7 +34,7 @@ use std::{convert::TryFrom, time::Duration};
 /// does not make much sense, actually -- it never needs to be transferred
 /// across processes. It should probably be moved out of ApiType (such that
 /// "mutable" bits are not part of it).
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RequestInPrep {
     sender: CanisterId,
     callee: PrincipalId,
@@ -68,6 +73,10 @@ impl RequestInPrep {
         multiplier_max_size_local_subnet: u64,
         max_sum_exported_function_name_lengths: usize,
     ) -> HypervisorResult<Self> {
+        const LARGE_NAME_SUGGESTION: &str =
+            "Size of method_name {} exceeds the allowed limit of {}.";
+        const LARGE_NAME_LINK: &str = "canister-made-a-call-with-too-large-method-name";
+
         let method_name = {
             // Check the conditions for method_name length separately to provide
             // a more specific error message instead of combining both based on
@@ -80,8 +89,8 @@ impl RequestInPrep {
                         "Size of method_name {} exceeds the allowed limit of {}.",
                         method_name_len, max_sum_exported_function_name_lengths
                     ),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
+                    suggestion: LARGE_NAME_SUGGESTION.to_string(),
+                    doc_link: doc_ref(LARGE_NAME_LINK),
                 });
             }
 
@@ -93,8 +102,8 @@ impl RequestInPrep {
                         "Size of method_name {} exceeds the allowed limit of {}.",
                         method_name_len, max_size_local_subnet
                     ),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
+                    suggestion: LARGE_NAME_SUGGESTION.to_string(),
+                    doc_link: doc_ref(LARGE_NAME_LINK),
                 });
             }
             let method_name = valid_subslice(
@@ -160,8 +169,8 @@ impl RequestInPrep {
                 current_size + size,
                 max_size_local_subnet
             ),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: PAYLOAD_SIZE_SUGGESTION.to_string(),
+                doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             })
         } else {
             let data = valid_subslice("ic0.call_data_append", src, size, heap)?;
@@ -227,8 +236,8 @@ pub(crate) fn into_request(
                 method_name,
                 payload_size, max_size_remote_subnet
             ),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+                suggestion: PAYLOAD_SIZE_SUGGESTION.to_string(),
+                doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             });
         }
     }

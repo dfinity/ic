@@ -85,6 +85,25 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///  * The reference at the front of a non-empty canister input or output queue
 ///    is non-stale.
 ///
+///    This is because we want to avoid a live lock, where a canister's output
+///    queue(s) are filled to capacity with stale references, preventing any
+///    more messages from being enqueued; but at the same time the canister is
+///    never included in an `OutputIterator` (the only way of consuming the
+///    stale references) because it has no outbound messages in its pool.
+///
+///    Dropping this invariant would require `available_output_request_slots()`
+///    to iterate over every input and output queue in order to discount stale
+///    references in the front from the count of available slots. Or else,
+///    (re-)introduce the old "slots in use in output queues" queue stat and use
+///    that to determine whether or not to create an output iterator for a
+///    canister. The former is potentially horribly inefficient; the latter
+///    requires additional code and significant test coverage. Without one of
+///    these changes, Execution will synchronously fail any call made by the
+///    canister. On top of this, the push implementation would need to actively
+///    try to pop a stale reference from the front of the queue whenever the
+///    queue is at capacity. See https://github.com/dfinity/ic/pull/1293 for an
+///    attempted implementation.
+///
 /// # Soft invariants
 ///
 ///  * `QueueStats`' input / output queue slot reservation stats are consistent
@@ -102,7 +121,7 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///  * `QueueStats`' slot and memory reservation stats are consistent with
 ///    `CallContextManager`'s callbacks and non-responded call contexts (see
 ///    `SystemState::check_invariants()` for details).
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
     #[validate_eq(CompareWithValidateEq)]
@@ -112,11 +131,6 @@ pub struct CanisterQueues {
     /// message pool, some of which may be stale due to expiration or load shedding.
     ///
     /// The item at the head of each queue, if any, is guaranteed to be non-stale.
-    /// This is because we want to avoid a live lock, where a canister's output
-    /// queue(s) are filled to capacity with stale references, preventing any more
-    /// messages from being enqueued; but at the same time the canister is never
-    /// included in an `OutputIterator` (the only way of consuming the stale
-    /// references).
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
@@ -1366,7 +1380,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 ///
 /// Stats for the enqueued messages themselves (counts and sizes by kind,
 /// context and class) are tracked separately in `message_pool::MessageStats`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct QueueStats {
     /// Count of guaranteed response memory reservations across input and output
     /// queues. This is equivalent to the number of outstanding (inbound or outbound)

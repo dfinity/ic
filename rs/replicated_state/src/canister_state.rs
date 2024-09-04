@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use self::execution_state::NextScheduledMethod;
 
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
     /// The last full round that a canister got the chance to execute. This
@@ -111,7 +111,7 @@ impl SchedulerState {
 }
 
 /// The full state of a single canister.
-#[derive(Clone, Debug, PartialEq, ValidateEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
     #[validate_eq(CompareWithValidateEq)]
@@ -608,7 +608,7 @@ impl CanisterState {
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
 ///   `install_code` subnet message and will continue it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum NextExecution {
     None,
     StartNew,
