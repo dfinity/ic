@@ -72,7 +72,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
         "//rs/tests",
-        "//rs/tests/dre:os_qualification_utils",
+        "//rs/tests/dre/utils:os_qualification_utils",
     ],
 )
 
