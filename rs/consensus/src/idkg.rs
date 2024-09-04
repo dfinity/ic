@@ -432,8 +432,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgBouncer` implements the bouncer function and other gossip related
-/// functionality
+/// Implements the BouncerFactory interface for IDkg.
 pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,

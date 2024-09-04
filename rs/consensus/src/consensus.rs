@@ -575,7 +575,7 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
     .unwrap_or_default()
 }
 
-/// Implement Consensus Gossip interface.
+/// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
 }

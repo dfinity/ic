@@ -39,8 +39,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-/// The Certification component, processing the changes on the certification
-/// pool and submitting the corresponding change sets.
+/// The Certification component, producing the change set for the certification pool(s).
 pub struct CertifierImpl {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
