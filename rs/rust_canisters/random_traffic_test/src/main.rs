@@ -1,17 +1,33 @@
 use candid::{Decode, Encode};
 use dfn_core::api;
 use ic_base_types::CanisterId;
-use rand::{distributions::Distribution, rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{
+    distributions::{Distribution, WeightedIndex},
+    rngs::StdRng,
+    seq::SliceRandom,
+    Rng, SeedableRng,
+};
 use random_traffic_test::*;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 thread_local! {
+    /// Random number generator used for determining payload sizes et.al.
     static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(13));
+    /// Weight for making a reply used in a weighted binomial distribution.
+    static REPLY_WEIGHT: Cell<u32> = Cell::new(1);
+    /// Weight for making a downstream call used in a weighted binomial distribution.
+    static CALL_WEIGHT: Cell<u32> = Cell::new(0);
+    /// A configuration holding parameters for how to the canister should behave, such as the range
+    /// of payload bytes it should send.
     static CONFIG: RefCell<Config> = RefCell::default();
-    static CALLS_PER_ROUND: Cell<u32> = Cell::default();
+    /// The maximum number of calls each heartbeat can make.
+    static MAX_CALLS_PER_HEARTBEAT: Cell<u32> = Cell::default();
+    /// An ID used as an entry in `RECORDS` unique for each call.
     static CALL_ID: Cell<u32> = Cell::default();
+    /// A collection of records; one record for each call. Keeps track of how each call went,
+    /// whether it was rejected or not and how many bytes we received as a reply.
     static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
 }
 
@@ -31,16 +47,30 @@ where
     api::reply(&msg[..]);
 }
 
-/// Sets the test config.
+/// Replaces the test config.
 #[export_name = "canister_update replace_config"]
 fn replace_config() {
     replace_state(|config: Config| CONFIG.replace(config));
 }
 
-/// Sets the requests per round to be sent each heart beat.
-#[export_name = "canister_update replace_calls_per_round"]
-fn replace_calls_per_round() {
-    replace_state(|calls_per_round: u32| CALLS_PER_ROUND.replace(calls_per_round));
+/// Replaces the requests per round to be sent each heart beat.
+#[export_name = "canister_update replace_max_calls_per_heartbeat"]
+fn replace_max_calls_per_heartbeat() {
+    replace_state(|max_calls_per_heartbeat: u32| {
+        MAX_CALLS_PER_HEARTBEAT.replace(max_calls_per_heartbeat)
+    });
+}
+
+/// Replaces the reply weight.
+#[export_name = "canister_update replace_reply_weight"]
+fn replace_reply_weight() {
+    replace_state(|reply_weight: u32| REPLY_WEIGHT.replace(reply_weight));
+}
+
+/// Replaces the call weight.
+#[export_name = "canister_update replace_call_weight"]
+fn replace_call_weight() {
+    replace_state(|call_weight: u32| CALL_WEIGHT.replace(call_weight));
 }
 
 /// Seeds `RNG`.
@@ -51,6 +81,16 @@ fn seed_rng() {
         *rng = StdRng::seed_from_u64(seed);
     });
     api::reply(&[]);
+}
+
+/// Probes a weighted binomial distribution to decide whether to make a reply (true) or a
+/// downstream call (false). Defaults to `true` for bad weights (i.e. both 0).
+fn make_reply() -> bool {
+    RNG.with_borrow_mut(|rng| {
+        WeightedIndex::new(&[REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
+            .map(|dist| dist.sample(rng) == 0)
+            .unwrap_or(true)
+    })
 }
 
 fn insert_new_call_record(call_id: u32, record: Record) {
@@ -98,20 +138,25 @@ fn next_call_id() -> u32 {
 /// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
 /// attempted in `RECORDS` in the order they were made. Once a reply is received, this record is
 /// updated in place.
-fn try_call() -> Result<(), ()> {
+fn try_call(is_downstream_call: bool) -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
     let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
 
     let call_id = next_call_id();
     let on_reply = move || {
-        let reply = api::arg_data();
-        set_reply(call_id, Reply::Bytes(reply.len() as u32));
+        set_reply(call_id, Reply::Bytes(api::arg_data().len() as u32));
+        if is_downstream_call {
+            reply();
+        }
     };
     let on_reject = move || {
         set_reply(
             call_id,
             Reply::AsynchronousRejection(api::reject_code(), api::reject_message()),
         );
+        if is_downstream_call {
+            reply();
+        }
     };
 
     match api::call_with_callbacks(
@@ -160,28 +205,19 @@ fn reply() {
     api::reply(&msg[..]);
 }
 
-/// Determines whether a downstream call should be attempted or if a reply should be sent back.
-fn probe_make_call() -> bool {
-    CONFIG.with_borrow(|config| {
-        let dist = rand::distributions::WeightedIndex::new(&[
-            config.downstream_call_weight,
-            config.reply_weight,
-        ])
-        .unwrap();
-        let choices = [true, false];
-        RNG.with_borrow_mut(|rng| choices[dist.sample(rng)])
-    })
-}
-
 /// Randomly determines whether to make a downstream call; reply if not or if the downstream call fails.
 #[export_name = "canister_update handle_call"]
 fn handle_call() {
-    if probe_make_call() {
-        if let Err(()) = try_call() {
+    if make_reply() {
+        reply();
+    } else {
+        // Try to make a downstream call; reply if it fails synchronously.
+        //
+        // Note: replies for all other cases are handled in the corresponding
+        // callbacks, so this function does reply on every branch.
+        if let Err(()) = try_call(true) {
             reply();
         }
-    } else {
-        reply();
     }
 }
 
@@ -190,10 +226,8 @@ fn handle_call() {
 /// - calling fails synchronously.
 #[export_name = "canister_heartbeat"]
 fn heartbeat() {
-    //let calls_per_round = CALLS_PER_ROUND.get();
-    //for _ in 0..calls_per_round {
-    for _ in 0..CALLS_PER_ROUND.get() {
-        if let Err(()) = try_call() {
+    for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
+        if let Err(()) = try_call(false) {
             return;
         }
     }

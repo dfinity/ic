@@ -16,8 +16,6 @@ pub struct Config {
     pub reply_bytes_max: u32,
     pub instructions_count_min: u32,
     pub instructions_count_max: u32,
-    pub downstream_call_weight: u32,
-    pub reply_weight: u32,
 }
 
 impl Default for Config {
@@ -31,8 +29,6 @@ impl Default for Config {
             reply_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
             instructions_count_min: 0,
             instructions_count_max: 0,
-            downstream_call_weight: 0,
-            reply_weight: 1,
         }
     }
 }
@@ -44,8 +40,6 @@ impl Config {
         call_bytes: RangeInclusive<u32>,
         reply_bytes: RangeInclusive<u32>,
         instructions_count: RangeInclusive<u32>,
-        downstream_call_weight: u32,
-        reply_weight: u32,
     ) -> Result<Self, String> {
         // Sanity checks. After passing these, the canister should run as intended.
         if call_bytes.is_empty() {
@@ -69,9 +63,6 @@ impl Config {
         if instructions_count.is_empty() {
             return Err("empty instructions_count range".to_string());
         }
-        if downstream_call_weight + reply_weight == 0 {
-            return Err("both weights are 0".to_string());
-        }
 
         Ok(Self {
             receivers,
@@ -81,8 +72,6 @@ impl Config {
             reply_bytes_max: *reply_bytes.end(),
             instructions_count_min: *instructions_count.start(),
             instructions_count_max: *instructions_count.end(),
-            downstream_call_weight,
-            reply_weight,
         })
     }
 }

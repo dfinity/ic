@@ -53,7 +53,17 @@ fn check_guaranteed_response_message_memory_limits_are_respected_manual() {
         1417391,
         3,
     ) {
-        unreachable!("REASON: {},\n{:#?}", reason, info.records);
+        let (canister_id, canister_state) = info
+            .latest_local_state
+            .canister_states
+            .first_key_value()
+            .unwrap();
+        let records = info.records.get(canister_id).unwrap();
+
+        unreachable!(
+            "REASON: {},\n{:#?}\n\n{:#?}",
+            reason, records, canister_state.system_state.status
+        );
     }
 }
 
@@ -98,15 +108,20 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         0..=max_payload_bytes, // call_bytes
         0..=max_payload_bytes, // reply_bytes
         0..=0,                 // instructions_count
-        1,                     // downstream_call_weight
-        2,                     // reply_weight
     )
     .unwrap();
+
+    let reply_weight = 2_u32;
+    let call_weight = 1_u32;
 
     // Send configs to canisters, seed the rng.
     for (index, canister) in fixture.canisters().into_iter().enumerate() {
         fixture.replace_config(canister, config.clone()).unwrap();
         fixture.seed_rng(canister, seeds[index]);
+        fixture
+            .replace_reply_weight(canister, reply_weight)
+            .unwrap();
+        fixture.replace_call_weight(canister, call_weight).unwrap();
     }
 
     // Start chatter on all canisters.
@@ -355,14 +370,32 @@ impl Fixture {
         self.replace_canister_state("replace_config", canister, config)
     }
 
-    /// Replaces the `calls_per_round` in `canister`.
+    /// Replaces the `max_calls_per_heartbeat` in `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn replace_calls_per_round(&self, canister: CanisterId, count: u32) -> Result<u32, ()> {
-        self.replace_canister_state("replace_calls_per_round", canister, count)
+    pub fn replace_max_calls_per_heartbeat(
+        &self,
+        canister: CanisterId,
+        count: u32,
+    ) -> Result<u32, ()> {
+        self.replace_canister_state("replace_max_calls_per_heartbeat", canister, count)
     }
 
-    /// Sets the `Rng` in `canister`.
+    /// Replaces the `reply_weight` in `canister`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn replace_reply_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
+        self.replace_canister_state("replace_reply_weight", canister, weight)
+    }
+
+    /// Replaces the `call_weight` in `canister`.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn replace_call_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
+        self.replace_canister_state("replace_call_weight", canister, weight)
+    }
+
+    /// Seeds the `Rng` in `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
     pub fn seed_rng(&self, canister: CanisterId, seed: u64) {
@@ -372,10 +405,10 @@ impl Fixture {
             .unwrap();
     }
 
-    /// Sets `calls_per_round` on all canisters to the same value.
-    pub fn start_chatter(&self, calls_per_round: u32) -> Result<(), ()> {
+    /// Sets `max_calls_per_heartbeat` on all canisters to the same value.
+    pub fn start_chatter(&self, max_calls_per_heartbeat: u32) -> Result<(), ()> {
         for canister in self.canisters() {
-            self.replace_calls_per_round(canister, calls_per_round)
+            self.replace_max_calls_per_heartbeat(canister, max_calls_per_heartbeat)
                 .map_err(|_| ())?;
         }
         Ok(())
@@ -464,6 +497,7 @@ impl Fixture {
 }
 
 /// Returned by `Fixture::debug_info()`.
+#[allow(dead_code)]
 struct DebugInfo {
     pub records: BTreeMap<CanisterId, Vec<Record>>,
     pub latest_local_state: Arc<ReplicatedState>,
