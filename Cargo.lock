@@ -5464,6 +5464,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
  "ic-protobuf",
@@ -5474,6 +5475,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_cbor",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
