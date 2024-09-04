@@ -1,5 +1,3 @@
-#![allow(clippy::declare_interior_mutable_const)]
-
 use std::{
     fmt,
     hash::{Hash, Hasher},
@@ -489,7 +487,6 @@ pub async fn validate_canister_request(
     request.extensions_mut().insert(canister_id);
 
     let mut resp = next.run(request).await;
-
     resp.headers_mut().insert(
         X_IC_CANISTER_ID,
         HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),

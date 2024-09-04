@@ -103,6 +103,27 @@ pub struct ListenConfig {
     #[clap(long, default_value = "4000")]
     pub http_timeout_connect: u64,
 
+    /// Maximum time between two read calls in milliseconds.
+    /// Applies to HTTP client (towards replica)
+    #[clap(long, default_value = "30000")]
+    pub http_timeout_read_client: u64,
+
+    /// Maximum time between two read calls in milliseconds.
+    /// Applies to HTTP server (towards client)
+    #[clap(long, default_value = "15000")]
+    pub http_timeout_read_server: u64,
+
+    /// Maximum number of requests to be served over a single connection.
+    /// After that it's gracefully closed
+    #[clap(long, default_value = "1000")]
+    pub http_max_requests_per_conn: u64,
+
+    /// Time to wait for the client to close connection in seconds.
+    /// After that it's closed forcefully.
+    /// Applies to requests closed after `--http-max-requests-per-conn`
+    #[clap(long, default_value = "30")]
+    pub http_grace_period: u64,
+
     /// Max number of in-flight requests that can be served in parallel.
     /// If this is exceeded - new requests would be throttled.
     #[clap(long)]
@@ -119,12 +140,13 @@ pub struct ListenConfig {
     #[clap(long, default_value = "1200", value_parser = clap::value_parser!(u64).range(10..))]
     pub shed_target_latency: u64,
 
-    /// How frequently to send TCP/HTTP2 keepalives, in seconds. Affects both incoming and outgoing connections.
+    /// How frequently to send TCP/HTTP2 keepalives, in seconds.
+    /// Affects both incoming and outgoing connections.
     #[clap(long, default_value = "30")]
     pub http_keepalive: u64,
 
     /// How long to wait for a keepalive response, in seconds
-    #[clap(long, default_value = "10")]
+    #[clap(long, default_value = "15")]
     pub http_keepalive_timeout: u64,
 
     /// How long to keep idle outgoing connections open, in seconds

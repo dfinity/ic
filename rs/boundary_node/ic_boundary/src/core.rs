@@ -148,7 +148,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let http_client_opts = http::client::Options {
         timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
-        timeout_read: Duration::from_secs(15),
+        timeout_read: Duration::from_millis(cli.listen.http_timeout_read_client),
         timeout: Duration::from_millis(cli.listen.http_timeout),
         tcp_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
         http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive_timeout)),
@@ -215,12 +215,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let server_opts = http::server::Options {
         backlog: cli.listen.backlog,
-        http1_header_read_timeout: Duration::from_secs(15),
+        http1_header_read_timeout: Duration::from_secs(cli.listen.http_timeout_read_server),
         http2_max_streams: cli.listen.http2_max_streams,
         http2_keepalive_interval: Duration::from_secs(cli.listen.http_keepalive),
         http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
-        grace_period: Duration::from_secs(60),
-        max_requests_per_conn: Some(1000),
+        grace_period: Duration::from_secs(cli.listen.http_grace_period),
+        max_requests_per_conn: Some(cli.listen.http_max_requests_per_conn),
     };
 
     // HTTP
