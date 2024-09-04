@@ -10,6 +10,7 @@ source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
 
+# change
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in

@@ -9,3 +9,4 @@ clap = { version = "4.4.3", features = ["derive"] }
 partition_tools = { path = "../partition_tools" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+xattr = "1.3.1"

@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import pathlib
 import shutil
+import stat
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, TypeVar
+import urllib.request
 
 import invoke
 from container_utils import (
@@ -72,7 +76,8 @@ def arrange_component_files(context_dir, component_files):
             install_target = install_target[1:]
         install_target = os.path.join(context_dir, install_target)
         os.makedirs(os.path.dirname(install_target), exist_ok=True)
-        shutil.copy(source_file, install_target)
+        pathlib.Path(install_target).unlink(missing_ok=True)
+        shutil.copyfile(source_file, install_target)
 
 
 def build_container(container_cmd: str,
@@ -280,7 +285,7 @@ def get_args():
 def main():
     args = get_args()
 
-    destination_tar_filename = args.output
+    destination_tar_filename = os.path.abspath(args.output)
     build_args = list(args.build_args or [])
 
     # Use the unique destination filename as the image tag.
@@ -294,39 +299,61 @@ def main():
     if not context_dir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
+    container_dir = os.path.join(context_dir, "container")
+    os.mkdir(container_dir)
+
+    # urllib.request.urlretrieve(
+    #     "https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04-base-amd64.tar.gz",
+    #     base_tar_path)
+
+    subprocess.run(["tar", "-xf", "/ic/host_base.tar", "-C", container_dir], check=True)
+
+
     # Add all context files directly into dir
     for context_file in context_files:
-        shutil.copy(context_file, context_dir)
+        shutil.copy(context_file, container_dir)
 
     # Fill context with remaining component files from map
-    arrange_component_files(context_dir, component_files)
+    arrange_component_files(container_dir, component_files)
+
 
     # Bazel can't read files. (: Resolve them here, instead.
     if args.file_build_args:
-        resolved_file_args = resolve_file_args(context_dir, args.file_build_args)
+        resolved_file_args = resolve_file_args(container_dir, args.file_build_args)
         build_args.extend(resolved_file_args)
 
-    # Override the base image with a local tar file?
-    def only_one_defined(a,b) -> bool:
-        return (a and not b) or (b and not a)
-    assert not only_one_defined(args.base_image_tar_file, args.base_image_tar_file_tag), \
-        "Please specify BOTH --base-image-tar-file* flags"
+    print(container_dir)
 
-    base_image_override = None
-    if args.base_image_tar_file:
-        base_image_override = BaseImageOverride(Path(args.base_image_tar_file),
-                                                args.base_image_tar_file_tag)
+    shutil.copy("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
+    shutil.copymode("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
 
-    container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
-    build_and_export(container_cmd,
-                     build_args,
-                     context_dir,
-                     args.dockerfile,
-                     image_tag,
-                     no_cache,
-                     base_image_override,
-                     destination_tar_filename)
-    remove_image(container_cmd, image_tag) # No harm removing if in the tmp dir
+    subprocess.run(["sudo", "chroot", container_dir, "/etc/setup.sh"], check=True)
+    subprocess.run(["sudo", "chown", "ubuntu", "-R", container_dir], check=True)
+
+    print(destination_tar_filename)
+    subprocess.check_call(f"tar -cvf {destination_tar_filename} *", cwd=container_dir, shell=True)
+
+    # # Override the base image with a local tar file?
+    # def only_one_defined(a,b) -> bool:
+    #     return (a and not b) or (b and not a)
+    # assert not only_one_defined(args.base_image_tar_file, args.base_image_tar_file_tag), \
+    #     "Please specify BOTH --base-image-tar-file* flags"
+    #
+    # base_image_override = None
+    # if args.base_image_tar_file:
+    #     base_image_override = BaseImageOverride(Path(args.base_image_tar_file),
+    #                                             args.base_image_tar_file_tag)
+    #
+    # container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
+    # build_and_export(container_cmd,
+    #                  build_args,
+    #                  context_dir,
+    #                  args.dockerfile,
+    #                  image_tag,
+    #                  no_cache,
+    #                  base_image_override,
+    #                  destination_tar_filename)
+    # remove_image(container_cmd, image_tag) # No harm removing if in the tmp dir
 
 
 if __name__ == "__main__":
