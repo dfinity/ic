@@ -21,7 +21,6 @@ import (
 var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 5400
 
 var FARM_BASE_URL = "https://farm.dfinity.systems"
-var FARM_API = FARM_BASE_URL + "/swagger-ui"
 var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
 var KEEPALIVE_PERIOD = 30 * time.Second
 
@@ -80,6 +79,7 @@ type TestnetConfig struct {
 	lifetimeMins         int
 	isFuzzyMatch         bool
 	isDryRun             bool
+	farmBaseUrl          string
 	requiredHostFeatures string
 	icConfigPath         string
 }
@@ -184,6 +184,11 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
 		command = append(command, "--test_arg=--no-delete-farm-group")
+		farmBaseUrl := FARM_BASE_URL
+		if len(cfg.farmBaseUrl) > 0 {
+			farmBaseUrl = cfg.farmBaseUrl
+			command = append(command, "--test_arg=--farm-base-url="+cfg.farmBaseUrl)
+		}
 		if len(cfg.requiredHostFeatures) > 0 {
 			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
 		}
@@ -227,22 +232,22 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		cmd.PrintErrf("%sCongrats, testnet with Farm group=%s was deployed successfully!%s\n", GREEN, group, NC)
 		if cfg.isDetached {
-			if err := SetTestnetLifetime(group, cfg.lifetimeMins*60); err != nil {
+			if err := SetTestnetLifetime(farmBaseUrl, group, cfg.lifetimeMins*60); err != nil {
 				return err
 			}
-			if expiration, err := GetTestnetExpiration(group); err != nil {
+			if expiration, err := GetTestnetExpiration(farmBaseUrl, group); err != nil {
 				return err
 			} else {
 				cmd.PrintErrf("%sTestnet will expire on %s%s\n", PURPLE, expiration, NC)
-				cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, FARM_API, NC)
+				cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, farmBaseUrl + "/swagger-ui", NC)
 			}
 		} else {
 			testnetExpirationTime := time.Now().Add(time.Minute * time.Duration(cfg.lifetimeMins))
 			cmd.PrintErrf("%sTestnet will expire on %s or earlier if you close this terminal%s\n", PURPLE, testnetExpirationTime.Format(time.UnixDate), NC)
-			if err = KeepTestnetAlive(group, testnetExpirationTime, outputFilepath, cfg, cmd); err != nil {
+			if err = KeepTestnetAlive(farmBaseUrl, group, testnetExpirationTime, outputFilepath, cfg, cmd); err != nil {
 				return err
 			}
-			if err = DeleteTestnet(group); err != nil {
+			if err = DeleteTestnet(farmBaseUrl, group); err != nil {
 				cmd.PrintErrln("failed to delete testnet: %v", err)
 				return err
 			}
@@ -267,8 +272,9 @@ func NewTestnetCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&cfg.lifetimeMins, "lifetime-mins", 0, fmt.Sprintf("Keep testnet alive for this duration in mins, max=%d", MAX_TESTNET_LIFETIME_MINS))
 	cmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar testnet names. Default: substring match")
 	cmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution")
-	cmd.Flags().BoolVarP(&cfg.isDetached, "experimental-detached", "", false, fmt.Sprintf("Create a testnet without blocking the console\nNOTE: extending testnet lifetime (ttl) should be done manually\nSee Farm API %s", FARM_API))
+	cmd.Flags().BoolVarP(&cfg.isDetached, "experimental-detached", "", false, fmt.Sprintf("Create a testnet without blocking the console\nNOTE: extending testnet lifetime (ttl) should be done manually\nSee Farm API %s", FARM_BASE_URL + "/swagger-ui"))
 	cmd.Flags().StringVarP(&cfg.icConfigPath, "from-ic-config-path", "", "", "Provide a custom config describing the desired layout of the network to be deployed")
+	cmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
 	cmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
 	cmd.SetOut(os.Stdout)
 	return cmd
@@ -326,8 +332,8 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 	return group, nil
 }
 
-func DeleteTestnet(group string) error {
-	url := FARM_BASE_URL + "/group/" + group
+func DeleteTestnet(farmBaseUrl string, group string) error {
+	url := farmBaseUrl + "/group/" + group
 	request, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return err
@@ -347,13 +353,13 @@ func DeleteTestnet(group string) error {
 	return nil
 }
 
-func KeepTestnetAlive(group string, expiration time.Time, outputFiles *OutputFilepath, cfg *TestnetConfig, cmd *cobra.Command) error {
+func KeepTestnetAlive(farmBaseUrl string, group string, expiration time.Time, outputFiles *OutputFilepath, cfg *TestnetConfig, cmd *cobra.Command) error {
 	file, err := os.OpenFile(outputFiles.logPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
 	for time.Now().Before(expiration) {
-		if err := SetTestnetLifetime(group, FARM_GROUP_KEEPALIVE_TTL_SEC); err != nil {
+		if err := SetTestnetLifetime(farmBaseUrl, group, FARM_GROUP_KEEPALIVE_TTL_SEC); err != nil {
 			return err
 		}
 		msg := fmt.Sprintf("Testnet lifetime was set to %d sec, next invocation in %.1f sec\n", FARM_GROUP_KEEPALIVE_TTL_SEC, KEEPALIVE_PERIOD.Seconds())
@@ -423,8 +429,8 @@ func ExtractFarmGroup(summary *Summary) (string, error) {
 	return "", fmt.Errorf("couldn't extract infra group from %s", INFRA_GROUP_NAME_CREATED_EVENT)
 }
 
-func GetTestnetExpiration(group string) (string, error) {
-	url := FARM_BASE_URL + "/group/" + group
+func GetTestnetExpiration(farmBaseUrl string, group string) (string, error) {
+	url := farmBaseUrl + "/group/" + group
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", err
@@ -451,10 +457,10 @@ func GetTestnetExpiration(group string) (string, error) {
 	return expiration, nil
 }
 
-func SetTestnetLifetime(group string, lifetimeSec int) error {
+func SetTestnetLifetime(farmBaseUrl string, group string, lifetimeSec int) error {
 	// Farm uses ttl (time-to-live) in seconds.
 	ttl := strconv.Itoa(lifetimeSec)
-	url := FARM_BASE_URL + "/group/" + group + "/ttl/" + ttl
+	url := farmBaseUrl + "/group/" + group + "/ttl/" + ttl
 	request, err := http.NewRequest("PUT", url, nil)
 	if err != nil {
 		return err
