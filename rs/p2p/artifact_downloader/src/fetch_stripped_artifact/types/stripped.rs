@@ -9,14 +9,14 @@ use ic_types::{
 };
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum MaybeStrippedIngress {
     Full(IngressMessageId, SignedIngress),
     Stripped(IngressMessageId),
 }
 
 /// Stripped version of the [`IngressPayload`].
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct StrippedIngressPayload {
     pub(crate) ingress_messages: Vec<MaybeStrippedIngress>,
 }

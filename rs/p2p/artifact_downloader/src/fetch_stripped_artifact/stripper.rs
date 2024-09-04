@@ -2,7 +2,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::{IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockPayload, BlockProposal, ConsensusMessage},
+    consensus::ConsensusMessage,
     CountBytes,
 };
 
@@ -62,7 +62,9 @@ impl Strippable for IngressPayload {
     type Output = StrippedIngressPayload;
 
     fn strip(self) -> Self::Output {
-        let ingresses: Vec<_> = self.try_into().expect("FIXME");
+        let ingresses: Vec<_> = self.try_into().expect(
+            "A valid ingress payload shouldn't fail when converting to a vector of ingresses",
+        );
 
         let stripped_ingresses = ingresses
             .into_iter()
@@ -80,5 +82,32 @@ impl Strippable for IngressPayload {
         Self::Output {
             ingress_messages: stripped_ingresses,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::fetch_stripped_artifact::test_utils::fake_ingress_message_with_arg_size;
+
+    use super::*;
+
+    #[test]
+    fn stripping_only_big_messages_test() {
+        let (small_ingress, small_ingress_id) = fake_ingress_message_with_arg_size("small", 0);
+        let (big_ingress, big_ingress_id) = fake_ingress_message_with_arg_size("big", 1024);
+        let ingress_payload =
+            IngressPayload::from(vec![small_ingress.clone(), big_ingress.clone()]);
+
+        let stripped_ingress_payload = ingress_payload.strip();
+
+        assert_eq!(
+            stripped_ingress_payload,
+            StrippedIngressPayload {
+                ingress_messages: vec![
+                    MaybeStrippedIngress::Full(small_ingress_id, small_ingress),
+                    MaybeStrippedIngress::Stripped(big_ingress_id)
+                ],
+            }
+        );
     }
 }
