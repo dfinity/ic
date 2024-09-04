@@ -21,7 +21,9 @@ ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_
 ic-nns-common = { path = "../../nns/common" }
 itertools.workspace = true
 futures.workspace = true
-
+anyhow.workspace = true
+reqwest.workspace = true
+ic-types = { path = "../../types" }
 
 [lib]
 name = "os_qualification_utils"

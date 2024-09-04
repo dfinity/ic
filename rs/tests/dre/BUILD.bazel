@@ -1,8 +1,28 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_ENV")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_CANISTER_ENV")
 load("//rs/tests:system_tests.bzl", "system_test")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+DEPS = [
+    "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/protobuf",
+    "//rs/tests/consensus/utils",
+    "//rs/registry/subnet_type",
+    "//rs/canister_client",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/types/types",
+    "@crate_index//:tokio",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:url",
+    "@crate_index//:itertools",
+    "@crate_index//:futures",
+    "@crate_index//:anyhow",
+    "@crate_index//:reqwest",
+]
 
 system_test(
     name = "guest_os_qualification",
@@ -22,7 +42,7 @@ system_test(
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +
         COUNTER_CANISTER_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests", ":os_qualification_utils"],
+    deps = DEPS + [":os_qualification_utils"],
 )
 
 rust_library(
@@ -32,5 +52,5 @@ rust_library(
     crate_name = "os_qualification_utils",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPS,
 )
