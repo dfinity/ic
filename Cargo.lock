@@ -15078,6 +15078,7 @@ dependencies = [
  "dfn_candid",
  "ic-base-types",
  "ic-cdk 0.13.5",
+ "ic-limits",
  "ic-management-canister-types",
  "ic-prep",
  "ic-registry-subnet-features",
