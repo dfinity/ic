@@ -1520,11 +1520,6 @@ pub mod settle_neurons_fund_participation_response {
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        /// TODO(NNS1-3198): Remove
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

@@ -746,6 +746,7 @@ impl CfParticipant {
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
+    /// Tries to get the controller, returning an error if it is not set
     pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
         #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         match (
@@ -1135,25 +1136,16 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
     fn try_from(
         value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed
         let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
             nns_neuron_id,
             amount_icp_e8s,
             controller,
             hotkeys,
             is_capped,
-            hotkey_principal,
         } = value;
         let hotkeys = hotkeys.unwrap_or_default().principals;
-
-        let controller = match (controller, hotkey_principal) {
-            (Some(controller), _) => controller,
-            // TODO(NNS1-3198): Remove this case once hotkey_principal is removed
-            (None, Some(hotkey_principal)) => PrincipalId::from_str(&hotkey_principal)
-                .map_err(|_| format!("Invalid hotkey_principal {}", hotkey_principal))?,
-            (None, None) => {
-                return Err("Either controller or hotkey_principal must be specified".to_string())
-            }
+        let Some(controller) = controller else {
+            return Err("NeuronsFundNeuron.controller must be specified".to_string());
         };
 
         match (nns_neuron_id, amount_icp_e8s, is_capped) {
@@ -1176,9 +1168,6 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
 }
 
 #[cfg(test)]
-// TODO(NNS1-3198): remove #[allow(deprecated)] once hotkey_principal is removed.
-// Unfortunately, this must be applied to the whole module to avoid warnings on the hotkey_principal field in lazy_static.
-#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::{
@@ -1265,6 +1254,7 @@ mod tests {
 
     #[test]
     fn participant_total_icp_e8s_no_overflow() {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let participant = CfParticipant {
             controller: None,
             hotkey_principal: "".to_string(),
