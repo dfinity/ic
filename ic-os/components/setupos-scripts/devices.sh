@@ -30,11 +30,15 @@ function copy_config_files() {
 
     echo "* Copying SSH authorized keys..."
     ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
-    if [ -d "${ssh_authorized_keys}" ]; then
-        cp -a "${ssh_authorized_keys}" /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
+    if [ -n "${ssh_authorized_keys}" ] && [ "${ssh_authorized_keys}" != "null" ]; then
+        if [ -d "${ssh_authorized_keys}" ]; then
+            cp -a "${ssh_authorized_keys}" /media/
+            log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
+        else
+            log_and_halt_installation_on_error "1" "Directory '${ssh_authorized_keys}' does not exist."
+        fi
     else
-        log_and_halt_installation_on_error "1" "Directory '${ssh_authorized_keys}' does not exist."
+        echo "SSH authorized keys path is not configured."
     fi
 
     echo "* Copying node operator private key..."
