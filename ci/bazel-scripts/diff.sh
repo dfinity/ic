@@ -11,6 +11,10 @@
 set -euo pipefail
 
 set -x
+
+# refresh the index
+git update-index --refresh
+
 cd "$(git rev-parse --show-toplevel)"
 
 git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --quiet
