@@ -5,26 +5,28 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
+        claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
         get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
         set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
-        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
-        DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
-        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateResponse, Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, Participant,
-        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
-        SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant,
+        ClaimSwapNeuronsRequest, DerivedState, DirectInvestment, ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, GetAutoFinalizationStatusRequest,
+        GetAutoFinalizationStatusResponse, GetBuyerStateRequest, GetBuyerStateResponse,
+        GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
+        GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
+        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Icrc1Account, Init,
+        Lifecycle, ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SwapNeuronId,
+        NeuronIds, NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse,
+        Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -38,14 +40,9 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
-use ic_sns_governance::pb::v1::claim_swap_neurons_request::{
-    neuron_recipe, NeuronRecipe, NeuronRecipes,
-};
-use ic_sns_governance::pb::v1::NeuronIds;
 use ic_sns_governance::pb::v1::{
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    SetMode, SetModeResponse,
+    governance, ClaimSwapNeuronsError, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
 };
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
@@ -1698,7 +1695,7 @@ impl Swap {
     async fn batch_claim_swap_neurons(
         sns_governance_client: &mut impl SnsGovernanceClient,
         neuron_recipes: &mut Vec<NeuronRecipe>,
-        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+        claimable_neurons_index: &mut BTreeMap<SwapNeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
         log!(
             INFO,
@@ -1811,7 +1808,7 @@ impl Swap {
     /// status of the SwapNeuron. Return a SweepResult to be consumed by claim_swap_neurons
     fn process_swap_neuron(
         swap_neuron: SwapNeuron,
-        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+        claimable_neurons_index: &mut BTreeMap<SwapNeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
         let mut sweep_result = SweepResult::default();
 
@@ -1836,7 +1833,8 @@ impl Swap {
             }
         };
 
-        let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) else {
+        let Some(recipe) = claimable_neurons_index.get_mut(&SwapNeuronId::from(neuron_id.clone()))
+        else {
             log!(
                 ERROR,
                 "Unable to find neuron {:?} (ID {}) in claimable_neurons_index.",
@@ -3544,8 +3542,8 @@ impl SnsNeuronRecipe {
             }
         };
 
-        let neuron_id = Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-            controller, *memo,
+        let neuron_id = Some(SwapNeuronId::from(NeuronId::from(
+            compute_neuron_staking_subaccount_bytes(controller, *memo),
         )));
 
         let followees = followees
@@ -3553,7 +3551,14 @@ impl SnsNeuronRecipe {
             .cloned()
             .map(NeuronId::from)
             .collect::<Vec<_>>();
-        let followees = Some(NeuronIds::from(followees.clone()));
+        let followees = Some(NeuronIds::from(
+            followees
+                .clone()
+                // TODO(NNS1-3306): This transition will no longer be necessary
+                .into_iter()
+                .map(SwapNeuronId::from)
+                .collect::<Vec<_>>(),
+        ));
 
         // Since claim_swap_neurons is a permission-ed API on governance, account for
         // the transfer_fee that is applied with the sns ledger transfer.
@@ -3971,9 +3976,9 @@ mod tests {
         };
 
         let mut index = btreemap! {
-            NeuronId::new_test_neuron_id(1) => &mut successful_recipe,
-            NeuronId::new_test_neuron_id(2) => &mut failed_recipe,
-            NeuronId::new_test_neuron_id(3) => &mut invalid_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(1)) => &mut successful_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(2)) => &mut failed_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(3)) => &mut invalid_recipe,
         };
 
         // Process first to satisfy the borrow checker
