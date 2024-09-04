@@ -4,7 +4,6 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SetupOSConfig {
     pub network_settings: NetworkSettings,
@@ -13,7 +12,6 @@ pub struct SetupOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HostOSConfig {
     pub network_settings: NetworkSettings,
@@ -22,7 +20,6 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
@@ -30,7 +27,6 @@ pub struct GuestOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
@@ -47,7 +43,6 @@ pub struct NetworkSettings {
     pub domain: Option<String>,
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ICOSSettings {
     pub nns_public_key_path: PathBuf,
@@ -60,7 +55,6 @@ pub struct ICOSSettings {
     pub ssh_authorized_keys_path: Option<PathBuf>,
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GuestOSSettings {
     pub verbose: bool,
@@ -70,7 +64,7 @@ pub struct GuestOSSettings {
     pub guestos_dev: GuestosDevConfig,
 }
 
-#[allow(dead_code)]
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GuestosDevConfig {
     pub backup_retention_time_seconds: Option<String>,
