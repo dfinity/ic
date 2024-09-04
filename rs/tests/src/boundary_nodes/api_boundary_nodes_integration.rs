@@ -514,7 +514,6 @@ async fn add_api_boundary_nodes_via_proposal(
     for (idx, node) in unassigned_nodes.iter().enumerate() {
         let domain = domains[idx];
 
-        // Create an empty ACME json to signal ic-boundary that we don't need to create a new ACME account
         // Create self-signed certificate & update permissions
         node.block_on_bash_script(&format!(
             "sudo openssl req -x509 -newkey rsa:2048 \
