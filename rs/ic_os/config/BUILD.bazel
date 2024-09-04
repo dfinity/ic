@@ -30,9 +30,7 @@ rust_library(
 
 rust_binary(
     name = "config",
-    srcs = glob(
-        ["src/main.rs"],
-    ),
+    srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "config",
     edition = "2021",
