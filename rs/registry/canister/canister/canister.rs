@@ -886,7 +886,7 @@ fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRe
 fn get_api_boundary_node_ids() {
     over(
         candid_one,
-        |()| -> Result<Vec<ApiBoundaryNodeIdRecord>, String> { get_api_boundary_node_ids_() },
+        get_api_boundary_node_ids_,
     )
 }
 
