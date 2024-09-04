@@ -18,6 +18,14 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
+    echo "* Copying 'config.json' to hostOS config partition..."
+    if [ -f "/var/ic/config/config.json" ]; then
+        cp /var/ic/config/config.json /media/
+        log_and_halt_installation_on_error "${?}" "Unable to copy 'config.json' to hostOS config partition."
+    else
+        log_and_halt_installation_on_error "1" "Configuration file 'config.json' does not exist."
+    fi
+
     echo "* Copying 'config.ini' to hostOS config partition..."
     if [ -f "${CONFIG_DIR}/config.ini" ]; then
         cp ${CONFIG_DIR}/config.ini /media/
