@@ -13,7 +13,7 @@ set -euo pipefail
 set -x
 
 # refresh the index
-git update-index --refresh
+git status
 
 cd "$(git rev-parse --show-toplevel)"
 
