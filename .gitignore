@@ -90,6 +90,7 @@ cpp/**/prestorecon
 cpp/**/prestorecon.o
 
 # Various build artifacts
+artifacts
 **/build
 **/build-tmp
 **/build-out
