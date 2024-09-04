@@ -31,7 +31,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
             "ic0_data_certificate_copy()/1B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
-                Params3(0 as i64, 0 as i64, 1 as i64),
+                Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
                 Wasm64::Enabled,
             ),
@@ -41,7 +41,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
             "ic0_data_certificate_copy()/64B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
-                Params3(0 as i64, 0 as i64, 64 as i64),
+                Params3(0_i64, 0_i64, 64_i64),
                 Result::No,
                 Wasm64::Enabled,
             ),
