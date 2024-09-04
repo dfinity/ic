@@ -31,6 +31,7 @@ pub struct GuestOSConfig {
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
+    pub verbose: bool,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NetworkSettings {
@@ -57,7 +58,6 @@ pub struct ICOSSettings {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GuestOSSettings {
-    pub verbose: bool,
     pub ic_crypto_path: Option<PathBuf>,
     pub ic_state_path: Option<PathBuf>,
     pub ic_registry_local_store_path: Option<PathBuf>,

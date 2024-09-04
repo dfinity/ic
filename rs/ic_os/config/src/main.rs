@@ -77,14 +77,13 @@ pub fn main() -> Result<()> {
             };
 
             let guestos_settings = config::types::GuestOSSettings {
-                verbose,
                 ic_crypto_path: None,
                 ic_state_path: None,
                 ic_registry_local_store_path: None,
                 guestos_dev: config::types::GuestosDevConfig::default(),
             };
 
-            let hostos_settings = config::types::HostOSSettings { vm_memory, vm_cpu };
+            let hostos_settings = config::types::HostOSSettings { vm_memory, vm_cpu, verbose};
 
             let setupos_config = config::types::SetupOSConfig {
                 network_settings,
