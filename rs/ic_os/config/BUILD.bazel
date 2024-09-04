@@ -19,7 +19,10 @@ ALIASES = {}
 
 rust_library(
     name = "config_lib",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
     crate_name = "config",
     edition = "2021",
     deps = DEPENDENCIES,
