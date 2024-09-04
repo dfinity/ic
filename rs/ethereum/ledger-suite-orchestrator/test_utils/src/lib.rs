@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, LedgerInitArg,
-    ManageInstalledCanisters, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
+    ManageOtherCanisters, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
@@ -123,7 +123,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_installed_canisters: None,
+                manage_other_canisters: None,
             },
         ))
     }
@@ -189,7 +189,7 @@ impl LedgerSuiteOrchestrator {
 
     pub fn manage_installed_canisters(
         self,
-        manage_installed_canister: Vec<ManageInstalledCanisters>,
+        manage_installed_canister: Vec<ManageOtherCanisters>,
     ) -> Self {
         self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
             UpgradeArg {
@@ -198,7 +198,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_installed_canisters: Some(manage_installed_canister),
+                manage_other_canisters: Some(manage_installed_canister),
             },
         ))
     }
@@ -433,13 +433,9 @@ pub fn usdt_erc20_contract() -> Erc20Contract {
     }
 }
 
-pub fn cketh_installed_canisters() -> ManageInstalledCanisters {
-    ManageInstalledCanisters {
-        erc20_contract: Erc20Contract {
-            chain_id: 1_u8.into(),
-            address: "0x0000000000000000000000000000000000000000".to_string(),
-        },
-        ckerc20_token_symbol: "ckETH".to_string(),
+pub fn cketh_installed_canisters() -> ManageOtherCanisters {
+    ManageOtherCanisters {
+        token_symbol: "ckETH".to_string(),
         ledger: InstalledCanister {
             canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
             installed_wasm_hash: "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"

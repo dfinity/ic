@@ -25,7 +25,7 @@ pub struct UpgradeArg {
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
     pub cycles_management: Option<UpdateCyclesManagement>,
-    pub manage_installed_canisters: Option<Vec<ManageInstalledCanisters>>,
+    pub manage_other_canisters: Option<Vec<ManageOtherCanisters>>,
 }
 
 impl UpgradeArg {
@@ -187,9 +187,8 @@ impl<T> From<&Canister<T>> for ManagedCanisterStatus {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct ManageInstalledCanisters {
-    pub erc20_contract: Erc20Contract,
-    pub ckerc20_token_symbol: String,
+pub struct ManageOtherCanisters {
+    pub token_symbol: String,
     pub ledger: InstalledCanister,
     pub index: InstalledCanister,
     pub archives: Option<Vec<Principal>>,

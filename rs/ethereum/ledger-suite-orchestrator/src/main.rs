@@ -24,6 +24,7 @@ fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
 #[query]
 fn get_orchestrator_info() -> OrchestratorInfo {
     read_state(|s| OrchestratorInfo {
+        //TODO XC-189: add new fields for non ckERC-20 ledger suites. Filter them out in managed_canisters.
         managed_canisters: s
             .managed_canisters_iter()
             .map(|(token, canisters)| (token.clone(), canisters.clone()).into())

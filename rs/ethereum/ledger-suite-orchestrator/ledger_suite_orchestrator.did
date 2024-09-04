@@ -46,8 +46,9 @@ type UpgradeArg = record {
    cycles_management: opt UpdateCyclesManagement;
 
    // Add already installed canisters to the canisters managed by the orchestrator.
+   // Those canisters are *NOT* ckERC20 tokens.
    // This assumes that the orchestrator is a controller of all the canisters in the list.
-   manage_installed_canisters: opt vec ManageInstalledCanisters;
+   manage_other_canisters: opt vec ManageOtherCanisters;
 };
 
 type AddErc20Arg = record {
@@ -105,12 +106,9 @@ type InstalledCanister = record {
     installed_wasm_hash : text
 };
 
-type ManageInstalledCanisters = record {
-    // Corresponding ERC20 contract
-    erc20_contract: Erc20Contract;
-
-    // ckERC20 Token symbol
-    ckerc20_token_symbol : text;
+type ManageOtherCanisters = record {
+    // Token symbol on the ledger
+    token_symbol : text;
 
     // Ledger canister
     ledger : InstalledCanister;

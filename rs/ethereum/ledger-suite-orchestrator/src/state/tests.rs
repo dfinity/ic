@@ -154,53 +154,16 @@ mod manage_canister {
 }
 
 mod manage_installed_canisters {
-    use crate::candid::ManageInstalledCanisters as CandidManageInstalledCanisters;
+    use crate::candid::ManageOtherCanisters as CandidManageInstalledCanisters;
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
-    use crate::scheduler::Erc20Token;
     use crate::state::test_fixtures::new_state;
     use crate::state::{
         CanistersMetadata, Index, InvalidManageInstalledCanistersError, Ledger,
-        ManageInstalledCanisters, State,
+        ManageOtherCanisters, State,
     };
     use assert_matches::assert_matches;
     use candid::Principal;
     use maplit::btreeset;
-    use proptest::proptest;
-
-    proptest! {
-        #[test]
-        fn should_error_when_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
-            let state = new_state();
-            let mut cketh = cketh_installed_canisters();
-            cketh.erc20_contract.address = invalid_address;
-
-            let result = ManageInstalledCanisters::validate(&state, cketh);
-
-            assert_matches!(
-                result,
-                Err(InvalidManageInstalledCanistersError::InvalidErc20Contract(
-                    _
-                ))
-            )
-        }
-    }
-
-    #[test]
-    fn should_error_when_ethereum_address_already_managed() {
-        let mut state = new_state();
-        let usdc = usdc();
-        state.record_new_erc20_token(usdc.clone(), usdc_metadata());
-        state.record_new_erc20_token(usdt(), usdt_metadata());
-        let mut cketh = cketh_installed_canisters();
-        cketh.erc20_contract.address = usdc.address().to_string();
-
-        let result = ManageInstalledCanisters::validate(&state, cketh);
-
-        assert_eq!(
-            result,
-            Err(InvalidManageInstalledCanistersError::Erc20ContractAlreadyManaged(usdc))
-        )
-    }
 
     #[test]
     fn should_error_when_same_wasm_hash() {
@@ -208,7 +171,7 @@ mod manage_installed_canisters {
         let mut cketh = cketh_installed_canisters();
         cketh.index.installed_wasm_hash = cketh.ledger.installed_wasm_hash.clone();
 
-        let result = ManageInstalledCanisters::validate(&state, cketh);
+        let result = ManageOtherCanisters::validate(&state, cketh);
 
         assert_matches!(
             result,
@@ -230,7 +193,7 @@ mod manage_installed_canisters {
         ] {
             let mut cketh = cketh_installed_canisters();
             cketh.ledger.canister_id = id;
-            let result = ManageInstalledCanisters::validate(&state, cketh);
+            let result = ManageOtherCanisters::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -238,7 +201,7 @@ mod manage_installed_canisters {
 
             let mut cketh = cketh_installed_canisters();
             cketh.index.canister_id = id;
-            let result = ManageInstalledCanisters::validate(&state, cketh);
+            let result = ManageOtherCanisters::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -248,7 +211,7 @@ mod manage_installed_canisters {
             if let Some(archives) = &mut cketh.archives {
                 archives.push(id);
             }
-            let result = ManageInstalledCanisters::validate(&state, cketh);
+            let result = ManageOtherCanisters::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -262,10 +225,9 @@ mod manage_installed_canisters {
         let cketh = cketh_installed_canisters();
         let expected_cketh = {
             let cketh = cketh.clone();
-            ManageInstalledCanisters {
-                erc20_token: Erc20Token::try_from(cketh.erc20_contract).unwrap(),
+            ManageOtherCanisters {
                 metadata: CanistersMetadata {
-                    ckerc20_token_symbol: cketh.ckerc20_token_symbol,
+                    ckerc20_token_symbol: cketh.token_symbol,
                 },
                 ledger: cketh.ledger.canister_id,
                 ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),
@@ -276,32 +238,28 @@ mod manage_installed_canisters {
         };
 
         assert_eq!(
-            ManageInstalledCanisters::validate(&state, cketh.clone()),
+            ManageOtherCanisters::validate(&state, cketh.clone()),
             Ok(expected_cketh.clone())
         );
 
         add_usdc_ledger_suite(&mut state);
         assert_eq!(
-            ManageInstalledCanisters::validate(&state, cketh.clone()),
+            ManageOtherCanisters::validate(&state, cketh.clone()),
             Ok(expected_cketh.clone())
         );
 
         add_usdt_ledger_suite(&mut state);
         assert_eq!(
-            ManageInstalledCanisters::validate(&state, cketh),
+            ManageOtherCanisters::validate(&state, cketh),
             Ok(expected_cketh)
         );
     }
 
     fn cketh_installed_canisters() -> CandidManageInstalledCanisters {
-        use crate::candid::{Erc20Contract, InstalledCanister};
+        use crate::candid::InstalledCanister;
 
         CandidManageInstalledCanisters {
-            erc20_contract: Erc20Contract {
-                chain_id: 1_u8.into(),
-                address: "0x0000000000000000000000000000000000000000".to_string(),
-            },
-            ckerc20_token_symbol: "ckETH".to_string(),
+            token_symbol: "ckETH".to_string(),
             ledger: InstalledCanister {
                 canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
                 installed_wasm_hash:

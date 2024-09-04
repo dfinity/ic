@@ -1308,6 +1308,10 @@ pub enum InvalidManageInstalledCanistersError {
 pub struct Erc20Token(ChainId, Address);
 
 impl Erc20Token {
+    pub fn new(chain_id: ChainId, address: Address) -> Self {
+        Self(chain_id, address)
+    }
+
     pub fn chain_id(&self) -> &ChainId {
         &self.0
     }
@@ -1320,6 +1324,14 @@ impl Erc20Token {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct ChainId(u64);
+
+impl ChainId {
+    pub const MAX: ChainId = ChainId(u64::MAX);
+
+    pub fn checked_decrement(&self) -> Option<Self> {
+        self.0.checked_sub(1).map(Self)
+    }
+}
 
 impl AsRef<u64> for ChainId {
     fn as_ref(&self) -> &u64 {
