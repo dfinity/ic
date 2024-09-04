@@ -12,7 +12,7 @@ pub struct SetuposConfig {
 
 impl SetuposConfig {
     pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
-        let hostos_config = HostOSConfig::new(vm_memory, vm_cpu, ic_config);
+        let hostos_config = HostOSConfig{vm_memory, vm_cpu, ic_config};
         SetuposConfig { hostos_config }
     }
 }
@@ -22,16 +22,6 @@ pub struct HostOSConfig {
     vm_memory: u32,
     vm_cpu: String,
     ic_config: IcConfig,
-}
-
-impl HostOSConfig {
-    pub fn new(vm_memory: u32, vm_cpu: String, ic_config: IcConfig) -> Self {
-        HostOSConfig {
-            vm_memory,
-            vm_cpu,
-            ic_config,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
