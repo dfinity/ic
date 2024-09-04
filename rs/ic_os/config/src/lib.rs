@@ -70,9 +70,7 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
     let file_contents = read_to_string(config_file_path)
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
 
-    let normalized_file_contents = file_contents
-        .replace("\r\n", "\n")
-        .replace("\r", "\n");
+    let normalized_file_contents = file_contents.replace("\r\n", "\n").replace("\r", "\n");
 
     Ok(normalized_file_contents
         .lines()

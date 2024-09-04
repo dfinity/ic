@@ -64,8 +64,7 @@ pub struct GuestOSSettings {
     pub guestos_dev: GuestosDevConfig,
 }
 
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct GuestosDevConfig {
     pub backup_retention_time_seconds: Option<String>,
     pub backup_purging_interval_seconds: Option<String>,
@@ -74,18 +73,4 @@ pub struct GuestosDevConfig {
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
-}
-
-impl Default for GuestosDevConfig {
-    fn default() -> Self {
-        GuestosDevConfig {
-            backup_retention_time_seconds: None,
-            backup_purging_interval_seconds: None,
-            malicious_behavior: None,
-            query_stats_epoch_length: None,
-            bitcoind_addr: None,
-            jaeger_addr: None,
-            socks_proxy: None,
-        }
-    }
 }
