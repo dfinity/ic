@@ -8,6 +8,7 @@ use ic_config::{
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
+use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
@@ -36,7 +37,6 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
-use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
@@ -1989,7 +1989,7 @@ impl StateMachine {
         let registry_version = self.registry_client.get_latest_version();
         let ingress_registry_settings = self
             .registry_client
-            .get_ingress_subnet_limits(self.subnet_id, registry_version)
+            .get_ingress_message_settings(self.subnet_id, registry_version)
             .unwrap()
             .unwrap();
         let provisional_whitelist = self
