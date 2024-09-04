@@ -106,6 +106,14 @@ macro_rules! tla_get_globals {
     };
 }
 
+// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
+fn set_java_path() {
+    let current_path = std::env::var("PATH").expect("PATH is not set");
+    let bazel_java = std::env::var("JAVABASE")
+        .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
+    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+}
+
 /// Checks a trace against the model.
 ///
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
@@ -118,6 +126,7 @@ pub fn check_traces() {
         std::mem::take(&mut (*t))
     };
 
+    set_java_path();
     let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
     // Construct paths to the data files

@@ -85,7 +85,7 @@ impl<M: ic_stable_structures::Memory> StableNeuronIndexes<M> {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct CorruptedNeuronIndexes {
     pub neuron_id: NeuronId,
     pub indexes: Vec<NeuronIndexDefect>,

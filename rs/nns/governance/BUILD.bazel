@@ -124,12 +124,12 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "//rs/tla_instrumentation",
     "@crate_index//:candid_parser",
     "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
-    "@crate_index//:tla_instrumentation",
     "@crate_index//:tokio",
     "@crate_index//:tokio-test",
 ] + select({
@@ -139,7 +139,7 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = ["@crate_index//:tla_instrumentation_proc_macros"]
+MACRO_DEV_DEPENDENCIES = ["//rs/tla_instrumentation:proc_macros"]
 
 ALIASES = {}
 
@@ -179,12 +179,12 @@ rust_library(
     crate_features = test_with_tla(),
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES + [
-        "@crate_index//:tla_instrumentation_proc_macros",
+        "//rs/tla_instrumentation:proc_macros",
     ],
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
-        "@crate_index//:tla_instrumentation",
+        "//rs/tla_instrumentation",
     ],
 )
 
@@ -352,15 +352,18 @@ rust_test_suite_with_extra_srcs(
     data = [
         "tests/neurons.csv",
         ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:contents",
     ],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
+        "JAVABASE": "$(JAVABASE)",
     },
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
