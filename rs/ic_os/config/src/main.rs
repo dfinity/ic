@@ -26,7 +26,7 @@ pub enum Commands {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH.to_string(), value_name = "node_operator_private_key.pem")]
         node_operator_private_key_path: String,
     },
-    GenerateHostOSConfig {
+    GenerateHostosConfig {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
     },
@@ -118,7 +118,7 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::GenerateHostOSConfig { setupos_config_json_path }) => {
+        Some(Commands::GenerateHostosConfig { setupos_config_json_path }) => {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
             let setupos_config: SetupOSConfig = serde_json::from_reader(File::open(setupos_config_json_path)?)?;
