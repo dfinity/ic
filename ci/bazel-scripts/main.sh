@@ -33,8 +33,6 @@ if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-    echo "debug 1"
-    echo "$BAZEL_TARGETS"
 fi
 
 # pass info about bazel targets to bazel-targets file
@@ -66,9 +64,6 @@ if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
     echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
     trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
-
-echo "debug 2"
-echo "$BAZEL_TARGETS"
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"

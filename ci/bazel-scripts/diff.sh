@@ -11,14 +11,7 @@
 set -euo pipefail
 
 set -x
-
 cd "$(git rev-parse --show-toplevel)"
-
-# # Check if we are in a detached HEAD state
-# if [ -z "$(git symbolic-ref -q HEAD)" ]; then
-#     echo "Error: Detached HEAD state detected. Exiting script." >&2
-#     exit 1
-# fi
 
 git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --quiet
 MERGE_BASE="$(git merge-base HEAD origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME)"
