@@ -5293,6 +5293,7 @@ dependencies = [
  "backoff",
  "bytes",
  "futures",
+ "http-body-util",
  "ic-base-types",
  "ic-consensus-manager",
  "ic-interfaces",
@@ -5301,7 +5302,9 @@ dependencies = [
  "ic-p2p-test-utils",
  "ic-protobuf",
  "ic-quic-transport",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
+ "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
  "mockall",
@@ -5311,6 +5314,7 @@ dependencies = [
  "rand 0.8.5",
  "slog",
  "tokio",
+ "tower",
  "tracing",
 ]
 
@@ -12961,7 +12965,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "threadpool",
  "tokio",
  "tokio-rustls 0.26.0",
  "tower",
