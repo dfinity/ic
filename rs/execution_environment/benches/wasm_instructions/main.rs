@@ -25,12 +25,12 @@ mod simd;
 use crate::common::Wasm64;
 
 pub fn wasm_instructions_bench(c: &mut Criterion) {
-    let WASM64_ENABLED = Wasm64::Enabled;
+    let wasm64_enabled = Wasm64::Enabled;
 
     // List of benchmarks to run.
     let mut benchmarks = vec![];
-    benchmarks.extend(basic::benchmarks(WASM64_ENABLED));
-    benchmarks.extend(simd::benchmarks(WASM64_ENABLED));
+    benchmarks.extend(basic::benchmarks(wasm64_enabled));
+    benchmarks.extend(simd::benchmarks(wasm64_enabled));
 
     ////////////////////////////////////////////////////////////////////
     // Benchmark function.
@@ -85,7 +85,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
             }
         },
-        WASM64_ENABLED,
+        wasm64_enabled,
     );
 }
 
