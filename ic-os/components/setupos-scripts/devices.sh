@@ -3,6 +3,8 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/config.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 CONFIG_DIR="/config"
@@ -18,6 +20,43 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
+    echo "* Copying 'config.ini' to hostOS config partition..."
+    if [ -f "${CONFIG_DIR}/config.ini" ]; then
+        cp ${CONFIG_DIR}/config.ini /media/
+        log_and_halt_installation_on_error "${?}" "Unable to copy 'config.ini' to hostOS config partition."
+    else
+        log_and_halt_installation_on_error "1" "Configuration file 'config.ini' does not exist."
+    fi
+
+    echo "* Copying SSH authorized keys..."
+    ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
+    if [ -d "${ssh_authorized_keys}" ]; then
+        cp -a "${ssh_authorized_keys}" /media/
+        log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
+    else
+        log_and_halt_installation_on_error "1" "Directory '${ssh_authorized_keys}' does not exist."
+    fi
+
+    echo "* Copying node operator private key..."
+    node_operator_private_key_path=$(get_config_value '.icos_settings.node_operator_private_key_path')
+    if [ "${node_operator_private_key_path}" != "null" ] && [ -f "${node_operator_private_key_path}" ]; then
+        cp "${node_operator_private_key_path}" /media/
+        log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
+    elif [ "${node_operator_private_key_path}" = "null" ]; then
+        echo "Node operator private key path is not configured."
+    else
+        echo "node_operator_private_key.pem does not exist, requiring HSM."
+    fi
+
+    echo "* Copying deployment.json to config partition..."
+    cp /data/deployment.json /media/
+    log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
+
+    echo "* Copying NNS public key to hostOS config partition..."
+    nns_public_key_path=$(get_config_value '.icos_settings.nns_public_key_path')
+    cp "${nns_public_key_path}" /media/
+    log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key to hostOS config partition."
+
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config generate-hostos-config
 
@@ -28,38 +67,6 @@ function copy_config_files() {
     else
         log_and_halt_installation_on_error "1" "Configuration file 'config-hostos.json' does not exist."
     fi
-
-    echo "* Copying 'config.ini' to hostOS config partition..."
-    if [ -f "${CONFIG_DIR}/config.ini" ]; then
-        cp ${CONFIG_DIR}/config.ini /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy 'config.ini' to hostOS config partition."
-    else
-        log_and_halt_installation_on_error "1" "Configuration file 'config.ini' does not exist."
-    fi
-
-    echo "* Copying SSH authorized keys..."
-    if [ -d "${CONFIG_DIR}/ssh_authorized_keys" ]; then
-        cp -r ${CONFIG_DIR}/ssh_authorized_keys /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
-    else
-        log_and_halt_installation_on_error "1" "Directory 'ssh_authorized_keys' does not exist."
-    fi
-
-    echo "* Copying node operator private key..."
-    if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
-        cp ${CONFIG_DIR}/node_operator_private_key.pem /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
-    else
-        echo "node_operator_private_key.pem does not exist, requiring HSM."
-    fi
-
-    echo "* Copying deployment.json to config partition..."
-    cp /data/deployment.json /media/
-    log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
-
-    echo "* Copying NNS public key to hostOS config partition..."
-    cp /data/nns_public_key.pem /media/
-    log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key to hostOS config partition."
 }
 
 function insert_hsm_if_necessary() {
