@@ -531,7 +531,9 @@ mod tests {
 
         registry.do_add_api_boundary_nodes(payload);
 
-        let mut api_bns = registry.get_api_boundary_node_ids();
+        let mut api_bns = registry
+            .get_api_boundary_node_ids()
+            .expect("couldn't get API nodes");
         api_bns.sort();
         node_ids.sort();
 
