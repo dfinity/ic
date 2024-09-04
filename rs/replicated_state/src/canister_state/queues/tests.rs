@@ -970,24 +970,24 @@ fn test_skip_input_round_robin() {
     assert!(loop_detector.detected_loop(&queues));
 }
 
-#[test]
-fn test_peek_input_with_stale_references() {
+/// Generates a `CanisterQueues` with 3 input queues: one empty; one holding one
+/// message; and one queue with a stale reference, followed by a message,
+/// followed by another stale reference. This is so that we can test all edge
+/// cases: empty queue, (already popped) stale reference before message and
+/// stale reference after message.
+///
+/// Returns the queues and copies of the requests that were enqueued (with only
+/// requests @2 and @3 non-stale).
+fn new_queues_with_stale_references() -> (CanisterQueues, Vec<Request>) {
     let mut queues = CanisterQueues::default();
 
-    let senders = [
-        canister_test_id(1),
-        canister_test_id(2),
-        canister_test_id(1),
-        canister_test_id(3),
-    ];
-    // 4 requests, with deadlines 1000, 1001, 1002, 1003.
-    let requests = senders
-        .iter()
-        .enumerate()
-        .map(|(i, sender)| {
+    // 5 requests, with the given senders and deadlines.
+    let requests = [(1, 1000), (2, 1001), (2, 1003), (3, 1004), (2, 1002)]
+        .into_iter()
+        .map(|(sender, deadline)| {
             RequestBuilder::default()
-                .sender(*sender)
-                .deadline(coarse_time(1000 + i as u32))
+                .sender(canister_test_id(sender))
+                .deadline(coarse_time(deadline as u32))
                 .build()
         })
         .collect::<Vec<_>>();
@@ -997,21 +997,46 @@ fn test_peek_input_with_stale_references() {
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
 
-    // Time out the first two requests (deadlines 1000, 1001), including the only
-    // request from canister 2.
-    queues.time_out_messages(coarse_time(1002).into(), &own_canister_id, &local_canisters);
+    // Time out requests @0, @1 and @4 (deadlines 1000, 1001, 1002), including the
+    // only request from canister 1; and the first and last request from canister 2.
+    assert_eq!(
+        3,
+        queues.time_out_messages(coarse_time(1003).into(), &own_canister_id, &local_canisters)
+    );
 
     assert!(queues.has_input());
+    (queues, requests)
+}
 
-    // 1. Request from canister 1 (index 2).
-    let peeked_input = CanisterMessage::Request(Arc::new(requests.get(2).unwrap().clone()));
-    assert_eq!(queues.peek_input().unwrap(), peeked_input);
-    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+#[test]
+fn test_peek_input_with_stale_references() {
+    let (mut queues, requests) = new_queues_with_stale_references();
 
-    // 2. Request from canister 3 (index 3).
-    let peeked_input = CanisterMessage::Request(Arc::new(requests.get(3).unwrap().clone()));
-    assert_eq!(queues.peek_input().unwrap(), peeked_input);
-    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+    // 1. Request @2.
+    let expected = CanisterMessage::Request(Arc::new(requests.get(2).unwrap().clone()));
+    assert_eq!(expected, queues.peek_input().unwrap());
+    assert_eq!(expected, queues.pop_input().unwrap());
+
+    // 2. Request @3.
+    let expected = CanisterMessage::Request(Arc::new(requests.get(3).unwrap().clone()));
+    assert_eq!(expected, queues.peek_input().unwrap());
+    assert_eq!(expected, queues.pop_input().unwrap());
+
+    assert!(!queues.has_input());
+    assert!(queues.pool.len() == 0);
+}
+
+#[test]
+fn test_pop_input_with_stale_references() {
+    let (mut queues, requests) = new_queues_with_stale_references();
+
+    // 1. Request @2.
+    let expected = CanisterMessage::Request(Arc::new(requests.get(2).unwrap().clone()));
+    assert_eq!(expected, queues.pop_input().unwrap());
+
+    // 2. Request @3.
+    let expected = CanisterMessage::Request(Arc::new(requests.get(3).unwrap().clone()));
+    assert_eq!(expected, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
     assert!(queues.pool.len() == 0);
@@ -1058,6 +1083,10 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
 
     // Ensure that we only have the messages from `other_2` and `other_5` left.
     assert_eq!(2, queues.input_queues_message_count());
+    for canister in [1, 3, 4, 6] {
+        let canister_id = canister_test_id(canister);
+        assert_eq!(0, queues.canister_queues.get(&canister_id).unwrap().0.len());
+    }
     // And no messages and only 2 reserved slots in output queues.
     assert_eq!(0, queues.output_queues_message_count());
     assert_eq!(2, queues.output_queues_reserved_slots());
@@ -2592,6 +2621,43 @@ fn output_into_iter_peek_with_stale_references(
         prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
     prop_assert_eq!(None, output_iter.next());
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_pop_with_stale_references(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[any] deadline: u32,
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out some messages.
+    canister_queues.time_out_messages(
+        coarse_time(deadline).into(),
+        &own_canister_id,
+        &local_canisters,
+    );
+    // And shed one more.
+    canister_queues.shed_largest_message(&own_canister_id, &local_canisters);
+
+    // Pop (after optionally peeking) a few times.
+    let mut output_iter = canister_queues.output_into_iter();
+    let mut should_peek = deadline % 2 == 0;
+    for _ in 0..3 {
+        if should_peek {
+            output_iter.peek();
+        }
+        if output_iter.next() == None {
+            break;
+        };
+        should_peek = !should_peek;
+    }
+
+    // Invariants should hold.
+    prop_assert_eq!(Ok(()), canister_queues.test_invariants());
 }
 
 /// Tests that 'has_expired_deadlines` reports:

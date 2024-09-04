@@ -141,7 +141,7 @@ pub struct CanisterQueues {
 /// Additional operations compared to a standard iterator:
 ///  * peeking (returning a reference to the next message without consuming it);
 ///    and
-///  * excluding whole queues from iteration while retaining their messages
+///  * excluding whole queues from iteration while retaining them in the state
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
@@ -211,17 +211,17 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Returns the number of (potentially stale) messages left in the just excluded
     /// queue.
     pub fn exclude_queue(&mut self) -> usize {
-        let ignored = self
+        let excluded = self
             .queues
             .pop_front()
             .map(|(_, q)| q.len())
             .unwrap_or_default();
 
-        debug_assert!(self.size >= ignored);
-        self.size -= ignored;
+        debug_assert!(self.size >= excluded);
+        self.size -= excluded;
         debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-        ignored
+        excluded
     }
 
     /// Checks if the iterator has finished.
@@ -236,7 +236,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
     /// Computes the number of (potentially stale) messages left in `queues`.
     ///
-    /// Time complexity: O(N).
+    /// Time complexity: `O(N)`.
     fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>) -> usize {
         queues.iter().map(|(_, q)| q.len()).sum()
     }
@@ -658,6 +658,8 @@ impl CanisterQueues {
 
     /// Returns the number of output requests that can be pushed to each
     /// canister before either the respective input or output queue is full.
+    ///
+    /// Time complexity: `O(N)`.
     pub fn available_output_request_slots(&self) -> BTreeMap<CanisterId, usize> {
         // When pushing a request we need to reserve a slot on the input
         // queue for the eventual reply. So we are limited by the amount of
@@ -728,6 +730,7 @@ impl CanisterQueues {
             .expect("Message peeked above so pop should not fail.");
 
         debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
         Ok(())
     }
 

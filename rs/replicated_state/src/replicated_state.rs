@@ -167,6 +167,7 @@ impl<'a> OutputIterator<'a> {
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
         let subnet_queues_iter = subnet_queues.output_into_iter();
+        // FIXME: Should we also use `has_output()` here?
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
@@ -194,7 +195,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
             // `next()` may consume an arbitrary number of stale references.
             self.size -= canister_iterator.size();
             let next = canister_iterator.next();
@@ -225,8 +226,8 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
-    /// Peeks into the iterator and returns a reference to the item that `next()`
-    /// would return.
+    /// Peeks into the iterator and returns a reference to the message that
+    /// `next()` would return.
     fn peek(&self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
