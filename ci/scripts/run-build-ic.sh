@@ -3,17 +3,14 @@
 set -euo pipefail
 VERSION=$(git rev-parse HEAD)
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-    RUN_ON_DIFF_ONLY="false"
-fi
-
 cd "$CI_PROJECT_DIR"
 
 # run build with release on protected branches or if a pull_request is targeting an rc branch
 if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
-# if run_on_diff_only was requested, only build selected targets
-elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ]; then
+
+# if override was not requested, only build selected targets
+elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${CI_MERGE_REQUEST_TITLE:-}" != *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 

@@ -6,38 +6,32 @@
 
 set -eufo pipefail
 
-
-# default behavior is that it runs whatever targets were specified in BAZEL_TARGETS and uploads to S3
+# default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
-s3_upload="True"
+s3_upload="False"
 
-# if we are on a protected branch we set ic_version to the commit_sha
-if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || ; then
+# if we are on a protected branch or targeting and rc branch we set ic_version to the commit_sha and upload to s3
+if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
 fi
 
-# we only run on the diff if the following conditions are met:
-# 1. It was triggered from a PR
-# 2. The PR is not targeting an rc branch
-# 3. The PR title doesn't contain [RUN_ALL_BAZEL_TARGETS]
-if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${CI_MERGE_REQUEST_TITLE:-}" != *"[RUN_ALL_BAZEL_TARGETS]"* ]] && \
-    [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]
-    RUN_ON_DIFF_ONLY="true"
-    s3_upload="false"
-fi
+# if we are on a pull_request check if RUN_ALL_BAZEL_TARGETS was requested
+if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
+    if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then    
+        s3_upload="True"
+    else
+        # get bazel targets that changed within the MR
+        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 
-# if run on diff_only was requested only run selected targets
-if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+        # pass info about bazel targets to bazel-targets file
+        echo "$BAZEL_TARGETS" >bazel-targets
 
-    # pass info about bazel targets to bazel-targets file
-    echo "$BAZEL_TARGETS" >bazel-targets
-
-    # if bazel targets is empty we don't need to run any tests
-    if [ -z "${BAZEL_TARGETS:-}" ]; then
-        echo "No bazel targets to build"
-        exit 0
+        # if bazel targets is empty we don't need to run any tests
+        if [ -z "${BAZEL_TARGETS:-}" ]; then
+            echo "No bazel targets to build"
+            exit 0
+        fi
     fi
 fi
 
