@@ -285,7 +285,7 @@ impl StrippedBlockProposal {
         let Self {
             block_proposal_without_ingresses_proto: mut reconstructed_block_proposal_proto,
             stripped_ingress_payload,
-            unstripped_consensus_message_id,
+            unstripped_consensus_message_id: _unstripped_consensus_message_id,
         } = self;
 
         let ingresses = stripped_ingress_payload
@@ -314,13 +314,14 @@ impl StrippedBlockProposal {
 
 #[cfg(test)]
 mod tests {
-    use ic_types::{
-        consensus::ConsensusMessageHash,
-        crypto::{CryptoHash, CryptoHashOf},
-        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
-        time::expiry_time_from_now,
-        Height,
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContentSigner, FromParent},
+        make_genesis,
     };
+    use ic_types::{
+        batch::BatchPayload, consensus::{dkg::{Dealings, Summary}, Block, BlockPayload, ConsensusMessageHash, DataPayload, Payload, Rank}, crypto::{CryptoHash, CryptoHashOf}, messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope}, time::expiry_time_from_now, Height
+    };
+    use ic_types_test_utils::ids::node_test_id;
 
     use crate::fetch_stripped_artifact::types::stripped::StrippedIngressPayload;
 
@@ -328,16 +329,49 @@ mod tests {
 
     #[test]
     fn strip_assemble_roundtrip_test() {
-        todo!()
-        //let (ingress_1, _) = fake_ingress_message("fake_1");
-        //let (ingress_2, _) = fake_ingress_message("fake_2");
-        //let ingress_payload = IngressPayload::from(vec![ingress_1, ingress_2]);
+        let (ingress_1, _ingress_id_1) = fake_ingress_message("fake_1");
+        let (ingress_2, _ingress_id_2) = fake_ingress_message("fake_2");
+        let block_proposal =
+            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
 
-        //// don't strip anything
-        //let stripped_payload = ingress_payload.clone().strip_ingresses(|_| false);
-        //let reconstructed_payload = stripped_payload.try_assemble();
+        // strip the block
+        let mut stripped_block_proposal = block_proposal.clone().strip();
 
-        //assert_eq!(reconstructed_payload, Ok(ingress_payload));
+        // insert back the missing messages
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_1)
+            .unwrap();
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_2)
+            .unwrap();
+
+        // try to reassemble the block
+        let assembled_block = stripped_block_proposal.try_assemble().unwrap();
+
+        assert_eq!(assembled_block, block_proposal);
+    }
+
+    fn strip_assemble_fails_when_still_missing_ingress_test() {
+        let (ingress_1, _ingress_id_1) = fake_ingress_message("fake_1");
+        let (ingress_2, ingress_id_2) = fake_ingress_message("fake_2");
+        let block_proposal =
+            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
+
+        // strip the block
+        let mut stripped_block_proposal = block_proposal.clone().strip();
+
+        // insert back only one missing messages
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_1)
+            .unwrap();
+
+        // try to reassemble the block
+        let assembly_error = stripped_block_proposal.try_assemble().unwrap_err();
+
+        match assembly_error {
+            AssemblyError::Missing(_) => (),
+            _ => panic!("Wrong error"),
+        }
     }
 
     #[test]
@@ -411,6 +445,28 @@ mod tests {
             stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
             unstripped_consensus_message_id: fake_consensus_message_id(),
         }
+    }
+
+    fn fake_block_proposal_with_ingresses(ingress_messages: Vec<SignedIngress>) -> BlockProposal {
+        let parent = make_genesis(Summary::fake()).content.block;
+        let block = Block::new(
+            ic_types::crypto::crypto_hash(parent.as_ref()),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload {
+                        ingress: IngressPayload::from(ingress_messages),
+                        ..BatchPayload::default()
+                    },
+                    dealings: Dealings::new_empty(Height::from(0)),
+                    idkg: None,
+                }),
+            ),
+            parent.as_ref().height.increment(),
+            Rank(0),
+            parent.as_ref().context.clone(),
+        );
+        BlockProposal::fake(block, node_test_id(0))
     }
 
     fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {

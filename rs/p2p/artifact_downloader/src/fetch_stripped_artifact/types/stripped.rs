@@ -71,8 +71,8 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 ingress_messages: value
                     .ingress_messages
                     .into_iter()
-                    .map(|proto| todo!())
-                    .collect(),
+                    .map(MaybeStrippedIngress::try_from)
+                    .collect::<Result<Vec<_>, _>>()?,
             },
             unstripped_consensus_message_id: try_from_option_field(
                 value.unstripped_consensus_message_id,
