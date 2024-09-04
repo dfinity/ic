@@ -15747,6 +15747,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "os_qualification_utils"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-canister-client",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "itertools 0.12.0",
+ "reqwest 0.12.5",
+ "serde",
+ "slog",
+ "tests",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "os_str_bytes"
 version = "6.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19543,6 +19566,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "os_qualification_utils",
  "reqwest 0.12.5",
  "serde",
  "serde_json",
