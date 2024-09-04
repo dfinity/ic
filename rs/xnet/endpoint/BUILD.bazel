@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
-    # "//rs/xnet/hyper",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
