@@ -28,44 +28,32 @@ impl Strippable for ConsensusMessage {
     type Output = MaybeStrippedConsensusMessage;
 
     fn strip(self) -> Self::Output {
+        let unstripped_consensus_message_id = self.id();
+
         match self {
             // We only strip data blocks.
             ConsensusMessage::BlockProposal(block_proposal)
                 if block_proposal.as_ref().payload.payload_type()
                     == ic_types::consensus::PayloadType::Data =>
             {
-                MaybeStrippedConsensusMessage::StrippedBlockProposal(block_proposal.strip())
+                let mut proto = pb::BlockProposal::from(&block_proposal);
+
+                // Remove the ingress payload from the proto.
+                proto
+                    .value
+                    .as_mut()
+                    .map(|block| block.ingress_payload = None);
+
+                let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
+                let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();
+
+                MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
+                    block_proposal_without_ingresses_proto: proto,
+                    stripped_ingress_payload,
+                    unstripped_consensus_message_id,
+                })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
-        }
-    }
-}
-
-impl Strippable for BlockProposal {
-    type Output = StrippedBlockProposal;
-
-    fn strip(self) -> Self::Output {
-        let unstripped_consensus_message_id = ConsensusMessage::BlockProposal(self.clone()).id();
-        let mut proto = pb::BlockProposal::from(&self);
-
-        // Remove the ingress payload from the proto.
-        proto
-            .value
-            .as_mut()
-            .map(|block| block.ingress_payload = None);
-
-        let stripped_ingress_payload = match self.content.as_ref().payload.as_ref() {
-            BlockPayload::Data(data) => data.batch.ingress.clone().strip(),
-            // Summary block has no ingress messages
-            BlockPayload::Summary(_) => StrippedIngressPayload {
-                ingress_messages: vec![],
-            },
-        };
-
-        Self::Output {
-            block_proposal_without_ingresses_proto: proto,
-            stripped_ingress_payload,
-            unstripped_consensus_message_id,
         }
     }
 }

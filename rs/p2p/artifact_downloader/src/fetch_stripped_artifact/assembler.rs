@@ -341,9 +341,14 @@ mod tests {
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
 
         // strip the block
-        let mut stripped_block_proposal = block_proposal.clone().strip();
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
 
         // insert back the missing messages
         stripped_block_proposal
@@ -365,9 +370,14 @@ mod tests {
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
 
         // strip the block
-        let mut stripped_block_proposal = block_proposal.clone().strip();
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
 
         // insert back only one missing messages
         stripped_block_proposal
