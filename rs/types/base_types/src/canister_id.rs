@@ -1,4 +1,4 @@
-use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
+use super::{PrincipalId, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
