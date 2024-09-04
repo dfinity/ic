@@ -3,6 +3,8 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/config.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
@@ -29,8 +31,6 @@ GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 # Dell 10 3.2TB and SuperMicro has 5 7.4 TB drives = 32TB
 GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
-
-CONFIG_DIR="/config"
 
 function check_generation() {
     echo "* Checking Generation..."
@@ -247,7 +247,11 @@ function verify_disks() {
 
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
-    if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
+
+    local node_operator_key_path=$(get_config_value '.hostos_config.ic_config.node_operator_private_key_path')
+
+
+    if [[ ${GENERATION} == 2 ]] && [[ ! -f "${node_operator_key_path}" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
         echo -e "\033[1;31mGen2 hardware should be deployed using the Gen2 Node Deployment method.\033[0m"
