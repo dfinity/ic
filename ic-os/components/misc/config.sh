@@ -2,7 +2,7 @@
 
 # Shared config utilities.
 
-CONFIG_FILE="/config/config.json"
+CONFIG_FILE="/var/ic/config/config.json"
 
 # Retrieves a value from the config.json file using a JSON path.
 # Arguments:
