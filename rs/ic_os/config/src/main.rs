@@ -5,6 +5,8 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
+use config::types::{SetupOSConfig, HostOSConfig, HostOSSettings, GuestOSSettings, GuestosDevConfig, ICOSSettings};
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Creates SetuposConfig object
@@ -23,6 +25,10 @@ pub enum Commands {
 
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH.to_string(), value_name = "node_operator_private_key.pem")]
         node_operator_private_key_path: String,
+    },
+    GenerateHostOSConfig {
+        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "config.json")]
+        setupos_config_json_path: String,
     },
 }
 
@@ -66,7 +72,7 @@ pub fn main() -> Result<()> {
             let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) =
                 get_deployment_settings(deployment_json_path);
 
-            let icos_settings = config::types::ICOSSettings {
+            let icos_settings = ICOSSettings {
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
                 nns_url,
                 elasticsearch_hosts,
@@ -76,16 +82,16 @@ pub fn main() -> Result<()> {
                 ssh_authorized_keys_path,
             };
 
-            let guestos_settings = config::types::GuestOSSettings {
+            let guestos_settings = GuestOSSettings {
                 ic_crypto_path: None,
                 ic_state_path: None,
                 ic_registry_local_store_path: None,
-                guestos_dev: config::types::GuestosDevConfig::default(),
+                guestos_dev: GuestosDevConfig::default(),
             };
 
-            let hostos_settings = config::types::HostOSSettings { vm_memory, vm_cpu, verbose};
+            let hostos_settings = HostOSSettings { vm_memory, vm_cpu, verbose};
 
-            let setupos_config = config::types::SetupOSConfig {
+            let setupos_config = SetupOSConfig {
                 network_settings,
                 icos_settings,
                 hostos_settings,
@@ -108,6 +114,38 @@ pub fn main() -> Result<()> {
             println!(
                 "SetuposConfig has been written to {}",
                 default_config_object_path.display()
+            );
+
+            Ok(())
+        }
+        Some(Commands::GenerateHostOSConfig { setupos_config_json_path }) => {
+            let setupos_config_json_path = Path::new(&setupos_config_json_path);
+
+            let setupos_config: SetupOSConfig = serde_json::from_reader(File::open(setupos_config_json_path)?)?;
+
+            let hostos_config = HostOSConfig {
+                network_settings: setupos_config.network_settings,
+                icos_settings: setupos_config.icos_settings,
+                hostos_settings: setupos_config.hostos_settings,
+                guestos_settings: setupos_config.guestos_settings,
+            };
+
+            let serialized_hostos_config = serde_json::to_string_pretty(&hostos_config)
+                .expect("Failed to serialize HostOSConfig");
+
+            let output_path = Path::new("/var/ic/config/config-hostos.json");
+            if let Some(parent) = output_path.parent() {
+                if !parent.exists() {
+                    create_dir_all(parent).expect("Failed to create directory");
+                }
+            }
+
+            let mut config_file = File::create(output_path)?;
+            config_file.write_all(serialized_hostos_config.as_bytes())?;
+
+            println!(
+                "HostOSConfig has been written to {}",
+                output_path.display()
             );
 
             Ok(())
