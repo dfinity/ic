@@ -71,8 +71,8 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
 
     let normalized_file_contents = file_contents
-        .replace("\r\n", "\n") // Convert CRLF to LF
-        .replace("\r", "\n"); // Convert remaining CR to LF
+        .replace("\r\n", "\n")
+        .replace("\r", "\n");
 
     Ok(normalized_file_contents
         .lines()
