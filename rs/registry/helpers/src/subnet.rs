@@ -27,7 +27,7 @@ pub struct NotarizationDelaySettings {
     pub initial_notary_delay: Duration,
 }
 
-pub struct IngressSubnetLimits {
+pub struct IngressMessageSettings {
     /// Maximum number of bytes per message. This is a hard cap, which means
     /// ingress messages greater than the limit will be dropped.
     pub max_ingress_bytes_per_message: usize,
@@ -60,11 +60,11 @@ pub trait SubnetRegistry {
     ) -> RegistryClientResult<usize>;
 
     /// Returns ingress message settings.
-    fn get_ingress_subnet_limits(
+    fn get_ingress_message_settings(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<IngressSubnetLimits>;
+    ) -> RegistryClientResult<IngressMessageSettings>;
 
     /// Returns SubnetFeatures
     fn get_features(
@@ -228,16 +228,18 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         )
     }
 
-    fn get_ingress_subnet_limits(
+    fn get_ingress_message_settings(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<IngressSubnetLimits> {
+    ) -> RegistryClientResult<IngressMessageSettings> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         Ok(
-            deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| IngressSubnetLimits {
-                max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
-                max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
+            deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| {
+                IngressMessageSettings {
+                    max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
+                    max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
+                }
             }),
         )
     }
