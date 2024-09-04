@@ -13,6 +13,11 @@ echo "Fetching git_commit_id from $CANISTER_NAME ($CANISTER_ID)..."
 CURRENT_COMMIT_ID=$(dfx canister --ic metadata "$CANISTER_ID" 'git_commit_id')
 echo "$CANISTER_NAME reports itself to be on commit $CURRENT_COMMIT_ID."
 
+# This is in case the commit is not yet in our local repo. This assumes that if
+# the commit was released, it is in the GitHub repo. That might not be true in
+# the case of hotfixes though.
+git fetch origin "$CURRENT_COMMIT_ID"
+
 echo
 if git merge-base --is-ancestor "$QUERY_COMMIT_ID" "$CURRENT_COMMIT_ID"; then
     echo "🎉 ${QUERY_COMMIT_ID} is included in the code that $CANISTER_NAME is currently running."
