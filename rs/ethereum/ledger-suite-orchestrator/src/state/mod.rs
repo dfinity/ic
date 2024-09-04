@@ -745,6 +745,11 @@ impl ManageInstalledCanisters {
         let index_wasm_hash = args.index.installed_wasm_hash.parse().map_err(|e| {
             InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
         })?;
+        if ledger_wasm_hash == index_wasm_hash {
+            return Err(InvalidManageInstalledCanistersError::WasmHashError(
+                WasmHashError::Invalid("ledger and index wasm hashes are the same".to_string()),
+            ));
+        }
         let archives = args.archives.unwrap_or_default();
 
         let installed_principals: BTreeSet<_> = once(&ledger)

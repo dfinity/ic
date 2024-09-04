@@ -9090,6 +9090,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic0 0.21.1",
  "icrc-ledger-types",
+ "maplit",
  "mockall",
  "num-traits",
  "paste",

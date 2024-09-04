@@ -153,6 +153,188 @@ mod manage_canister {
     }
 }
 
+mod manage_installed_canisters {
+    use crate::candid::ManageInstalledCanisters as CandidManageInstalledCanisters;
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
+    use crate::scheduler::Erc20Token;
+    use crate::state::test_fixtures::new_state;
+    use crate::state::{
+        CanistersMetadata, Index, InvalidManageInstalledCanistersError, Ledger,
+        ManageInstalledCanisters, State,
+    };
+    use assert_matches::assert_matches;
+    use candid::Principal;
+    use maplit::btreeset;
+    use proptest::proptest;
+
+    proptest! {
+        #[test]
+        fn should_error_when_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
+            let state = new_state();
+            let mut cketh = cketh_installed_canisters();
+            cketh.erc20_contract.address = invalid_address;
+
+            let result = ManageInstalledCanisters::validate(&state, cketh);
+
+            assert_matches!(
+                result,
+                Err(InvalidManageInstalledCanistersError::InvalidErc20Contract(
+                    _
+                ))
+            )
+        }
+    }
+
+    #[test]
+    fn should_error_when_ethereum_address_already_managed() {
+        let mut state = new_state();
+        let usdc = usdc();
+        state.record_new_erc20_token(usdc.clone(), usdc_metadata());
+        state.record_new_erc20_token(usdt(), usdt_metadata());
+        let mut cketh = cketh_installed_canisters();
+        cketh.erc20_contract.address = usdc.address().to_string();
+
+        let result = ManageInstalledCanisters::validate(&state, cketh);
+
+        assert_eq!(
+            result,
+            Err(InvalidManageInstalledCanistersError::Erc20ContractAlreadyManaged(usdc))
+        )
+    }
+
+    #[test]
+    fn should_error_when_same_wasm_hash() {
+        let state = new_state();
+        let mut cketh = cketh_installed_canisters();
+        cketh.index.installed_wasm_hash = cketh.ledger.installed_wasm_hash.clone();
+
+        let result = ManageInstalledCanisters::validate(&state, cketh);
+
+        assert_matches!(
+            result,
+            Err(InvalidManageInstalledCanistersError::WasmHashError(_))
+        )
+    }
+
+    #[test]
+    fn should_error_when_principal_already_managed() {
+        let mut state = new_state();
+        let [usdc_index_canister_id, usdc_ledger_canister_id] = add_usdc_ledger_suite(&mut state);
+        let [usdt_index_canister_id, usdt_ledger_canister_id] = add_usdt_ledger_suite(&mut state);
+
+        for id in [
+            usdc_index_canister_id,
+            usdc_ledger_canister_id,
+            usdt_index_canister_id,
+            usdt_ledger_canister_id,
+        ] {
+            let mut cketh = cketh_installed_canisters();
+            cketh.ledger.canister_id = id;
+            let result = ManageInstalledCanisters::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+
+            let mut cketh = cketh_installed_canisters();
+            cketh.index.canister_id = id;
+            let result = ManageInstalledCanisters::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+
+            let mut cketh = cketh_installed_canisters();
+            if let Some(archives) = &mut cketh.archives {
+                archives.push(id);
+            }
+            let result = ManageInstalledCanisters::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+        }
+    }
+
+    #[test]
+    fn should_validate() {
+        let mut state = new_state();
+        let cketh = cketh_installed_canisters();
+        let expected_cketh = {
+            let cketh = cketh.clone();
+            ManageInstalledCanisters {
+                erc20_token: Erc20Token::try_from(cketh.erc20_contract).unwrap(),
+                metadata: CanistersMetadata {
+                    ckerc20_token_symbol: cketh.ckerc20_token_symbol,
+                },
+                ledger: cketh.ledger.canister_id,
+                ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),
+                index: cketh.index.canister_id,
+                index_wasm_hash: cketh.index.installed_wasm_hash.parse().unwrap(),
+                archives: cketh.archives.unwrap(),
+            }
+        };
+
+        assert_eq!(
+            ManageInstalledCanisters::validate(&state, cketh.clone()),
+            Ok(expected_cketh.clone())
+        );
+
+        add_usdc_ledger_suite(&mut state);
+        assert_eq!(
+            ManageInstalledCanisters::validate(&state, cketh.clone()),
+            Ok(expected_cketh.clone())
+        );
+
+        add_usdt_ledger_suite(&mut state);
+        assert_eq!(
+            ManageInstalledCanisters::validate(&state, cketh),
+            Ok(expected_cketh)
+        );
+    }
+
+    fn cketh_installed_canisters() -> CandidManageInstalledCanisters {
+        use crate::candid::{Erc20Contract, InstalledCanister};
+
+        CandidManageInstalledCanisters {
+            erc20_contract: Erc20Contract {
+                chain_id: 1_u8.into(),
+                address: "0x0000000000000000000000000000000000000000".to_string(),
+            },
+            ckerc20_token_symbol: "ckETH".to_string(),
+            ledger: InstalledCanister {
+                canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+                installed_wasm_hash:
+                    "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6".to_string(),
+            },
+            index: InstalledCanister {
+                canister_id: "s3zol-vqaaa-aaaar-qacpa-cai".parse().unwrap(),
+                installed_wasm_hash:
+                    "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a".to_string(),
+            },
+            archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
+        }
+    }
+
+    fn add_usdc_ledger_suite(state: &mut State) -> [Principal; 2] {
+        state.record_new_erc20_token(usdc(), usdc_metadata());
+        let usdc_index_canister_id = Principal::from_slice(&[1_u8; 29]);
+        state.record_created_canister::<Index>(&usdc(), usdc_index_canister_id);
+        let usdc_ledger_canister_id = Principal::from_slice(&[2_u8; 29]);
+        state.record_created_canister::<Ledger>(&usdc(), usdc_ledger_canister_id);
+        [usdc_index_canister_id, usdc_ledger_canister_id]
+    }
+
+    fn add_usdt_ledger_suite(state: &mut State) -> [Principal; 2] {
+        state.record_new_erc20_token(usdt(), usdt_metadata());
+        let usdt_index_canister_id = Principal::from_slice(&[3_u8; 29]);
+        state.record_created_canister::<Index>(&usdt(), usdt_index_canister_id);
+        let usdt_ledger_canister_id = Principal::from_slice(&[4_u8; 29]);
+        state.record_created_canister::<Ledger>(&usdt(), usdt_ledger_canister_id);
+        [usdt_index_canister_id, usdt_ledger_canister_id]
+    }
+}
+
 mod wasm_hash {
     use crate::state::WasmHash;
     use assert_matches::assert_matches;
