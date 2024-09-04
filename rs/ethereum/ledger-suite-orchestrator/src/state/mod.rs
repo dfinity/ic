@@ -4,12 +4,11 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::candid::{CyclesManagement, InitArg};
-use crate::scheduler::{ChainId, Erc20Token, InvalidManageInstalledCanistersError, Task};
+use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
 use crate::storage::memory::{state_memory, StableMemory};
 use crate::storage::WasmHashError;
 use candid::Principal;
 use ic_cdk::trap;
-use ic_ethereum_types::Address;
 use ic_stable_structures::{storable::Bound, Cell, Storable};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteArray;
@@ -216,7 +215,43 @@ pub type GitCommitHash = Hash<GIT_COMMIT_HASH_LENGTH>;
 
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ManagedCanisters {
+    /// Canisters for an ERC-20 token
     canisters: BTreeMap<Erc20Token, Canisters>,
+    /// Canisters for non ERC-20 token, identified by their token symbol
+    #[serde(default)]
+    other_canisters: BTreeMap<TokenSymbol, Canisters>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct TokenSymbol(String);
+
+impl Display for TokenSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for TokenSymbol {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+pub enum TokenId<'a> {
+    Erc20(&'a Erc20Token),
+    Other(&'a TokenSymbol),
+}
+
+impl<'a> From<&'a Erc20Token> for TokenId<'a> {
+    fn from(value: &'a Erc20Token) -> Self {
+        Self::Erc20(value)
+    }
+}
+
+impl<'a> From<&'a TokenSymbol> for TokenId<'a> {
+    fn from(value: &'a TokenSymbol) -> Self {
+        Self::Other(value)
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -428,8 +463,6 @@ pub struct State {
 }
 
 impl State {
-    const ADDRESS_FOR_NON_ERC20_TOKEN: Address = Address::ZERO;
-
     pub fn more_controller_ids(&self) -> &[Principal] {
         &self.more_controller_ids
     }
@@ -451,18 +484,11 @@ impl State {
     }
 
     pub fn erc20_managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
-        self.managed_canisters
-            .canisters
-            .iter()
-            .filter(|(token, _)| token.address() != &Self::ADDRESS_FOR_NON_ERC20_TOKEN)
+        self.managed_canisters.canisters.iter()
     }
 
     pub fn other_managed_canisters_iter(&self) -> impl Iterator<Item = &Canisters> {
-        self.managed_canisters
-            .canisters
-            .iter()
-            .filter(|(token, _)| token.address() == &Self::ADDRESS_FOR_NON_ERC20_TOKEN)
-            .map(|(_, canisters)| canisters)
+        self.managed_canisters.other_canisters.values()
     }
 
     pub fn all_managed_principals(&self) -> impl Iterator<Item = &Principal> {
@@ -474,8 +500,11 @@ impl State {
         self.managed_canisters.canisters.keys()
     }
 
-    pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {
-        self.managed_canisters.canisters.get(contract)
+    pub fn managed_canisters<'a, T: Into<TokenId<'a>>>(&self, token_id: T) -> Option<&Canisters> {
+        match token_id.into() {
+            TokenId::Erc20(contract) => self.managed_canisters.canisters.get(contract),
+            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get(symbol),
+        }
     }
 
     pub fn ledger_suite_version(&self) -> Option<&LedgerSuiteVersion> {
@@ -511,39 +540,20 @@ impl State {
 
     //TODO XC-189 unit tests
     /// Record other canisters managed by the orchestrator.
-    ///
-    /// Internally, this method stores the non-ckERC20 ledger suites as a ckERC20 token by using a dummy zero address.
-    /// This allows the various tasks run by the orchestrator (top-up, upgrade, etc.) to be agnostic of the ledger suite type.
-    pub fn record_manage_other_canisters(&mut self, canisters: ManageOtherCanisters) {
-        let unique_key_for_non_erc20_token = {
-            let min_chain_id = self
-                .managed_erc20_tokens_iter()
-                .filter(|token| token.address() == &Self::ADDRESS_FOR_NON_ERC20_TOKEN)
-                .map(|token| token.chain_id())
-                .min();
-            // To avoid realistic ChainIds, we start from the max ChainId and decrement.
-            let chain_id_for_non_erc20_token = min_chain_id.map_or(ChainId::MAX, |id| {
-                id.checked_decrement().expect(
-                    "BUG: more than u64::MAX of other canisters to manage seems like a lot!",
-                )
-            });
-            Erc20Token::new(
-                chain_id_for_non_erc20_token,
-                Self::ADDRESS_FOR_NON_ERC20_TOKEN,
-            )
-        };
-        self.record_new_erc20_token(unique_key_for_non_erc20_token.clone(), canisters.metadata);
-        self.record_created_canister::<Ledger>(&unique_key_for_non_erc20_token, canisters.ledger);
-        self.record_installed_canister::<Ledger>(
-            &unique_key_for_non_erc20_token,
-            canisters.ledger_wasm_hash,
+    pub fn record_manage_other_canisters(&mut self, other_canisters: ManageOtherCanisters) {
+        let token_symbol = other_canisters.token_symbol.clone();
+        assert_eq!(
+            self.managed_canisters.other_canisters.get(&token_symbol),
+            None,
+            "BUG: token with symbol{:?} is already managed",
+            &token_symbol
         );
-        self.record_created_canister::<Index>(&unique_key_for_non_erc20_token, canisters.index);
-        self.record_installed_canister::<Index>(
-            &unique_key_for_non_erc20_token,
-            canisters.index_wasm_hash,
+        assert_eq!(
+            self.managed_canisters
+                .other_canisters
+                .insert(token_symbol, Canisters::from(other_canisters)),
+            None
         );
-        self.record_archives(&unique_key_for_non_erc20_token, canisters.archives);
     }
 
     pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
@@ -759,7 +769,7 @@ pub fn init_state(state: State) {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct ManageOtherCanisters {
-    metadata: CanistersMetadata,
+    token_symbol: TokenSymbol,
     ledger: Principal,
     ledger_wasm_hash: WasmHash,
     index: Principal,
@@ -767,11 +777,36 @@ pub struct ManageOtherCanisters {
     archives: Vec<Principal>,
 }
 
+impl From<ManageOtherCanisters> for Canisters {
+    fn from(value: ManageOtherCanisters) -> Self {
+        Self {
+            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: value.ledger,
+                installed_wasm_hash: value.ledger_wasm_hash,
+            })),
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: value.index,
+                installed_wasm_hash: value.index_wasm_hash,
+            })),
+            archives: value.archives,
+            metadata: CanistersMetadata {
+                ckerc20_token_symbol: value.token_symbol.to_string(),
+            },
+        }
+    }
+}
+
 impl ManageOtherCanisters {
     pub fn validate(
         state: &State,
         args: crate::candid::ManageOtherCanisters,
     ) -> Result<ManageOtherCanisters, InvalidManageInstalledCanistersError> {
+        let token_symbol = TokenSymbol(args.token_symbol);
+        if state.managed_canisters(&token_symbol).is_some() {
+            return Err(InvalidManageInstalledCanistersError::TokenAlreadyManaged(
+                token_symbol,
+            ));
+        }
         let ledger = args.ledger.canister_id;
         let ledger_wasm_hash = args.ledger.installed_wasm_hash.parse().map_err(|e| {
             InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
@@ -806,11 +841,8 @@ impl ManageOtherCanisters {
                 ),
             );
         }
-        let metadata = CanistersMetadata {
-            ckerc20_token_symbol: args.token_symbol,
-        };
         Ok(ManageOtherCanisters {
-            metadata,
+            token_symbol,
             ledger,
             ledger_wasm_hash,
             index,

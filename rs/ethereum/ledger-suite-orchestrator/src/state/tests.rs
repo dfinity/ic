@@ -158,8 +158,8 @@ mod manage_installed_canisters {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
     use crate::state::test_fixtures::new_state;
     use crate::state::{
-        CanistersMetadata, Index, InvalidManageInstalledCanistersError, Ledger,
-        ManageOtherCanisters, State,
+        Index, InvalidManageInstalledCanistersError, Ledger, ManageOtherCanisters, State,
+        TokenSymbol,
     };
     use assert_matches::assert_matches;
     use candid::Principal;
@@ -176,6 +176,23 @@ mod manage_installed_canisters {
         assert_matches!(
             result,
             Err(InvalidManageInstalledCanistersError::WasmHashError(_))
+        )
+    }
+
+    #[test]
+    fn should_error_when_token_symbol_already_managed() {
+        let mut state = new_state();
+        let registered_canisters = validated_cketh_canisters();
+        state.record_manage_other_canisters(registered_canisters.clone());
+        let cketh = cketh_installed_canisters();
+
+        let result = ManageOtherCanisters::validate(&state, cketh);
+
+        assert_eq!(
+            result,
+            Err(InvalidManageInstalledCanistersError::TokenAlreadyManaged(
+                registered_canisters.token_symbol
+            ))
         )
     }
 
@@ -223,19 +240,7 @@ mod manage_installed_canisters {
     fn should_validate() {
         let mut state = new_state();
         let cketh = cketh_installed_canisters();
-        let expected_cketh = {
-            let cketh = cketh.clone();
-            ManageOtherCanisters {
-                metadata: CanistersMetadata {
-                    ckerc20_token_symbol: cketh.token_symbol,
-                },
-                ledger: cketh.ledger.canister_id,
-                ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),
-                index: cketh.index.canister_id,
-                index_wasm_hash: cketh.index.installed_wasm_hash.parse().unwrap(),
-                archives: cketh.archives.unwrap(),
-            }
-        };
+        let expected_cketh = validated_cketh_canisters();
 
         assert_eq!(
             ManageOtherCanisters::validate(&state, cketh.clone()),
@@ -271,6 +276,18 @@ mod manage_installed_canisters {
                     "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a".to_string(),
             },
             archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
+        }
+    }
+
+    fn validated_cketh_canisters() -> ManageOtherCanisters {
+        let cketh = cketh_installed_canisters();
+        ManageOtherCanisters {
+            token_symbol: TokenSymbol::from(cketh.token_symbol),
+            ledger: cketh.ledger.canister_id,
+            ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),
+            index: cketh.index.canister_id,
+            index_wasm_hash: cketh.index.installed_wasm_hash.parse().unwrap(),
+            archives: cketh.archives.unwrap(),
         }
     }
 

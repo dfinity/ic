@@ -11,7 +11,7 @@ use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
     mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
+    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, TokenSymbol, WasmHash,
 };
 use crate::storage::{
     read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
@@ -1299,9 +1299,8 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum InvalidManageInstalledCanistersError {
-    InvalidErc20Contract(String),
-    Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashError(WasmHashError),
+    TokenAlreadyManaged(TokenSymbol),
     AlreadyManagedPrincipals(BTreeSet<Principal>),
 }
 
