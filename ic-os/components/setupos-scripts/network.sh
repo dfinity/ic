@@ -6,22 +6,13 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-CONFIG="${CONFIG:=/config/config.ini}"
-DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv4_address") ipv4_address="${value}" ;;
-            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
-            "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "domain") domain="${value}" ;;
-        esac
-    done <"${CONFIG}"
+function read_config_variables() {
+    ipv6_prefix=$(get_config_value '.hostos_config.ic_config.networking.ipv6_prefix')
+    ipv6_gateway=$(get_config_value '.hostos_config.ic_config.networking.ipv6_gateway')
+    ipv4_address=$(get_config_value '.hostos_config.ic_config.networking.ipv4_address')
+    ipv4_prefix_length=$(get_config_value '.hostos_config.ic_config.networking.ipv4_prefix_length')
+    ipv4_gateway=$(get_config_value '.hostos_config.ic_config.networking.ipv4_gateway')
+    domain=$(get_config_value '.hostos_config.ic_config.networking.domain')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -169,8 +160,8 @@ function ping_ipv6_gateway() {
 }
 
 function assemble_nns_nodes_list() {
-    NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    NNS_URL_LIST=$(echo $NNS_URL_STRING | sed 's@,@ @g')
+    nns_url_string=$(get_config_value '.hostos_config.ic_config.nns_url')
+    nns_url_list=$(echo $nns_url_string | sed 's@,@ @g')
 }
 
 function query_nns_nodes() {
@@ -178,10 +169,10 @@ function query_nns_nodes() {
 
     i=0
     success=0
-    nodes=$(echo ${NNS_URL_LIST} | wc -w)
+    nodes=$(echo ${nns_url_list} | wc -w)
     # At least one of the provided URLs needs to work.
     verify=1
-    for url in $(echo $NNS_URL_LIST); do
+    for url in $(echo $nns_url_list); do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
@@ -206,7 +197,7 @@ function query_nns_nodes() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    read_variables
+    read__config_variables
     get_network_settings
     print_network_settings
 
