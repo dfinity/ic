@@ -24,7 +24,7 @@ use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
-    pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
+    pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
 #[cfg(feature = "test")]

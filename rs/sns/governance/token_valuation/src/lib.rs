@@ -61,7 +61,7 @@ fn now() -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_nanos(ic_cdk::api::time())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Token {
     Icp,
 
@@ -91,7 +91,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Valuation {
     pub token: Token,
     pub account: Account,
@@ -105,7 +105,7 @@ impl Valuation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ValuationFactors {
     pub tokens: Decimal,
     pub icps_per_token: Decimal,
@@ -191,7 +191,7 @@ async fn try_get_balance_valuation_factors(
 
 // ValuationError
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ValuationError {
     pub species: ValuationErrorSpecies,
 
@@ -223,7 +223,7 @@ impl ValuationError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ValuationErrorSpecies {
     /// Needed data from another canister, but was not able to get a reply.
     External,

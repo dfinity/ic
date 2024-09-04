@@ -22,4 +22,4 @@ simple_asn1 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wycheproof = "0.5"
+wycheproof = { version = "0.6", default-features = false, features = ["rsa_sig"] }

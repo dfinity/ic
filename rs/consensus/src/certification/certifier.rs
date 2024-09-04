@@ -3,7 +3,7 @@ use crate::{
     consensus::MINIMUM_CHAIN_LENGTH,
 };
 use ic_consensus_utils::{
-    active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
+    active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
@@ -60,7 +60,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for CertifierGossipImpl {
+impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for CertifierGossipImpl {
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
@@ -79,6 +79,10 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for Cer
                 BouncerValue::Wants
             }
         })
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }
 
@@ -352,8 +356,7 @@ impl CertifierImpl {
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
-                    active_high_threshold_transcript(self.consensus_pool_cache.as_ref(), height)?
-                        .dkg_id;
+                    active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
@@ -381,7 +384,7 @@ impl CertifierImpl {
     ) -> Vec<CertificationMessage> {
         // A struct defined to morph `Certification` into a format that can be
         // accepted by `utils::aggregate`.
-        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
         struct CertificationTuple(Height, CertificationContent);
 
         impl HasHeight for CertificationTuple {
@@ -405,13 +408,7 @@ impl CertifierImpl {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
-                Some(
-                    active_high_threshold_transcript(
-                        self.consensus_pool_cache.as_ref(),
-                        cert.height(),
-                    )?
-                    .dkg_id,
-                )
+                active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
             shares,
         )
@@ -584,11 +581,10 @@ impl CertifierImpl {
                         .crypto
                         .verify(
                             &share.signed,
-                            active_high_threshold_transcript(
+                            active_high_threshold_nidkg_id(
                                 self.consensus_pool_cache.as_ref(),
                                 share.height,
-                            )?
-                            .dkg_id,
+                            )?,
                         )
                         .map_err(VerifierError::from)
                     {

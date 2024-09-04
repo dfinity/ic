@@ -144,6 +144,20 @@ fn coarse_time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
+/// Generates an `input_queue_type_fn` that returns `LocalSubnet` for
+/// `local_canisters` and `RemoteSubnet` otherwise.
+pub fn input_queue_type_from_local_canisters(
+    local_canisters: Vec<CanisterId>,
+) -> impl Fn(&CanisterId) -> InputQueueType {
+    move |sender| {
+        if local_canisters.contains(sender) {
+            LocalSubnet
+        } else {
+            RemoteSubnet
+        }
+    }
+}
+
 /// Can push one request to the output queues.
 #[test]
 fn can_push_output_request() {
@@ -1030,21 +1044,15 @@ fn decode_invalid_input_schedule() {
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let mut encoded: pb_queues::CanisterQueues = (&queues).into();
-    // Wipe the input schedule.
-    encoded.local_subnet_input_schedule.clear();
+    // Wipe the local sender schedule.
+    encoded.local_sender_schedule.clear();
 
     // Decoding should succeed.
     let metrics = CountingMetrics(RefCell::new(0));
     let mut decoded =
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)).unwrap();
     // Even though the input schedules are not valid.
-    assert_matches!(
-        decoded.schedules_ok(
-            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-            &BTreeMap::new(),
-        ),
-        Err(_)
-    );
+    assert_matches!(decoded.schedules_ok(&this, &BTreeMap::new(),), Err(_));
     assert_eq!(1, *metrics.0.borrow());
 
     // If we replace the input schedules with the original ones, the rest should be
@@ -1121,7 +1129,7 @@ fn decode_forward_compatibility() {
             output_queue: Some((&oq1).into()),
         });
     queues_proto
-        .local_subnet_input_schedule
+        .local_sender_schedule
         .push(local_canister.into());
     queues_proto.guaranteed_response_memory_reservations += 2;
     expected_queues
@@ -1258,15 +1266,15 @@ fn decode_backward_compatibility() {
         queue: Some((&oq1).into()),
     });
     queues_proto
-        .local_subnet_input_schedule
+        .local_sender_schedule
         .push(local_canister.into());
     queues_proto.guaranteed_response_memory_reservations += 2;
     expected_queues
         .canister_queues
         .insert(local_canister, (expected_iq1, expected_oq1));
     expected_queues
-        .local_subnet_input_schedule
-        .push_back(local_canister);
+        .input_schedule
+        .schedule(local_canister, LocalSubnet);
 
     //
     // `remote_canister`'s queues.
@@ -1737,8 +1745,8 @@ fn test_garbage_collect() {
 
     // Push input response.
     queues.push_input(response.into(), LocalSubnet).unwrap();
-    // Before popping any input, `queue.next_input_queue` has default value.
-    assert_eq!(NextInputQueue::default(), queues.next_input_queue);
+    // Before popping any input, `next_input_source` has default value.
+    assert_eq!(InputSource::default(), queues.next_input_source);
     // No-op.
     queues.garbage_collect();
     // Still one queue pair.
@@ -1747,8 +1755,8 @@ fn test_garbage_collect() {
 
     // "Process" response.
     queues.pop_input();
-    // After having popped an input, `next_input_queue` has advanced.
-    assert_ne!(NextInputQueue::default(), queues.next_input_queue);
+    // After having popped an input, `next_input_source` has advanced.
+    assert_ne!(InputSource::default(), queues.next_input_source);
     // No more inputs, but we still have the queue pair.
     assert!(!queues.has_input());
     assert_eq!(1, queues.canister_queues.len());
@@ -1774,7 +1782,7 @@ fn test_garbage_collect_restores_defaults() {
     // Push and pop an ingress message.
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
     assert!(queues.pop_input().is_some());
-    // `next_input_queue` has now advanced to `RemoteSubnet`.
+    // `next_input_source` has now advanced to `RemoteSubnet`.
     assert_ne!(CanisterQueues::default(), queues);
 
     // But `garbage_collect()` should restore the struct to its default value.

@@ -63,6 +63,8 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
     "//rs/crypto/ed25519",
     "//rs/rosetta-api/client:ic-icp-rosetta-client",
@@ -74,6 +76,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:num-traits",
     "@crate_index//:proptest",
     "@crate_index//:rand_chacha",
     "@crate_index//:tempfile",

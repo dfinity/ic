@@ -33,7 +33,6 @@ use super::metrics::FetchArtifactMetrics;
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
-const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
@@ -120,7 +119,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
@@ -147,7 +146,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                             break;
                         }
 
-                        tokio::time::sleep(PRIORITY_FUNCTION_UPDATE_INTERVAL).await
+                        tokio::time::sleep(bouncer_factory_clone.refresh_period()).await
                     }
                 });
                 Self {
