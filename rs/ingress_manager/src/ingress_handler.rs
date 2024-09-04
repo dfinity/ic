@@ -1,5 +1,4 @@
 use crate::IngressManager;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_pool::{
         ChangeAction::{
@@ -9,6 +8,7 @@ use ic_interfaces::{
     },
     p2p::consensus::ChangeSetProducer,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::debug;
 use ic_registry_client_helpers::subnet::IngressSubnetLimits;
 use ic_types::{
