@@ -28,7 +28,7 @@ use std::collections::{BTreeSet, HashMap};
 /// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Neuron {
     /// The id of the neuron.
     id: NeuronId,
@@ -114,6 +114,94 @@ pub struct Neuron {
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
     visibility: Option<Visibility>,
+}
+
+impl PartialEq for Neuron {
+    fn eq(&self, other: &Self) -> bool {
+        #[derive(PartialEq)]
+        struct Normalized<'a> {
+            id: &'a NeuronId,
+            subaccount: &'a Subaccount,
+            controller: &'a PrincipalId,
+            dissolve_state_and_age: &'a DissolveStateAndAge,
+            hot_keys: &'a Vec<PrincipalId>,
+            cached_neuron_stake_e8s: &'a u64,
+            neuron_fees_e8s: &'a u64,
+            created_timestamp_seconds: &'a u64,
+            spawn_at_timestamp_seconds: &'a Option<u64>,
+            followees: &'a HashMap<i32, Followees>,
+            recent_ballots: &'a Vec<BallotInfo>,
+            kyc_verified: &'a bool,
+            transfer: &'a Option<NeuronStakeTransfer>,
+            maturity_e8s_equivalent: &'a u64,
+            staked_maturity_e8s_equivalent: &'a Option<u64>,
+            auto_stake_maturity: &'a Option<bool>,
+            not_for_profit: &'a bool,
+            joined_community_fund_timestamp_seconds: &'a Option<u64>,
+            known_neuron_data: &'a Option<KnownNeuronData>,
+            neuron_type: &'a Option<i32>,
+
+            visibility: Visibility,
+        }
+
+        impl<'a> Normalized<'a> {
+            fn new(src: &'a Neuron) -> Self {
+                let Neuron {
+                    id,
+                    subaccount,
+                    controller,
+                    dissolve_state_and_age,
+                    hot_keys,
+                    cached_neuron_stake_e8s,
+                    neuron_fees_e8s,
+                    created_timestamp_seconds,
+                    spawn_at_timestamp_seconds,
+                    followees,
+                    recent_ballots,
+                    kyc_verified,
+                    transfer,
+                    maturity_e8s_equivalent,
+                    staked_maturity_e8s_equivalent,
+                    auto_stake_maturity,
+                    not_for_profit,
+                    joined_community_fund_timestamp_seconds,
+                    known_neuron_data,
+                    neuron_type,
+
+                    visibility: _,
+                } = src;
+
+                let visibility = src.visibility().unwrap_or(Visibility::Private);
+
+                Self {
+                    id,
+                    subaccount,
+                    controller,
+                    dissolve_state_and_age,
+                    hot_keys,
+                    cached_neuron_stake_e8s,
+                    neuron_fees_e8s,
+                    created_timestamp_seconds,
+                    spawn_at_timestamp_seconds,
+                    followees,
+                    recent_ballots,
+                    kyc_verified,
+                    transfer,
+                    maturity_e8s_equivalent,
+                    staked_maturity_e8s_equivalent,
+                    auto_stake_maturity,
+                    not_for_profit,
+                    joined_community_fund_timestamp_seconds,
+                    known_neuron_data,
+                    neuron_type,
+
+                    visibility,
+                }
+            }
+        }
+
+        Normalized::new(self) == Normalized::new(other)
+    }
 }
 
 impl Neuron {
