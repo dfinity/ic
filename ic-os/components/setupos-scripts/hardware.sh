@@ -4,6 +4,7 @@ set -o nounset
 set -o pipefail
 
 source /opt/ic/bin/config.sh
+source /opt/ic/bin/functions.sh
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
@@ -264,7 +265,6 @@ function verify_deployment_path() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     check_generation
     verify_cpu

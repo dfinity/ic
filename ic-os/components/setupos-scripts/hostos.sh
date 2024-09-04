@@ -3,6 +3,8 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/functions.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
@@ -101,7 +103,6 @@ function resize_partition() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     install_hostos
     configure_efi
