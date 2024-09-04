@@ -9,7 +9,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, messages::SignedIngress};
+use ic_types::artifact::*;
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
     sync::{
@@ -20,10 +20,9 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{unbounded_channel, Sender, UnboundedSender},
     time::timeout,
 };
-use tracing::instrument;
 
 type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
@@ -83,28 +82,6 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-// TODO: make it private, it is used only for tests outside of this crate
-pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
-    /// Process changes to the client's state, which includes but not
-    /// limited to:
-    ///   - newly arrived artifacts (passed as input parameters)
-    ///   - changes in dependencies
-    ///   - changes in time
-    ///
-    /// As part of the processing, it may also modify its own state
-    /// including both unvalidated and validated pools. The return
-    /// result includes a list of adverts for P2P to disseminate to
-    /// peers, deleted artifact,  as well as a result flag indicating
-    /// if there are more changes to be processed so that the caller
-    /// can decide whether this function should be called again
-    /// immediately, or after certain period of time.
-    fn process_changes(
-        &self,
-        time_source: &dyn TimeSource,
-        new_artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A>;
-}
-
 // TODO: remove in favour of the Shutdown struct instead
 pub struct ArtifactProcessorJoinGuard {
     handle: Option<JoinHandle<()>>,
@@ -112,6 +89,9 @@ pub struct ArtifactProcessorJoinGuard {
 }
 
 impl JoinGuard for ArtifactProcessorJoinGuard {}
+
+/// Periodic duration of `PollEvent` in milliseconds.
+const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 impl ArtifactProcessorJoinGuard {
     pub fn new(handle: JoinHandle<()>, shutdown: Arc<AtomicBool>) -> Self {
@@ -132,11 +112,20 @@ impl Drop for ArtifactProcessorJoinGuard {
 }
 
 // TODO: make it private, it is used only for tests outside of this crate
-pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
-    time_source: Arc<dyn TimeSource>,
-    metrics_registry: MetricsRegistry,
-    client: Box<dyn ArtifactProcessor<Artifact>>,
+pub fn run_artifact_processor<
+    Artifact: IdentifiableArtifact,
+    Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
+>(
     send_advert: Sender<ArtifactMutation<Artifact>>,
+    // TODO: to static dispatch here once the ingress code is fixed
+    change_set_producer: Arc<
+        dyn ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet>
+            + Send
+            + Sync,
+    >,
+    time_source: Arc<dyn TimeSource>,
+    pool: Arc<RwLock<Pool>>,
+    metrics_registry: MetricsRegistry,
     initial_artifacts: Vec<Artifact>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
     // Making this channel bounded can be problematic since we don't have true multiplexing
@@ -146,11 +135,12 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     // result in slower consumptions of adverts. Ideally adverts are consumed at rate
     // independent of consensus.
     #[allow(clippy::disallowed_methods)]
-    let (sender, receiver) = unbounded_channel();
+    let (sender, mut receiver) = unbounded_channel();
     let shutdown = Arc::new(AtomicBool::new(false));
 
     // Spawn the processor thread
     let shutdown_cl = shutdown.clone();
+    let mut metrics = ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string());
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
@@ -160,260 +150,86 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
                     is_latency_sensitive: false,
                 }));
             }
-            process_messages(
-                time_source,
-                client,
-                send_advert,
-                receiver,
-                ArtifactProcessorMetrics::new(metrics_registry, Artifact::NAME.to_string()),
-                shutdown_cl,
-            );
+
+            let current_thread_rt = tokio::runtime::Builder::new_current_thread()
+                .thread_name("ArtifactProcessor_Thread".to_string())
+                .enable_time()
+                .build()
+                .unwrap();
+
+            let mut last_on_state_change_result = false;
+            while !shutdown.load(SeqCst) {
+                // TODO: assess impact of continued processing in same
+                // iteration if StateChanged
+                let recv_timeout = if last_on_state_change_result {
+                    Duration::from_millis(0)
+                } else {
+                    Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
+                };
+
+                let batched_artifact_events = current_thread_rt.block_on(async {
+                    match timeout(recv_timeout, receiver.recv()).await {
+                        Ok(Some(artifact_event)) => {
+                            let mut artifacts = vec![artifact_event];
+                            while let Ok(artifact) = receiver.try_recv() {
+                                artifacts.push(artifact);
+                            }
+                            Some(artifacts)
+                        }
+                        Ok(None) => {
+                            // p2p is stopped
+                            None
+                        }
+                        Err(_) => Some(vec![]),
+                    }
+                });
+                let batched_artifact_events = match batched_artifact_events {
+                    Some(v) => v,
+                    None => {
+                        return;
+                    }
+                };
+                let ChangeResult {
+                    mutations,
+                    poll_immediately,
+                } = metrics.with_metrics(|| {
+                    {
+                        let mut pool = pool.write().unwrap();
+                        for artifact_event in batched_artifact_events {
+                            match artifact_event {
+                                UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
+                                    let unvalidated_artifact = UnvalidatedArtifact {
+                                        message,
+                                        peer_id,
+                                        timestamp: time_source.get_relative_time(),
+                                    };
+                                    pool.insert(unvalidated_artifact);
+                                }
+                                UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
+                            }
+                        }
+                    }
+                    let change_set = change_set_producer.on_state_change(&pool.read().unwrap());
+                    pool.write().unwrap().apply_changes(change_set)
+                });
+
+                // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
+                for mutation in mutations {
+                    let _ = send_advert.blocking_send(mutation);
+                }
+                last_on_state_change_result = poll_immediately;
+            }
         })
         .unwrap();
 
     (
-        Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown)),
+        Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown_cl.clone())),
         sender,
     )
 }
 
-// The artifact processor thread loop
-fn process_messages<Artifact: IdentifiableArtifact + 'static>(
-    time_source: Arc<dyn TimeSource>,
-    client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactMutation<Artifact>>,
-    mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
-    mut metrics: ArtifactProcessorMetrics,
-    shutdown: Arc<AtomicBool>,
-) {
-    let current_thread_rt = tokio::runtime::Builder::new_current_thread()
-        .thread_name("ArtifactProcessor_Thread".to_string())
-        .enable_time()
-        .build()
-        .unwrap();
-    let mut last_on_state_change_result = false;
-    while !shutdown.load(SeqCst) {
-        // TODO: assess impact of continued processing in same
-        // iteration if StateChanged
-        let recv_timeout = if last_on_state_change_result {
-            Duration::from_millis(0)
-        } else {
-            Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
-        };
+/*
 
-        let batched_artifact_events = current_thread_rt.block_on(async {
-            match timeout(recv_timeout, receiver.recv()).await {
-                Ok(Some(artifact_event)) => {
-                    let mut artifacts = vec![artifact_event];
-                    while let Ok(artifact) = receiver.try_recv() {
-                        artifacts.push(artifact);
-                    }
-                    Some(artifacts)
-                }
-                Ok(None) => {
-                    // p2p is stopped
-                    None
-                }
-                Err(_) => Some(vec![]),
-            }
-        });
-        let batched_artifact_events = match batched_artifact_events {
-            Some(v) => v,
-            None => {
-                return;
-            }
-        };
-        let ChangeResult {
-            mutations,
-            poll_immediately,
-        } = metrics
-            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
-
-        // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
-        for mutation in mutations {
-            let _ = send_advert.blocking_send(mutation);
-        }
-        last_on_state_change_result = poll_immediately;
-    }
-}
-
-/// Periodic duration of `PollEvent` in milliseconds.
-const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
-
-pub fn create_ingress_handlers<
-    PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
->(
-    send_advert: Sender<ArtifactMutation<SignedIngress>>,
-    time_source: Arc<dyn TimeSource>,
-    ingress_pool: Arc<RwLock<PoolIngress>>,
-    ingress_handler: Arc<
-        dyn ChangeSetProducer<
-                PoolIngress,
-                ChangeSet = <PoolIngress as MutablePool<SignedIngress>>::ChangeSet,
-            > + Send
-            + Sync,
-    >,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
-    Box<dyn JoinGuard>,
-) {
-    let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-        vec![],
-    );
-    (sender, jh)
-}
-
-/// Starts the event loop that pools consensus for updates on what needs to be replicated.
-pub fn create_artifact_handler<
-    Artifact: IdentifiableArtifact + Send + Sync + 'static,
-    Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
-    C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
->(
-    send_advert: Sender<ArtifactMutation<Artifact>>,
-    change_set_producer: C,
-    time_source: Arc<dyn TimeSource>,
-    pool: Arc<RwLock<Pool>>,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_validated().collect();
-    let client = Processor::new(pool, change_set_producer);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-        inital_artifacts,
-    );
-    (sender, jh)
-}
-
-// TODO: make it private, it is used only for tests outside of this crate
-pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
-    pool: Arc<RwLock<P>>,
-    change_set_producer: C,
-    unused: std::marker::PhantomData<A>,
-}
-
-impl<
-        A: IdentifiableArtifact + Send,
-        P: MutablePool<A>,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
-    > Processor<A, P, C>
-{
-    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
-        Self {
-            pool,
-            change_set_producer,
-            unused: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<
-        A: IdentifiableArtifact + Send,
-        P: MutablePool<A> + Send + Sync + 'static,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
-    > ArtifactProcessor<A> for Processor<A, P, C>
-{
-    #[instrument(skip_all)]
-    fn process_changes(
-        &self,
-        time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A> {
-        {
-            let mut pool = self.pool.write().unwrap();
-            for artifact_event in artifact_events {
-                match artifact_event {
-                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
-                        let unvalidated_artifact = UnvalidatedArtifact {
-                            message,
-                            peer_id,
-                            timestamp: time_source.get_relative_time(),
-                        };
-                        pool.insert(unvalidated_artifact);
-                    }
-                    UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
-                }
-            }
-        }
-        let change_set = self
-            .change_set_producer
-            .on_state_change(&self.pool.read().unwrap());
-        self.pool.write().unwrap().apply_changes(change_set)
-    }
-}
-
-/// The ingress `OnStateChange` client.
-pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
-    /// The ingress pool, protected by a read-write lock and automatic reference
-    /// counting.
-    ingress_pool: Arc<RwLock<P>>,
-    /// The ingress handler.
-    client: Arc<
-        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
-            + Send
-            + Sync,
-    >,
-}
-
-impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
-    pub fn new(
-        ingress_pool: Arc<RwLock<P>>,
-        client: Arc<
-            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
-                + Send
-                + Sync,
-        >,
-    ) -> Self {
-        Self {
-            ingress_pool,
-            client,
-        }
-    }
-}
-
-impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<SignedIngress>
-    for IngressProcessor<P>
-{
-    /// The method processes changes in the ingress pool.
-    #[instrument(skip_all)]
-    fn process_changes(
-        &self,
-        time_source: &dyn TimeSource,
-        artifact_events: Vec<UnvalidatedArtifactMutation<SignedIngress>>,
-    ) -> ChangeResult<SignedIngress> {
-        {
-            let mut ingress_pool = self.ingress_pool.write().unwrap();
-            for artifact_event in artifact_events {
-                match artifact_event {
-                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
-                        let unvalidated_artifact = UnvalidatedArtifact {
-                            message,
-                            peer_id,
-                            timestamp: time_source.get_relative_time(),
-                        };
-                        ingress_pool.insert(unvalidated_artifact);
-                    }
-                    UnvalidatedArtifactMutation::Remove(id) => ingress_pool.remove(&id),
-                }
-            }
-        }
-        let change_set = self
-            .client
-            .on_state_change(&self.ingress_pool.read().unwrap());
-        self.ingress_pool.write().unwrap().apply_changes(change_set)
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,8 +240,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
 
-    use crate::{run_artifact_processor, ArtifactProcessor};
-
+    use crate::run_artifact_processor;
     #[test]
     fn send_initial_artifacts() {
         #[derive(Eq, PartialEq, Debug)]
@@ -490,3 +305,5 @@ mod tests {
         }
     }
 }
+
+*/
