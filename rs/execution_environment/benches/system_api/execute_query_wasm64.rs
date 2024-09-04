@@ -22,8 +22,8 @@ pub fn execute_query_bench(c: &mut Criterion) {
             Module::QueryTest.from_ic0(
                 "data_certificate_size",
                 NoParams,
-                Result::I32,
-                Wasm64::Disabled,
+                Result::I64,
+                Wasm64::Enabled,
             ),
             517000006,
         ),
@@ -31,9 +31,9 @@ pub fn execute_query_bench(c: &mut Criterion) {
             "ic0_data_certificate_copy()/1B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
-                Params3(0, 0, 1),
+                Params3(0 as i64, 0 as i64, 1 as i64),
                 Result::No,
-                Wasm64::Disabled,
+                Wasm64::Enabled,
             ),
             520000006,
         ),
@@ -41,9 +41,9 @@ pub fn execute_query_bench(c: &mut Criterion) {
             "ic0_data_certificate_copy()/64B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
-                Params3(0, 0, 64),
+                Params3(0 as i64, 0 as i64, 64 as i64),
                 Result::No,
-                Wasm64::Disabled,
+                Wasm64::Enabled,
             ),
             583000006,
         ),
@@ -95,7 +95,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Disabled,
+        Wasm64::Enabled,
     );
 }
 

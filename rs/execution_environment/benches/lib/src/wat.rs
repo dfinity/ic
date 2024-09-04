@@ -206,7 +206,7 @@ impl Module {
             {IMPORTS}
             {MEMORY}
             (func (export "canister_inspect_message")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
                 (call $ic0_accept_message)
             )
@@ -214,6 +214,11 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }
@@ -243,13 +248,18 @@ impl Module {
             {IMPORTS}
             {MEMORY}
             (func $test (export "canister_query test")
-                (local $i i32) (local $s i32)
+                {VARS_DECLARATION}
                 {BODY}
             )
         )
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                        "(local $i i64) (local $s i64)"
+                    } else {
+                        "(local $i i32) (local $s i32)"
+                    },
                     BODY = body
                 )
             }

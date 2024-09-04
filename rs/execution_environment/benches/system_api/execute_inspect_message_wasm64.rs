@@ -20,8 +20,8 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             Module::InspectMessage.from_ic0(
                 "msg_method_name_size",
                 NoParams,
-                Result::I32,
-                Wasm64::Disabled,
+                Result::I64,
+                Wasm64::Enabled,
             ),
             517000511,
         ),
@@ -29,9 +29,9 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             "ic0_msg_method_name_copy()/1B".into(),
             Module::InspectMessage.from_ic0(
                 "msg_method_name_copy",
-                Params3(0, 0, 1),
+                Params3(0 as i64, 0 as i64, 1 as i64),
                 Result::No,
-                Wasm64::Disabled,
+                Wasm64::Enabled,
             ),
             520000511,
         ),
@@ -39,15 +39,15 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             "ic0_msg_method_name_copy()/30B".into(),
             Module::InspectMessage.from_ic0(
                 "msg_method_name_copy",
-                Params3(0, 0, 20),
+                Params3(0 as i64, 0 as i64, 20 as i64),
                 Result::No,
-                Wasm64::Disabled,
+                Wasm64::Enabled,
             ),
             539000511,
         ),
         common::Benchmark(
             "ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Disabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", ""), Wasm64::Enabled), // inspect_message accepts by default
             506,
         ),
     ];
@@ -92,7 +92,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Disabled,
+        Wasm64::Enabled,
     );
 }
 
