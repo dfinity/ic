@@ -3,7 +3,7 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
+use ic_artifact_manager::run_artifact_processor;
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
@@ -336,9 +336,9 @@ fn start_consensus(
         let consensus_pool = Arc::clone(&consensus_pool);
 
         // Create the consensus client.
-        let (client, jh) = create_artifact_handler(
+        let (jh, client) = run_artifact_processor(
             consensus_tx,
-            consensus_setup,
+            Arc::new(consensus_setup),
             time_source.clone(),
             consensus_pool.clone(),
             metrics_registry.clone(),
@@ -360,7 +360,7 @@ fn start_consensus(
         let ingress_bouncer = Arc::new(IngressBouncer::new(time_source.clone()));
 
         // Create the ingress client.
-        let (client, jh) = create_ingress_handlers(
+        let (jh, client) = run_artifact_processor(
             ingress_tx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
@@ -395,7 +395,7 @@ fn start_consensus(
         let certifier_gossip = Arc::new(certifier_gossip);
 
         // Create the certification client.
-        let (client, jh) = create_artifact_handler(
+        let (jh, client) = run_artifact_processor(
             certification_tx,
             certifier,
             Arc::clone(&time_source) as Arc<_>,
@@ -416,7 +416,7 @@ fn start_consensus(
     {
         // Create the DKG client.
         let dkg_gossip = Arc::new(dkg::DkgGossipImpl {});
-        let (client, jh) = create_artifact_handler(
+        let (jh, client) = run_artifact_processor(
             dkg_tx,
             dkg::DkgImpl::new(
                 node_id,
