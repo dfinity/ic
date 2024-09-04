@@ -86,7 +86,9 @@ impl Strippable for IngressPayload {
 
 #[cfg(test)]
 mod tests {
-    use crate::fetch_stripped_artifact::test_utils::fake_ingress_message_with_arg_size;
+    use crate::fetch_stripped_artifact::test_utils::{
+        fake_ingress_message_with_arg_size, fake_summary_block_proposal,
+    };
 
     use super::*;
 
@@ -107,6 +109,18 @@ mod tests {
                     MaybeStrippedIngress::Stripped(big_ingress_id)
                 ],
             }
+        );
+    }
+
+    #[test]
+    fn summary_blocks_are_not_stripped_test() {
+        let summary_block = fake_summary_block_proposal();
+
+        let stripped = summary_block.clone().strip();
+
+        assert_eq!(
+            stripped,
+            MaybeStrippedConsensusMessage::Unstripped(summary_block)
         );
     }
 }

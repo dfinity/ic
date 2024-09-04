@@ -8,7 +8,8 @@ use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{
         dkg::{Dealings, Summary},
-        Block, BlockPayload, BlockProposal, ConsensusMessageHash, DataPayload, Payload, Rank,
+        Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
+        Payload, Rank,
     },
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
@@ -83,6 +84,15 @@ pub(crate) fn fake_stripped_block_proposal_with_ingresses(
         stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
         unstripped_consensus_message_id: fake_consensus_message_id(),
     }
+}
+
+pub(crate) fn fake_summary_block_proposal() -> ConsensusMessage {
+    let block = make_genesis(ic_types::consensus::dkg::Summary::fake())
+        .content
+        .block
+        .into_inner();
+
+    ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
 }
 
 fn fake_consensus_message_id() -> ConsensusMessageId {
