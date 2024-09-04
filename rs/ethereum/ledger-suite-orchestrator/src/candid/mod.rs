@@ -1,6 +1,5 @@
 use crate::scheduler::Erc20Token;
 use crate::state::{Canister, Canisters};
-use crate::storage::WasmHashError;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use std::fmt::{Display, Formatter};
 
@@ -200,19 +199,6 @@ pub struct ManageInstalledCanisters {
 pub struct InstalledCanister {
     pub canister_id: Principal,
     pub installed_wasm_hash: String,
-}
-
-impl InstalledCanister {
-    pub fn try_into_canister<T>(self) -> Result<Canister<T>, WasmHashError> {
-        let status = crate::state::ManagedCanisterStatus::Installed {
-            canister_id: self.canister_id,
-            installed_wasm_hash: self
-                .installed_wasm_hash
-                .parse()
-                .map_err(WasmHashError::Invalid)?,
-        };
-        Ok(Canister::new(status))
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]

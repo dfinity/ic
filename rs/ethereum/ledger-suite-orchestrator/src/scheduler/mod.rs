@@ -607,7 +607,6 @@ pub enum TaskError {
     InsufficientCyclesToTopUp { required: u128, available: u128 },
     DiscoverArchivesError(DiscoverArchivesError),
     UpgradeLedgerSuiteError(UpgradeLedgerSuiteError),
-    ManageAlreadyInstalledLedgerSuiteError(ManageAlreadyInstalledLedgerSuiteError),
 }
 
 impl TaskError {
@@ -625,7 +624,6 @@ impl TaskError {
             TaskError::InsufficientCyclesToTopUp { .. } => false, //top-up task is periodic, will retry on next interval
             TaskError::DiscoverArchivesError(e) => e.is_recoverable(),
             TaskError::UpgradeLedgerSuiteError(e) => e.is_recoverable(),
-            TaskError::ManageAlreadyInstalledLedgerSuiteError(e) => e.is_recoverable(),
         }
     }
 }
@@ -683,21 +681,6 @@ impl UpgradeLedgerSuiteError {
 impl From<UpgradeLedgerSuiteError> for TaskError {
     fn from(value: UpgradeLedgerSuiteError) -> Self {
         TaskError::UpgradeLedgerSuiteError(value)
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum ManageAlreadyInstalledLedgerSuiteError {}
-
-impl ManageAlreadyInstalledLedgerSuiteError {
-    fn is_recoverable(&self) -> bool {
-        todo!("Implement this")
-    }
-}
-
-impl From<ManageAlreadyInstalledLedgerSuiteError> for TaskError {
-    fn from(value: ManageAlreadyInstalledLedgerSuiteError) -> Self {
-        TaskError::ManageAlreadyInstalledLedgerSuiteError(value)
     }
 }
 
