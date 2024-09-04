@@ -88,7 +88,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    _metrics: FetchStrippedConsensusArtifactMetrics,
+    metrics: FetchStrippedConsensusArtifactMetrics,
 }
 
 impl FetchStrippedConsensusArtifact {
@@ -128,7 +128,7 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
-                _metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
+                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
             }
         };
 
@@ -165,6 +165,10 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut join_set = tokio::task::JoinSet::new();
 
         let missing_ingress_ids = stripped_block_proposal.missing_ingress_messages();
+        let timer = self
+            .metrics
+            .download_missing_ingress_messages_duration
+            .start_timer();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
         for missing_ingress_id in missing_ingress_ids {
@@ -179,15 +183,50 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
+        let mut found_stripped_ingress_messages = 0;
+        let mut missing_stripped_ingress_messages = 0;
+        let total_ingresses_count = stripped_block_proposal
+            .stripped_ingress_payload
+            .ingress_messages
+            .len();
+
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, _peer_id)) = join_result else {
+            let Ok((ingress, peer_id)) = join_result else {
                 return Err(Aborted {});
             };
+
+            // the ingress comes from our own ingress pool
+            if peer_id == self.node_id {
+                found_stripped_ingress_messages += 1;
+            }
+            // otherwise the ingress was downloaded from a peer
+            else {
+                missing_stripped_ingress_messages += 1;
+            }
 
             stripped_block_proposal
                 .try_insert_ingress_message(ingress)
                 .map_err(|_| Aborted {})?;
         }
+
+        // Only report the metric if we actually downloaded some ingresses from peers
+        if missing_stripped_ingress_messages > 0 {
+            timer.stop_and_record();
+        } else {
+            timer.stop_and_discard();
+        }
+
+        if total_ingresses_count > 0 {
+            self.metrics
+                .found_stripped_ingress_messages
+                .observe(found_stripped_ingress_messages as f64);
+            self.metrics
+                .missing_stripped_ingress_messages
+                .observe(missing_stripped_ingress_messages as f64);
+        }
+        self.metrics
+            .total_ingress_messages
+            .observe(total_ingresses_count as f64);
 
         let reconstructed_block_proposal = stripped_block_proposal
             .try_assemble()
