@@ -1491,7 +1491,31 @@ pub struct GetIngressMessageInBlockResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedBlockProposal {}
+pub struct StrippedBlockProposal {
+    #[prost(message, optional, tag = "1")]
+    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    #[prost(message, repeated, tag = "2")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    #[prost(message, optional, tag = "3")]
+    pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedIngressMessage {
+    #[prost(oneof = "stripped_ingress_message::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<stripped_ingress_message::Msg>,
+}
+/// Nested message and enum types in `StrippedIngressMessage`.
+pub mod stripped_ingress_message {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(bytes, tag = "1")]
+        Full(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "2")]
+        Stripped(super::IngressMessageId),
+    }
+}
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

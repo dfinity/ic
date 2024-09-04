@@ -5,7 +5,7 @@ use ic_protobuf::{
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
     consensus::ConsensusMessage,
-    messages::SignedIngress,
+    messages::{SignedIngress, SignedRequestBytes},
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -48,9 +48,62 @@ impl TryFrom<pb::StrippedConsensusMessage> for MaybeStrippedConsensusMessage {
 
         Ok(match msg {
             Msg::Unstripped(msg) => MaybeStrippedConsensusMessage::Unstripped(msg.try_into()?),
-            // TODO(kpop): Implement this
-            Msg::StrippedBlockProposal(_) => unimplemented!(),
+            Msg::StrippedBlockProposal(stripped_block_proposal_proto) => {
+                MaybeStrippedConsensusMessage::StrippedBlockProposal(
+                    stripped_block_proposal_proto.try_into()?,
+                )
+            }
         })
+    }
+}
+
+impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::StrippedBlockProposal) -> Result<Self, Self::Error> {
+        Ok(Self {
+            block_proposal_without_ingresses_proto: value
+                .block_proposal_without_ingress_payload
+                .ok_or_else(|| {
+                    ProxyDecodeError::MissingField("block_proposal_without_ingress_payload")
+                })?,
+            stripped_ingress_payload: StrippedIngressPayload {
+                ingress_messages: value
+                    .ingress_messages
+                    .into_iter()
+                    .map(|proto| todo!())
+                    .collect(),
+            },
+            unstripped_consensus_message_id: try_from_option_field(
+                value.unstripped_consensus_message_id,
+                "unstripped_consensus_message_id",
+            )?,
+        })
+    }
+}
+
+impl TryFrom<pb::StrippedIngressMessage> for MaybeStrippedIngress {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::StrippedIngressMessage) -> Result<Self, Self::Error> {
+        let Some(msg) = value.msg else {
+            return Err(ProxyDecodeError::MissingField("msg"));
+        };
+
+        use pb::stripped_ingress_message::Msg as MaybeStrippedIngressProto;
+
+        let ingress = match msg {
+            MaybeStrippedIngressProto::Full(ingress) => {
+                let ingress = SignedIngress::try_from(SignedRequestBytes::from(ingress))
+                    .map_err(|err| ProxyDecodeError::Other(err.to_string()))?;
+                MaybeStrippedIngress::Full(IngressMessageId::from(&ingress), ingress)
+            }
+            MaybeStrippedIngressProto::Stripped(ingress_id) => {
+                MaybeStrippedIngress::Stripped(ingress_id.try_into()?)
+            }
+        };
+
+        Ok(ingress)
     }
 }
 

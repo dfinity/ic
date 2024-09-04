@@ -327,6 +327,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn strip_assemble_roundtrip_test() {
+        todo!()
+        //let (ingress_1, _) = fake_ingress_message("fake_1");
+        //let (ingress_2, _) = fake_ingress_message("fake_2");
+        //let ingress_payload = IngressPayload::from(vec![ingress_1, ingress_2]);
+
+        //// don't strip anything
+        //let stripped_payload = ingress_payload.clone().strip_ingresses(|_| false);
+        //let reconstructed_payload = stripped_payload.try_assemble();
+
+        //assert_eq!(reconstructed_payload, Ok(ingress_payload));
+    }
+
+    #[test]
     fn missing_ingress_messages_test() {
         let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
         let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
