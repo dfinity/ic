@@ -610,14 +610,14 @@ impl StreamHandlerImpl {
                         state,
                         available_guaranteed_response_memory,
                     ) {
-                        Ok(()) => {
+                        None => {
                             // Reject response successfully inducted or dropped.
                         }
-                        Err((StateError::CanisterMigrating { .. }, reject_response)) => {
+                        Some((StateError::CanisterMigrating { .. }, reject_response)) => {
                             // Canister is being migrated, reroute reject response.
                             reroute_response(reject_response, state, streams, &self.log);
                         }
-                        Err(_) => {
+                        Some(_) => {
                             unreachable!(
                                 "Errors other than `CanisterMigrating` shouldn't be possible."
                             );
@@ -739,12 +739,9 @@ impl StreamHandlerImpl {
                     // Message successfully inducted or dropped.
                     stream.push_accept_signal();
                 }
-                Some((StateError::CanisterMigrating { .. }, RequestOrResponse::Response(_))) => {
-                    // Unable to deliver a response due to migrating canister, push reject signal.
-                    stream.push_reject_signal(RejectReason::CanisterMigrating);
-                }
-                Some((err, RequestOrResponse::Request(request))) => {
-                    // TODO(MR-249): Replace generating reject responses with pushing reject signals.
+                Some((err, RequestOrResponse::Request(request)))
+                    if state.metadata.certification_version < CertificationVersion::V19 =>
+                {
                     // Unable to induct a request, generate reject response and push it into `stream`.
                     let code = match err {
                         StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
@@ -761,7 +758,25 @@ impl StreamHandlerImpl {
                     *available_guaranteed_response_memory -=
                         stream.push(generate_reject_response(&request, code, err.to_string()))
                             as i64;
-                    stream.push_accept_signal()
+                    stream.push_accept_signal();
+                }
+                Some((err, RequestOrResponse::Request(_))) => {
+                    // Unable to induct a request, push a reject signal.
+                    let reason = match err {
+                        StateError::CanisterMigrating { .. } => RejectReason::CanisterMigrating,
+                        StateError::CanisterNotFound(_) => RejectReason::CanisterNotFound,
+                        StateError::CanisterStopped(_) => RejectReason::CanisterStopped,
+                        StateError::CanisterStopping(_) => RejectReason::CanisterStopping,
+                        StateError::QueueFull { .. } => RejectReason::QueueFull,
+                        StateError::OutOfMemory { .. } => RejectReason::OutOfMemory,
+                        StateError::NonMatchingResponse { .. }
+                        | StateError::BitcoinNonMatchingResponse { .. } => RejectReason::Unknown,
+                    };
+                    stream.push_reject_signal(reason);
+                }
+                Some((StateError::CanisterMigrating { .. }, RequestOrResponse::Response(_))) => {
+                    // Unable to deliver a response due to migrating canister, push reject signal.
+                    stream.push_reject_signal(RejectReason::CanisterMigrating);
                 }
                 Some((_, RequestOrResponse::Response(_))) => {
                     unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
