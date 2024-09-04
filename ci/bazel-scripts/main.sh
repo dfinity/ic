@@ -6,17 +6,28 @@
 
 set -eufo pipefail
 
+
+# default behavior is that it runs whatever targets were specified in BAZEL_TARGETS and uploads to S3
 ic_version_rc_only="0000000000000000000000000000000000000000"
-# if we are on a protected branch or the PR is targeting an rc branch or building all targets was requested, we run all bazel targets and upload to S3
-if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]] \ 
-    || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+s3_upload="True"
+
+# if we are on a protected branch we set ic_version to the commit_sha
+if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || ; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
-    RUN_ON_DIFF_ONLY="false"
-    s3_upload="True"
 fi
 
-# if on a pull_request, only run build on targets that have changed
-if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]; then
+# we only run on the diff if the following conditions are met:
+# 1. It was triggered from a PR
+# 2. The PR is not targeting an rc branch
+# 3. The PR title doesn't contain [RUN_ALL_BAZEL_TARGETS]
+if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${CI_MERGE_REQUEST_TITLE:-}" != *"[RUN_ALL_BAZEL_TARGETS]"* ]] && \
+    [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]
+    RUN_ON_DIFF_ONLY="true"
+    s3_upload="false"
+fi
+
+# if run on diff_only was requested only run selected targets
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 
