@@ -12,9 +12,6 @@ use prost::alloc::collections::BTreeSet;
 
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):

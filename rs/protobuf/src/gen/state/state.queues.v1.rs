@@ -271,12 +271,11 @@ pub struct CanisterQueues {
     #[prost(message, optional, tag = "10")]
     pub pool: ::core::option::Option<MessagePool>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
-    pub next_input_queue: i32,
+    pub next_input_source: i32,
     #[prost(message, repeated, tag = "7")]
-    pub local_subnet_input_schedule:
-        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    pub local_sender_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
-    pub remote_subnet_input_schedule:
+    pub remote_sender_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "11")]
     pub guaranteed_response_memory_reservations: u64,
