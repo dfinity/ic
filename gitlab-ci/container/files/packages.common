@@ -13,6 +13,7 @@ iproute2
 shellcheck
 xxd
 vim
+openssh-client
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
