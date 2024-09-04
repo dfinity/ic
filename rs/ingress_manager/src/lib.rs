@@ -20,7 +20,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{IngressSubnetLimits, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
@@ -204,22 +204,16 @@ impl IngressManager {
         }
     }
 
-    fn get_ingress_message_settings(
+    fn get_ingress_subnet_limits(
         &self,
         registry_version: RegistryVersion,
-    ) -> Option<IngressMessageSettings> {
+    ) -> Option<IngressSubnetLimits> {
         match self
             .registry_client
-            .get_ingress_message_settings(self.subnet_id, registry_version)
+            .get_ingress_subnet_limits(self.subnet_id, registry_version)
         {
             Ok(None) => {
-                error!(
-                    self.log,
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    registry_version,
-                    self.subnet_id,
-                );
-                None
+                
             }
             Err(err) => {
                 error!(

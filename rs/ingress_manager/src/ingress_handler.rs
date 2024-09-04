@@ -10,7 +10,7 @@ use ic_interfaces::{
     p2p::consensus::ChangeSetProducer,
 };
 use ic_logger::debug;
-use ic_registry_client_helpers::subnet::IngressMessageSettings;
+use ic_registry_client_helpers::subnet::IngressSubnetLimits;
 use ic_types::{
     artifact::IngressMessageId, ingress::IngressStatus, messages::MessageId, CountBytes,
     RegistryVersion, Time,
@@ -24,7 +24,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         // Skip on_state_change when ingress_message_setting is not available in
         // registry.
         let registry_version = self.registry_client.get_latest_version();
-        let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
+        let Some(ingress_message_settings) = self.get_ingress_subnet_limits(registry_version)
         else {
             return ChangeSet::new();
         };
@@ -140,7 +140,7 @@ impl IngressManager {
     fn validate_ingress_pool_object(
         &self,
         ingress_object: &IngressPoolObject,
-        settings: &IngressMessageSettings,
+        settings: &IngressSubnetLimits,
         ingress_message_status: impl Fn(&MessageId) -> IngressStatus,
         consensus_time: Time,
         registry_version: RegistryVersion,

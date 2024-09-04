@@ -1989,7 +1989,7 @@ impl StateMachine {
         let registry_version = self.registry_client.get_latest_version();
         let ingress_registry_settings = self
             .registry_client
-            .get_ingress_message_settings(self.subnet_id, registry_version)
+            .get_ingress_subnet_limits(self.subnet_id, registry_version)
             .unwrap()
             .unwrap();
         let provisional_whitelist = self

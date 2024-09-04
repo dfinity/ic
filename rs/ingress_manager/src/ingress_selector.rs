@@ -16,7 +16,7 @@ use ic_interfaces::{
 };
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
-use ic_registry_client_helpers::subnet::IngressMessageSettings;
+use ic_registry_client_helpers::subnet::IngressSubnetLimits;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
@@ -87,7 +87,7 @@ impl IngressSelector for IngressManager {
         let expiry_range = min_expiry..=max_expiry;
 
         let settings = self
-            .get_ingress_message_settings(context.registry_version)
+            .get_ingress_subnet_limits(context.registry_version)
             .expect("Couldn't fetch ingress message parameters from the registry.");
 
         // Select valid ingress messages and stop once the total size
@@ -286,8 +286,8 @@ impl IngressSelector for IngressManager {
 
         let certified_height = context.certified_height;
         let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't get IngressMessageSettings from the registry.");
+            .get_ingress_subnet_limits(context.registry_version)
+            .expect("Couldn't get IngressSubnetLimits from the registry.");
 
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
@@ -433,7 +433,7 @@ impl IngressManager {
         signed_ingress: &SignedIngress,
         state: &ReplicatedState,
         context: &ValidationContext,
-        settings: &IngressMessageSettings,
+        settings: &IngressSubnetLimits,
         past_ingress_set: &IngressSetChain<IngressHistorySet>,
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
@@ -734,7 +734,7 @@ mod tests {
         setup(|ingress_manager, _| {
             let mut payload = Vec::new();
             let settings = ingress_manager
-                .get_ingress_message_settings(RegistryVersion::from(1))
+                .get_ingress_subnet_limits(RegistryVersion::from(1))
                 .unwrap();
             for i in 0..=settings.max_ingress_messages_per_block {
                 let ingress = SignedIngressBuilder::new()

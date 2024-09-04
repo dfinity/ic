@@ -18,7 +18,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
-    subnet::{IngressMessageSettings, SubnetRegistry},
+    subnet::{IngressSubnetLimits, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
@@ -115,8 +115,8 @@ fn get_registry_data(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
-) -> Result<(IngressMessageSettings, ProvisionalWhitelist), HttpError> {
-    let settings = match registry_client.get_ingress_message_settings(subnet_id, registry_version) {
+) -> Result<(IngressSubnetLimits, ProvisionalWhitelist), HttpError> {
+    let settings = match registry_client.get_ingress_subnet_limits(subnet_id, registry_version) {
         Ok(Some(settings)) => settings,
         Ok(None) => {
             let message = format!(
