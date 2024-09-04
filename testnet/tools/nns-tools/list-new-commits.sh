@@ -41,6 +41,8 @@ for canister_name in "${NNS_CANISTERS[@]}"; do
     git --no-pager log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
 done
 
+echo
+echo
 echo SNS
 echo =====
 
