@@ -87,9 +87,6 @@ fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
 pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettings, bool)> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
-    // Per PFOPS - this will never not be 64
-    let ipv6_subnet = 64_u8;
-
     let ipv6_prefix = config_map
         .get("ipv6_prefix")
         .map(|prefix| {
@@ -104,11 +101,14 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         })
         .transpose()?;
 
+    // Per PFOPS - ipv6_subnet will never not be 64
+    let ipv6_subnet = 64_u8;
     // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
     let ipv6_address = config_map
         .get("ipv6_address")
         .map(|address| {
             // ipv6_address might be formatted with the trailing suffix. Remove it.
+
             let address = address
                 .strip_suffix(&format!("/{}", ipv6_subnet))
                 .unwrap_or(address);
