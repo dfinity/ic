@@ -77,6 +77,7 @@ type TestnetConfig struct {
 	outputDir            string
 	verbose              bool
 	lifetimeMins         int
+	noTTL                bool
 	isFuzzyMatch         bool
 	isDryRun             bool
 	farmBaseUrl          string
@@ -121,12 +122,14 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 
 func ValidateTestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		err := cmd.MarkFlagRequired("lifetime-mins")
-		if err != nil {
-			return err
-		}
-		if cfg.lifetimeMins <= 0 || cfg.lifetimeMins > MAX_TESTNET_LIFETIME_MINS {
-			return fmt.Errorf("flag --lifetime-mins should be in range 0 < lifetime-mins <= %d mins", MAX_TESTNET_LIFETIME_MINS)
+		if !cfg.noTTL {
+			err := cmd.MarkFlagRequired("lifetime-mins")
+			if err != nil {
+				return err
+			}
+			if cfg.lifetimeMins <= 0 || cfg.lifetimeMins > MAX_TESTNET_LIFETIME_MINS {
+				return fmt.Errorf("flag --lifetime-mins should be in range 0 < lifetime-mins <= %d mins", MAX_TESTNET_LIFETIME_MINS)
+			}
 		}
 		if cfg.icConfigPath != "" {
 			if _, err := os.Stat(cfg.icConfigPath); os.IsNotExist(err) {
@@ -192,6 +195,9 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		if len(cfg.requiredHostFeatures) > 0 {
 			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
 		}
+		if cfg.noTTL {
+			command = append(command, "--test_arg=--no-group-ttl")
+		}
 		// If the user provided a special config path we add it as an environment variable
 		if config != "" {
 			command = append(command, fmt.Sprintf("--test_env=IC_CONFIG='%s'", config))
@@ -231,27 +237,31 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			return err
 		}
 		cmd.PrintErrf("%sCongrats, testnet with Farm group=%s was deployed successfully!%s\n", GREEN, group, NC)
-		if cfg.isDetached {
-			if err := SetTestnetLifetime(farmBaseUrl, group, cfg.lifetimeMins*60); err != nil {
-				return err
-			}
-			if expiration, err := GetTestnetExpiration(farmBaseUrl, group); err != nil {
-				return err
-			} else {
-				cmd.PrintErrf("%sTestnet will expire on %s%s\n", PURPLE, expiration, NC)
-				cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, farmBaseUrl + "/swagger-ui", NC)
-			}
+		if cfg.noTTL {
+			cmd.PrintErrf("%sWARNING Testnet will NOT expire! To prevent resource exhaustion make sure to delete the testnet manually when no longer used using:\ncurl -X DELETE '%s/group/%s'%s\n", YELLOW, farmBaseUrl, group, NC)
 		} else {
-			testnetExpirationTime := time.Now().Add(time.Minute * time.Duration(cfg.lifetimeMins))
-			cmd.PrintErrf("%sTestnet will expire on %s or earlier if you close this terminal%s\n", PURPLE, testnetExpirationTime.Format(time.UnixDate), NC)
-			if err = KeepTestnetAlive(farmBaseUrl, group, testnetExpirationTime, outputFilepath, cfg, cmd); err != nil {
-				return err
+			if cfg.isDetached {
+				if err := SetTestnetLifetime(farmBaseUrl, group, cfg.lifetimeMins*60); err != nil {
+					return err
+				}
+				if expiration, err := GetTestnetExpiration(farmBaseUrl, group); err != nil {
+					return err
+				} else {
+					cmd.PrintErrf("%sTestnet will expire on %s%s\n", PURPLE, expiration, NC)
+					cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, farmBaseUrl + "/swagger-ui", NC)
+				}
+			} else {
+				testnetExpirationTime := time.Now().Add(time.Minute * time.Duration(cfg.lifetimeMins))
+				cmd.PrintErrf("%sTestnet will expire on %s or earlier if you close this terminal%s\n", PURPLE, testnetExpirationTime.Format(time.UnixDate), NC)
+				if err = KeepTestnetAlive(farmBaseUrl, group, testnetExpirationTime, outputFilepath, cfg, cmd); err != nil {
+					return err
+				}
+				if err = DeleteTestnet(farmBaseUrl, group); err != nil {
+					cmd.PrintErrln("failed to delete testnet: %v", err)
+					return err
+				}
+				cmd.PrintErrln(GREEN + "Testnet was deleted successfully" + NC)
 			}
-			if err = DeleteTestnet(farmBaseUrl, group); err != nil {
-				cmd.PrintErrln("failed to delete testnet: %v", err)
-				return err
-			}
-			cmd.PrintErrln(GREEN + "Testnet was deleted successfully" + NC)
 		}
 		return nil
 	}
@@ -270,6 +280,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&cfg.verbose, "verbose", "", false, "Print all testnet deployment log to stdout")
 	cmd.Flags().StringVarP(&cfg.outputDir, "output-dir", "", "", fmt.Sprintf("Docker path to testnet deployment result files (default: %s)", os.TempDir()))
 	cmd.Flags().IntVar(&cfg.lifetimeMins, "lifetime-mins", 0, fmt.Sprintf("Keep testnet alive for this duration in mins, max=%d", MAX_TESTNET_LIFETIME_MINS))
+	cmd.Flags().BoolVarP(&cfg.noTTL, "no-ttl", "", false, "Do not set a Time-To-Live (expiration time) for the testnet.\nIf set the --lifetime-mins setting is ignored.\nBE CAREFUL WITH THIS OPTION BECAUSE THIS WILL CAUSE RESOURCE EXHAUSTION\nIF YOU FORGET TO DELETE THE TESTNET MANUALLY WHEN NO LONGER USED!")
 	cmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar testnet names. Default: substring match")
 	cmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution")
 	cmd.Flags().BoolVarP(&cfg.isDetached, "experimental-detached", "", false, fmt.Sprintf("Create a testnet without blocking the console\nNOTE: extending testnet lifetime (ttl) should be done manually\nSee Farm API %s", FARM_BASE_URL + "/swagger-ui"))
