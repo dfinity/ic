@@ -802,6 +802,13 @@ impl StreamHandlerImpl {
         }
     }
 
+    /// Inducts a message into `state`. This may fail and log an error for cases where there is
+    /// nothing we can do about it; for other cases it may return `(StateError, RequestOrResponse)`
+    /// as it is returned by `ReplicatedState::push_input()` upon failure such that we may generate
+    /// a reject response or push a reject signal.
+    ///
+    /// The return type is `Option<_>` rather than `Result<_, _>` because not returning an error
+    /// does not always mean the message was inducted successfully.
     fn induct_message_impl(
         &self,
         msg: RequestOrResponse,
