@@ -1,10 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{get_config_ini_settings, get_deployment_settings, write_to_file};
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 
-use config::types::{SetupOSConfig, HostOSConfig, HostOSSettings, GuestOSSettings, GuestosDevConfig, ICOSSettings};
+use config::types::{
+    GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig,
+};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -88,7 +90,11 @@ pub fn main() -> Result<()> {
                 guestos_dev: GuestosDevConfig::default(),
             };
 
-            let hostos_settings = HostOSSettings { vm_memory, vm_cpu, verbose};
+            let hostos_settings = HostOSSettings {
+                vm_memory,
+                vm_cpu,
+                verbose,
+            };
 
             let setupos_config = SetupOSConfig {
                 network_settings,
@@ -110,10 +116,13 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::GenerateHostosConfig { setupos_config_json_path }) => {
+        Some(Commands::GenerateHostosConfig {
+            setupos_config_json_path,
+        }) => {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
-            let setupos_config: SetupOSConfig = serde_json::from_reader(File::open(setupos_config_json_path)?)?;
+            let setupos_config: SetupOSConfig =
+                serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
@@ -128,10 +137,7 @@ pub fn main() -> Result<()> {
             let output_path = Path::new("/var/ic/config/config-hostos.json");
             write_to_file(output_path, &serialized_hostos_config)?;
 
-            println!(
-                "HostOSConfig has been written to {}",
-                output_path.display()
-            );
+            println!("HostOSConfig has been written to {}", output_path.display());
 
             Ok(())
         }

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::fs::read_to_string;
-use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::Path;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::path::Path;
 
 use anyhow::bail;
 use anyhow::{Context, Result};
@@ -201,7 +201,6 @@ fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
         .join(" "),
     )
 }
-
 
 fn ensure_directory_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
