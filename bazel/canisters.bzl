@@ -188,9 +188,9 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
         message = "Finalizing canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
         cmd_bash = " && ".join([
-            "{ic_wasm} {input_wasm} -o $@.shrunk shrink",
-            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
-            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id --visibility public --file {version_file}",
+            "{ic_wasm} {input_wasm} -o $@.shrunk shrink --keep-name-section",
+            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service --keep-name-section --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
+            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id --keep-name-section --visibility public --file {version_file}",
             "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
         ])
             .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)"),
