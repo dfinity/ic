@@ -1,8 +1,9 @@
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact,
+    artifact::{IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::{BlockPayload, BlockProposal, ConsensusMessage},
+    CountBytes,
 };
 
 use super::types::stripped::{
@@ -10,6 +11,7 @@ use super::types::stripped::{
     StrippedIngressPayload,
 };
 
+/// If an ingress message has size above this threshold, we will strip it from the block.
 const INGRESS_MESSAGE_SIZE_STRIPPING_THRESHOLD_BYTES: usize = 1024;
 
 /// Provides functionality for stripping objects of given information.
@@ -72,11 +74,19 @@ impl Strippable for IngressPayload {
     type Output = StrippedIngressPayload;
 
     fn strip(self) -> Self::Output {
-        let stripped_ingresses = self
-            .message_ids()
+        let ingresses: Vec<_> = self.try_into().expect("FIXME");
+
+        let stripped_ingresses = ingresses
             .into_iter()
-            // TODO(kpop): use threshold
-            .map(MaybeStrippedIngress::Stripped)
+            .map(|ingress| {
+                let ingress_message_id = IngressMessageId::from(&ingress);
+
+                if ingress.count_bytes() > INGRESS_MESSAGE_SIZE_STRIPPING_THRESHOLD_BYTES {
+                    MaybeStrippedIngress::Stripped(ingress_message_id)
+                } else {
+                    MaybeStrippedIngress::Full(ingress_message_id, ingress)
+                }
+            })
             .collect();
 
         Self::Output {

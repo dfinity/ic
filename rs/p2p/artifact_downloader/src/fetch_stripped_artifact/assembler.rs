@@ -285,7 +285,7 @@ impl StrippedBlockProposal {
         let Self {
             block_proposal_without_ingresses_proto: mut reconstructed_block_proposal_proto,
             stripped_ingress_payload,
-            unstripped_consensus_message_id: _unstripped_consensus_message_id,
+            ..
         } = self;
 
         let ingresses = stripped_ingress_payload
@@ -315,11 +315,19 @@ impl StrippedBlockProposal {
 #[cfg(test)]
 mod tests {
     use ic_test_utilities_consensus::{
-        fake::{Fake, FakeContentSigner, FromParent},
+        fake::{Fake, FakeContentSigner},
         make_genesis,
     };
     use ic_types::{
-        batch::BatchPayload, consensus::{dkg::{Dealings, Summary}, Block, BlockPayload, ConsensusMessageHash, DataPayload, Payload, Rank}, crypto::{CryptoHash, CryptoHashOf}, messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope}, time::expiry_time_from_now, Height
+        batch::BatchPayload,
+        consensus::{
+            dkg::{Dealings, Summary},
+            Block, BlockPayload, ConsensusMessageHash, DataPayload, Payload, Rank,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+        time::expiry_time_from_now,
+        Height,
     };
     use ic_types_test_utils::ids::node_test_id;
 
@@ -329,8 +337,8 @@ mod tests {
 
     #[test]
     fn strip_assemble_roundtrip_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message("fake_1");
-        let (ingress_2, _ingress_id_2) = fake_ingress_message("fake_2");
+        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
 
@@ -351,9 +359,10 @@ mod tests {
         assert_eq!(assembled_block, block_proposal);
     }
 
+    #[test]
     fn strip_assemble_fails_when_still_missing_ingress_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message("fake_1");
-        let (ingress_2, ingress_id_2) = fake_ingress_message("fake_2");
+        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
 
@@ -470,12 +479,19 @@ mod tests {
     }
 
     fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
+        fake_ingress_message_with_arg_size(method_name, 0)
+    }
+
+    fn fake_ingress_message_with_arg_size(
+        method_name: &str,
+        arg_size: usize,
+    ) -> (SignedIngress, IngressMessageId) {
         let ingress_expiry = expiry_time_from_now();
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),
                 method_name: method_name.to_string(),
-                arg: Blob(b"".to_vec()),
+                arg: Blob(vec![0; arg_size]),
                 sender: Blob(vec![0x05]),
                 nonce: Some(Blob(vec![1, 2, 3, 4])),
                 ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
