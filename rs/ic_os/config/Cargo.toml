@@ -12,6 +12,10 @@ url = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 
+[lib]
+name = "config"
+path = "src/lib.rs"
+
 [[bin]]
-name = "config_tool"
+name = "config"
 path = "src/main.rs"

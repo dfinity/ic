@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -13,16 +13,26 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+MACRO_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_library(
+    name = "config_lib",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "config",
+    edition = "2021",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
     name = "config",
     srcs = glob(
-        ["src/**/*.rs"],
+        ["src/main.rs"],
     ),
     aliases = ALIASES,
     crate_name = "config",
     edition = "2021",
-    proc_macro_deps = [],
-    deps = DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":config_lib"] + DEPENDENCIES,
 )
