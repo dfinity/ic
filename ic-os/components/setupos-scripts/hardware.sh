@@ -248,7 +248,7 @@ function verify_disks() {
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
 
-    local node_operator_key_path=$(get_config_value '.hostos_config.ic_config.node_operator_private_key_path')
+    local node_operator_key_path=$(get_config_value '.icos_settings.node_operator_private_key_path')
 
 
     if [[ ${GENERATION} == 2 ]] && [[ ! -f "${node_operator_key_path}" ]]; then

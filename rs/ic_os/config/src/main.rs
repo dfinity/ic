@@ -1,10 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{default_deployment_values, parse_config_ini};
+use config::{get_config_ini_settings, get_deployment_settings};
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
-use utils::deployment::read_deployment_file;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -52,30 +51,7 @@ pub fn main() -> Result<()> {
             let ssh_authorized_keys_path = Path::new(&ssh_authorized_keys_path);
             let node_operator_private_key_path = Path::new(&node_operator_private_key_path);
 
-            // get config.ini variables
-            let (networking, verbose) = parse_config_ini(config_ini_path)?;
-
-            // get deployment.json variables
-            let deployment = read_deployment_file(deployment_json_path);
-            let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) = match &deployment {
-                Ok(deployment_json) => (
-                    deployment_json.resources.memory,
-                    deployment_json
-                        .resources
-                        .cpu
-                        .clone()
-                        .unwrap_or("kvm".to_string()),
-                    deployment_json.nns.url.clone(),
-                    deployment_json.deployment.name.to_string(),
-                    deployment_json.logging.hosts.to_string(),
-                ),
-                Err(e) => {
-                    eprintln!(
-                        "Error retrieving deployment file: {e}. Continuing with default values"
-                    );
-                    default_deployment_values()
-                }
-            };
+            let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
 
             let node_operator_private_key_path = if node_operator_private_key_path.exists() {
                 Some(node_operator_private_key_path.to_path_buf())
@@ -83,21 +59,39 @@ pub fn main() -> Result<()> {
                 None
             };
 
-            let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
+            // get config.ini variables
+            let (network_settings, verbose) = get_config_ini_settings(config_ini_path)?;
 
-            let ic_config = config::types::IcConfigBuilder::new()
-                .networking(networking)
-                .nns_public_key_path(nns_public_key_path.to_path_buf())
-                .nns_url(nns_url)
-                .elasticsearch_hosts(elasticsearch_hosts)
-                .hostname(hostname)
-                .node_operator_private_key_path(node_operator_private_key_path)
-                .ssh_authorized_keys_path(ssh_authorized_keys_path)
-                .verbose(verbose)
-                .build()
-                .expect("Failed to build IcConfig");
+            // get deployment.json variables
+            let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) =
+                get_deployment_settings(deployment_json_path);
 
-            let setupos_config = config::types::SetuposConfig::new(vm_memory, vm_cpu, ic_config);
+            let icos_settings = config::types::ICOSSettings {
+                nns_public_key_path: nns_public_key_path.to_path_buf(),
+                nns_url,
+                elasticsearch_hosts,
+                elasticsearch_tags: None,
+                hostname,
+                node_operator_private_key_path,
+                ssh_authorized_keys_path,
+            };
+
+            let guestos_settings = config::types::GuestOSSettings {
+                verbose,
+                ic_crypto_path: None,
+                ic_state_path: None,
+                ic_registry_local_store_path: None,
+                guestos_dev: config::types::GuestosDevConfig::default(),
+            };
+
+            let hostos_settings = config::types::HostOSSettings { vm_memory, vm_cpu };
+
+            let setupos_config = config::types::SetupOSConfig {
+                network_settings,
+                icos_settings,
+                hostos_settings,
+                guestos_settings,
+            };
 
             let serialized_config = serde_json::to_string_pretty(&setupos_config)
                 .expect("Failed to serialize SetuposConfig");
@@ -109,11 +103,8 @@ pub fn main() -> Result<()> {
                 }
             }
 
-            let mut config_file =
-                File::create(default_config_object_path).expect("Failed to create config file");
-            config_file
-                .write_all(serialized_config.as_bytes())
-                .expect("Failed to write to config file");
+            let mut config_file = File::create(default_config_object_path)?;
+            config_file.write_all(serialized_config.as_bytes())?;
 
             println!(
                 "SetuposConfig has been written to {}",

@@ -6,9 +6,10 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::{Context, Result};
 use url::Url;
+use utils::deployment::read_deployment_file;
 
 pub mod types;
-use crate::types::Networking;
+use crate::types::NetworkSettings;
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -26,6 +27,28 @@ pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
 //todo: delete
 pub static DEFAULT_HOSTOS_CONFIG_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
+
+pub fn get_deployment_settings(
+    deployment_json_path: &Path,
+) -> (u32, String, Vec<Url>, String, String) {
+    match read_deployment_file(deployment_json_path) {
+        Ok(deployment_json) => (
+            deployment_json.resources.memory,
+            deployment_json
+                .resources
+                .cpu
+                .clone()
+                .unwrap_or("kvm".to_string()),
+            deployment_json.nns.url.clone(),
+            deployment_json.deployment.name.to_string(),
+            deployment_json.logging.hosts.to_string(),
+        ),
+        Err(err) => {
+            eprintln!("Error retrieving deployment file: {err}. Using default values.");
+            default_deployment_values()
+        }
+    }
+}
 
 fn parse_config_line(line: &str) -> Option<(String, String)> {
     // Skip blank lines and comments
@@ -61,7 +84,7 @@ fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
 }
 
-pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
+pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettings, bool)> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
     // Per PFOPS - this will never not be 64
@@ -141,7 +164,7 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
 
     let domain = config_map.get("domain").cloned();
 
-    let networking = crate::types::Networking {
+    let networking = crate::types::NetworkSettings {
         ipv6_prefix,
         ipv6_address,
         ipv6_gateway,
@@ -159,7 +182,7 @@ pub fn parse_config_ini(config_file_path: &Path) -> Result<(Networking, bool)> {
     Ok((networking, verbose))
 }
 
-pub fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
+fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
     (
         490,
         "kvm".to_string(),
