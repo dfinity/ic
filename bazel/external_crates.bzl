@@ -1211,7 +1211,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "max_level_trace",
                     "nested-values",
-                    "release_max_level_debug",
                     "release_max_level_trace",
                 ],
             ),
