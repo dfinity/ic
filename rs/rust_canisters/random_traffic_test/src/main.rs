@@ -88,19 +88,6 @@ where
     CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(&config))))
 }
 
-/// Determines whether a downstream call should be attempted or if a reply should be sent back.
-fn probe_make_call() -> bool {
-    CONFIG.with_borrow(|config| {
-        let dist = rand::distributions::WeightedIndex::new(&[
-            config.downstream_call_weight,
-            config.reply_weight,
-        ])
-        .unwrap();
-        let choices = [true, false];
-        RNG.with_borrow_mut(|rng| choices[dist.sample(rng)])
-    })
-}
-
 /// Returns a message id for use in keeping records.
 fn next_call_id() -> u32 {
     let id = CALL_ID.take();
@@ -171,6 +158,19 @@ fn reply() {
 
     let msg = vec![0_u8; payload_bytes as usize];
     api::reply(&msg[..]);
+}
+
+/// Determines whether a downstream call should be attempted or if a reply should be sent back.
+fn probe_make_call() -> bool {
+    CONFIG.with_borrow(|config| {
+        let dist = rand::distributions::WeightedIndex::new(&[
+            config.downstream_call_weight,
+            config.reply_weight,
+        ])
+        .unwrap();
+        let choices = [true, false];
+        RNG.with_borrow_mut(|rng| choices[dist.sample(rng)])
+    })
 }
 
 /// Randomly determines whether to make a downstream call; reply if not or if the downstream call fails.

@@ -26,9 +26,8 @@ const MB: u64 = KB * KB;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
-/*
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(100))]
+    #![proptest_config(ProptestConfig::with_cases(1))]
     #[test]
     fn check_guaranteed_response_message_memory_limits_are_respected(
         seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
@@ -42,10 +41,9 @@ proptest! {
         ).is_ok());
     }
 }
-*/
 
 #[test]
-fn check_guaranteed_response_message_memory_limits_are_respected() {
+fn check_guaranteed_response_message_memory_limits_are_respected_manual() {
     if let Err((reason, info)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
         &[
             13766374379982621544,
