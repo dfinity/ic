@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-tests = { path = "../" }
 ic-system-test-driver = { path = "../driver" }
-ic-protobuf = { path = "../..protobuf" }
+ic-protobuf = { path = "../../protobuf" }
 tokio.workspace = true
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
