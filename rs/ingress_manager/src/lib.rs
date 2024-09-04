@@ -213,7 +213,13 @@ impl IngressManager {
             .get_ingress_subnet_limits(self.subnet_id, registry_version)
         {
             Ok(None) => {
-                
+                error!(
+                    self.log,
+                    "No subnet record found for registry version={:?} and subnet_id={:?}",
+                    registry_version,
+                    self.subnet_id,
+                );
+                None
             }
             Err(err) => {
                 error!(
