@@ -27,7 +27,7 @@ pub enum Commands {
         node_operator_private_key_path: String,
     },
     GenerateHostosConfig {
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "config.json")]
+        #[arg(long, default_value_t = config::DEFAULT_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
     },
 }
