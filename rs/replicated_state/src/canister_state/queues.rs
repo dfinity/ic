@@ -193,7 +193,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         self.size -= queue.len();
 
         // Queue must be non-empty and message at the head of queue non-stale.
-        let msg = pop_and_advance(queue, self.pool).unwrap();
+        let msg = pop_and_advance(queue, self.pool).expect("Empty queue in output iterator.");
         debug_assert_eq!(Ok(()), canister_queue_ok(queue, self.pool, receiver));
 
         if queue.len() > 0 {
@@ -426,7 +426,9 @@ impl CanisterQueues {
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
-                self.input_schedule.pop(input_queue_type).unwrap();
+                self.input_schedule
+                    .pop(input_queue_type)
+                    .expect("pop() should return the sender peeked above");
                 continue;
             };
             let msg = pop_and_advance(input_queue, &mut self.pool);
@@ -436,7 +438,9 @@ impl CanisterQueues {
             if input_queue.len() != 0 {
                 self.input_schedule.reschedule(*sender, input_queue_type);
             } else {
-                self.input_schedule.pop(input_queue_type).unwrap();
+                self.input_schedule
+                    .pop(input_queue_type)
+                    .expect("pop() should return the sender peeked above");
             }
 
             if let Some(msg) = msg {
@@ -474,7 +478,9 @@ impl CanisterQueues {
             }
 
             // Queue was garbage collected or is empty.
-            self.input_schedule.pop(input_queue_type).unwrap();
+            self.input_schedule
+                .pop(input_queue_type)
+                .expect("pop() should return the sender peeked above");
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
@@ -496,7 +502,9 @@ impl CanisterQueues {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
             } else {
-                self.input_schedule.pop(input_queue_type);
+                self.input_schedule
+                    .pop(input_queue_type)
+                    .expect("pop() should return the sender peeked above");
             }
         }
 
@@ -952,7 +960,10 @@ impl CanisterQueues {
             Inbound => msg.sender(),
             Outbound => msg.receiver(),
         };
-        let (input_queue, output_queue) = self.canister_queues.get_mut(&remote).unwrap();
+        let (input_queue, output_queue) = self
+            .canister_queues
+            .get_mut(&remote)
+            .expect("No matching queue for dropped message.");
         let (queue, reverse_queue) = match context {
             Inbound => (input_queue, output_queue),
             Outbound => (output_queue, input_queue),
