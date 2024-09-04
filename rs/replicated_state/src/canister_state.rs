@@ -623,10 +623,6 @@ pub type NumWasmPages = AmountOf<NumWasmPagesTag, usize>;
 
 pub const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * 1024; // 64KB
 
-/// A session is represented by an array of bytes and a monotonic
-/// offset and is unique for each execution.
-pub type SessionNonce = ([u8; 32], u64);
-
 pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
     let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
     if overflow {

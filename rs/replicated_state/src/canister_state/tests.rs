@@ -756,13 +756,7 @@ fn execution_state_test_partial_eq() {
         state_1
     );
 
-    assert_eq!(
-        ExecutionState {
-            session_nonce: Some(([11; 32], 10)),
-            ..state_1.clone()
-        },
-        state_1
-    );
+    assert_eq!(ExecutionState { ..state_1.clone() }, state_1);
 
     assert_ne!(
         ExecutionState {
