@@ -2650,7 +2650,7 @@ fn output_into_iter_pop_with_stale_references(
         if should_peek {
             output_iter.peek();
         }
-        if output_iter.next() == None {
+        if output_iter.next().is_none() {
             break;
         };
         should_peek = !should_peek;
