@@ -368,6 +368,9 @@ members = [
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",
     "rs/tests/testing_verification/testnets",
+    "rs/tla_instrumentation/local_key",
+    "rs/tla_instrumentation/tla_instrumentation",
+    "rs/tla_instrumentation/tla_instrumentation_proc_macros",
     "rs/tree_deserializer",
     "rs/types/types",
     "rs/types/types_test_utils",
@@ -679,7 +682,7 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
-wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
+wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
 wasmparser = "0.212.0"
 wasmprinter = "0.212.0"
 wast = "212.0.0"

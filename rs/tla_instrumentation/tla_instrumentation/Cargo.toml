@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "^0.10.2"
-serde = "1.0"
+candid = { workspace = true }
+serde = { workspace = true }
 tla_instrumentation_proc_macros = { path = "../tla_instrumentation_proc_macros" }
-sha2 = "0.10"
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-tokio = { version = "1.39", features = ["rt"] }
+local_key = { path = "../local_key" }

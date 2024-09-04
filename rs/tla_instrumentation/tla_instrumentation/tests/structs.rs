@@ -147,10 +147,11 @@ impl StructCanister {
     }
 }
 
+// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
 fn set_java_path() {
-    let p = std::env::var("PATH").unwrap();
-    let j = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{p}:{j}/bin"));
+    let current_path = std::env::var("PATH").unwrap();
+    let bazel_java = std::env::var("JAVABASE").unwrap();
+    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
 }
 
 #[test]

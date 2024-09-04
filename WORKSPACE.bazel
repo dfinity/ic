@@ -456,6 +456,7 @@ http_jar(
     url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-deps-202302091937.jar",
 )
 
+# Apalache model checker for TLA+
 http_archive(
     name = "tla_apalache",
     build_file_content = """
