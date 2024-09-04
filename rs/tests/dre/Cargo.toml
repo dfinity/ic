@@ -23,7 +23,7 @@ itertools.workspace = true
 futures.workspace = true
 anyhow.workspace = true
 reqwest.workspace = true
-ic-types = { path = "../../types" }
+ic-types = { path = "../../types/types" }
 
 [lib]
 name = "os_qualification_utils"
