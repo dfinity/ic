@@ -4,7 +4,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     ops::Range,
     path::{Path, PathBuf},
     sync::Arc,
@@ -887,8 +887,50 @@ impl dyn StorageLayout + '_ {
         Ok(result)
     }
 
+    // Read the number of memory pages from overlay.
+    // Basically it's the index of the last page, which we read based on the offset from the end of
+    // the file plus some error handling.
+    fn overlay_memory_pages(overlay: &Path) -> StorageResult<usize> {
+        let to_storage_err = |err: std::io::Error| -> Box<dyn std::error::Error + Send> {
+            Box::new(PersistenceError::FileSystemError {
+                path: overlay.display().to_string(),
+                context: "Failed to get number of memory pages".to_string(),
+                internal_error: err.to_string(),
+            }) as Box<dyn std::error::Error + Send>
+        };
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .open(&overlay)
+            .map_err(|err| to_storage_err(err))?;
+
+        let mut version_buf = [0u8; VERSION_NUM_BYTES];
+        file.seek(SeekFrom::End(-(VERSION_NUM_BYTES as i64)))
+            .map_err(|err| to_storage_err(err))?;
+        file.read_exact(&mut version_buf)
+            .map_err(|err| to_storage_err(err))?;
+        static_assertions::const_assert_eq!(MAX_SUPPORTED_OVERLAY_VERSION as u32, 0);
+        let version = u32::from_le_bytes(version_buf);
+        if version > MAX_SUPPORTED_OVERLAY_VERSION as u32 {
+            return Err(Box::new(PersistenceError::VersionMismatch {
+                path: overlay.display().to_string(),
+                file_version: version,
+                supported: MAX_SUPPORTED_OVERLAY_VERSION,
+            }) as Box<dyn std::error::Error + Send>);
+        }
+
+        let mut last_page_index_range_buf = [[0u8; 8]; 3];
+        file.seek(SeekFrom::End(
+            -((VERSION_NUM_BYTES + SIZE_NUM_BYTES + PAGE_INDEX_RANGE_NUM_BYTES) as i64),
+        ))
+        .map_err(|err| to_storage_err(err))?;
+        file.read_exact(&mut last_page_index_range_buf.as_flattened_mut())
+            .map_err(|err| to_storage_err(err))?;
+        let last_page_index_range = PageIndexRange::from(&last_page_index_range_buf);
+        Ok(last_page_index_range.end_page.get() as usize)
+    }
+
     pub fn memory_pages(&self) -> StorageResult<usize> {
-        use std::io::{Read, Seek, SeekFrom};
         let mut result = 0;
         if let Some(base) = self.existing_base() {
             result = std::fs::metadata(&base)
@@ -902,22 +944,8 @@ impl dyn StorageLayout + '_ {
                 .len() as usize
                 / PAGE_SIZE;
         }
-        for overlay in self.existing_overlays().unwrap() {
-            let mut file = OpenOptions::new()
-                .read(true)
-                .open(&overlay)
-                .map_err(|err| PersistenceError::FileSystemError {
-                    path: overlay.display().to_string(),
-                    context: "Failed to open file".to_string(),
-                    internal_error: err.to_string(),
-                })
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-            file.seek(SeekFrom::End(-28))
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-            let mut buf = [0u8; 8];
-            file.read_exact(&mut buf)
-                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-            result = std::cmp::max(result, usize::from_le_bytes(buf));
+        for overlay in self.existing_overlays()? {
+            result = std::cmp::max(result, Self::overlay_memory_pages(&overlay)?);
         }
         debug_assert_eq!(result, Storage::load(self).unwrap().num_logical_pages());
         Ok(result)

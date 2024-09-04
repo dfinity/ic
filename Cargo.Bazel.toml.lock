@@ -3172,6 +3172,7 @@ dependencies = [
  "slog-term",
  "socket2 0.5.7",
  "ssh2",
+ "static_assertions",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "stubborn-io",

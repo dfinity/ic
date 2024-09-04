@@ -10929,6 +10929,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "slog",
+ "static_assertions",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",

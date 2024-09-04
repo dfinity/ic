@@ -600,9 +600,8 @@ fn merge_candidates_and_storage_info(
     thread_pool: &mut scoped_threadpool::Pool,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
-    log: &ReplicaLogger,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
-    let start = Instant::now();
+    let _timer = request_timer(&metrics, "merge_candidates_and_storage_info");
     let layout = &tip_handler
         .tip(height)
         .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
@@ -643,12 +642,6 @@ fn merge_candidates_and_storage_info(
         merge_candidates.append(&mut merge_candidate_with_storage_info.0);
         storage_info = storage_info.add(&merge_candidate_with_storage_info.1);
     }
-    let elapsed = start.elapsed();
-    info!(
-        log,
-        "merge candidates and storage info time: {}",
-        elapsed.as_secs_f64()
-    );
     Ok((merge_candidates, storage_info))
 }
 
@@ -723,7 +716,6 @@ fn merge(
         thread_pool,
         lsmt_config,
         metrics,
-        log,
     )
     .unwrap_or_else(|err| {
         fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);

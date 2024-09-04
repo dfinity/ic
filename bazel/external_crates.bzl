@@ -1234,6 +1234,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ssh2": crate.spec(
                 version = "0.9.4",
             ),
+            "static_assertions": crate.spec(
+                version = "1.1.0",
+            ),
             "strum": crate.spec(
                 version = "^0.26.2",
                 features = [
