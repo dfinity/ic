@@ -120,8 +120,6 @@ pub fn main() -> Result<()> {
                 default_config_object_path.display()
             );
 
-            dbg!(setupos_config);
-
             Ok(())
         }
         None => Ok(()),
