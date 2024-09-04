@@ -5,7 +5,7 @@ use std::time::Duration;
 use crate::driver::constants::GROUP_TTL;
 use crate::driver::ic::VmResources;
 
-#[derive(Clone, Deserialize, Serialize, Default, Debug)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct GroupSetup {
     pub group_base_name: String,
     pub infra_group_name: String,
@@ -47,7 +47,7 @@ impl TestEnvAttribute for GroupSetup {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InfraProvider {
     Farm,
     K8s,

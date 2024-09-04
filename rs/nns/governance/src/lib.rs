@@ -230,7 +230,7 @@ trait Clock {
     fn set_time_warp(&mut self, new_time_warp: TimeWarp);
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct IcClock {
     time_warp: TimeWarp,
 }
@@ -944,7 +944,7 @@ impl NeuronSubsetMetricsPb {
 }
 
 fn enable_new_canister_management_topics() -> bool {
-    cfg!(feature = "test")
+    true
 }
 
 #[cfg(test)]

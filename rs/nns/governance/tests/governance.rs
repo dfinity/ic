@@ -24,7 +24,7 @@ use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, Caniste
 use ic_nervous_system_common::{
     cmc::CMC,
     ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -39,7 +39,8 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{
@@ -61,7 +62,6 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
-        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -77,17 +77,17 @@ use ic_nns_governance::{
         proposal::{self, Action, ActionDesc},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_neurons_fund_participation_request, swap_background_information,
-        AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
-        BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, InstallCode, KnownNeuron, KnownNeuronData, ListNeurons,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
-        NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
-        NodeProvider, Proposal, ProposalChange, ProposalData, ProposalDataChange,
+        AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
+        CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
+        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, KnownNeuron,
+        KnownNeuronData, ListNeurons, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron,
+        NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
+        ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
-        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SwapBackgroundInformation, SwapParticipationLimits,
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
@@ -7305,251 +7305,6 @@ fn test_network_economics_proposal() {
     );
 }
 
-fn make_proposal_with_action(
-    gov: &mut Governance,
-    proposer_p: &PrincipalId,
-    proposer_n: &NeuronId,
-    action: proposal::Action,
-) -> ProposalId {
-    let response = match gov
-        .manage_neuron(
-            proposer_p,
-            &ManageNeuron {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*proposer_n)),
-                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
-                    title: Some("Dummy proposal".to_string()),
-                    summary: "".to_string(),
-                    url: "".to_string(),
-                    action: Some(action),
-                }))),
-            },
-        )
-        .now_or_never()
-        .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
-        .command
-        .unwrap()
-    {
-        manage_neuron_response::Command::MakeProposal(resp) => resp,
-        _ => panic!("Invalid response"),
-    };
-    response.proposal_id.unwrap()
-}
-
-// When a neuron A follows neuron B on topic Unspecified, and B votes on topic
-// T, then A votes the same was as B, except when T is Governance or
-// SnsAndCommunityFund.
-#[test]
-fn test_default_followees() {
-    let p = match std::env::var("NEURON_CSV_PATH") {
-        Ok(v) => PathBuf::from(v),
-        Err(_) => PathBuf::from("tests/neurons.csv"),
-    };
-    let mut builder = GovernanceCanisterInitPayloadBuilder::new();
-    let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
-
-    let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
-    let voter_neuron = init_neurons[&42].id.unwrap();
-    init_neurons.get_mut(&42).unwrap().dissolve_state = Some(
-        DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS).into(),
-    );
-    let (mut driver, mut gov) = governance_with_neurons(
-        &init_neurons
-            .values()
-            .map(|n| n.clone().into())
-            .collect::<Vec<Neuron>>(),
-    );
-
-    let default_followees = hashmap![
-        Topic::Unspecified as i32 => Followees { followees: vec![voter_neuron]},
-    ];
-
-    gov.heap_data
-        .default_followees
-        .clone_from(&default_followees);
-    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    let neuron_stake_e8s = 100 * 100_000_000;
-    let nonce = 1234u64;
-
-    let to_subaccount = Subaccount({
-        let mut sha = Sha256::new();
-        sha.write(&[0x0c]);
-        sha.write(b"neuron-stake");
-        sha.write(from.as_slice());
-        sha.write(&nonce.to_be_bytes());
-        sha.finish()
-    });
-
-    driver.create_account_with_funds(
-        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(to_subaccount)),
-        neuron_stake_e8s,
-    );
-
-    let follower_neuron_id =
-        claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
-            .unwrap();
-    match gov
-        .manage_neuron(
-            &from,
-            &ManageNeuron {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(follower_neuron_id)),
-                command: Some(manage_neuron::Command::Configure(Configure {
-                    operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                        additional_dissolve_delay_seconds: (6 * ONE_MONTH_SECONDS) as u32,
-                    })),
-                })),
-            },
-        )
-        .now_or_never()
-        .unwrap()
-        .panic_if_error("Couldn't increase dissolve delay.")
-        .command
-        .unwrap()
-    {
-        manage_neuron_response::Command::Configure(_) => (),
-        _ => panic!("Invalid response"),
-    };
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&follower_neuron_id, |n| n.clone())
-            .unwrap()
-            .followees,
-        default_followees,
-    );
-    let followed_proposal_ids = |gov: &mut Governance| {
-        gov.neuron_store
-            .with_neuron(&follower_neuron_id, |n| n.clone())
-            .unwrap()
-            .recent_ballots
-            .iter()
-            .map(|b| *b.proposal_id.as_ref().unwrap())
-            .collect::<Vec<ProposalId>>()
-    };
-
-    // Despite having default followees on the Unspecified topic, topics Governance and
-    // SnsAndCommunityFund shouldn't have default following, i.e. when the voter_neuron votes in
-    // all other topics, the neuron we just created should follow, except in these two topics.
-    let not_governance_nor_sns_proposal_id = make_proposal_with_action(
-        &mut gov,
-        &voter_pid,
-        &voter_neuron,
-        proposal::Action::ApproveGenesisKyc(ApproveGenesisKyc {
-            principals: vec![voter_pid],
-        }),
-    );
-    let expected_followed_proposal_ids = vec![not_governance_nor_sns_proposal_id];
-    assert_eq!(
-        followed_proposal_ids(&mut gov),
-        expected_followed_proposal_ids,
-    );
-
-    let governance_proposal_id = make_proposal_with_action(
-        &mut gov,
-        &voter_pid,
-        &voter_neuron,
-        proposal::Action::Motion(Motion {
-            motion_text: "".to_string(),
-        }),
-    );
-    assert!(!followed_proposal_ids(&mut gov).contains(&governance_proposal_id));
-    assert_eq!(
-        followed_proposal_ids(&mut gov),
-        expected_followed_proposal_ids
-    );
-
-    let sns_proposal_id = make_proposal_with_action(
-        &mut gov,
-        &voter_pid,
-        &voter_neuron,
-        CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL
-            .action
-            .clone()
-            .unwrap(),
-    );
-    assert!(!followed_proposal_ids(&mut gov).contains(&sns_proposal_id));
-    assert_eq!(
-        followed_proposal_ids(&mut gov),
-        expected_followed_proposal_ids
-    );
-
-    let default_followees2 = hashmap![
-        Topic::ExchangeRate as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Governance as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::ParticipantManagement as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::NetworkCanisterManagement as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Kyc as i32 => Followees { followees: vec![voter_neuron]},
-    ];
-
-    // Make a proposal to change the default followees.
-    let change_default_followees_proposal_id = match gov
-        .manage_neuron(
-            &voter_pid,
-            &ManageNeuron {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
-                command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
-                    title: Some("Change Network Economics".to_string()),
-                    summary: "Just want to change this param.".to_string(),
-                    url: "".to_string(),
-                    action: Some(proposal::Action::SetDefaultFollowees(SetDefaultFollowees {
-                        default_followees: default_followees2.clone(),
-                    })),
-                }))),
-            },
-        )
-        .now_or_never()
-        .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
-        .command
-        .unwrap()
-    {
-        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        _ => panic!("Invalid response"),
-    };
-
-    assert_eq!(
-        gov.get_proposal_data(change_default_followees_proposal_id)
-            .unwrap()
-            .status(),
-        ProposalStatus::Executed
-    );
-
-    let nonce = 2345u64;
-    let to_subaccount = Subaccount({
-        let mut sha = Sha256::new();
-        sha.write(&[0x0c]);
-        sha.write(b"neuron-stake");
-        sha.write(from.as_slice());
-        sha.write(&nonce.to_be_bytes());
-        sha.finish()
-    });
-
-    driver.create_account_with_funds(
-        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(to_subaccount)),
-        neuron_stake_e8s,
-    );
-
-    let id2 =
-        claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
-            .unwrap();
-
-    // The second neuron should have the default followees we set with the proposal.
-    assert!(follower_neuron_id != id2);
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&id2, |n| n.clone())
-            .unwrap()
-            .followees,
-        default_followees2
-    );
-}
-
 #[test]
 fn test_recompute_tally() {
     let ballot = |v: Vote| -> Ballot {
@@ -7666,68 +7421,6 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         action,
         proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
-}
-
-#[test]
-fn test_list_proposals_removes_install_code_large_fields() {
-    let original_install_code = InstallCode {
-        wasm_module: Some(vec![0; 100_000]),
-        arg: Some(vec![0; 1_000]),
-        install_mode: Some(CanisterInstallMode::Upgrade as i32),
-        canister_id: Some(GOVERNANCE_CANISTER_ID.into()),
-        skip_stopping_before_installing: Some(false),
-    };
-    let proto = GovernanceProto {
-        economics: Some(NetworkEconomics::with_default_values()),
-        proposals: btreemap! {
-            1 => ProposalData {
-                id: Some(ProposalId { id: 1 }),
-                proposal: Some(Proposal {
-                    title: Some("Upgrade canister".to_string()),
-                    action: Some(proposal::Action::InstallCode(original_install_code.clone())),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    };
-    let driver = fake::FakeDriver::default();
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-    let caller = &principal(1);
-
-    let results = gov.list_proposals(
-        caller,
-        &ListProposalInfo {
-            ..Default::default()
-        },
-    );
-
-    let action = results.proposal_info[0]
-        .proposal
-        .as_ref()
-        .unwrap()
-        .action
-        .as_ref()
-        .unwrap();
-    match action {
-        proposal::Action::InstallCode(install_code) => {
-            assert_eq!(
-                install_code,
-                &InstallCode {
-                    wasm_module: None,
-                    arg: None,
-                    ..original_install_code
-                }
-            );
-        }
-        _ => panic!("Unexpected action"),
-    };
 }
 
 #[test]
@@ -11262,7 +10955,7 @@ async fn test_known_neurons() {
     assert!(gov.neuron_store.contains_known_neuron_name("Zwei"));
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ExpectedCallCanisterMethodCallArguments<'a> {
     target: CanisterId,
     method_name: &'a str,
@@ -11979,6 +11672,7 @@ lazy_static! {
                     Some(517576), // memory_allocation
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
+                    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, // wasm_memory_limit
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -12226,7 +11920,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12360,7 +12053,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12448,7 +12140,6 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
     assert_matches!(proposal.failure_reason, Some(_), "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12553,7 +12244,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12701,7 +12391,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12847,7 +12536,6 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
     assert_eq!(proposal.sns_token_swap_lifecycle, None);
     assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12996,7 +12684,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
@@ -13040,7 +12727,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
