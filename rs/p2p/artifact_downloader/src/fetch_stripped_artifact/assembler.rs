@@ -318,18 +318,9 @@ impl StrippedBlockProposal {
 
 #[cfg(test)]
 mod tests {
-    use ic_types::{
-        consensus::ConsensusMessageHash,
-        crypto::{CryptoHash, CryptoHashOf},
-        Height,
-    };
-
-    use crate::fetch_stripped_artifact::{
-        test_utils::{
-            fake_block_proposal_with_ingresses, fake_ingress_message,
-            fake_ingress_message_with_arg_size,
-        },
-        types::stripped::StrippedIngressPayload,
+    use crate::fetch_stripped_artifact::test_utils::{
+        fake_block_proposal_with_ingresses, fake_ingress_message,
+        fake_ingress_message_with_arg_size, fake_stripped_block_proposal_with_ingresses,
     };
 
     use super::*;
@@ -453,22 +444,5 @@ mod tests {
             stripped_block_proposal.try_insert_ingress_message(ingress_1),
             Err(InsertionError::NotNeeded)
         );
-    }
-
-    fn fake_stripped_block_proposal_with_ingresses(
-        ingress_messages: Vec<MaybeStrippedIngress>,
-    ) -> StrippedBlockProposal {
-        StrippedBlockProposal {
-            block_proposal_without_ingresses_proto: pb::BlockProposal::default(),
-            stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
-            unstripped_consensus_message_id: fake_consensus_message_id(),
-        }
-    }
-
-    fn fake_consensus_message_id() -> ConsensusMessageId {
-        ConsensusMessageId {
-            hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(vec![]))),
-            height: Height::new(42),
-        }
     }
 }

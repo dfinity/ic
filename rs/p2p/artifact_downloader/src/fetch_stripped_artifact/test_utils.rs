@@ -1,19 +1,23 @@
+use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
 };
 use ic_types::{
-    artifact::IngressMessageId,
+    artifact::{ConsensusMessageId, IngressMessageId},
     batch::{BatchPayload, IngressPayload},
     consensus::{
         dkg::{Dealings, Summary},
-        Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank,
+        Block, BlockPayload, BlockProposal, ConsensusMessageHash, DataPayload, Payload, Rank,
     },
+    crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::expiry_time_from_now,
     Height,
 };
 use ic_types_test_utils::ids::node_test_id;
+
+use super::types::stripped::{MaybeStrippedIngress, StrippedBlockProposal, StrippedIngressPayload};
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
     fake_ingress_message_with_arg_size(method_name, 0)
@@ -69,4 +73,21 @@ pub(crate) fn fake_block_proposal_with_ingresses(
         parent.as_ref().context.clone(),
     );
     BlockProposal::fake(block, node_test_id(0))
+}
+
+pub(crate) fn fake_stripped_block_proposal_with_ingresses(
+    ingress_messages: Vec<MaybeStrippedIngress>,
+) -> StrippedBlockProposal {
+    StrippedBlockProposal {
+        block_proposal_without_ingresses_proto: pb::BlockProposal::default(),
+        stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
+        unstripped_consensus_message_id: fake_consensus_message_id(),
+    }
+}
+
+fn fake_consensus_message_id() -> ConsensusMessageId {
+    ConsensusMessageId {
+        hash: ConsensusMessageHash::BlockProposal(CryptoHashOf::new(CryptoHash(vec![]))),
+        height: Height::new(42),
+    }
 }
