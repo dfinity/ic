@@ -306,10 +306,9 @@ impl StrippedBlockProposal {
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(&reconstructed_ingress_payload);
 
-        reconstructed_block_proposal_proto
-            .value
-            .as_mut()
-            .map(|block| block.ingress_payload = Some(reconstructed_ingress_payload_proto));
+        if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
+            block.ingress_payload = Some(reconstructed_ingress_payload_proto);
+        }
 
         reconstructed_block_proposal_proto
             .try_into()

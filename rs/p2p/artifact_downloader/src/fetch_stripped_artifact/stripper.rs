@@ -39,10 +39,9 @@ impl Strippable for ConsensusMessage {
                 let mut proto = pb::BlockProposal::from(&block_proposal);
 
                 // Remove the ingress payload from the proto.
-                proto
-                    .value
-                    .as_mut()
-                    .map(|block| block.ingress_payload = None);
+                if let Some(block) = proto.value.as_mut() {
+                    block.ingress_payload = None;
+                }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
                 let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();

@@ -29,6 +29,7 @@ pub struct StrippedBlockProposal {
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum MaybeStrippedConsensusMessage {
     StrippedBlockProposal(StrippedBlockProposal),
