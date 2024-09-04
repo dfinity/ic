@@ -250,7 +250,6 @@ function verify_deployment_path() {
 
     local node_operator_key_path=$(get_config_value '.icos_settings.node_operator_private_key_path')
 
-
     if [[ ${GENERATION} == 2 ]] && [[ ! -f "${node_operator_key_path}" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
