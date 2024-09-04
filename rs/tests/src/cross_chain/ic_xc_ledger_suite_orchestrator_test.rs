@@ -111,6 +111,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
+                manage_installed_canisters: None,
             }),
         )
         .await
