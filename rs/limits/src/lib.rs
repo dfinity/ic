@@ -1,3 +1,7 @@
+//! The file contains system limits of the IC. Typically, an architectural constraint. System limits cannot be adjusted.
+//! Few common situations when system limits can be adjusted include:
+//!     1. architectural change that in turn requires the system limits
+//!     2. operational situation in which the system limits should be adjusted and this can happen via a registry proposal for most cases
 use std::time::Duration;
 
 /// This constant defines the maximum amount of time an ingress message can wait
