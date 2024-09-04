@@ -41,7 +41,7 @@ impl Registry {
         get_key_family_iter::<ApiBoundaryNodeRecord>(self, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
             .map(|k| {
                 let principal = Principal::from_text(k.0).unwrap();
-                let principal_id: PrincipalId = principal.into();
+                let principal_id = PrincipalId::from_str(&k.0).unwrap();
                 NodeId::from(principal_id)
             })
             .collect()
