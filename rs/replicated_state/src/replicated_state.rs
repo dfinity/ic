@@ -21,7 +21,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -37,7 +37,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -52,9 +52,10 @@ pub enum InputQueueType {
     RemoteSubnet,
 }
 
-/// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumIter)]
-pub enum NextInputQueue {
+/// Next input source: round-robin across local subnet canister messages;
+/// ingress messages; and remote subnet canister messages.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumCount, EnumIter)]
+pub enum InputSource {
     /// Local subnet input messages.
     #[default]
     LocalSubnet = 0,
@@ -64,26 +65,24 @@ pub enum NextInputQueue {
     RemoteSubnet = 2,
 }
 
-impl From<&NextInputQueue> for ProtoNextInputQueue {
-    fn from(next: &NextInputQueue) -> Self {
+impl From<&InputSource> for NextInputQueue {
+    fn from(next: &InputSource) -> Self {
         match next {
             // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
             // serializes to zero bytes).
-            NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
-            NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
-            NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
+            InputSource::LocalSubnet => NextInputQueue::Unspecified,
+            InputSource::Ingress => NextInputQueue::Ingress,
+            InputSource::RemoteSubnet => NextInputQueue::RemoteSubnet,
         }
     }
 }
 
-impl From<ProtoNextInputQueue> for NextInputQueue {
-    fn from(next: ProtoNextInputQueue) -> Self {
+impl From<NextInputQueue> for InputSource {
+    fn from(next: NextInputQueue) -> Self {
         match next {
-            ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
-                NextInputQueue::LocalSubnet
-            }
-            ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
-            ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
+            NextInputQueue::Unspecified | NextInputQueue::LocalSubnet => InputSource::LocalSubnet,
+            NextInputQueue::Ingress => InputSource::Ingress,
+            NextInputQueue::RemoteSubnet => InputSource::RemoteSubnet,
         }
     }
 }

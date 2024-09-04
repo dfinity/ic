@@ -4,6 +4,7 @@ use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
 };
+use std::time::Duration;
 
 #[derive(PartialEq, Debug)]
 pub struct ArtifactWithOpt<T> {
@@ -117,7 +118,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn disassemble_message(&self, msg: A1) -> A2;
     /// Reconstruct message A1 from wire message. `peers` is the set of peers that
     /// have the message. Note that it is possible that the peer set changes over time.
-    fn assemble_message<P: Peers + Send + 'static>(
+    fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
         artifact: Option<(A2, NodeId)>,
@@ -142,7 +143,12 @@ pub enum BouncerValue {
 
 /// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh to a newer function.
 /// Invocations of the bouncer closure and factory should happen inside the implentations of the ArtifactAssembler.
-pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
+pub trait BouncerFactory<Id, Pool>: Send + Sync {
     /// Returns a new bouncer function for the given pool.
-    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
+
+    /// The period at which the bouncer should be refreshed.
+    /// Implementors fo the bouncer are well suited for determing the
+    /// refresh period.
+    fn refresh_period(&self) -> Duration;
 }

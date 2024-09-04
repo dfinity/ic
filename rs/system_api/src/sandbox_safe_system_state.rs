@@ -543,16 +543,6 @@ impl SystemStateChanges {
     }
 }
 
-/// Determines if a precise amount of cycles is requested
-/// or if the provided number is only a limit.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum CyclesAmountType {
-    /// Use exactly this many cycles or fail.
-    Exact(Cycles),
-    /// Use as many cycles as possible, up to this limit.
-    UpTo(Cycles),
-}
-
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
@@ -941,46 +931,28 @@ impl SandboxSafeSystemState {
 
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
-        current_payload_size_bytes: NumBytes,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
-        amount: CyclesAmountType,
+        amount: Cycles,
         reveal_top_up: bool,
-    ) -> HypervisorResult<Cycles> {
+    ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
-        let result = match amount {
-            CyclesAmountType::Exact(amount) => self
-                .cycles_account_manager
-                .withdraw_cycles_for_transfer(
-                    self.canister_id,
-                    self.freeze_threshold,
-                    self.memory_allocation,
-                    canister_current_memory_usage,
-                    canister_current_message_memory_usage,
-                    self.compute_allocation,
-                    &mut new_balance,
-                    amount,
-                    self.subnet_size,
-                    self.reserved_balance(),
-                    reveal_top_up,
-                )
-                .map(|()| amount)
-                .map_err(HypervisorError::InsufficientCyclesBalance),
-            CyclesAmountType::UpTo(amount) => Ok(self
-                .cycles_account_manager
-                .withdraw_up_to_cycles_for_transfer(
-                    self.freeze_threshold,
-                    self.memory_allocation,
-                    current_payload_size_bytes,
-                    canister_current_memory_usage,
-                    canister_current_message_memory_usage,
-                    self.compute_allocation,
-                    &mut new_balance,
-                    amount,
-                    self.subnet_size,
-                    self.reserved_balance(),
-                )),
-        };
+        let result = self
+            .cycles_account_manager
+            .withdraw_cycles_for_transfer(
+                self.canister_id,
+                self.freeze_threshold,
+                self.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                self.compute_allocation,
+                &mut new_balance,
+                amount,
+                self.subnet_size,
+                self.reserved_balance(),
+                reveal_top_up,
+            )
+            .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
         result
     }

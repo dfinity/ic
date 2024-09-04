@@ -1076,6 +1076,7 @@ fn serialize_snapshot_to_tip(
             stable_memory_size: canister_snapshot.stable_memory().size,
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
+            exported_globals: canister_snapshot.exported_globals().clone(),
         }
         .into(),
     )?;

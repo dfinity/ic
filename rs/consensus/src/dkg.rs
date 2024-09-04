@@ -386,7 +386,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> BouncerFactory<Message, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgGossipImpl {
     fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id| {
@@ -397,6 +397,10 @@ impl<Pool: DkgPool> BouncerFactory<Message, Pool> for DkgGossipImpl {
                 Ordering::Less => BouncerValue::Unwanted,
             }
         })
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }
 
