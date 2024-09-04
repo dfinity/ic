@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{default_deployment_values, parse_config_ini};
-use std::fs::File;
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 use utils::deployment::read_deployment_file;
@@ -103,8 +103,12 @@ pub fn main() -> Result<()> {
                 .expect("Failed to serialize SetuposConfig");
 
             let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
+            if let Some(parent) = default_config_object_path.parent() {
+                if !parent.exists() {
+                    create_dir_all(parent).expect("Failed to create directory");
+                }
+            }
 
-            // Write serialized data to the file
             let mut config_file =
                 File::create(default_config_object_path).expect("Failed to create config file");
             config_file
