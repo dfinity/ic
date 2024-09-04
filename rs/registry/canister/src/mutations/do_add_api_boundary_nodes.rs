@@ -522,13 +522,19 @@ mod tests {
         ]);
 
         // Create a valid proposal payload
-        let node_ids = node_ids_and_dkg_pks.keys().cloned().collect();
+        let mut node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
 
         let payload = AddApiBoundaryNodesPayload {
-            node_ids,
+            node_ids: node_ids.clone(),
             version: "version".into(),
         };
 
         registry.do_add_api_boundary_nodes(payload);
+
+        let mut api_bns = registry.get_api_boundary_node_ids();
+        api_bns.sort();
+        node_ids.sort();
+
+        assert_eq!(node_ids, api_bns);
     }
 }

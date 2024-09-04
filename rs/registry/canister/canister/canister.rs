@@ -549,6 +549,12 @@ fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
+// #[candid_method(update, rename = "add_api_boundary_nodes")]
+// fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
+//     registry_mut().do_add_api_boundary_nodes(payload);
+//     recertify_registry();
+// }
+
 #[export_name = "canister_update remove_api_boundary_nodes"]
 fn remove_api_boundary_nodes() {
     check_caller_is_governance_and_log("remove_api_boundary_nodes");
@@ -880,6 +886,23 @@ fn get_node_providers_monthly_xdr_rewards() {
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
 fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
     registry().get_node_providers_monthly_xdr_rewards()
+}
+
+#[export_name = "canister_query get_api_boundary_node_ids"]
+fn get_api_boundary_node_ids() {
+    over(candid_one, |()| -> Result<Vec<String>, String> {
+        get_api_boundary_node_ids_()
+    })
+}
+
+#[candid_method(query, rename = "get_api_boundary_node_ids")]
+fn get_api_boundary_node_ids_() -> Result<Vec<String>, String> {
+    let ids = registry()
+        .get_api_boundary_node_ids()
+        .iter()
+        .map(|k| k.get().to_string())
+        .collect();
+    Ok(ids)
 }
 
 #[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]
