@@ -37,7 +37,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -107,7 +107,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -205,7 +205,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -242,7 +242,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -279,7 +279,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -306,7 +306,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -408,7 +408,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
@@ -445,7 +445,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b45359df2457d941663d00ded6f59d81c03f7836ff10f6d2311209dbe6424bdc
+      image: ghcr.io/dfinity/ic-build@sha256:51d9d119cb6b1e120e46dde118e2bd49b68ffe3358c71d4d279d3346298b2d5f
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
