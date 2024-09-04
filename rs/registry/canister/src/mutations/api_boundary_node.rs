@@ -42,7 +42,7 @@ impl Registry {
             .map(|k| {
                 let principal = Principal::from_text(k.0).unwrap();
                 let principal_id: PrincipalId = principal.into();
-                principal_id.into()
+                NodeId::from(principal_id)
             })
             .collect()
     }
