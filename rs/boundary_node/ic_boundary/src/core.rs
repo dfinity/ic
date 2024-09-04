@@ -530,48 +530,81 @@ fn setup_registry(
 }
 
 #[cfg(feature = "tls")]
-fn setup_tls_resolver(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+fn setup_tls_resolver_stub(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+    use ic_bn_lib::tls;
+
+    let cert = cli
+        .tls_cert_path
+        .clone()
+        .ok_or(anyhow!("TLS cert not specified"))?;
+    let key = cli
+        .tls_pkey_path
+        .clone()
+        .ok_or(anyhow!("TLS key not specified"))?;
+
+    let cert = std::fs::read(cert).context("unable to read TLS cert")?;
+    let key = std::fs::read(key).context("unable to read TLS key")?;
+
+    let resolver = tls::StubResolver::new(&cert, &key)?;
+    Ok(Arc::new(resolver))
+}
+
+#[cfg(feature = "tls")]
+fn setup_tls_resolver_acme(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
     use tokio_util::sync::CancellationToken;
 
-    let resolver = if let Some(v) = &cli.acme_credentials_path {
-        warn!("TLS: Using ACME ALPN-01 (staging: {})", cli.acme_staging);
+    let path = cli
+        .acme_credentials_path
+        .clone()
+        .ok_or(anyhow!("ACME credentials path not specified"))?;
 
-        let hostname = cli
-            .hostname
-            .clone()
-            .ok_or(anyhow!("hostname not specified"))?;
+    let hostname = cli
+        .hostname
+        .clone()
+        .ok_or(anyhow!("hostname not specified"))?;
 
-        let opts = tls::acme::AcmeOptions::new(
-            vec![hostname],
-            v.clone(),
-            Duration::from_secs(86400 * 14),
-            false,
-            cli.acme_staging,
-            "mailto:boundary-nodes@dfinity.org".into(),
-        );
+    let opts = tls::acme::AcmeOptions::new(
+        vec![hostname],
+        path,
+        // Does not matter, rustls-acme renews after 45 days always
+        Duration::from_secs(1),
+        false,
+        cli.acme_staging,
+        "mailto:boundary-nodes@dfinity.org".into(),
+    );
 
-        tls::acme::alpn::new(opts, CancellationToken::new())
-    } else {
-        warn!("TLS: Using static certificates");
+    Ok(tls::acme::alpn::new(opts, CancellationToken::new()))
+}
 
-        let cert = cli
-            .tls_cert_path
-            .clone()
-            .ok_or(anyhow!("TLS cert not specified"))?;
-        let key = cli
-            .tls_pkey_path
-            .clone()
-            .ok_or(anyhow!("TLS key not specified"))?;
+/// Try to load the static resolver first, then ACME one.
+/// This is needed for integration tests where we cannot easily separate test/prod environments
+#[cfg(feature = "tls")]
+fn setup_tls_resolver(cli: &cli::TlsConfig) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+    warn!("TLS: Trying resolver: static files");
+    match setup_tls_resolver_stub(cli) {
+        Ok(v) => {
+            warn!("TLS: static resolver loaded");
+            return Ok(v);
+        }
 
-        let cert = std::fs::read(cert).context("unable to read TLS cert")?;
-        let key = std::fs::read(key).context("unable to read TLS key")?;
+        Err(e) => warn!("TLS: unable to load static resolver: {e}"),
+    }
 
-        let resolver = tls::StubResolver::new(&cert, &key)?;
-        Arc::new(resolver)
-    };
+    warn!(
+        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
+        cli.acme_staging
+    );
+    match setup_tls_resolver_acme(cli) {
+        Ok(v) => {
+            warn!("TLS: ACME resolver loaded");
+            return Ok(v);
+        }
 
-    Ok(resolver)
+        Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
+    }
+
+    Err(anyhow!("TLS: no resolvers were able to load"))
 }
 
 #[cfg(feature = "tls")]

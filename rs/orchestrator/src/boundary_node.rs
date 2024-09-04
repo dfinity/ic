@@ -158,6 +158,8 @@ impl BoundaryNodeManager {
         let args = vec![
             format!("--hostname={}", domain_name),
             format!("--https-port=443"),
+            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
+            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
             format!("--acme-credentials-path=/var/lib/ic/data"),
             format!("--disable-registry-replicator"),
             format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
