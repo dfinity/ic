@@ -3,6 +3,8 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/config.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
