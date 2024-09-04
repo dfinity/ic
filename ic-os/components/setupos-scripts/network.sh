@@ -160,7 +160,7 @@ function ping_ipv6_gateway() {
 }
 
 function assemble_nns_nodes_list() {
-    nns_url_string=$(get_config_value '.hostos_config.ic_config.nns_url')
+    nns_url_string=$(get_config_value '.icos_settings.nns_url')
     nns_url_list=$(echo $nns_url_string | sed 's@,@ @g')
 }
 
