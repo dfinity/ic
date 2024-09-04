@@ -2,6 +2,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
     Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
@@ -226,15 +227,19 @@ async fn get_or_fetch<P: Peers>(
     .await
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub(crate) enum InsertionError {
+    #[error("Trying to an ingress message which was never missing")]
     NotNeeded,
+    #[error("Trying to an ingress message which was already inserted")]
     AlreadyInserted,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub(crate) enum AssemblyError {
+    #[error("The block proposal is missing ingress message with id {0}")]
     Missing(IngressMessageId),
+    #[error("The block proposal cannot be deserialized {0}")]
     DeserializationFailed(ProxyDecodeError),
 }
 

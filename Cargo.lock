@@ -5313,6 +5313,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "slog",
+ "thiserror",
  "tokio",
  "tower",
  "tracing",
