@@ -8,6 +8,7 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
+use pretty_assertions::assert_eq;
 
 static CREATED_TIMESTAMP_SECONDS: u64 = 123_456_789;
 
@@ -305,7 +306,7 @@ fn test_neuron_store_new_then_restore() {
             restored_neuron_store
                 .with_neuron(&neuron.id(), |neuron| neuron.clone())
                 .unwrap(),
-            neuron.clone()
+            neuron.clone(),
         );
     }
     assert_eq!(
