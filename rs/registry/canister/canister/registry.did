@@ -444,7 +444,7 @@ service : {
   ) -> ();
   deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
-  get_api_boundary_node_ids : () -> (GetApiBoundaryNodeIdsResponse) query;
+  get_api_boundary_node_ids : (record {}) -> (GetApiBoundaryNodeIdsResponse) query;
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
