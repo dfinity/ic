@@ -175,7 +175,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
     /// Returns the first message from the next queue.
     pub fn peek(&self) -> Option<&RequestOrResponse> {
-        let item = self.queues.front()?.1.peek().unwrap();
+        let queue = &self.queues.front()?.1;
+        let item = queue.peek().expect("Empty queue in iterator.");
 
         let msg = self.pool.get(item.id());
         assert!(msg.is_some(), "stale reference at the head of output queue");
@@ -362,7 +363,8 @@ impl CanisterQueues {
         let sender = msg.sender();
         let input_queue = match &msg {
             RequestOrResponse::Request(_) => {
-                let (input_queue, output_queue) = self.get_or_insert_queues(&sender);
+                let (input_queue, output_queue) =
+                    get_or_insert_queues(&mut self.canister_queues, &sender);
                 if let Err(e) = input_queue.check_has_request_slot() {
                     return Err((e, msg));
                 }
@@ -371,8 +373,7 @@ impl CanisterQueues {
                 if let Err(e) = output_queue.try_reserve_response_slot() {
                     return Err((e, msg));
                 }
-                // Make the borrow checker happy.
-                &mut self.canister_queues.get_mut(&sender).unwrap().0
+                input_queue
             }
             RequestOrResponse::Response(response) => {
                 match self.canister_queues.get_mut(&sender) {
@@ -596,7 +597,8 @@ impl CanisterQueues {
         request: Arc<Request>,
         time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        let (input_queue, output_queue) = self.get_or_insert_queues(&request.receiver);
+        let (input_queue, output_queue) =
+            get_or_insert_queues(&mut self.canister_queues, &request.receiver);
 
         if let Err(e) = output_queue.check_has_request_slot() {
             return Err((e, request));
@@ -604,8 +606,6 @@ impl CanisterQueues {
         if let Err(e) = input_queue.try_reserve_response_slot() {
             return Err((e, request));
         }
-        // Make the borrow checker happy.
-        let (_, output_queue) = &mut self.canister_queues.get_mut(&request.receiver).unwrap();
 
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
@@ -638,7 +638,8 @@ impl CanisterQueues {
             "reject_subnet_output_request can only be used to reject management canister requests"
         );
 
-        let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
+        let (input_queue, _output_queue) =
+            get_or_insert_queues(&mut self.canister_queues, &request.receiver);
         input_queue.try_reserve_response_slot()?;
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
@@ -827,21 +828,6 @@ impl CanisterQueues {
     pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
         self.queue_stats
             .transient_stream_guaranteed_responses_size_bytes = size_bytes;
-    }
-
-    /// Returns an existing matching pair of input and output queues from/to
-    /// the given canister; or creates a pair of empty queues, if non-existent.
-    fn get_or_insert_queues(
-        &mut self,
-        canister_id: &CanisterId,
-    ) -> (&mut CanisterQueue, &mut CanisterQueue) {
-        let (input_queue, output_queue) =
-            self.canister_queues.entry(*canister_id).or_insert_with(|| {
-                let input_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-                let output_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-                (input_queue, output_queue)
-            });
-        (input_queue, output_queue)
     }
 
     /// Garbage collects all input and output queue pairs that are both empty.
@@ -1117,6 +1103,23 @@ impl CanisterQueues {
     }
 }
 
+/// Returns an existing matching pair of input and output queues from/to
+/// the given canister; or creates a pair of empty queues, if non-existent.
+///
+/// Written as a free function in order to avoid borrowing the full
+/// `CanisterQueues`, which then requires looking up the queues again.
+fn get_or_insert_queues<'a>(
+    canister_queues: &'a mut BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    canister_id: &CanisterId,
+) -> (&'a mut CanisterQueue, &'a mut CanisterQueue) {
+    let (input_queue, output_queue) = canister_queues.entry(*canister_id).or_insert_with(|| {
+        let input_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+        let output_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+        (input_queue, output_queue)
+    });
+    (input_queue, output_queue)
+}
+
 /// Pops and returns the item at the head of the queue and advances the queue
 /// to the next non-stale item.
 fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<RequestOrResponse> {
@@ -1165,6 +1168,23 @@ fn generate_timeout_response(request: &Arc<Request>) -> Response {
             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
         )),
         deadline: request.deadline,
+    }
+}
+
+/// Returns a function that determines the input queue type (local or remote) of
+/// a given sender, based on a the set of all local canisters, plus
+/// `own_canister_id` (since Rust's ownership rules would prevent us from
+/// mutating a canister's queues if they were still under `local_canisters`).
+fn input_queue_type_fn<'a>(
+    own_canister_id: &'a CanisterId,
+    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
+) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
+    move |sender| {
+        if sender == own_canister_id || local_canisters.contains_key(sender) {
+            InputQueueType::LocalSubnet
+        } else {
+            InputQueueType::RemoteSubnet
+        }
     }
 }
 
@@ -1473,23 +1493,6 @@ pub fn memory_required_to_push_request(req: &Request) -> usize {
     }
 
     req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
-}
-
-/// Returns a function that determines the input queue type (local or remote) of
-/// a given sender, based on a the set of all local canisters, plus
-/// `own_canister_id` (since Rust's ownership rules would prevent us from
-/// mutating a canister's queues if they were still under `local_canisters`).
-fn input_queue_type_fn<'a>(
-    own_canister_id: &'a CanisterId,
-    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
-) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
-    move |sender| {
-        if sender == own_canister_id || local_canisters.contains_key(sender) {
-            InputQueueType::LocalSubnet
-        } else {
-            InputQueueType::RemoteSubnet
-        }
-    }
 }
 
 pub mod testing {
