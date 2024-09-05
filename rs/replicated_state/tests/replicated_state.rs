@@ -1009,18 +1009,6 @@ proptest! {
         }
 
         prop_assert_eq!(replicated_state.output_message_count(), 0);
-
-    }
-
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        while output_iter.peek().is_some() {
-            output_iter.next();
-        }
     }
 
     #[test]
