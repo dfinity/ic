@@ -25,10 +25,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{
-        Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        MAX_RESPONSE_COUNT_BYTES,
-    },
+    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId,
 };
@@ -49,7 +46,7 @@ const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CyclesAccountManagerError {
     /// One of the API contracts that the cycles account manager enforces was
     /// violated.
@@ -78,7 +75,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -161,7 +158,7 @@ pub fn is_delayed_ingress_induction_cost(arg: &[u8]) -> bool {
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManager {
     /// The maximum allowed instructions to be spent on a single message
     /// execution.
@@ -376,48 +373,6 @@ impl CyclesAccountManager {
             ),
             reveal_top_up,
         )
-    }
-
-    /// Withdraws up to `cycles` worth of cycles from the canister's balance
-    /// without putting the canister below its freezing threshold even if
-    /// the call currently under construction is performed.
-    ///
-    /// NOTE: This method is intended for use in inter-canister transfers.
-    ///       It doesn't report these cycles as consumed. To withdraw cycles
-    ///       and have them reported as consumed, use `consume_cycles`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn withdraw_up_to_cycles_for_transfer(
-        &self,
-        freeze_threshold: NumSeconds,
-        memory_allocation: MemoryAllocation,
-        current_payload_size_bytes: NumBytes,
-        canister_current_memory_usage: NumBytes,
-        canister_current_message_memory_usage: NumBytes,
-        canister_compute_allocation: ComputeAllocation,
-        cycles_balance: &mut Cycles,
-        cycles: Cycles,
-        subnet_size: usize,
-        reserved_balance: Cycles,
-    ) -> Cycles {
-        let call_perform_cost = self.xnet_call_performed_fee(subnet_size)
-            + self.xnet_call_bytes_transmitted_fee(current_payload_size_bytes, subnet_size)
-            + self.prepayment_for_response_transmission(subnet_size)
-            + self.prepayment_for_response_execution(subnet_size);
-        let memory_used_to_enqueue_message =
-            current_payload_size_bytes.max((MAX_RESPONSE_COUNT_BYTES as u64).into());
-        let freeze_threshold = self.freeze_threshold_cycles(
-            freeze_threshold,
-            memory_allocation,
-            canister_current_memory_usage,
-            canister_current_message_memory_usage + memory_used_to_enqueue_message,
-            canister_compute_allocation,
-            subnet_size,
-            reserved_balance,
-        );
-        let available_for_withdrawal = *cycles_balance - freeze_threshold - call_perform_cost;
-        let withdrawn_cycles = available_for_withdrawal.min(cycles);
-        *cycles_balance -= withdrawn_cycles;
-        withdrawn_cycles
     }
 
     /// Charges the canister for ingress induction cost.
@@ -1176,7 +1131,7 @@ impl CyclesAccountManager {
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCost {
     /// Induction is free.
     Free,
@@ -1195,7 +1150,7 @@ impl IngressInductionCost {
 }
 
 /// Errors returned when computing the cost of receiving an ingress.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCostError {
     /// The requested subnet method is not available.
     UnknownSubnetMethod,

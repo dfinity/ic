@@ -113,6 +113,17 @@ macro_rules! assert_is_err {
     };
 }
 
+pub fn obsolete_string_field<T: AsRef<str>>(obselete_field: T, replacement: Option<T>) -> String {
+    match replacement {
+        Some(replacement) => format!(
+            "The field `{}` is obsolete. Please use `{}` instead.",
+            obselete_field.as_ref(),
+            replacement.as_ref(),
+        ),
+        None => format!("The field `{}` is obsolete.", obselete_field.as_ref()),
+    }
+}
+
 /// Besides dividing, this also converts to Decimal (from u64).
 ///
 /// The only way this can fail is if denominations_per_token is 0. Therefore, if you pass a positive
@@ -172,7 +183,7 @@ impl fmt::Debug for NervousSystemError {
 
 /// A more convenient (but explosive) way to do token math. Not suitable for
 /// production use! Only for use in tests.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ExplosiveTokens(Tokens);
 
 impl Display for ExplosiveTokens {
@@ -326,7 +337,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,
@@ -813,14 +824,10 @@ pub fn stable_memory_size_bytes() -> u64 {
 
 // Given 2 numbers `dividend`` and `divisor`, break the dividend to `divisor * quotient + remainder`
 // where `remainder < divisor`, using safe arithmetic. Returns `(quotient, remainder)`.
-fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
-    let quotient = dividend
-        .checked_div(divisor)
-        .expect("Failed to calculate quotient");
-    let remainder = dividend
-        .checked_rem(divisor)
-        .expect("Failed to calculate remainder");
-    (quotient, remainder)
+fn checked_div_mod(dividend: usize, divisor: usize) -> Option<(usize, usize)> {
+    let quotient = dividend.checked_div(divisor)?;
+    let remainder = dividend.checked_rem(divisor)?;
+    Some((quotient, remainder))
 }
 
 #[cfg(test)]

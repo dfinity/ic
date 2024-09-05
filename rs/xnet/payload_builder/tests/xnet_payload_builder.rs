@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use ic_base_types::NumBytes;
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_interfaces::messaging::XNetPayloadBuilder;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -680,7 +680,7 @@ impl XNetClient for FakeXNetClient {
 
 /// A replacement for `XNetClientError` because `XNetClientError` is not `Clone`
 /// and thus can't be used directly by `FakeXNetClient`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[allow(dead_code)]
 enum FakeXNetClientError {
     ErrorResponse,

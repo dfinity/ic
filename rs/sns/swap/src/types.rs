@@ -3,13 +3,14 @@ use crate::{
     environment::{CanisterClients, CanisterEnvironment},
     logs::{ERROR, INFO},
     pb::v1::{
-        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
-        set_mode_call_result::SetModeResult,
+        claim_swap_neurons_request::{NeuronRecipe, NeuronRecipes},
+        error_refund_icp_response, set_dapp_controllers_call_result,
+        set_mode_call_result::{self, SetModeResult},
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
-        Params, SetDappControllersCallResult, SetModeCallResult,
+        NeuronIds as SwapNeuronIds, Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
@@ -746,6 +747,7 @@ impl CfParticipant {
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
+    /// Tries to get the controller, returning an error if it is not set
     pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
         #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         match (
@@ -866,7 +868,7 @@ impl TransferResult {
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct ScheduledVestingEvent {
     /// The dissolve_delay of the neuron
     pub(crate) dissolve_delay_seconds: u64,
@@ -1082,6 +1084,43 @@ impl From<SwapNeuronId> for NeuronId {
     }
 }
 
+// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
+impl From<Vec<SwapNeuronId>> for SwapNeuronIds {
+    fn from(neuron_ids: Vec<SwapNeuronId>) -> Self {
+        SwapNeuronIds { neuron_ids }
+    }
+}
+
+// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
+impl From<Vec<NeuronId>> for SwapNeuronIds {
+    fn from(neuron_ids: Vec<NeuronId>) -> Self {
+        SwapNeuronIds {
+            neuron_ids: neuron_ids.into_iter().map(SwapNeuronId::from).collect(),
+        }
+    }
+}
+
+// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
+impl From<SwapNeuronIds> for Vec<SwapNeuronId> {
+    fn from(neuron_ids: SwapNeuronIds) -> Self {
+        neuron_ids.neuron_ids
+    }
+}
+
+// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
+impl From<Vec<NeuronRecipe>> for NeuronRecipes {
+    fn from(neuron_recipes: Vec<NeuronRecipe>) -> Self {
+        NeuronRecipes { neuron_recipes }
+    }
+}
+
+// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
+impl From<NeuronRecipes> for Vec<NeuronRecipe> {
+    fn from(neuron_recipes: NeuronRecipes) -> Self {
+        neuron_recipes.neuron_recipes
+    }
+}
+
 /// Internal definition of a NeuronsFundNeuron. This is the simplified version with
 /// all options removed.
 ///
@@ -1135,25 +1174,16 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
     fn try_from(
         value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed
         let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
             nns_neuron_id,
             amount_icp_e8s,
             controller,
             hotkeys,
             is_capped,
-            hotkey_principal,
         } = value;
         let hotkeys = hotkeys.unwrap_or_default().principals;
-
-        let controller = match (controller, hotkey_principal) {
-            (Some(controller), _) => controller,
-            // TODO(NNS1-3198): Remove this case once hotkey_principal is removed
-            (None, Some(hotkey_principal)) => PrincipalId::from_str(&hotkey_principal)
-                .map_err(|_| format!("Invalid hotkey_principal {}", hotkey_principal))?,
-            (None, None) => {
-                return Err("Either controller or hotkey_principal must be specified".to_string())
-            }
+        let Some(controller) = controller else {
+            return Err("NeuronsFundNeuron.controller must be specified".to_string());
         };
 
         match (nns_neuron_id, amount_icp_e8s, is_capped) {
@@ -1176,9 +1206,6 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
 }
 
 #[cfg(test)]
-// TODO(NNS1-3198): remove #[allow(deprecated)] once hotkey_principal is removed.
-// Unfortunately, this must be applied to the whole module to avoid warnings on the hotkey_principal field in lazy_static.
-#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::{
@@ -1265,6 +1292,7 @@ mod tests {
 
     #[test]
     fn participant_total_icp_e8s_no_overflow() {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let participant = CfParticipant {
             controller: None,
             hotkey_principal: "".to_string(),

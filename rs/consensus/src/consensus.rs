@@ -52,12 +52,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::ConsensusMessageId,
-    consensus::{ConsensusMessage, ConsensusMessageHashable},
-    malicious_flags::MaliciousFlags,
-    replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion,
-    Time,
+    artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
+    replica_version::ReplicaVersion, Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -68,7 +65,7 @@ use std::{
 };
 use strum_macros::AsRefStr;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, AsRefStr)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {
     Notary,
@@ -151,11 +148,13 @@ impl ConsensusImpl {
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         time_source: Arc<dyn TimeSource>,
-        stable_registry_version_age: Duration,
+        registry_poll_delay_duration_ms: u64,
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
+        let stable_registry_version_age =
+            POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
             replica_config.node_id,
@@ -576,84 +575,27 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
     .unwrap_or_default()
 }
 
-/// Implement Consensus Gossip interface.
-pub struct ConsensusGossipImpl {
+/// Implements the BouncerFactory interfaces for Consensus.
+pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
 }
 
-impl ConsensusGossipImpl {
-    /// Create a new [ConsensusGossipImpl].
+impl ConsensusBouncer {
+    /// Create a new [ConsensusBouncer].
     pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
-        ConsensusGossipImpl { message_routing }
+        ConsensusBouncer { message_routing }
     }
 }
 
-impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusBouncer {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }
-}
 
-#[allow(clippy::too_many_arguments)]
-/// Setup consensus component, and return two objects satisfying the Consensus
-/// and ConsensusGossip interfaces respectively.
-pub fn setup(
-    replica_config: ReplicaConfig,
-    registry_client: Arc<dyn RegistryClient>,
-    membership: Arc<Membership>,
-    crypto: Arc<dyn ConsensusCrypto>,
-    ingress_selector: Arc<dyn IngressSelector>,
-    xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
-    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
-    canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
-    query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
-    dkg_pool: Arc<RwLock<dyn DkgPool>>,
-    idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
-    message_routing: Arc<dyn MessageRouting>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    time_source: Arc<dyn TimeSource>,
-    malicious_flags: MaliciousFlags,
-    metrics_registry: MetricsRegistry,
-    logger: ReplicaLogger,
-    registry_poll_delay_duration_ms: u64,
-) -> (ConsensusImpl, ConsensusGossipImpl) {
-    // Currently, the orchestrator polls the registry every
-    // `registry_poll_delay_duration_ms` and writes new updates into the
-    // registry local store. The registry client polls the local store
-    // for updates every `registry::POLLING_PERIOD`. These two polls are completely
-    // async, so that every replica sees a new registry version at any time
-    // between >0 and the sum of both polling intervals. To accommodate for that,
-    // we use this sum as the minimal age of a registry version we consider as
-    // stable.
-
-    let stable_registry_version_age =
-        POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
-    (
-        ConsensusImpl::new(
-            replica_config,
-            registry_client,
-            membership,
-            crypto,
-            ingress_selector,
-            xnet_payload_builder,
-            self_validating_payload_builder,
-            canister_http_payload_builder,
-            query_stats_payload_builder,
-            dkg_pool,
-            idkg_pool,
-            dkg_key_manager,
-            message_routing.clone(),
-            state_manager,
-            time_source,
-            stable_registry_version_age,
-            malicious_flags,
-            metrics_registry,
-            logger,
-        ),
-        ConsensusGossipImpl::new(message_routing),
-    )
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
+    }
 }
 
 #[cfg(test)]
@@ -676,7 +618,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
@@ -738,7 +680,7 @@ mod tests {
             Arc::new(FakeMessageRouting::new()),
             state_manager,
             time_source.clone(),
-            Duration::from_secs(0),
+            0,
             MaliciousFlags::default(),
             metrics_registry,
             no_op_logger(),

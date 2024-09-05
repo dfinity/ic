@@ -1784,7 +1784,7 @@ pub fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
 }
 
 /// Specifies the upgrade path for SNS instances
-#[derive(Clone, Default, Debug, candid::CandidType, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct UpgradePath {
     /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
     /// this version.

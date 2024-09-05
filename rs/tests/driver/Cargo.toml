@@ -38,7 +38,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
@@ -101,7 +101,7 @@ itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
 k8s-openapi = { version = "0.22.0", features = ["v1_24"] }
-kube = { version = "0.93.1", features = ["runtime", "derive", "ws"] }
+kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
 lifeline = { path = "../../nns/handlers/lifeline/impl" }

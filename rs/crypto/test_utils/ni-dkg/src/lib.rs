@@ -387,7 +387,7 @@ impl RandomNiDkgConfigBuilder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RandomNiDkgConfig(NiDkgConfig);
 
 impl RandomNiDkgConfig {

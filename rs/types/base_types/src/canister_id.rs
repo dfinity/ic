@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, CandidType, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Serialize)]
 pub struct CanisterId(PrincipalId);
 
 /// Represents an error that can occur when constructing a [`CanisterId`] from a
 /// [`PrincipalId`].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterIdError {
     /// An invalid [`PrincipalId`] was given.
     InvalidPrincipalId(String),

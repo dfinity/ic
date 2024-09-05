@@ -3,12 +3,12 @@
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -153,15 +153,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "call_new+ic0_call_cycles_add128()".into(),
             Module::CallNewLoop.from_ic0("call_cycles_add128", Params2(0_i64, 100_i64), Result::No),
-            2059000006,
-        ),
-        common::Benchmark(
-            "call_new+ic0_call_cycles_add128_up_to()".into(),
-            Module::CallNewLoop.from_ic0(
-                "call_cycles_add128_up_to",
-                Params3(0_i64, 100_i64, 0_i32),
-                Result::No,
-            ),
             2059000006,
         ),
         common::Benchmark(

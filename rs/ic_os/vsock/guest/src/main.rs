@@ -20,7 +20,7 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 #[clap(
     version = "1.0.0",
     about = "A CLI for sending vsock commands",
@@ -50,7 +50,7 @@ struct Cli {
     upgrade: Upgrade,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug, Args)]
 struct Notify {
     /// Request HostOS to print to the host terminal a given message COUNT number of times.
     #[clap(long, value_name = "MESSAGE")]
@@ -61,7 +61,7 @@ struct Notify {
     count: u32,
 }
 
-#[derive(Args, Debug)]
+#[derive(Debug, Args)]
 struct Upgrade {
     /// Request HostOS to apply the given upgrade
     #[clap(long, value_name = "URL")]

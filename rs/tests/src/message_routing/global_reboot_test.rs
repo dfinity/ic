@@ -31,7 +31,7 @@ use std::time::Duration;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-    IcNodeSnapshot,
+    IcNodeSnapshot, SubnetSnapshot,
 };
 use ic_system_test_driver::util::{
     assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
@@ -42,6 +42,7 @@ use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::InternetComputer;
+use itertools::Itertools;
 use slog::{info, Logger};
 use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};
@@ -67,13 +68,20 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let log = env.logger();
     let all_nodes: Vec<IcNodeSnapshot> = env
         .topology_snapshot()
         .subnets()
         .flat_map(|s| s.nodes())
         .collect();
     assert_eq!(all_nodes.len(), SUBNETS_COUNT); // 1 node per subnet
+    let subnets = env.topology_snapshot().subnets().collect_vec();
+    test_on_subnets(env, subnets)
+}
+
+pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
+    let log = env.logger();
+    let all_nodes: Vec<IcNodeSnapshot> = subnets.iter().flat_map(|s| s.nodes()).collect();
+
     let runtimes: Vec<Runtime> = all_nodes
         .iter()
         .map(|n| runtime_from_url(n.get_public_url(), n.effective_canister_id()))

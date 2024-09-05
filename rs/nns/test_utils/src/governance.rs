@@ -642,7 +642,7 @@ pub async fn invalid_bitcoin_set_config_by_proposal(
     set_config_request: SetConfigRequest,
 ) -> ProposalId {
     // An invalid proposal payload to set the Bitcoin configuration.
-    #[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
+    #[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
     pub struct BitcoinSetConfigProposalInvalid {
         pub payload: Vec<u8>,
     }
