@@ -113,7 +113,7 @@ impl StateMachine for StateMachineImpl {
         let timed_out_messages = state.time_out_requests();
         self.metrics
             .timed_out_messages_total
-            .inc_by(timed_out_messages as u64);
+            .inc_by(timed_out_messages);
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
