@@ -16,9 +16,7 @@ use ic_consensus::{
     dkg, idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -307,6 +305,7 @@ fn start_consensus(
         let consensus_impl = ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client),
+            consensus_pool_cache.clone(),
             Arc::clone(&consensus_crypto),
             Arc::clone(&ingress_manager) as Arc<_>,
             xnet_payload_builder,
