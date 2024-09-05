@@ -216,7 +216,7 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
                 chain_id: candid::Nat::from(*token.chain_id().as_ref()),
                 address: token.address().to_string(),
             },
-            ckerc20_token_symbol: canisters.metadata.ckerc20_token_symbol.to_string(),
+            ckerc20_token_symbol: canisters.metadata.token_symbol.to_string(),
             ledger: canisters.ledger.as_ref().map(ManagedCanisterStatus::from),
             index: canisters.index.as_ref().map(ManagedCanisterStatus::from),
             archives: canisters.archives.clone(),
@@ -235,7 +235,7 @@ pub struct ManagedOtherCanisters {
 impl From<Canisters> for ManagedOtherCanisters {
     fn from(value: Canisters) -> Self {
         Self {
-            token_symbol: value.metadata.ckerc20_token_symbol.to_string(),
+            token_symbol: value.metadata.token_symbol.to_string(),
             ledger: value.ledger.as_ref().map(ManagedCanisterStatus::from),
             index: value.index.as_ref().map(ManagedCanisterStatus::from),
             archives: value.archives.clone(),

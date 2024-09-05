@@ -35,7 +35,7 @@ fn should_display_managed_canisters() {
     state.record_new_erc20_token(
         usdc(),
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDC".to_string(),
+            token_symbol: "ckUSDC".to_string(),
         },
     );
     state.record_created_canister::<Ledger>(&usdc(), Principal::from_str(USDC_LEDGER_ID).unwrap());
@@ -66,7 +66,7 @@ fn should_display_managed_canisters() {
     state.record_new_erc20_token(
         usdt(),
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDT".to_string(),
+            token_symbol: "ckUSDT".to_string(),
         },
     );
     state.record_created_canister::<Ledger>(&usdt(), Principal::from_str(USDT_LEDGER_ID).unwrap());
@@ -446,7 +446,7 @@ mod fixtures {
 
     pub fn usdc_metadata() -> CanistersMetadata {
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDC".to_string(),
+            token_symbol: "ckUSDC".to_string(),
         }
     }
 

@@ -824,7 +824,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     record_new_erc20_token_once(
         args.contract.clone(),
         CanistersMetadata {
-            ckerc20_token_symbol: args.ledger_init_arg.token_symbol.clone(),
+            token_symbol: args.ledger_init_arg.token_symbol.clone(),
         },
     );
     let CyclesManagement {
@@ -1121,7 +1121,7 @@ async fn notify_erc20_added<R: CanisterRuntime>(
             let args = AddCkErc20Token {
                 chain_id: Nat::from(*token.chain_id().as_ref()),
                 address: token.address().to_string(),
-                ckerc20_token_symbol: metadata.ckerc20_token_symbol,
+                ckerc20_token_symbol: metadata.token_symbol,
                 ckerc20_ledger_id: *ledger.canister_id(),
             };
             runtime

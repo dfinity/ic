@@ -16,7 +16,7 @@ pub fn dai() -> Erc20Token {
 
 pub fn dai_metadata() -> CanistersMetadata {
     CanistersMetadata {
-        ckerc20_token_symbol: "ckDAI".to_string(),
+        token_symbol: "ckDAI".to_string(),
     }
 }
 
@@ -31,7 +31,7 @@ pub fn usdc() -> Erc20Token {
 
 pub fn usdc_metadata() -> CanistersMetadata {
     CanistersMetadata {
-        ckerc20_token_symbol: "ckUSDC".to_string(),
+        token_symbol: "ckUSDC".to_string(),
     }
 }
 
@@ -45,6 +45,6 @@ pub fn usdt() -> Erc20Token {
 }
 pub fn usdt_metadata() -> CanistersMetadata {
     CanistersMetadata {
-        ckerc20_token_symbol: "ckUSDT".to_string(),
+        token_symbol: "ckUSDT".to_string(),
     }
 }

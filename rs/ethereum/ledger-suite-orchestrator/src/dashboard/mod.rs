@@ -148,7 +148,7 @@ impl DashboardTemplate {
                     (
                         k.clone(),
                         CanistersDashboardData {
-                            ckerc20_token_symbol: v.metadata.ckerc20_token_symbol.clone(),
+                            ckerc20_token_symbol: v.metadata.token_symbol.clone(),
                             canisters: CanisterDashboardData::from_canisters(v),
                         },
                     )

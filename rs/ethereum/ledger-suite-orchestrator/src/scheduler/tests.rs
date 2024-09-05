@@ -455,7 +455,7 @@ mod notify_erc_20_added {
             AddCkErc20Token {
                 chain_id: Nat::from(1_u8),
                 address: usdc.address().to_string(),
-                ckerc20_token_symbol: usdc_metadata.ckerc20_token_symbol,
+                ckerc20_token_symbol: usdc_metadata.token_symbol,
                 ckerc20_ledger_id: LEDGER_PRINCIPAL,
             },
             Ok(()),
@@ -552,7 +552,7 @@ mod notify_erc_20_added {
                 AddCkErc20Token {
                     chain_id: Nat::from(1_u8),
                     address: usdc.address().to_string(),
-                    ckerc20_token_symbol: usdc_metadata.ckerc20_token_symbol.clone(),
+                    ckerc20_token_symbol: usdc_metadata.token_symbol.clone(),
                     ckerc20_ledger_id: LEDGER_PRINCIPAL,
                 },
                 Ok(()),
@@ -1361,7 +1361,7 @@ mod run_task {
         AddCkErc20Token {
             chain_id: Nat::from(1_u8),
             address: usdc().address().to_string(),
-            ckerc20_token_symbol: usdc_metadata().ckerc20_token_symbol.clone(),
+            ckerc20_token_symbol: usdc_metadata().token_symbol.clone(),
             ckerc20_ledger_id: LEDGER_PRINCIPAL,
         }
     }

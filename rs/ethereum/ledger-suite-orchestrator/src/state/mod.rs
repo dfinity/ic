@@ -264,8 +264,7 @@ pub struct Canisters {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct CanistersMetadata {
-    //TODO XC-189 rename field
-    pub ckerc20_token_symbol: String,
+    pub token_symbol: String,
 }
 
 impl Canisters {
@@ -790,7 +789,7 @@ impl From<ManageOtherCanisters> for Canisters {
             })),
             archives: value.archives,
             metadata: CanistersMetadata {
-                ckerc20_token_symbol: value.token_symbol.to_string(),
+                token_symbol: value.token_symbol.to_string(),
             },
         }
     }
