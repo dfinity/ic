@@ -367,7 +367,7 @@ impl RosettaClient {
                 signatures,
             )
             .await?;
-        
+
         let submit_response = self
             .construction_submit(
                 network_identifier.clone(),
