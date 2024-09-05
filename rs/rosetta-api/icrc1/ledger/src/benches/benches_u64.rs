@@ -36,7 +36,7 @@ fn bench_icrc1_transfers() -> BenchResult {
                     from_subaccount: account_with_tokens.subaccount,
                     to: Account {
                         owner: max_length_principal(i),
-                        subaccount: Some([11_u8; 32]),
+                        subaccount: Some([12_u8; 32]),
                     },
                     created_at_time: Some(start_time + i as u64),
                     ..ckbtc_transfer()
