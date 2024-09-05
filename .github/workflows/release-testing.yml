@@ -258,7 +258,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Run qualification for version ${{ matrix.version }}
+      - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         shell: bash
         run: |
-          bazel test //rs/tests/dre:guest_os_qualification --config=systest --cache_test_results=no --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }} --test_env=NEW_VERSION=${{ github.sha }}
+          bazel test //rs/tests/dre:guest_os_qualification --config=systest --cache_test_results=no --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}
