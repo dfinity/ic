@@ -51,7 +51,7 @@ pub enum CallContextIdTag {}
 /// Identifies an incoming call.
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
@@ -90,7 +90,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -259,7 +259,7 @@ impl std::fmt::Debug for Request {
 }
 
 /// The context attached when an inter-canister message is rejected.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
     code: RejectCode,
@@ -312,6 +312,18 @@ impl RejectContext {
         &self.message
     }
 
+    /// For use in tests.
+    /// Assert that the rejection has the given code and containing the given string.
+    pub fn assert_contains(&self, code: RejectCode, message: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.message.contains(message),
+            "Unable to match rejection message {} with expected {}",
+            self.message,
+            message
+        );
+    }
+
     /// Returns the size of this `RejectContext` in bytes.
     fn size_bytes(&self) -> NumBytes {
         let size = std::mem::size_of::<RejectCode>() + self.message.len();
@@ -329,7 +341,7 @@ impl From<UserError> for RejectContext {
 }
 
 /// A union of all possible message payloads.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
@@ -340,6 +352,16 @@ pub enum Payload {
 }
 
 impl Payload {
+    /// For use in tests.
+    /// Assert that the payload is a rejection with the given code and
+    /// containing the given string.
+    pub fn assert_contains_reject(&self, code: RejectCode, message: &str) {
+        match self {
+            Self::Reject(err) => err.assert_contains(code, message),
+            Self::Data(_) => panic!("Expected a rejection, but got a valid response."),
+        }
+    }
+
     /// Returns the size of this `Payload` in bytes.
     fn size_bytes(&self) -> NumBytes {
         match self {
@@ -412,7 +434,7 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
@@ -464,7 +486,7 @@ impl Hash for Response {
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),

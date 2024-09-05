@@ -4,7 +4,7 @@ use ic_artifact_pool::{
     dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::ConsensusGossipImpl;
+use ic_consensus::consensus::ConsensusBouncer;
 use ic_interfaces::{
     certification,
     consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
@@ -28,7 +28,7 @@ impl<'a> ConsensusDriver<'a> {
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
         consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
-        consensus_gossip: ConsensusGossipImpl,
+        consensus_bouncer: ConsensusBouncer,
         dkg: ic_consensus::dkg::DkgImpl,
         idkg: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
         certifier: Box<
@@ -48,10 +48,10 @@ impl<'a> ConsensusDriver<'a> {
             metrics_registry,
         )));
         let consensus_priority =
-            PriorityFnState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
+            BouncerState::new(&consensus_bouncer, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
-            consensus_gossip,
+            consensus_bouncer,
             dkg,
             idkg,
             certifier,

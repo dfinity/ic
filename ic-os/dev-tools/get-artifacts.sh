@@ -14,8 +14,8 @@ CI_PROJECT_DIR=$(dirname "$0")/../..
 cd "${CI_PROJECT_DIR}"
 echo "➡️  Downloading artifacts for revision $GIT"
 set -x
-./gitlab-ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/canisters --remote-path canisters --latest-to
-./gitlab-ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/release --remote-path release --latest-to
+./ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/canisters --remote-path canisters --latest-to
+./ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/release --remote-path release --latest-to
 (
     cd artifacts/canisters
     for f in *.gz; do gunzip -f $f; done
@@ -27,7 +27,7 @@ set -x
 )
 
 if [[ $GET_GUEST_OS -eq 1 ]]; then
-    ./gitlab-ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/guest-os --remote-path guest-os --latest-to
+    ./ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/guest-os --remote-path guest-os --latest-to
     (
         cd artifacts/guest-os/disk-img
         for f in *.gz; do gunzip -f $f; done
@@ -39,7 +39,7 @@ if [[ $GET_GUEST_OS -eq 1 ]]; then
 fi
 
 if [[ $GET_HOST_OS -eq 1 ]]; then
-    ./gitlab-ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/host-os --remote-path host-os --latest-to
+    ./ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/host-os --remote-path host-os --latest-to
     (
         cd artifacts/host-os/disk-img
         for f in *.gz; do gunzip -f $f; done
@@ -51,7 +51,7 @@ if [[ $GET_HOST_OS -eq 1 ]]; then
 fi
 
 if [[ $GET_SETUP_OS -eq 1 ]]; then
-    ./gitlab-ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/setup-os --remote-path setup-os --latest-to
+    ./ci/src/artifacts/rclone_download.py --git-rev $GIT --out=artifacts/setup-os --remote-path setup-os --latest-to
     (
         cd artifacts/setup-os/disk-img
         for f in *.gz; do gunzip -f $f; done

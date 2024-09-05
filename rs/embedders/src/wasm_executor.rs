@@ -105,7 +105,7 @@ impl WasmExecutorMetrics {
 }
 
 /// Contains information about execution of the current slice.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
@@ -594,6 +594,7 @@ pub fn process(
         execution_parameters.clone(),
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
+        embedder.config().feature_flags.canister_backtrace,
         embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
         out_of_instructions_handler,

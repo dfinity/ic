@@ -1236,16 +1236,10 @@ pub enum ProposalActionRequest {
     AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
     #[prost(message, tag = "17")]
     RewardNodeProvider(RewardNodeProvider),
-    #[prost(message, tag = "18")]
-    SetDefaultFollowees(SetDefaultFollowees),
     #[prost(message, tag = "19")]
     RewardNodeProviders(RewardNodeProviders),
     #[prost(message, tag = "21")]
     RegisterKnownNeuron(KnownNeuron),
-    #[prost(message, tag = "22")]
-    SetSnsTokenSwapOpenTimeWindow(SetSnsTokenSwapOpenTimeWindow),
-    #[prost(message, tag = "23")]
-    OpenSnsTokenSwap(OpenSnsTokenSwap),
     #[prost(message, tag = "24")]
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     #[prost(message, tag = "25")]
@@ -1548,11 +1542,6 @@ pub struct ProposalData {
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: Option<u64>,
-    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
-    /// conclude_community_fund_participation Candid method is called to either
-    /// mint ICP, or restore CF neuron maturity.
-    #[prost(message, repeated, tag = "18")]
-    pub cf_participants: Vec<::ic_sns_swap::pb::v1::CfParticipant>,
     /// This gets set to one of the terminal values (i.e. Committed or Aborted)
     /// when the swap canister calls our conclude_community_fund_participation
     /// Candid method. Initially, it is set to Open, because swap is supposed to
@@ -1746,10 +1735,6 @@ pub mod neurons_fund_snapshot {
         /// The principals that can vote, propose, and follow on behalf of this neuron.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: Vec<PrincipalId>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        #[deprecated]
-        #[prost(message, optional, tag = "4")]
-        pub hotkey_principal: Option<PrincipalId>,
     }
 }
 /// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
@@ -2235,6 +2220,7 @@ pub mod create_service_nervous_system {
     /// Nested message and enum types in `InitialTokenDistribution`.
     pub mod initial_token_distribution {
         use super::*;
+
         #[derive(
             candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
         )]
@@ -3528,11 +3514,7 @@ pub mod settle_neurons_fund_participation_response {
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
-        pub is_capped: Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: Option<::prost::alloc::string::String>,
+        pub is_capped: ::core::option::Option<bool>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

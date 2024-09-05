@@ -1400,10 +1400,8 @@ message ProposalData {
   // This is populated when an OpenSnsTokenSwap proposal is first made.
   optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 
-  // This is populated when OpenSnsTokenSwap is executed. It is used when our
-  // conclude_community_fund_participation Candid method is called to either
-  // mint ICP, or restore CF neuron maturity.
-  repeated ic_sns_swap.pb.v1.CfParticipant cf_participants = 18;
+  reserved "cf_participants";
+  reserved 18;
 
   // This gets set to one of the terminal values (i.e. Committed or Aborted)
   // when the swap canister calls our conclude_community_fund_participation
@@ -1554,8 +1552,8 @@ message NeuronsFundSnapshot {
     // The principals that can vote, propose, and follow on behalf of this neuron.
     repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4 [deprecated = true];
+    reserved 4;
+    reserved "hotkey_principal";
   }
 
   repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;
@@ -2721,8 +2719,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

@@ -6,9 +6,9 @@ use crate::proposal::ProposalTemplate;
 use askama::Template;
 use candid::Principal;
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf, StripPrefixError};
 
-#[derive(Debug, Clone, Args)]
+#[derive(Clone, Debug, Args)]
 pub struct IcAdminArgs {
     /// Use an HSM to sign calls.
     #[clap(long)]
@@ -73,6 +73,16 @@ pub struct ProposalFiles {
     pub wasm: PathBuf,
     pub arg: PathBuf,
     pub summary: PathBuf,
+}
+
+impl ProposalFiles {
+    pub fn strip_prefix(self, base: &Path) -> Result<Self, StripPrefixError> {
+        Ok(Self {
+            wasm: self.wasm.strip_prefix(base)?.to_path_buf(),
+            arg: self.arg.strip_prefix(base)?.to_path_buf(),
+            summary: self.summary.strip_prefix(base)?.to_path_buf(),
+        })
+    }
 }
 
 #[derive(Template)]

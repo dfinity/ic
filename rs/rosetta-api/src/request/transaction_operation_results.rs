@@ -9,7 +9,7 @@ use crate::models::operation::OperationType;
 use crate::models::Operation;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionOperationResults {
     pub operations: Vec<Operation>,
 }

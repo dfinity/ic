@@ -4,9 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-/.github/                 @dfinity/idx
-/.github/workflows        @dfinity/idx
-/.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
@@ -64,20 +61,18 @@ go_deps.bzl               @dfinity/idx
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
+# [GitHub-Ci]
+/.github/                                                                @dfinity/idx
+/.github/workflows/                                                      @dfinity/idx
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
+/ci/                                                                     @dfinity/idx
+/ci/src/dependencies/                                                    @dfinity/product-security
+
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
 /pre-commit/                                                            @dfinity/idx
-/.gitlab-ci.yml                                                         @dfinity/idx
-/.gitlab/                                                               @dfinity/idx
-/.gitlab/CODEOWNERS                                                     @dfinity/ic-owners-owners
 /gitlab-ci/                                                             @dfinity/idx
-/gitlab-ci/src/std-fs-check/                                            @dfinity/node
-/gitlab-ci/src/dependencies/                                            @dfinity/product-security
-/gitlab-ci/config/dependencies.yml                                      @dfinity/product-security
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
-/gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/rosetta.yml                                           @dfinity/finint
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
@@ -233,6 +228,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
+/rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
 /rs/tests/gix/                                          @dfinity/idx
@@ -264,6 +260,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
+/rs/tla_instrumentation/                                @dfinity/research
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners

@@ -33,13 +33,14 @@ use std::{
     time::Duration,
 };
 
-use axum::{middleware::from_fn_with_state, Router};
+use axum::{
+    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
+    middleware::Next, Router,
+};
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{
-    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -51,13 +52,13 @@ use quinn::{
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    utils::collect_metrics,
     ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
@@ -85,7 +86,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum Direction {
     Inbound,
     Outbound,
@@ -131,62 +132,38 @@ struct ConnectionManager {
     router: Router,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ConnectionEstablishError {
+    #[error("Timeout during connection establishment")]
     Timeout,
+    #[error("Gruezi handshake failed. {0}")]
     Gruezi(String),
+    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
     TlsClientConfigError {
         peer_id: NodeId,
         cause: TlsConfigError,
     },
+    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
     ConnectError {
         peer_id: NodeId,
         cause: ConnectError,
     },
+    #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
+    #[error("No peer identity available.")]
     MissingPeerIdentity,
-    MalformedPeerIdentity(MalformedPeerCertificateError),
-    PeerIdMismatch {
-        client: NodeId,
-        server: NodeId,
-    },
+    #[error("Malformed peer identity. {0}")]
+    MalformedPeerIdentity(String),
+    #[error("Received peer ids didn't match {client:?} and {server:?}.")]
+    PeerIdMismatch { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
     peer_id: NodeId,
     connection: Connection,
-}
-
-impl std::fmt::Display for ConnectionEstablishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Timeout => write!(f, "Timeout during connection establishment."),
-            Self::Gruezi(e) => write!(f, "Gruezi handshake failed. {e}"),
-            Self::TlsClientConfigError { peer_id, cause } => {
-                write!(
-                    f,
-                    "Failed to get rustls client config for peer {peer_id}. {cause}"
-                )
-            }
-            Self::ConnectError { peer_id, cause } => {
-                write!(f, "Failed to connect to peer {peer_id}. {cause}")
-            }
-            Self::ConnectionError { peer_id, cause } => match peer_id {
-                Some(peer_id) => write!(f, "Outgoing connection to peer {peer_id}. {cause}"),
-                None => write!(f, "Incoming connection failed. {cause}"),
-            },
-            Self::MissingPeerIdentity => write!(f, "No peer identity available."),
-            Self::MalformedPeerIdentity(MalformedPeerCertificateError { internal_error }) => {
-                write!(f, "Malformed peer identity. {internal_error}")
-            }
-            Self::PeerIdMismatch { client, server } => {
-                write!(f, "Received peer ids didn't match {client} and {server}.")
-            }
-        }
-    }
 }
 
 pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocket> {
@@ -615,15 +592,10 @@ impl ConnectionManager {
                 rustls_certs
                     .first()
                     .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
-                        MalformedPeerCertificateError {
-                            internal_error: "a single cert must be present".to_string(),
-                        },
+                        "a single cert must be present".to_string(),
                     ))?;
-            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
-                ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: format!("{:?}", err),
-                })
-            })?;
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
+                .map_err(|err| ConnectionEstablishError::MalformedPeerIdentity(err.to_string()))?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
@@ -711,4 +683,26 @@ impl ConnectionManager {
         };
         Ok(conn)
     }
+}
+
+/// Axum middleware to collect metrics
+async fn collect_metrics(
+    State(state): State<QuicTransportMetrics>,
+    request: Request<Body>,
+    next: Next,
+) -> axum::response::Response {
+    state
+        .request_handle_bytes_received_total
+        .with_label_values(&[request.uri().path()])
+        .inc_by(request.body().size_hint().lower());
+    let _timer = state
+        .request_handle_duration_seconds
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
+    let out_counter = state
+        .request_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let response = next.run(request).await;
+    out_counter.inc_by(response.body().size_hint().lower());
+    response
 }

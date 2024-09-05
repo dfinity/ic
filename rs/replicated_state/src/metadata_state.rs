@@ -64,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -179,7 +179,7 @@ pub struct SystemMetadata {
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -205,7 +205,7 @@ pub struct NetworkTopology {
 /// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
 /// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
 /// The converse statement is not true.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ApiBoundaryNodeEntry {
     /// Domain name, required field from NodeRecord
     pub domain: String,
@@ -349,7 +349,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
@@ -412,7 +412,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
@@ -1213,7 +1213,7 @@ impl SystemMetadata {
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
 /// collection of exceptions, i.e. `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<RequestOrResponse>,
@@ -1257,7 +1257,6 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
         let reject_signals = item
             .reject_signals()
             .iter()
@@ -1274,7 +1273,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals: Vec::new(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
@@ -1294,42 +1292,18 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
-        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
-        let reject_signals = match (
-            item.reject_signals.as_slice(),
-            item.deprecated_reject_signals.as_slice(),
-        ) {
-            // No reject signals.
-            ([], []) => VecDeque::new(),
-
-            // Only contemporary reject signals.
-            (reject_signals, []) => reject_signals
-                .iter()
-                .map(|signal| {
-                    Ok(RejectSignal {
-                        reason: pb_queues::RejectReason::try_from(signal.reason)
-                            .map_err(ProxyDecodeError::DecodeError)?
-                            .try_into()?,
-                        index: signal.index.into(),
-                    })
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(ProxyDecodeError::DecodeError)?
+                        .try_into()?,
+                    index: signal.index.into(),
                 })
-                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
-
-            // Only deprecated reject signals.
-            ([], deprecated_reject_signals) => deprecated_reject_signals
-                .iter()
-                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
-                .collect(),
-
-            // Both contemporary and deprecated reject signals.
-            ([_, ..], [_, ..]) => {
-                return Err(ProxyDecodeError::Other(format!(
-                    "both contemporary and deprecated signals are populated \
-                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
-                    item.reject_signals, item.deprecated_reject_signals,
-                )));
-            }
-        };
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
         // Check reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
@@ -1545,7 +1519,7 @@ impl From<Stream> for StreamSlice {
 }
 
 /// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct Streams {
     /// Map of streams by destination `SubnetId`.
     streams: StreamMap,
@@ -1778,7 +1752,7 @@ impl<'a> StreamHandle<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
@@ -2122,10 +2096,10 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// There is an invariant (including checks at deserialization):
 /// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
 ///   by `days_since_unix_epoch()`).
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStats {
     /// Successfully proposed blocks (blocks that became part of the blockchain).
     blocks_proposed_total: u64,
@@ -2135,7 +2109,7 @@ pub struct BlockmakerStats {
 }
 
 /// Per-node and overall blockmaker stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStatsMap {
     /// Maps a node ID to it's blockmaker stats.
     node_stats: BTreeMap<NodeId, BlockmakerStats>,

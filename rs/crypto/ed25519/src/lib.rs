@@ -14,7 +14,7 @@ use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
 /// An error if a private key cannot be decoded
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum PrivateKeyDecodingError {
     /// The outer PEM encoding is invalid
     #[error("The outer PEM encoding is invalid: {0}")]
@@ -28,7 +28,7 @@ pub enum PrivateKeyDecodingError {
 }
 
 /// An Ed25519 secret key
-#[derive(Clone, ZeroizeOnDrop, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, ZeroizeOnDrop)]
 pub struct PrivateKey {
     sk: SigningKey,
 }
@@ -71,7 +71,7 @@ const BUGGY_RING_V2_LEN: usize = BUGGY_RING_V2_DER_PREFIX.len()
     + PublicKey::BYTES;
 
 /// Specifies a private key encoding format
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PrivateKeyFormat {
     /// PKCS #8 v1: most common version, implemented by for example OpenSSL
     Pkcs8v1,
@@ -420,7 +420,7 @@ impl DerivedPrivateKey {
 }
 
 /// An invalid key was encountered
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum PublicKeyDecodingError {
     /// The outer PEM encoding is invalid
     #[error("The outer PEM encoding is invalid: {0}")]
@@ -480,7 +480,7 @@ impl Signature {
 }
 
 /// An Ed25519 public key
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
     pk: VerifyingKey,
     // TODO(CRP-2412) This struct member can be removed once
@@ -491,7 +491,7 @@ pub struct PublicKey {
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Error, Debug)]
+#[derive(Copy, Clone, Debug, Error)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
     #[error("The signature had an invalid length, and cannot possibly be valid")]
@@ -792,13 +792,13 @@ impl PublicKey {
 }
 
 /// A component of a derivation path
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationIndex(pub Vec<u8>);
 
 /// Derivation Path
 ///
 /// A derivation path is simply a sequence of DerivationIndex
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
 }

@@ -167,7 +167,7 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(2_000_000_000);
 
 /// The per subnet type configuration for the scheduler component
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SchedulerConfig {
     /// Number of canisters that the scheduler is allowed to schedule in
     /// parallel.
@@ -383,7 +383,7 @@ impl SchedulerConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManagerConfig {
     /// Reference value of a subnet size that all the fees below are calculated for.
     /// Fees for a real subnet are calculated proportionally to this reference value.

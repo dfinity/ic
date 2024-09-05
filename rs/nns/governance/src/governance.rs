@@ -296,21 +296,18 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
             controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
             hotkeys: neuron.hotkeys,
-            hotkey_principal: Some(neuron.controller),
         }
     }
 }
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         Self {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
             hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
-            hotkey_principal: Some(neuron.controller.to_string()),
         }
     }
 }
@@ -610,7 +607,7 @@ impl NnsFunction {
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
             NnsFunction::ReviseElectedGuestosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_replica_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_guestos_versions")
             }
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
@@ -637,12 +634,10 @@ impl NnsFunction {
                 ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
             }
             NnsFunction::DeployHostosToSomeNodes => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+                (REGISTRY_CANISTER_ID, "deploy_hostos_to_some_nodes")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
@@ -683,9 +678,6 @@ impl NnsFunction {
             NnsFunction::ChangeSubnetTypeAssignment => {
                 (CYCLES_MINTING_CANISTER_ID, "change_subnet_type_assignment")
             }
-            NnsFunction::UpdateAllowedPrincipals => {
-                (SNS_WASM_CANISTER_ID, "update_allowed_principals")
-            }
             NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
             }
@@ -693,7 +685,9 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateAllowedPrincipals => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
@@ -716,10 +710,10 @@ impl NnsFunction {
                     ),
                 ));
             }
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
-                // TODO[NNS1-3000]: Rename Registry API for consistency.
-                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
-            }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
+                REGISTRY_CANISTER_ID,
+                "deploy_guestos_to_some_api_boundary_nodes",
+            ),
             NnsFunction::DeployGuestosToAllUnassignedNodes => (
                 REGISTRY_CANISTER_ID,
                 "deploy_guestos_to_all_unassigned_nodes",
@@ -817,9 +811,9 @@ impl Proposal {
                             NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
+                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateNodesHostosVersion
                             | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
                             NnsFunction::BlessReplicaVersion
@@ -997,11 +991,6 @@ impl Action {
                     execute_nns_function.payload.clear();
                 }
                 Action::ExecuteNnsFunction(execute_nns_function)
-            }
-            Action::InstallCode(mut install_code) => {
-                install_code.wasm_module = None;
-                install_code.arg = None;
-                Action::InstallCode(install_code)
             }
             action => action,
         }
@@ -3698,11 +3687,7 @@ impl Governance {
         let proposal = if multi_query {
             if let Some(
                 proposal @ Proposal {
-                    action:
-                        Some(
-                            proposal::Action::ExecuteNnsFunction(_)
-                            | proposal::Action::InstallCode(_),
-                        ),
+                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
                     ..
                 },
             ) = data.proposal.clone()
@@ -4991,10 +4976,12 @@ impl Governance {
             | Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
-            | Action::SetDefaultFollowees(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
 
+            Action::SetDefaultFollowees(obsolete_action) => {
+                Self::validate_obsolete_proposal_action(obsolete_action)
+            }
             Action::SetSnsTokenSwapOpenTimeWindow(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }
@@ -8249,7 +8236,7 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }
