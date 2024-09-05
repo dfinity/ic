@@ -63,10 +63,7 @@ use crate::{
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
         Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::{
-        call_canister::CallCanister,
-        create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
-    },
+    proposals::call_canister::CallCanister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -4663,6 +4660,17 @@ impl Governance {
         }
     }
 
+    async fn create_service_nervous_system(
+        &mut self,
+        proposal_id: u64,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+    ) {
+        let result = self
+            .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
     async fn do_create_service_nervous_system(
         &mut self,
         proposal_id: u64,
@@ -4696,61 +4704,97 @@ impl Governance {
                 (NeuronsFundSnapshot::empty(), None)
             };
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: create_service_nervous_system.clone(),
-                proposal_id: proposal_id.id,
-                random_swap_start_time: self.randomly_pick_swap_start(),
-                neurons_fund_participation_constraints,
-            };
+        let random_swap_start_time = self.randomly_pick_swap_start();
+        let create_service_nervous_system = create_service_nervous_system.clone();
 
         self.execute_create_service_nervous_system_proposal(
-            executed_create_service_nervous_system_proposal,
+            create_service_nervous_system,
+            neurons_fund_participation_constraints,
+            current_timestamp_seconds,
+            proposal_id,
+            random_swap_start_time,
             initial_neurons_fund_participation_snapshot,
         )
         .await
     }
 
-    async fn create_service_nervous_system(
-        &mut self,
-        proposal_id: u64,
-        create_service_nervous_system: &CreateServiceNervousSystem,
-    ) {
-        let result = self
-            .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
+    // This function is public as it is used in various tests, also outside this crate.
+    fn make_sns_init_payload(
+        create_service_nervous_system: CreateServiceNervousSystem,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
+        current_timestamp_seconds: u64,
+        proposal_id: ProposalId,
+        random_swap_start_time: GlobalTimeOfDay,
+    ) -> Result<SnsInitPayload, String> {
+        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+            let start_time = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.start_time);
+
+            let duration = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.duration);
+
+            CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                start_time.unwrap_or(random_swap_start_time),
+                duration.unwrap_or_default(),
+                current_timestamp_seconds,
+            )
+        }?;
+
+        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)?;
+
+        Ok(SnsInitPayload {
+            neurons_fund_participation_constraints,
+            nns_proposal_id: Some(proposal_id.id),
+            swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+            swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+            ..sns_init_payload
+        })
     }
 
     async fn execute_create_service_nervous_system_proposal(
         &mut self,
-        executed_create_service_nervous_system_proposal: ExecutedCreateServiceNervousSystemProposal,
+        create_service_nervous_system: CreateServiceNervousSystem,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
+        current_timestamp_seconds: u64,
+        proposal_id: ProposalId,
+        random_swap_start_time: GlobalTimeOfDay,
         initial_neurons_fund_participation_snapshot: NeuronsFundSnapshot,
     ) -> Result<(), GovernanceError> {
-        let is_start_time_unspecified = executed_create_service_nervous_system_proposal
-            .create_service_nervous_system
+        let is_start_time_unspecified = create_service_nervous_system
             .swap_parameters
             .as_ref()
             .map(|swap_parameters| swap_parameters.start_time.is_none())
             .unwrap_or(false);
 
-        // Step 1: Convert proposal into main request object.
-        let sns_init_payload =
-            match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal.clone())
-            {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "Failed to convert ExecutedCreateServiceNervousSystemProposal \
-                            to SnsInitPayload: {}",
-                            err,
-                        ),
-                    ))
-                }
-            };
+        // Step 1.1: Convert proposal into SnsInitPayload.
+        let sns_init_payload = Self::make_sns_init_payload(
+            create_service_nervous_system,
+            neurons_fund_participation_constraints,
+            current_timestamp_seconds,
+            proposal_id,
+            random_swap_start_time,
+        )
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload: {}",
+                    err,
+                ),
+            )
+        })?;
+
+        // Step 1.2: Validate the SnsInitPayload.
+        sns_init_payload.validate_post_execution().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Failed to validate SnsInitPayload: {}", err),
+            )
+        })?;
 
         // If the test configuration is active (implying we are not running in
         // production), and the start time has not been specified,
@@ -4770,9 +4814,7 @@ impl Governance {
             println!(
                 "{}The swap's start time for proposal {:?} is unspecified, \
                 so a random time of {:?} will be used.",
-                LOG_PREFIX,
-                executed_create_service_nervous_system_proposal.proposal_id,
-                executed_create_service_nervous_system_proposal.random_swap_start_time
+                LOG_PREFIX, proposal_id, random_swap_start_time,
             );
         }
 
@@ -4783,10 +4825,6 @@ impl Governance {
             call_deploy_new_sns(&mut self.env, sns_init_payload).await;
 
         // Step 3: React to response from deploy_new_sns (Ok or Err).
-
-        let proposal_id = ProposalId {
-            id: executed_create_service_nervous_system_proposal.proposal_id,
-        };
 
         // Step 3.1: If the call was not successful, issue refunds (and then, return).
         if let Err(ref mut err) = &mut deploy_new_sns_response {
