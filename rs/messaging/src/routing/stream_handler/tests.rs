@@ -214,6 +214,71 @@ fn induct_loopback_stream_reject_response() {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that inducting a loopback stream containing a request to a non-existant canister produces a
+/// corresponding reject response in the loopback stream.
+#[test]
+fn legacy_induct_loopback_stream_reject_response() {
+    // A loopback stream with 1 message addressed to an unknown canister.
+    with_legacy_local_test_setup(
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER)],
+            signals_end: 21,
+            ..StreamConfig::default()
+        }],
+        |stream_handler, state, metrics| {
+            let reject_response = generate_reject_response(
+                request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
+                RejectCode::DestinationInvalid,
+                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
+            );
+            let reject_response_count_bytes = reject_response.count_bytes();
+
+            let mut expected_state = state.clone();
+            // Expecting a loopback stream with begin advanced and a reject response.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 22,
+                messages: vec![reject_response],
+                signals_end: 22,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            let initial_available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let mut available_guaranteed_response_memory =
+                initial_available_guaranteed_response_memory;
+
+            let inducted_state = stream_handler
+                .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+
+            assert_eq!(expected_state, inducted_state);
+
+            // One reject response generated.
+            assert_eq!(
+                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                available_guaranteed_response_memory
+            );
+            // Not equal, because the computed available memory does not account for the
+            // reject response (since it's from a nonexistent canister).
+            assert!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state)
+                    >= available_guaranteed_response_memory
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_REQUEST,
+                LABEL_VALUE_CANISTER_NOT_FOUND,
+                1,
+            )]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
 /// Tests that messages in the loopback stream on a subnet where `OTHER_LOCAL_CANISTER` has been
 /// migrated to `CANISTER_MIGRATION_SUBNET`
 /// - are inducted successfully when addressed to the non-migrating canister `LOCAL_CANISTER`.
@@ -307,6 +372,120 @@ fn induct_loopback_stream_reroute_response() {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that messages in the loopback stream on a subnet where `OTHER_LOCAL_CANISTER` has been
+/// migrated to `CANISTER_MIGRATION_SUBNET`
+/// - are inducted successfully when addressed to the non-migrating canister `LOCAL_CANISTER`.
+/// - requests trigger a reject response when addressed the migrating canister
+///   `OTHER_LOCAL_CANISTER`.
+/// - responses are rerouted into the stream to `CANISTER_MIGRATION_SUBNET` when addressed to the
+///   migrating canister `OTHER_LOCAL_CANISTER`.
+#[test]
+fn legacy_induct_loopback_stream_reroute_response() {
+    with_legacy_local_test_setup(
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                Response(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+            ],
+            signals_end: 21,
+            ..StreamConfig::default()
+        }],
+        |stream_handler, state, metrics| {
+            // `OTHER_LOCAL_CANISTER` was hosted by the `LOCAL_SUBNET` but then migrated.
+            let state = simulate_canister_migration(
+                state,
+                *OTHER_LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+
+            let mut expected_state = state.clone();
+            // The request @21 is expected to be inducted successfully.
+            push_input(
+                &mut expected_state,
+                message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone(),
+            );
+            // The response @22 is expected to be inducted successfully.
+            let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22).clone();
+            let inducted_response_count_bytes = inducted_response.count_bytes();
+            push_input(&mut expected_state, inducted_response);
+
+            // The request @23 is expected to trigger a reject response in the loopback stream.
+            let reject_response = generate_reject_response(
+                request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
+                RejectCode::SysTransient,
+                format!(
+                    "Canister {} is being migrated to/from {}",
+                    *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+                ),
+            );
+            let reject_response_count_bytes = reject_response.count_bytes();
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 25,
+                messages: vec![reject_response],
+                signals_end: 25,
+                // The response @24 produces a reject signal, that is immediately consumed and the response
+                // is rerouted.
+                reject_signals: vec![],
+                ..StreamConfig::default()
+            });
+
+            // A new outgoing stream is generated with the response @24 rerouted into it.
+            let migration_stream = stream_from_config(StreamConfig {
+                messages: vec![message_in_stream(state.get_stream(&LOCAL_SUBNET), 24).clone()],
+                ..StreamConfig::default()
+            });
+
+            expected_state.with_streams(btreemap![
+                LOCAL_SUBNET => loopback_stream,
+                CANISTER_MIGRATION_SUBNET => migration_stream,
+            ]);
+
+            let initial_available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let mut available_guaranteed_response_memory =
+                initial_available_guaranteed_response_memory;
+
+            let inducted_state = stream_handler
+                .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+
+            assert_eq!(expected_state, inducted_state);
+
+            // One request inducted, one response inducted and one reject response produced.
+            assert_eq!(
+                initial_available_guaranteed_response_memory
+                    // Inducting a request triggers a new reservation in the output queue.
+                    - MAX_RESPONSE_COUNT_BYTES as i64
+                    // Inducting a response uses memory for the response, but also frees a reservation.
+                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64)
+                    // The reject response is in the loopback stream, i.e. no reservation is freed.
+                    - reject_response_count_bytes as i64,
+                available_guaranteed_response_memory,
+            );
+            // Not equal, because the computed available memory does not account for the
+            // reject response (since it's from a canister no longer hosted by the subnet).
+            assert!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state)
+                    >= available_guaranteed_response_memory
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+            ]);
+            assert_eq!(2, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
 /// Tests that inducting a loopback stream containing a valid request and a valid response to and from
 /// `LOCAL_CANISTER` results in both messages inducted successfully.
 #[test]
@@ -375,6 +554,18 @@ fn induct_loopback_stream_with_subnet_message_memory_limit() {
     });
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn legacy_induct_loopback_stream_with_subnet_message_memory_limit() {
+    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
+    legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
+        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        ..Default::default()
+    });
+}
+
 /// Tests that wasm custom sections memory capacity does not affect
 /// `StreamHandlerImpl::induct_loopback_stream()`.
 #[test]
@@ -382,6 +573,20 @@ fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
     // A stream handler with a subnet message memory limit that only allows up to 3 reservations
     // and no allowance for wasm custom sections.
     induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
+        subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+        subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
+        ..Default::default()
+    });
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that wasm custom sections memory capacity does not affect
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn legacy_induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
+    // A stream handler with a subnet message memory limit that only allows up to 3 reservations
+    // and no allowance for wasm custom sections.
+    legacy_induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
         subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
         subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
         ..Default::default()
@@ -438,12 +643,13 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memo
 fn with_induct_loopback_stream_setup(
     config: HypervisorConfig,
     subnet_type: SubnetType,
+    certification_version: CertificationVersion,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_local_test_setup_and_config(
         config,
         subnet_type,
-        CURRENT_CERTIFICATION_VERSION,
+        certification_version,
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
@@ -471,6 +677,7 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
     with_induct_loopback_stream_setup(
         config,
         SubnetType::Application,
+        CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
             let mut expected_state = state.clone();
             // Expecting a canister state with... the first message and a reject response for the
@@ -514,6 +721,65 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Common implementation for `StreamHandlerImpl::induct_loopback_stream()`
+/// memory limit tests. Expects a `StreamHandlerImpl` with canister; subnet; or
+/// subnet message; memory limits only large enough for 3 in-flight requests
+/// plus epsilon at a time. Ensures that the limits are enforced when inducting
+/// the loopback stream.
+///
+/// Sets up a canister with two input queue reservations for two in-flight
+/// loopback requests and a loopback stream containing said requests. Tries to
+/// induct the loopback stream and expects the first request to be inducted; and
+/// the second request to fail to be inducted due to lack of memory.
+fn legacy_induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
+    with_induct_loopback_stream_setup(
+        config,
+        SubnetType::Application,
+        CertificationVersion::V18,
+        |stream_handler, state, metrics| {
+            let mut expected_state = state.clone();
+            // Expecting a canister state with the first message inducted...
+            push_input(
+                &mut expected_state,
+                message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone(),
+            );
+            // ...and a loopback stream with indices advanced and a reject response for the request @22.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 23,
+                messages: vec![generate_reject_response(
+                    request_in_stream(state.get_stream(&LOCAL_SUBNET), 22),
+                    RejectCode::CanisterError,
+                    StateError::OutOfMemory {
+                        requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                        available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
+                    }
+                    .to_string(),
+                )],
+                signals_end: 23,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler
+                .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+
+            assert_eq!(expected_state, inducted_state);
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
+            );
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_OUT_OF_MEMORY, 1),
+            ]);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
+        },
+    );
+}
+
 /// Common implementation for `StreamHandlerImpl::induct_loopback_stream()`
 /// memory limit tests. Expects a `StreamHandlerImpl` with canister; subnet; or
 /// subnet message; memory limits only large enough for 3 in-flight requests
@@ -528,6 +794,7 @@ fn induct_loopback_stream_ignores_memory_limit_impl(config: HypervisorConfig) {
     with_induct_loopback_stream_setup(
         config,
         SubnetType::System,
+        CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
             let mut expected_state = state.clone();
             // Expecting a canister state with the 2 requests inducted...
@@ -1762,6 +2029,161 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Common implementation for tests checking reject responses generated by the `StreamHandler`
+/// directly.
+fn legacy_check_stream_handler_generated_reject_response_impl(
+    mut available_guaranteed_response_memory: i64,
+    // This function will be fed with a replicated state that has one `LOCAL_CANISTER` installed.
+    // It's purpose is to set the stage as required such that inducting the `loopback_stream`
+    // induces the type of reject response that will be be compared against a reference given
+    // by `expected_reject_code` and `expected_state_error`.
+    setup_state: &dyn Fn(&mut ReplicatedState),
+    expected_reject_code: RejectCode,
+    expected_state_error: StateError,
+) {
+    with_legacy_local_test_setup(
+        // A loopback stream with one request in it.
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            messages: vec![Request(*LOCAL_CANISTER, *LOCAL_CANISTER)],
+            ..StreamConfig::default()
+        }],
+        |stream_handler, mut state, _| {
+            // Call the state setup function.
+            setup_state(&mut state);
+
+            // Generate the expected reject response for the request in `loopback_stream`.
+            let request = request_in_stream(state.get_stream(&LOCAL_SUBNET), 0);
+            let reject_response = ic_types::messages::Response {
+                originator: request.sender,
+                respondent: request.receiver,
+                originator_reply_callback: request.sender_reply_callback,
+                refund: request.payment,
+                response_payload: Payload::Reject(RejectContext::new(
+                    expected_reject_code,
+                    expected_state_error,
+                )),
+                deadline: request.deadline,
+            };
+
+            // Induct the loopback stream and check the expected reject response is present.
+            let inducted_state = stream_handler
+                .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+            assert_eq!(
+                response_in_stream(inducted_state.get_stream(&LOCAL_SUBNET), 1),
+                &reject_response,
+            );
+        },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn legacy_check_stream_handler_generated_reject_response_canister_not_found() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|state| {
+            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+        },
+        RejectCode::DestinationInvalid,
+        StateError::CanisterNotFound(*LOCAL_CANISTER),
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|state| {
+            state
+                .canister_states
+                .get_mut(&LOCAL_CANISTER)
+                .unwrap()
+                .system_state
+                .status = CanisterStatus::Stopped;
+        },
+        RejectCode::CanisterError,
+        StateError::CanisterStopped(*LOCAL_CANISTER),
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn legacy_check_stream_handler_generated_reject_response_canister_stopping() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|state| {
+            state
+                .canister_states
+                .get_mut(&LOCAL_CANISTER)
+                .unwrap()
+                .system_state
+                .status = CanisterStatus::Stopping {
+                call_context_manager: Default::default(),
+                stop_contexts: Default::default(),
+            };
+        },
+        RejectCode::CanisterError,
+        StateError::CanisterStopping(*LOCAL_CANISTER),
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn legacy_check_stream_handler_generated_reject_response_queue_full() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|state| {
+            let mut callback_id = 2;
+            while let Ok(()) = state.push_input(
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                    .build_with(CallbackId::new(callback_id), 0),
+                &mut (i64::MAX / 2),
+            ) {
+                callback_id += 1;
+            }
+        },
+        RejectCode::SysTransient,
+        StateError::QueueFull { capacity: 500 },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn lgeacy_check_stream_handler_generated_reject_response_out_of_memory() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        0, // `available_guaranteed_response_memory`
+        &|_| {},
+        RejectCode::CanisterError,
+        StateError::OutOfMemory {
+            requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+            available: 0,
+        },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+#[test]
+fn legacy_check_stream_handler_generated_reject_response_canister_migrating() {
+    legacy_check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|state| {
+            *state = simulate_canister_migration(
+                state.clone(),
+                *LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+        },
+        RejectCode::SysTransient,
+        StateError::CanisterMigrating {
+            canister_id: *LOCAL_CANISTER,
+            host_subnet: CANISTER_MIGRATION_SUBNET,
+        },
+    );
+}
+
 /// Tests that inducting stream slices results in signals appended to `StreamHeaders`;
 /// and messages included into canister `InputQueues` or reject `Responses` on output streams
 /// as appropriate.
@@ -1850,6 +2272,137 @@ fn induct_stream_slices_partial_success() {
                 initial_available_guaranteed_response_memory
                     - MAX_RESPONSE_COUNT_BYTES as i64
                     - response_count_bytes as i64,
+                available_guaranteed_response_memory
+            );
+            // Not equal, because the computed available memory does not account for the
+            // reject response (since it's from a nonexistent canister).
+            assert!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state)
+                    >= available_guaranteed_response_memory
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[
+                // Requests @43 and @44 successfully inducted.
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 2),
+                // Request @46 not inducted because of missing canister.
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
+                // Request @47 not inducted because of canister not on `REMOTE_SUBNET`.
+                // Request @48 not inducted becaue of unknown canister sender.
+                (
+                    LABEL_VALUE_TYPE_REQUEST,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                    2,
+                ),
+                // Response @45 successfully inducted.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                // Response @49 not inducted because of missing canister.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
+            ]);
+            assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
+            // Three critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                induct_response_failed: 1,
+                sender_subnet_mismatch: 2,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that inducting stream slices results in signals appended to `StreamHeaders`;
+/// and messages included into canister `InputQueues` or reject `Responses` on output streams
+/// as appropriate.
+#[test]
+fn legacy_induct_stream_slices_partial_success() {
+    with_legacy_test_setup(
+        // An outgoing stream with one request and one response in it.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 31,
+            messages: vec![
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+            ],
+            signals_end: 43,
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with...
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages_begin: 43,
+            messages: vec![
+                // ...two incoming request @43 and @44...
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                // ...an incoming response @45...
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                // ...a request to a missing canister @46 (on this subnet according to the
+                // routing table); this is expected to trigger a reject response...
+                Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                // ..a request not from `REMOTE_SUBNET` @47...
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                // ...a request from a missing canister @48 (not anywhere according to the routing
+                // table); this is expected to be accepted but dropped...
+                Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                // ...and a response to a missing canister @49 (on this subnet according to the
+                // routing table); this expected to be accepted but dropped.
+                Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+            ],
+            // ...and two accept signals.
+            signals_end: 33,
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let mut expected_state = state.clone();
+            // The expected state has the first 3 messages inducted.
+            push_inputs(
+                &mut expected_state,
+                messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
+            );
+            let response_count_bytes =
+                response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
+
+            let reject_response = generate_reject_response(
+                request_in_slice(slices.get(&REMOTE_SUBNET), 46),
+                RejectCode::DestinationInvalid,
+                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
+            );
+            let reject_response_count_bytes = reject_response.count_bytes();
+
+            // The expected stream has...
+            let expected_stream = stream_from_config(StreamConfig {
+                begin: 31,
+                // ...the two initial messages as `induct_stream_slices` does not gc,
+                // a reject response for the request to a missing canister @46...
+                messages: vec![
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
+                    reject_response,
+                ],
+                // ...7 accept signals for all of the messages in the stream slice.
+                signals_end: 50,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            let initial_available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let mut available_guaranteed_response_memory =
+                initial_available_guaranteed_response_memory;
+
+            // Act
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+            // 2 requests and one response inducted (consuming 2 - 1 reservations); one reject response enqueued.
+            assert_eq!(
+                initial_available_guaranteed_response_memory
+                    - MAX_RESPONSE_COUNT_BYTES as i64
+                    - response_count_bytes as i64
+                    - reject_response_count_bytes as i64,
                 available_guaranteed_response_memory
             );
             // Not equal, because the computed available memory does not account for the
@@ -2070,6 +2623,116 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that inducting stream slices containing messages to a canister that is
+/// known to be in the process of migration but has not yet been migrated to
+/// this subnet results in reject signals for responses and reject `Responses`
+/// for requests on output streams.
+#[test]
+fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
+    with_legacy_test_setup(
+        // An outgoing stream with one request and one response in it.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+            ],
+            signals_end: 43,
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with a request addressed to `REMOTE_CANISTER` @43 and a response
+        // woth the same recipients @44.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages_begin: 43,
+            messages: vec![
+                Request(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
+                Response(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
+            ],
+            signals_end: 21,
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            // `REMOTE_CANISTER` is hosted by `CANISTER_MIGRATION_SUBNET` but in the process
+            // of being migrated to `LOCAL_SUBNET`.
+            let state =
+                complete_canister_migration(state, *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET);
+            let state = prepare_canister_migration(
+                state,
+                *REMOTE_CANISTER,
+                CANISTER_MIGRATION_SUBNET,
+                LOCAL_SUBNET,
+            );
+
+            let reject_response = generate_reject_response(
+                request_in_slice(slices.get(&REMOTE_SUBNET), 43),
+                RejectCode::SysTransient,
+                format!(
+                    "Canister {} is being migrated to/from {}",
+                    *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET
+                ),
+            );
+            let reject_response_count_bytes = reject_response.count_bytes();
+
+            let mut expected_state = state.clone();
+            // Expecting a stream with...
+            let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
+            let expected_stream = stream_from_config(StreamConfig {
+                begin: 21,
+                messages: vec![
+                    // ...the initial messages still in it...
+                    message_in_stream(outgoing_stream, 21).clone(),
+                    message_in_stream(outgoing_stream, 22).clone(),
+                    // ...a reject response for the request @43...
+                    reject_response,
+                ],
+                // ... a `signals_end` advanced by 2...
+                signals_end: 45,
+                // ...and a reject signal for the response @44.
+                reject_signals: vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    44.into(),
+                )],
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            let initial_available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let mut available_guaranteed_response_memory =
+                initial_available_guaranteed_response_memory;
+
+            // Act.
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            // One reject response enqueued.
+            assert_eq!(
+                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                available_guaranteed_response_memory
+            );
+            // Not equal, because the computed available memory does not account for the
+            // reject response (since it's from a canister not yet hosted by the subnet).
+            assert!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state)
+                    >= available_guaranteed_response_memory
+            );
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+            ]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
 /// Tests that inducting stream slices containing messages to a migrated
 /// canister results in reject signals for responses and reject `Responses` for
 /// requests on output streams.
@@ -2142,6 +2805,111 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
                 available_guaranteed_response_memory
             );
 
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+            ]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that inducting stream slices containing messages to a migrated
+/// canister results in reject signals for responses and reject `Responses` for
+/// requests on output streams.
+#[test]
+fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
+    with_legacy_test_setup(
+        // An outgoing stream with one request and one response in it.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+            ],
+            signals_end: 43,
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with a request @43 and a response @44.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages_begin: 43,
+            messages: vec![
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+            ],
+            signals_end: 21,
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            // `LOCAL_CANISTER` was hosted by the `LOCAL_SUBNET` but then migrated.
+            let state = simulate_canister_migration(
+                state,
+                *LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+
+            let reject_response = generate_reject_response(
+                request_in_slice(slices.get(&REMOTE_SUBNET), 43),
+                RejectCode::SysTransient,
+                format!(
+                    "Canister {} is being migrated to/from {}",
+                    *LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+                ),
+            );
+            let reject_response_count_bytes = reject_response.count_bytes();
+
+            let mut expected_state = state.clone();
+            // Expecting a stream with...
+            let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
+            let expected_stream = stream_from_config(StreamConfig {
+                begin: 21,
+                messages: vec![
+                    // ...the initial messages still in it...
+                    message_in_stream(outgoing_stream, 21).clone(),
+                    message_in_stream(outgoing_stream, 22).clone(),
+                    // ...a reject response for the request @43...
+                    reject_response,
+                ],
+                // ... a `signals_end` advanced by 2...
+                signals_end: 45,
+                // ...and a reject signal for the response @44.
+                reject_signals: vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    44.into(),
+                )],
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            let initial_available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let mut available_guaranteed_response_memory =
+                initial_available_guaranteed_response_memory;
+
+            // Act
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            // One reject response enqueued.
+            assert_eq!(
+                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                available_guaranteed_response_memory
+            );
+            // Not equal, because the computed available memory does not account for the
+            // reject response (since it's from a canister no longer hosted by the subnet).
+            assert!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state)
+                    >= available_guaranteed_response_memory
+            );
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
@@ -2330,6 +3098,116 @@ fn induct_stream_slices_with_subnet_message_memory_limit() {
 #[test]
 fn system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
     induct_stream_slices_with_memory_limit_impl(SubnetType::System);
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Common implementation for memory limit tests setup such the subnet has
+/// only enough message memory for one reservation (plus epsilon).
+///
+/// Ensures that the limits are enforced when inducting stream slices.
+///
+/// Tries to induct a slice consisting of `[request1, response, request2]`:
+///  * `request1` will fail to be inducted due to lack of memory;
+///  * `response` will be inducted and consume the existing reservation;
+///  * `request2` will be inducted successfully, as there is now available
+///    guaranteed response memory for one request.
+fn legacy_induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
+    with_test_setup_and_config(
+        // A config with only enough subnet message memory for one request + epsilon.
+        HypervisorConfig {
+            subnet_message_memory_capacity: NumBytes::new(
+                MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
+            ),
+            ..Default::default()
+        },
+        subnet_type,
+        CertificationVersion::V18,
+        // An empty outgoing stream.
+        btreemap![REMOTE_SUBNET => StreamConfig {
+            begin: 31,
+            signals_end: 43,
+            ..StreamConfig::default()
+        }],
+        // An incoming stream slice with [request1 @43, response @44, request2 @45] in it.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages_begin: 43,
+            messages: vec![
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+            ],
+            signals_end: 31,
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            let mut expected_state = state.clone();
+            // The expected state must have `response` and `request2` inducted.
+            push_inputs(
+                &mut expected_state,
+                messages_in_slice(slices.get(&REMOTE_SUBNET), 44..=45),
+            );
+            // The expected stream has...
+            let expected_stream = stream_from_config(StreamConfig {
+                begin: 31,
+                messages: vec![
+                    // ...a reject response for request1 @43...
+                    generate_reject_response(
+                        request_in_slice(slices.get(&REMOTE_SUBNET), 43),
+                        RejectCode::CanisterError,
+                        StateError::OutOfMemory {
+                            requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                            available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
+                        }
+                        .to_string(),
+                    ),
+                ],
+                // ...and the `signal_end` incremented by 3.
+                signals_end: 46,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            // Act
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            // Assert
+            assert_eq!(expected_state, inducted_state);
+            assert_eq!(
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
+                available_guaranteed_response_memory
+            );
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_OUT_OF_MEMORY, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+            ]);
+            assert_eq!(2, metrics.fetch_inducted_payload_sizes_stats().count);
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()`.
+#[test]
+fn legacy_induct_stream_slices_with_subnet_message_memory_limit() {
+    legacy_induct_stream_slices_with_memory_limit_impl(SubnetType::Application);
+}
+
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that subnet message memory limit is enforced by
+/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
+#[test]
+fn legacy_system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
+    legacy_induct_stream_slices_with_memory_limit_impl(SubnetType::System);
 }
 
 /// Tests that messages in the loopback stream and incoming slices are inducted
@@ -2696,6 +3574,233 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
     );
 }
 
+// TODO: Remove legacy tests once certification versions < V19 can be phased out safely.
+/// Tests that when canister migration happens in both sending and receiving subnets,
+/// messages in the loopback stream and incoming slices are inducted
+/// (with signals added appropriately); and messages present in the initial
+/// state are garbage collected or rerouted as appropriate.
+#[test]
+fn legacy_process_stream_slices_canister_migration_in_both_subnets_success() {
+    with_legacy_test_setup(
+        btreemap![
+            // A loopback stream with...
+            LOCAL_SUBNET => StreamConfig {
+                begin: 21,
+                messages: vec![
+                    // ...3 messages to and from `LOCAL_CANISTER` @21..=23...
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    // ...a request @24 and a response @25 to `LOCAL_CANISTER` from `OTHER_LOCAL_CANISTER`...
+                    Request(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Response(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
+                    // ...a request @26 from `LOCAL_CANISTER` to `OTHER_LOCAL_CANISTER (a reject response
+                    // should be generated for it)...
+                    Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                    // ...and a response @27 from `LOCAL_CANISTER` to `OTHER_LOCAL_CANISTER` (a reject
+                    // signal will be generated during induction; the response will be rerouted; and then
+                    // the reject signal is gc'ed; i.e. the signal is never visible).
+                    Response(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                ],
+                signals_end: 21,
+                ..StreamConfig::default()
+            },
+            // An outgoing stream with...
+            REMOTE_SUBNET => StreamConfig {
+                begin: 31,
+                messages: vec![
+                    // ...4 messages from `LOCAL_CANISTER` to `REMOTE_CANISTER`... @31..=34, with a
+                    // response @33...
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                ],
+                signals_end: 153,
+                // ...and 4 reject signals.
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                ],
+                ..StreamConfig::default()
+            }
+        ],
+        // An incoming stream slice with...
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            header_begin: Some(142),
+            messages_begin: 153,
+            messages: vec![
+                // ...a request @153 from `REMOTE_CANISTER` to `LOCAL_CANISTER`...
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                // ...one request @154 to the migrated canister...
+                Request(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                // ...one response @155 to the migrated canister...
+                Response(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                // ...one request @156 between the two migrated canisters...
+                Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                // ...one response @157 between the two migrated canisters...
+                Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+            ],
+            signals_end: 34,
+            // ..and a reject signal for the response @33.
+            reject_signals: vec![RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                33.into(),
+            )],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, state, slices, metrics| {
+            stream_handler
+                .time_in_stream_metrics
+                .lock()
+                .unwrap()
+                .record_header(
+                    REMOTE_SUBNET,
+                    &state.get_stream(&REMOTE_SUBNET).unwrap().header(),
+                );
+
+            // `OTHER_LOCAL_CANISTER` is marked as migrating from `LOCAL_SUBNET` to `CANISTER_MIGRATION_SUBNET`.
+            let state = simulate_canister_migration(
+                state,
+                *OTHER_LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+
+            // `REMOTE_CANISTER` is marked as migrating from `REMOTE_SUBNET` to `CANISTER_MIGRATION_SUBNET`.
+            let state = simulate_canister_migration(
+                state,
+                *REMOTE_CANISTER,
+                REMOTE_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+
+            let mut expected_state = state.clone();
+            // The expected state has the first 5 loopback messages @21..=25 inducted...
+            push_inputs(
+                &mut expected_state,
+                messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=25),
+            );
+            // ...and the first incoming message @153.
+            push_input(
+                &mut expected_state,
+                message_in_slice(slices.get(&REMOTE_SUBNET), 153).clone(),
+            );
+
+            // The expected loopback stream has all initial messages gc'ed...
+            let expected_loopback_stream = stream_from_config(StreamConfig {
+                begin: 28,
+                messages: vec![
+                    // ...and a reject response for the request @26.
+                    generate_reject_response(
+                        request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
+                        RejectCode::SysTransient,
+                        format!(
+                            "Canister {} is being migrated to/from {}",
+                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+                        ),
+                    ),
+                ],
+                signals_end: 28,
+                ..StreamConfig::default()
+            });
+
+            // The expected outgoing stream is pruned and...
+            let pruned_outgoing_stream = stream_from_config(StreamConfig {
+                begin: 34,
+                messages: vec![
+                    // ...one message @34 not gc'ed...
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 34).clone(),
+                    // ...a reject response for the request @154...
+                    generate_reject_response(
+                        request_in_slice(slices.get(&REMOTE_SUBNET), 154),
+                        RejectCode::SysTransient,
+                        format!(
+                            "Canister {} is being migrated to/from {}",
+                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+                        ),
+                    ),
+                    // ...a reject response for the request @156...
+                    generate_reject_response(
+                        request_in_slice(slices.get(&REMOTE_SUBNET), 156),
+                        RejectCode::SysTransient,
+                        format!(
+                            "Canister {} is being migrated to/from {}",
+                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+                        ),
+                    ),
+                ],
+                signals_end: 158,
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 155.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 157.into()),
+                ],
+                ..StreamConfig::default()
+            });
+
+            // The expected stream to `CANISTER_MIGRATION_SUBNET` has...
+            let rerouted_stream = stream_from_config(StreamConfig {
+                messages: vec![
+                    // ...the response @27 rerouted...
+                    message_in_stream(state.get_stream(&LOCAL_SUBNET), 27).clone(),
+                    // ...and the response @33 rerouted.
+                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 33).clone(),
+                ],
+                ..StreamConfig::default()
+            });
+
+            expected_state.with_streams(btreemap![
+                LOCAL_SUBNET => expected_loopback_stream,
+                REMOTE_SUBNET => pruned_outgoing_stream,
+                CANISTER_MIGRATION_SUBNET => rerouted_stream,
+            ]);
+
+            // Act
+            let inducted_state = stream_handler.process_stream_slices(state, slices);
+
+            assert_eq!(expected_state, inducted_state);
+
+            // 2 incoming messages discarded and 3 loopback +1 incoming inducted.
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 3),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 3),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 5),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+            ]);
+            // 6 messages inducted, compare above.
+            assert_eq!(6, metrics.fetch_inducted_payload_sizes_stats().count);
+            // 7 messages GC-ed from loopback stream, 3 from outgoing stream.
+            assert_eq!(
+                Some(10),
+                metrics.fetch_int_counter(METRIC_GCED_XNET_MESSAGES),
+            );
+            // 3 reject signals from outgoing stream (138, 139, 142) were gc-ed.
+            assert_eq!(
+                Some(3),
+                metrics.fetch_int_counter(METRIC_GCED_XNET_REJECT_SIGNALS),
+            );
+            assert_eq!(
+                metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 0)]),
+                metrics.fetch_int_gauge_vec(METRIC_XNET_MESSAGE_BACKLOG),
+            );
+            // Check the number of GC-ed messages in the stream for the remote subnet.
+            assert_eq!(
+                metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 3)]),
+                metrics.fetch_histogram_vec_count(METRIC_TIME_IN_STREAM),
+            );
+            // Check the number of inducted messages in the slice from the remote subnet.
+            assert_eq!(
+                metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 5)]),
+                metrics.fetch_histogram_vec_count(METRIC_TIME_IN_BACKLOG),
+            );
+        },
+    );
+}
+
 /// Tests that attempting to induct a slice with messages for which we have
 /// already produced signals panics.
 #[test]
@@ -2746,6 +3851,27 @@ fn with_test_setup(
         HypervisorConfig::default(),
         SubnetType::Application,
         CURRENT_CERTIFICATION_VERSION,
+        stream_configs,
+        slice_configs,
+        test_impl,
+    )
+}
+
+/// Generates a legacy test setup. For details see `with_test_setup_and_config()`.
+fn with_legacy_test_setup(
+    stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
+    slice_configs: BTreeMap<SubnetId, StreamSliceConfig<Vec<MessageBuilder>>>,
+    test_impl: impl FnOnce(
+        StreamHandlerImpl,
+        ReplicatedState,
+        BTreeMap<SubnetId, StreamSlice>,
+        MetricsFixture,
+    ),
+) {
+    with_test_setup_and_config(
+        HypervisorConfig::default(),
+        SubnetType::Application,
+        CertificationVersion::V18,
         stream_configs,
         slice_configs,
         test_impl,
@@ -2931,6 +4057,19 @@ fn with_local_test_setup(
 
 /// Generates a local test setup, i.e. without incoming stream slices.
 /// For details see `with_test_setup_and_config()`.
+fn with_legacy_local_test_setup(
+    stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
+    test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
+) {
+    with_legacy_test_setup(
+        stream_configs,
+        btreemap![],
+        |stream_handler, state, _, metrics| test_impl(stream_handler, state, metrics),
+    );
+}
+
+/// Generates a local test setup, i.e. without incoming stream slices.
+/// For details see `with_test_setup_and_config()`.
 fn with_local_test_setup_and_config(
     hypervisor_config: HypervisorConfig,
     subnet_type: SubnetType,
@@ -3032,6 +4171,23 @@ fn request_in_stream(
     stream_index: u64,
 ) -> &ic_types::messages::Request {
     match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
+        Some(RequestOrResponse::Request(request)) => request,
+        _ => unreachable!(),
+    }
+}
+
+/// Returns a reference to a request in a stream slice at `stream_index`.
+///
+/// Panics if no such request exists.
+fn request_in_slice(
+    opt_slice: Option<&StreamSlice>,
+    stream_index: u64,
+) -> &ic_types::messages::Request {
+    match opt_slice.and_then(|slice| {
+        slice
+            .messages()
+            .and_then(|msgs| msgs.get(stream_index.into()))
+    }) {
         Some(RequestOrResponse::Request(request)) => request,
         _ => unreachable!(),
     }
