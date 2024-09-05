@@ -421,7 +421,7 @@ pub(crate) fn check_success(
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
 /// - On test failure.
-pub(crate) async fn test_async_impl(
+pub async fn test_async_impl(
     env: TestEnv,
     endpoints_runtimes: impl Iterator<Item = Runtime>,
     config: Config,

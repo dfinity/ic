@@ -146,7 +146,7 @@ git checkout $NEXT_COMMIT
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
             echo "
 
 
@@ -157,11 +157,11 @@ This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_AR
 [latest-didc]: https://github.com/dfinity/candid/releases/latest
 
 \`\`\`
-didc encode '$CANDID_ARGS'
+didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum
 
 \`\`\`
 
-This should match the \`arg_hex\` field of this proposal.
+This should match the \`arg_hash\` field of this proposal.
 "
         fi)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

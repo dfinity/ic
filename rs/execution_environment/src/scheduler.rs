@@ -1872,6 +1872,13 @@ impl Scheduler for SchedulerImpl {
                         registry_settings.subnet_size,
                     );
                 }
+
+                self.metrics
+                    .canister_snapshots_memory_usage
+                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
+                self.metrics
+                    .num_canister_snapshots
+                    .set(final_state.canister_snapshots.count() as i64);
             }
             self.finish_round(&mut final_state, current_round_type);
             final_state

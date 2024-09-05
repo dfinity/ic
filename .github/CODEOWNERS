@@ -228,6 +228,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
+/rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
 /rs/tests/gix/                                          @dfinity/idx
@@ -259,6 +260,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
+/rs/tla_instrumentation/                                @dfinity/research
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners
