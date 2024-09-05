@@ -16,8 +16,8 @@ get_if_addrs = "0.5.3"
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-util = { version = "^0.1.3", features = ["full"] }
-hyper-rustls = { version = "^0.27.1", default-features = false, features = ["ring"] }
+hyper-util = { workspace = true }
+hyper-rustls = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
