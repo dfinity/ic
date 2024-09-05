@@ -53,7 +53,7 @@ Note that instances are shared among test cases there, which is not recommended 
 * [How to use this library](HOWTO.md)
 * [API documentation](https://docs.rs/pocket-ic/)
 * [PocketIC repo](https://github.com/dfinity/pocketic)
-* [PocketIC server compatibility](https://docs.google.com/document/d/1VYmHUTjrgbzRHtsAyRrI5cj-gWGs7ktTnutPvUMJioU/edit?usp=sharing)
+* [PocketIC server compatibility](https://docs.google.com/document/d/1VYmHUTjrgbzRHtsAyRrI5cj-gWGs7ktTnutPvUMJioU)
 * [Why PocketIC](https://github.com/dfinity/pocketic#why-pocketic)
 * [Changelog](CHANGELOG.md)
 * [Source code](.)
