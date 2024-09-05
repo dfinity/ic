@@ -360,8 +360,6 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:chrono",
-        "@crate_index//:futures",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
