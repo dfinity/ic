@@ -230,7 +230,6 @@ jobs:
         name: Fetch beginning versions for qualification
         shell: bash
         run: |
-          sudo apt-get install -y jq curl
           UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
           echo "Will qualify starting from versions: ${UNIQUE_VERSIONS}"
           echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
@@ -254,14 +253,10 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
           BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel --cache_test_results=no --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS_RULES: ${{ env.BAZEL_EXTRA_ARGS_RULES || '' }}
-          # run on diff only if it is a pull request, otherwise run all targets
-          RUN_ON_DIFF_ONLY: false
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
