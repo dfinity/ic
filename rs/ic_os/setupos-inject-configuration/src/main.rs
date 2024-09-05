@@ -58,9 +58,6 @@ struct ConfigIni {
 
     #[arg(long)]
     verbose: Option<String>,
-
-    #[arg(long)]
-    mgmt_mac: Option<String>,
 }
 
 #[derive(Args)]
@@ -184,7 +181,6 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let ConfigIni {
         ipv6_prefix,
         ipv6_gateway,
-        mgmt_mac,
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
@@ -206,10 +202,6 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
         writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
         writeln!(&mut f, "domain={}", domain)?;
-    }
-
-    if let Some(mgmt_mac) = mgmt_mac {
-        writeln!(&mut f, "mgmt_mac={}", mgmt_mac)?;
     }
 
     if let Some(verbose) = verbose {

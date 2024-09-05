@@ -31,7 +31,7 @@ pub fn generate_network_config(
 
     let deployment_name = deployment_name
         .context("Error: Deployment name not found when attempting to generate mac address")?;
-    let mac = generate_mac_address(deployment_name, &node_type, &network_info.bmc_mac)?;
+    let mac = generate_mac_address(deployment_name, &node_type)?;
     eprintln!("Using generated mac (unformatted) {}", mac.get());
 
     eprintln!("Generating ipv6 address");

@@ -9,7 +9,6 @@ source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
-CONFIG="/boot/config/config.ini"
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -29,16 +28,6 @@ Arguments:
             ;;
     esac
 done
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "mgmt_mac") mgmt_mac="${value}" ;;
-        esac
-    done <"${CONFIG}"
-}
 
 # Fetch the management MAC address of the physical machine.
 # The management MAC address will be used as unique key for:
@@ -66,14 +55,7 @@ function fetch_mgmt_mac() {
 }
 
 function main() {
-    # Establish run order
-    mgmt_mac=""
-    read_variables
-    if [ "${mgmt_mac}" == "" ]; then
-        fetch_mgmt_mac
-    else
-        echo "${mgmt_mac}"
-    fi
+    fetch_mgmt_mac
 }
 
 main
