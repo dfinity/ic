@@ -44,6 +44,7 @@ impl Strippable for ConsensusMessage {
                 }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
+                // TODO(CON-1402): avoid the clone
                 let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
