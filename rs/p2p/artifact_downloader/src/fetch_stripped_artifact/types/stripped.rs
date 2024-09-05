@@ -73,7 +73,9 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             .as_ref()
             .is_some_and(|block| block.ingress_payload.is_some())
         {
-            return Err(ProxyDecodeError::Other(String::from("The ingress payload is NOT empty")));
+            return Err(ProxyDecodeError::Other(String::from(
+                "The ingress payload is NOT empty",
+            )));
         }
 
         Ok(Self {
