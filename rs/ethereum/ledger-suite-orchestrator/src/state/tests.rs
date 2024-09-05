@@ -403,20 +403,37 @@ mod schema_upgrades {
     use crate::candid::CyclesManagement;
     use crate::scheduler::Task;
     use crate::state::test_fixtures::arb_state;
-    use crate::state::{decode, encode, ManagedCanisters, State};
+    use crate::state::{
+        decode, encode, Canisters, Erc20Token, LedgerSuiteVersion, ManagedCanisters, State,
+    };
     use candid::{Deserialize, Principal};
     use proptest::proptest;
     use serde::Serialize;
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+    pub struct ManagedCanistersPreviousVersion {
+        canisters: BTreeMap<Erc20Token, Canisters>,
+    }
+
+    impl From<ManagedCanisters> for ManagedCanistersPreviousVersion {
+        fn from(value: ManagedCanisters) -> Self {
+            ManagedCanistersPreviousVersion {
+                canisters: value.canisters,
+            }
+        }
+    }
 
     #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
     pub struct StatePreviousVersion {
-        managed_canisters: ManagedCanisters,
+        managed_canisters: ManagedCanistersPreviousVersion,
         cycles_management: CyclesManagement,
         more_controller_ids: Vec<Principal>,
         minter_id: Option<Principal>,
         /// Locks preventing concurrent execution timer tasks
         pub active_tasks: BTreeSet<Task>,
+        #[serde(default)]
+        ledger_suite_version: Option<LedgerSuiteVersion>,
     }
 
     impl From<State> for StatePreviousVersion {
@@ -427,15 +444,16 @@ mod schema_upgrades {
                 more_controller_ids,
                 minter_id,
                 active_tasks,
-                ledger_suite_version: _,
+                ledger_suite_version,
             }: State,
         ) -> Self {
             Self {
-                managed_canisters,
+                managed_canisters: managed_canisters.into(),
                 cycles_management,
                 more_controller_ids,
                 minter_id,
                 active_tasks,
+                ledger_suite_version,
             }
         }
     }
