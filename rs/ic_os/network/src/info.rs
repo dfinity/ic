@@ -2,7 +2,6 @@ use std::net::Ipv6Addr;
 
 use anyhow::{bail, Context, Result};
 
-use crate::mac_address::FormattedMacAddress;
 use config::ConfigMap;
 
 #[derive(Debug)]
