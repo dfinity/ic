@@ -34,6 +34,7 @@ tower = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

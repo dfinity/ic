@@ -10242,6 +10242,8 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "quinn-udp",
+ "rcgen",
+ "rustls 0.23.12",
  "serde",
  "slog",
  "tempfile",
@@ -10382,6 +10384,7 @@ name = "ic-quic-transport"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "async-trait",
  "axum 0.7.5",
  "bytes",

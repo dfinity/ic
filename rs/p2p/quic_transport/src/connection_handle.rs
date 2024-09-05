@@ -214,3 +214,77 @@ async fn write_request(
         .with_context(|| "Failed to write request to stream.")?;
     Ok(())
 }
+
+// tests
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+    use bytes::Bytes;
+    use ic_p2p_test_utils::{generate_self_signed_cert, SkipServerVerification};
+    use quinn::{
+        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, ReadError, ReadToEndError,
+    };
+    use std::sync::Arc;
+
+    use crate::connection_handle::SendStreamDropGuard;
+
+    const MAX_READ_SIZE: usize = 10_000;
+    #[tokio::test]
+    async fn test_dropped_connection_handle_resets_the_stream() {
+        let server_addr = "127.0.0.1:5000".parse().unwrap();
+        // let server_cert_verifier = SkipServerVerification::new();
+        let server_config = generate_self_signed_cert();
+        let endpoint = Endpoint::server(server_config, server_addr).unwrap();
+
+        // server and client are running on the same thread asynchronously
+        let handler = tokio::spawn(async move {
+            let (_send_stream, mut recv_stream) = endpoint
+                .accept()
+                .await
+                .unwrap()
+                .await
+                .unwrap()
+                .accept_bi()
+                .await
+                .unwrap();
+
+            recv_stream.read_to_end(MAX_READ_SIZE).await
+        });
+
+        let client_addr = "127.0.0.1:5001".parse().unwrap();
+        let mut endpoint = Endpoint::client(client_addr).unwrap();
+        endpoint.set_default_client_config(ClientConfig::new(Arc::new(
+            QuicClientConfig::try_from(
+                rustls::ClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(SkipServerVerification::new())
+                    .with_no_client_auth(),
+            )
+            .unwrap(),
+        )));
+
+        // connect to server
+        let connection = endpoint
+            .connect(server_addr, "localhost")
+            .unwrap()
+            .await
+            .unwrap();
+
+        let (send_stream, _recv_stream) = connection.open_bi().await.unwrap();
+        let mut drop_guard = SendStreamDropGuard::new(send_stream);
+        let send_stream = &mut drop_guard.send_stream;
+        send_stream
+            .write_chunk(Bytes::from(&b"hello wo"[..]))
+            .await
+            .unwrap();
+
+        drop(drop_guard);
+
+        let server_result = handler.await.unwrap();
+
+        assert_matches!(
+            server_result,
+            Err(ReadToEndError::Read(ReadError::Reset { .. }))
+        );
+    }
+}
