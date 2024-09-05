@@ -149,7 +149,7 @@ impl<'a> ConsensusRunner<'a> {
             pool_reader,
         )));
         let malicious_flags = MaliciousFlags::default();
-        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
+        let consensus = ic_consensus::consensus::ConsensusImpl::new(
             deps.replica_config.clone(),
             Arc::clone(&deps.registry_client),
             membership.clone(),
@@ -165,11 +165,13 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
+            0,
             malicious_flags.clone(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
-            0,
         );
+        let consensus_bouncer =
+            ic_consensus::consensus::ConsensusBouncer::new(deps.message_routing.clone());
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
             Arc::clone(&consensus_crypto),
@@ -212,7 +214,7 @@ impl<'a> ConsensusRunner<'a> {
                 node_id,
                 pool_config,
                 apply_modifier_consensus(&modifier, consensus),
-                consensus_gossip,
+                consensus_bouncer,
                 dkg,
                 apply_modifier_idkg(&modifier, idkg),
                 Box::new(certifier),

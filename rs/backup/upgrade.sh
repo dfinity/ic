@@ -34,7 +34,7 @@ echo -e "${YELLOW}Attempting to upgrade the 'ic-backup' binary${ENDCOLOR}."
 
 if [ -z "$1" ]; then
     echo -e "${YELLOW}Please provide a GIT SHA of the revision which contains the desired 'ic-backup' version. ${RED}Note ${YELLOW}that the revision should have a disk images built already.${ENDCOLOR}"
-    echo -e "${YELLOW}To get the latest revision that has a disk image pre-built, you can run '${GREEN}gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master${YELLOW}' from within the IC repo${ENDCOLOR}."
+    echo -e "${YELLOW}To get the latest revision that has a disk image pre-built, you can run '${GREEN}ci/src/artifacts/newest_sha_with_disk_image.sh master${YELLOW}' from within the IC repo${ENDCOLOR}."
 
     read -p "GIT SHA: " git_sha
 else

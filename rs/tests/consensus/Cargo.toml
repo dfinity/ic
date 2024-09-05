@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-chrono = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
