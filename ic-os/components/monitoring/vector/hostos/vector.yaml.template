@@ -1,0 +1,15 @@
+sources:
+  hostos_node_exporter:
+    type: prometheus_scrape
+    tls:
+      verify_certificate: false
+    endpoints:
+      - https://ip6-localhost:42372/metrics/hostos_node_exporter
+  metrics_proxy:
+    type: prometheus_scrape
+    tls:
+      verify_certificate: false
+    endpoints:
+      - https://ip6-localhost:19100/metrics
+sinks:
+${prometheus_sinks}

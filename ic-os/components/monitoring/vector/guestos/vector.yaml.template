@@ -1,0 +1,34 @@
+sources:
+  guestos_node_exporter:
+    type: prometheus_scrape
+    tls:
+      verify_certificate: false
+    endpoints:
+      - https://ip6-localhost:42372/metrics/guestos_node_exporter
+  guestos_replica:
+    type: prometheus_scrape
+    tls:
+      verify_certificate: false
+    endpoints:
+      - https://ip6-localhost:42372/metrics/guestos_replica
+  metrics_proxy:
+    type: prometheus_scrape
+    tls:
+      verify_certificate: false
+    endpoints:
+      - https://ip6-localhost:19100/metrics
+  logs:
+    type: journald
+sinks:
+${prometheus_sinks}
+  elasticsearch:
+    type: elasticsearch
+    inputs:
+      - logs
+    batch:
+      max_events: 50
+    bulk:
+      index: "ic-logs-%Y.%m.%d"
+    endpoints: [{{ elasticsearch_hosts }}]
+    tls:
+      verify_certificate: false

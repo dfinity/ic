@@ -1,0 +1,8 @@
+= Vector configuration
+
+The Vector configuration is performed using a file +vector.conf+ in
+the bootstrap tarball. It must contain lines of "key=value= statements,
+with the following keys supported:
+
+* prometheus_hosts:    space-separated list of prometheus metrics compatible hosts with the format <name>_<host>
+* vector_tls:          vector tls path where tls certificates are saved. Default: /run/ic-node/etc/vector}
