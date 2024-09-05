@@ -110,7 +110,7 @@ pub struct NewCanisterQueues {
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
     /// time-based expiration and load shedding.
-    #[validate_eq(Ignore)]
+    #[validate_eq(CompareWithValidateEq)]
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -120,7 +120,6 @@ pub struct NewCanisterQueues {
     /// Round-robin schedule for `pop_input()` across ingress, local subnet senders
     /// and remote subnet senders; as well as within local subnet senders and remote
     /// subnet senders.
-    #[validate_eq(CompareWithValidateEq)]
     input_schedule: InputSchedule,
 }
 
