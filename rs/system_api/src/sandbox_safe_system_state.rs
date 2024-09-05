@@ -33,7 +33,7 @@ use std::str::FromStr;
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterStatusView {
     Running,
     Stopping,
@@ -50,14 +50,14 @@ impl CanisterStatusView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
     Unregister(CallbackId),
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     // pub for testing
@@ -543,20 +543,10 @@ impl SystemStateChanges {
     }
 }
 
-/// Determines if a precise amount of cycles is requested
-/// or if the provided number is only a limit.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CyclesAmountType {
-    /// Use exactly this many cycles or fail.
-    Exact(Cycles),
-    /// Use as many cycles as possible, up to this limit.
-    UpTo(Cycles),
-}
-
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SandboxSafeSystemState {
     /// Only public for tests
     #[doc(hidden)]
@@ -941,46 +931,28 @@ impl SandboxSafeSystemState {
 
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
-        current_payload_size_bytes: NumBytes,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
-        amount: CyclesAmountType,
+        amount: Cycles,
         reveal_top_up: bool,
-    ) -> HypervisorResult<Cycles> {
+    ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
-        let result = match amount {
-            CyclesAmountType::Exact(amount) => self
-                .cycles_account_manager
-                .withdraw_cycles_for_transfer(
-                    self.canister_id,
-                    self.freeze_threshold,
-                    self.memory_allocation,
-                    canister_current_memory_usage,
-                    canister_current_message_memory_usage,
-                    self.compute_allocation,
-                    &mut new_balance,
-                    amount,
-                    self.subnet_size,
-                    self.reserved_balance(),
-                    reveal_top_up,
-                )
-                .map(|()| amount)
-                .map_err(HypervisorError::InsufficientCyclesBalance),
-            CyclesAmountType::UpTo(amount) => Ok(self
-                .cycles_account_manager
-                .withdraw_up_to_cycles_for_transfer(
-                    self.freeze_threshold,
-                    self.memory_allocation,
-                    current_payload_size_bytes,
-                    canister_current_memory_usage,
-                    canister_current_message_memory_usage,
-                    self.compute_allocation,
-                    &mut new_balance,
-                    amount,
-                    self.subnet_size,
-                    self.reserved_balance(),
-                )),
-        };
+        let result = self
+            .cycles_account_manager
+            .withdraw_cycles_for_transfer(
+                self.canister_id,
+                self.freeze_threshold,
+                self.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                self.compute_allocation,
+                &mut new_balance,
+                amount,
+                self.subnet_size,
+                self.reserved_balance(),
+                reveal_top_up,
+            )
+            .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
         result
     }

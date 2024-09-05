@@ -386,8 +386,6 @@ pub fn load_canister_state(
         })?;
     durations.insert("canister_state_bits", starting_time.elapsed());
 
-    let session_nonce = None;
-
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
@@ -420,7 +418,6 @@ pub fn load_canister_state(
                     .raw_path();
             Some(ExecutionState {
                 canister_root,
-                session_nonce,
                 wasm_binary,
                 wasm_memory,
                 stable_memory,
@@ -579,8 +576,11 @@ pub fn load_snapshot<P: ReadPolicy>(
             .deserialize(canister_snapshot_bits.binary_hash)?;
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
+        let exported_globals = canister_snapshot_bits.exported_globals.clone();
+
         ExecutionStateSnapshot {
             wasm_binary,
+            exported_globals,
             stable_memory,
             wasm_memory,
         }

@@ -290,7 +290,7 @@ impl Registry {
 /// See /rs/protobuf/def/registry/subnet/v1/subnet.proto
 /// for the explanation of the fields for the SubnetRecord. All the fields
 /// will be used by the subnet canister to create SubnetRecord.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct CreateSubnetPayload {
     /// The list of node IDs that will be part of the new subnet.
     pub node_ids: Vec<NodeId>,
@@ -337,7 +337,7 @@ pub struct CreateSubnetPayload {
     pub gossip_retransmission_request_ms: u32,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
@@ -403,13 +403,13 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfigRequest {
     pub key_config: Option<KeyConfig>,
     pub subnet_id: Option<PrincipalId>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: Option<MasterPublicKeyId>,
     pub pre_signatures_to_create_in_advance: Option<u32>,
@@ -557,7 +557,7 @@ impl TryFrom<EcdsaInitialConfig> for InitialChainKeyConfigInternal {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
     pub keys: Vec<EcdsaKeyRequest>,
@@ -567,7 +567,7 @@ pub struct EcdsaInitialConfig {
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct EcdsaKeyRequest {
     pub key_id: EcdsaKeyId,
     pub subnet_id: Option<PrincipalId>,

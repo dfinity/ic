@@ -56,7 +56,7 @@ const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 ///    to checkpoint.
 /// Height(0) is special, it has no corresponding checkpoint to write on top of. That's why the
 /// state of a freshly created TipRequest with empty tip directory is ReadyForPageDeltas(0).
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum TipState {
     Empty,
     ReadyForPageDeltas(Height),
@@ -143,7 +143,7 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum HasDowngrade {
     Yes,
     No,
@@ -1106,6 +1106,7 @@ fn serialize_snapshot_to_tip(
             stable_memory_size: canister_snapshot.stable_memory().size,
             wasm_memory_size: canister_snapshot.wasm_memory().size,
             total_size: canister_snapshot.size(),
+            exported_globals: canister_snapshot.exported_globals().clone(),
         }
         .into(),
     )?;

@@ -10955,7 +10955,7 @@ async fn test_known_neurons() {
     assert!(gov.neuron_store.contains_known_neuron_name("Zwei"));
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ExpectedCallCanisterMethodCallArguments<'a> {
     target: CanisterId,
     method_name: &'a str,
@@ -11191,7 +11191,7 @@ lazy_static! {
         let mut result = vec![
             sns_swap_pb::CfParticipant {
                 controller: Some(principal(1)),
-                hotkey_principal: principal(1).to_string(),
+                hotkey_principal: String::new(),
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron::try_new(
                         1,
@@ -11207,7 +11207,7 @@ lazy_static! {
             },
             sns_swap_pb::CfParticipant {
                 controller: Some(principal(2)),
-                hotkey_principal: principal(2).to_string(),
+                hotkey_principal: String::new(),
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron::try_new(
                         3,
@@ -11233,7 +11233,6 @@ lazy_static! {
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> =
-    #[allow(deprecated)] // TODO[#NNS-2338]: Remove this once hotkey_principal is removed.
     Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
@@ -11260,8 +11259,6 @@ lazy_static! {
                         is_capped: Some(
                             false,
                         ),
-                        // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
-                        hotkey_principal: Some(principal(1)),
                     },
                     NeuronsFundNeuronPortion {
                         nns_neuron_id: Some(
@@ -11280,9 +11277,6 @@ lazy_static! {
                         is_capped: Some(
                             false,
                         ),
-
-                        // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
-                        hotkey_principal: Some(principal(2)),
                     },
                 ],
             },
@@ -11321,7 +11315,6 @@ lazy_static! {
     });
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION_ABORT: Option<NeuronsFundParticipation> =
-    #[allow(deprecated)] // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
     Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
@@ -11367,7 +11360,6 @@ lazy_static! {
     });
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION_COMMIT: Option<NeuronsFundParticipation> =
-    #[allow(deprecated)] // TODO(#NNS-2338): Remove this once hotkey_principal is removed.
     Some(NeuronsFundParticipation {
         ideal_matched_participation_function: Some(
             IdealMatchedParticipationFunction {
@@ -11394,9 +11386,6 @@ lazy_static! {
                         is_capped: Some(
                             false,
                         ),
-
-                        // TODO[NNS-2338]: Remove this once hotkey_principal is removed.
-                        hotkey_principal: Some(principal(1)),
                     },
                     NeuronsFundNeuronPortion {
                         nns_neuron_id: Some(
@@ -11415,9 +11404,6 @@ lazy_static! {
                         is_capped: Some(
                             false,
                         ),
-
-                        // TODO[NNS-2338]: Remove this once hotkey_principal is removed.
-                        hotkey_principal: Some(principal(2)),
                     },
                 ],
             },
@@ -11456,7 +11442,6 @@ lazy_static! {
     });
 
     static ref NEURONS_FUND_FULL_REFUNDS: Option<NeuronsFundSnapshot> =
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
     Some(NeuronsFundSnapshot {
         neurons_fund_neuron_portions: vec![
             NeuronsFundNeuronPortion {
@@ -11476,10 +11461,6 @@ lazy_static! {
                 is_capped: Some(
                     false,
                 ),
-
-
-                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
-                hotkey_principal: Some(principal(1)),
             },
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11498,15 +11479,11 @@ lazy_static! {
                 is_capped: Some(
                     false,
                 ),
-
-                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
-                hotkey_principal: Some(principal(2)),
             },
         ],
     });
 
     static ref NEURONS_FUND_PARTIAL_REFUNDS: Option<NeuronsFundSnapshot> =
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
     Some(NeuronsFundSnapshot {
         neurons_fund_neuron_portions: vec![
             NeuronsFundNeuronPortion {
@@ -11526,9 +11503,6 @@ lazy_static! {
                 is_capped: Some(
                     false,
                 ),
-
-                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
-                hotkey_principal: Some(principal(1)),
             },
             NeuronsFundNeuronPortion {
                 nns_neuron_id: Some(
@@ -11547,9 +11521,6 @@ lazy_static! {
                 is_capped: Some(
                     false,
                 ),
-
-                // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
-                hotkey_principal: Some(principal(2)),
             },
         ],
     });

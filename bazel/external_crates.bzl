@@ -630,7 +630,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
-                rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3",
+                tag = "0.1.0-b0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -730,11 +730,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "kube": crate.spec(
                 version = "^0.93.1",
-                features = [
-                    "runtime",
-                    "derive",
-                    "ws",
-                ],
             ),
             "lazy_static": crate.spec(
                 version = "^1.4.0",
@@ -994,7 +989,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.11.3",
+                version = "^0.11.4",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
@@ -1216,7 +1211,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "max_level_trace",
                     "nested-values",
-                    "release_max_level_debug",
                     "release_max_level_trace",
                 ],
             ),

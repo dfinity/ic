@@ -164,6 +164,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_memory_capacity,
             ),
             embedder.config().feature_flags.wasm_native_stable_memory,
+            embedder.config().feature_flags.canister_backtrace,
             embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
             Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(

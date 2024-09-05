@@ -94,7 +94,7 @@ impl Farm {
         &self,
         group_base_name: &str,
         group_name: &str,
-        ttl: Duration,
+        ttl: Option<Duration>,
         mut spec: GroupSpec,
         env: &TestEnv,
     ) -> FarmResult<()> {
@@ -103,7 +103,7 @@ impl Farm {
             .clone()
             .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{}", group_name);
-        let ttl = ttl.as_secs() as u32;
+        let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
         let spec = spec.add_meta(env, group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
@@ -397,12 +397,12 @@ pub enum ClaimResult {
     FileClaimed(FileExpiration),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FileExpiration {
     pub expiration: Option<DateTime<Utc>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FileId(String);
 
 impl fmt::Display for FileId {
@@ -429,13 +429,13 @@ struct TimeoutSettings {
     linear_backoff: Duration,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 struct CreateGroupRequest {
-    pub ttl: u32,
+    pub ttl: Option<u32>,
     pub spec: GroupSpec,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct GroupSpec {
     #[serde(rename = "vmAllocation")]
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -488,7 +488,7 @@ impl GroupSpec {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct GroupMetadata {
     #[serde(rename = "user")]
     pub user: Option<String>,
@@ -509,7 +509,7 @@ fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
     map
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum HostFeature {
     DC(String),
     Host(String),
@@ -582,7 +582,7 @@ impl TestEnvAttribute for Vec<HostFeature> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct CreateVmRequest {
     #[serde(skip)]
     pub name: String,
@@ -634,7 +634,7 @@ impl CreateVmRequest {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
@@ -643,7 +643,7 @@ pub enum VmType {
     Sev,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[serde(tag = "_tag")]
 #[serde(rename_all = "camelCase")]
 pub enum ImageLocation {
@@ -654,7 +654,7 @@ pub enum ImageLocation {
     PersistentVolumeClaim { name: String },
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum FarmError {
     #[error("Not found: {message}")]
     NotFound { message: String },
@@ -678,7 +678,7 @@ pub enum FarmError {
     IoError(#[from] std::io::Error),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct VMCreateResponse {
     pub ipv6: Ipv6Addr,
     #[serde(default)]
@@ -688,7 +688,7 @@ pub struct VMCreateResponse {
     pub spec: VmSpec,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct VmSpec {
     #[serde(rename = "vCPUs")]
     pub v_cpus: u64,
@@ -696,18 +696,18 @@ pub struct VmSpec {
     pub memory_ki_b: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageUploadResponse {
     image_ids: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct AttachDrivesRequest {
     pub drives: Vec<AttachImageSpec>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct AttachImageSpec {
     pub _tag: String,
     pub id: Option<FileId>,
@@ -735,13 +735,13 @@ impl AttachImageSpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PlaynetCertificate {
     pub playnet: String,
     pub cert: Certificate,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Certificate {
     #[serde(rename = "privKeyPem")]
     pub priv_key_pem: String,
@@ -751,7 +751,7 @@ pub struct Certificate {
     pub chain_pem: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct DnsRecord {
     pub name: String,
     #[serde(rename = "type")]
@@ -759,7 +759,7 @@ pub struct DnsRecord {
     pub records: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum DnsRecordType {
     A,
     AAAA,
@@ -775,13 +775,13 @@ pub enum DnsRecordType {
     TXT,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct CreateDnsRecordsResult {
     suffix: String,
 }
 
 fn emit_vm_console_link_event(log: &Logger, url: Url, vm_name: &str) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     struct ConsoleLink {
         url: Url,
         vm_name: String,
@@ -804,7 +804,7 @@ pub fn emit_vm_created_event(
     v_cpus: u64,
     memory_ki_b: u64,
 ) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct FarmVMCreated {
         vm_name: String,
         hostname: String,

@@ -179,7 +179,7 @@ pub struct CanisterStateBits {
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
@@ -201,6 +201,8 @@ pub struct CanisterSnapshotBits {
     pub wasm_memory_size: NumWasmPages,
     /// The total size of the snapshot in bytes.
     pub total_size: NumBytes,
+    /// State of the exported Wasm globals.
+    pub exported_globals: Vec<Global>,
 }
 
 #[derive(Clone)]
@@ -2513,6 +2515,11 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             stable_memory_size: item.stable_memory_size.get() as u64,
             wasm_memory_size: item.wasm_memory_size.get() as u64,
             total_size: item.total_size.get(),
+            exported_globals: item
+                .exported_globals
+                .iter()
+                .map(|global| global.into())
+                .collect(),
         }
     }
 }
@@ -2537,6 +2544,12 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             }
             None => None,
         };
+
+        let mut exported_globals = Vec::with_capacity(item.exported_globals.len());
+        for global in item.exported_globals.into_iter() {
+            exported_globals.push(global.try_into()?);
+        }
+
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
@@ -2552,6 +2565,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             stable_memory_size: NumWasmPages::from(item.stable_memory_size as usize),
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
             total_size: NumBytes::from(item.total_size),
+            exported_globals,
         })
     }
 }
@@ -2573,7 +2587,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum FilePermissions {
     ReadOnly,
     ReadWrite,
@@ -2662,7 +2676,7 @@ fn sync_and_mark_files_readonly(
     Ok(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum FSync {
     Yes,
     No,

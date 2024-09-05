@@ -34,7 +34,7 @@ pub(crate) trait IDkgComplaintHandler: Send {
     fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct ComplaintKey {
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
@@ -51,7 +51,7 @@ impl From<&SignedIDkgComplaint> for ComplaintKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct OpeningKey {
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,

@@ -50,7 +50,7 @@ lazy_static! {
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
 /// Enumerates use cases of consumed cycles.
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
 pub enum CyclesUseCase {
     Memory = 1,
     ComputeAllocation = 2,
@@ -143,7 +143,7 @@ enum ConsumingCycles {
     No,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
 // protobuf/def/state/canister_state_bits/v1/canister_state_bits.proto:
@@ -191,7 +191,7 @@ pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>
 /// The system can drop the oldest canister changes from the list to keep its length bounded
 /// (with `20` latest canister changes to always remain in the list).
 /// The system also drops all canister changes if the canister runs out of cycles.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterHistory {
     /// The canister changes stored in the order from the oldest to the most recent.
     #[validate_eq(Ignore)]
@@ -270,7 +270,7 @@ impl CanisterHistory {
 /// Contains structs needed for running and maintaining the canister on the IC.
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
@@ -374,7 +374,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,
@@ -455,12 +455,12 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
 }
 
 /// The id of a paused execution stored in the execution environment.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PausedExecutionId(pub u64);
 
 /// Represents a task that needs to be executed before processing canister
 /// inputs.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ExecutionTask {
     /// A heartbeat task exists only within an execution round. It is never
     /// serialized.
@@ -1238,10 +1238,11 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues.set_stream_responses_size_bytes(size_bytes);
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.queues
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
