@@ -717,7 +717,9 @@ impl NNS {
                 .ledger
                 .accounts
                 .clone(),
-            governance_proto: self.governance.clone_proto(),
+            governance_proto: GovernanceProto {
+                ..Default::default()
+            },
             latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
         }
     }

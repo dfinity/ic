@@ -11229,7 +11229,7 @@ lazy_static! {
     };
 
     static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
-        PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS).unwrap().serialize()
+        PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS, false).unwrap().serialize()
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> =

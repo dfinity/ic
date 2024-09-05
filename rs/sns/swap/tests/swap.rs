@@ -32,8 +32,7 @@ use ic_nervous_system_common_test_utils::{
     drain_receiver_channel, InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply,
     SpyLedger,
 };
-use ic_nervous_system_proto::pb::v1::Countries;
-use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_proto::pb::v1::{Countries, Principals};
 use ic_neurons_fund::{
     InvertibleFunction, MatchingFunction, NeuronsFundParticipationLimits,
     PolynomialMatchingFunction, SerializableFunction,
@@ -3133,9 +3132,12 @@ async fn test_finalization_halts_when_set_mode_fails() {
 #[test]
 fn test_derived_state() {
     let total_nf_maturity = 1_000_000 * E8;
-    let nf_matching_fn =
-        PolynomialMatchingFunction::new(total_nf_maturity, neurons_fund_participation_limits())
-            .unwrap();
+    let nf_matching_fn = PolynomialMatchingFunction::new(
+        total_nf_maturity,
+        neurons_fund_participation_limits(),
+        false,
+    )
+    .unwrap();
     println!("{}", nf_matching_fn.dbg_plot());
     let mut swap = Swap {
         init: Some(Init {
@@ -5265,6 +5267,7 @@ fn test_refresh_buyer_tokens_with_neurons_fund_matched_funding() {
                     (PolynomialMatchingFunction::new(
                         total_nf_maturity_equivalent_icp_e8s,
                         neurons_fund_participation_limits(),
+                        false,
                     )
                     .unwrap())
                     .serialize(),
@@ -5451,6 +5454,7 @@ fn test_refresh_buyer_tokens_without_neurons_fund_matched_funding() {
                     (PolynomialMatchingFunction::new(
                         total_nf_maturity_equivalent_icp_e8s,
                         neurons_fund_participation_limits(),
+                        false,
                     )
                     .unwrap())
                     .serialize(),
@@ -5710,6 +5714,7 @@ fn test_swap_cannot_finalize_via_new_participation_if_remaining_lt_minimal_parti
                     PolynomialMatchingFunction::new(
                         total_nf_maturity_equivalent_icp_e8s,
                         neurons_fund_participation_limits(),
+                        false,
                     )
                     .unwrap()
                     .serialize(),
