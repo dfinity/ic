@@ -31,11 +31,11 @@ def main():
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    boot_path = os.path.join(tmpdir, "boot.img")
-    subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
+    # boot_path = os.path.join(tmpdir, "boot.img")
+    # subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
 
-    root_path = os.path.join(tmpdir, "root.img")
-    subprocess.run(["tar", "xf", root_image, "--transform=s/partition.img/root.img/", "-C", tmpdir], check=True)
+    # root_path = os.path.join(tmpdir, "root.img")
+    # subprocess.run(["tar", "xf", root_image, "--transform=s/partition.img/root.img/", "-C", tmpdir], check=True)
 
     version_path = os.path.join(tmpdir, "VERSION.TXT")
     shutil.copy(version_file, version_path, follow_symlinks=True)
@@ -47,9 +47,9 @@ def main():
         [
             args.dflate,
             "--input",
-            boot_path,
+            boot_image,
             "--input",
-            root_path,
+            root_image,
             "--input",
             version_path,
             "--output",

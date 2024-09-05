@@ -10,6 +10,7 @@
 #   build_lvm_image -v volumes.csv -o partition-hostlvm.tzst part1.tzst part2.tzst ...
 #
 import argparse
+import io
 import os
 import subprocess
 import sys
@@ -23,6 +24,7 @@ BYTES_PER_MEBIBYTE = int(2 ** 20)
 EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
 
 def main():
+    print("STARTING")
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--out", help="Target (tzst) file to write lvm image to", type=str)
     parser.add_argument("-v", "--volume_table", help="CSV file describing the volume table", type=str)
@@ -51,11 +53,12 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    # tmpdir = os.getenv("ICOS_TMPDIR")
+    # if not tmpdir:
+    #     raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    lvm_image = os.path.join(tmpdir, "partition.img")
+    # lvm_image = os.path.join(tmpdir, "partition.img")
+    lvm_image = out_file
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
 
     for entry in lvm_entries:
@@ -74,36 +77,40 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
+            print("Partition file found")
             write_partition_image_from_tzst(entry, lvm_image, partition_file)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    temp_tar = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            lvm_image,
-            "--output",
-            temp_tar,
-        ],
-        check=True,
-    )
+    os.setxattr(out_file, "user.checksum.sha256", b"123441")
 
-    subprocess.run(
-        [
-            "zstd",
-            "-q",
-            "--threads=0",
-            temp_tar,
-            "-o",
-            out_file,
-        ],
-        check=True,
-    )
+    print("FINISHED")
+    # # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # # If dflate is ever misbehaving, it can be replaced with:
+    # # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    # temp_tar = os.path.join(tmpdir, "partition.tar")
+    # subprocess.run(
+    #     [
+    #         args.dflate,
+    #         "--input",
+    #         lvm_image,
+    #         "--output",
+    #         temp_tar,
+    #     ],
+    #     check=True,
+    # )
+    #
+    # subprocess.run(
+    #     [
+    #         "zstd",
+    #         "-q",
+    #         "--threads=0",
+    #         temp_tar,
+    #         "-o",
+    #         out_file,
+    #     ],
+    #     check=True,
+    # )
 
 
 def read_volume_description(data):
@@ -178,37 +185,19 @@ def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
     base_temp_dir = os.getenv("ICOS_TMPDIR")
     if not base_temp_dir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
-    with tempfile.TemporaryDirectory(dir=base_temp_dir) as tmpdir:
-        partition_tf = os.path.join(tmpdir, "partition.tar")
-        subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
-
-        partition_tf = tarfile.open(partition_tf, mode="r:")
-        base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
-        with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
-            for member in partition_tf:
-                if member.path != "partition.img":
-                    continue
-                if member.size > lvm_entry["size"] * EXTENT_SIZE_BYTES:
-                    raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
-                source = partition_tf.extractfile(member)
-                if member.type == tarfile.GNUTYPE_SPARSE:
-                    for offset, size in member.sparse:
-                        if size == 0:
-                            continue
-                        source.seek(offset)
-                        target.seek(offset + base)
-                        _copyfile(source, target, size)
-                else:
-                    target.seek(base)
-                    _copyfile(source, target, member.size)
+    base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
+    _copyfile(partition_tzst, image_file, base)
+    # with open(partition_tzst, "rb") as file:
+    #     source = io.BufferedReader(file)
+    #     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
 
 
-def _copyfile(source, target, size):
-    while size:
-        count = min(16 * 1024, size)
-        data = source.read(count)
-        target.write(data)
-        size -= len(data)
+def _copyfile(source, target, base):
+    print(f"Copying {source} to {target} at {base}", flush=True)
+    print()
+    print()
+    subprocess.run(["dd", f"if={source}", f"seek={base}", f"of={target}", "conv=sparse", "oflag=seek_bytes", "bs=1M"], check=True)
+    print(f"Copying {source} finished", flush=True)
 
 
 def _build_pv_header(pv_uuid, image_size):

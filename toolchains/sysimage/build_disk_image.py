@@ -10,7 +10,9 @@
 #   build_disk_image -p partitions.csv -o disk.img.tar part1.tzst part2.tzst ...
 #
 import argparse
+import io
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -87,41 +89,52 @@ def prepare_diskimage(gpt_entries, image_file):
             raise RuntimeError("Build of partition table failed")
 
 
-def _copyfile(source, target, size):
-    while size:
-        count = min(16 * 1024, size)
-        data = source.read(count)
-        target.write(data)
-        size -= len(data)
+def _copyfile(source, target, base):
+    print(f"Copying {source} to {target} at {base}", flush=True)
+    print()
+    print()
+    subprocess.run(["dd", f"if={source}", f"seek={base}", f"of={target}", "conv=sparse", "oflag=seek_bytes", "bs=1M"], check=True)
+    print(f"Copying {source} finished", flush=True)
+    # shutil.copyfileobj(source, target, 8192)
+    # while size:
+    #     os.lseek()
+    #     count = min(16 * 1024, size)
+    #     data = source.read(count)
+    #     target.write(data)
+    #     size -= len(data)
 
 
 def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    # tmpdir = os.getenv("ICOS_TMPDIR")
+    # if not tmpdir:
+    #     raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    partition_tf = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+    # partition_tf = os.path.join(tmpdir, "partition.tar")
+    # subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
 
-    partition_tf = tarfile.open(partition_tf, mode="r:")
+    # partition_tf = tarfile.open(partition_tf, mode="r:")
     base = gpt_entry["start"] * 512
-    with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
-        for member in partition_tf:
-            if member.path != "partition.img":
-                continue
-            if member.size > gpt_entry["size"] * 512:
-                raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
-            source = partition_tf.extractfile(member)
-            if member.type == tarfile.GNUTYPE_SPARSE:
-                for offset, size in member.sparse:
-                    if size == 0:
-                        continue
-                    source.seek(offset)
-                    target.seek(offset + base)
-                    _copyfile(source, target, size)
-            else:
-                target.seek(base)
-                _copyfile(source, target, member.size)
+    # with os.fdopen(os.open(partition_tzst, os.O_RDONLY), "rb") as source:
+    #     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
+    #         target.seek(base)
+
+    _copyfile(partition_tzst, image_file, base)
+        # for member in partition_tf:
+        #     if member.path != "partition.img":
+        #         continue
+        #     if member.size > gpt_entry["size"] * 512:
+        #         raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
+        #     source = partition_tf.extractfile(member)
+        #     if member.type == tarfile.GNUTYPE_SPARSE:
+        #         for offset, size in member.sparse:
+        #             if size == 0:
+        #                 continue
+        #             source.seek(offset)
+        #             target.seek(offset + base)
+        #             _copyfile(source, target, size)
+        #     else:
+        #         target.seek(base)
+        #         _copyfile(source, target, member.size)
 
 
 def select_partition_file(name, partition_files):
@@ -133,6 +146,7 @@ def select_partition_file(name, partition_files):
 
 
 def main():
+    print("STARRINT", flush=True)
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--out", help="Target (tar) file to write disk image to", type=str)
     parser.add_argument("-p", "--partition_table", help="CSV file describing the partition table", type=str)
@@ -152,6 +166,7 @@ def main():
     partition_desc_file = args.partition_table
     partition_files = list(args.partitions)
 
+    print("169", flush=True)
     with open(partition_desc_file, "r") as f:
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
@@ -160,9 +175,12 @@ def main():
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
-    disk_image = os.path.join(tmpdir, "disk.img")
+    print("178", flush=True)
+    # disk_image = os.path.join(tmpdir, "disk.img")
+    disk_image = out_file
     prepare_diskimage(gpt_entries, disk_image)
 
+    print("182", flush=True)
     for entry in gpt_entries:
         # Skip over any partitions starting with "B_". These are empty in our
         # published images, and stay this way until a live system upgrades
@@ -184,22 +202,25 @@ def main():
             print("No partition file for '%s' found, leaving empty" % name)
 
     # Provide additional space for vda10, the final partition, for immediate QEMU use
+    print("trunacting", flush=True)
     if args.expanded_size:
         subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
 
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            disk_image,
-            "--output",
-            out_file,
-        ],
-        check=True,
-    )
+    print("setting sha", flush=True)
+    os.setxattr(out_file, "user.checksum.sha256", b"123441")
+    # # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # # If dflate is ever misbehaving, it can be replaced with:
+    # # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    # subprocess.run(
+    #     [
+    #         args.dflate,
+    #         "--input",
+    #         disk_image,
+    #         "--output",
+    #         out_file,
+    #     ],
+    #     check=True,
+    # )
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@
 #
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -197,22 +198,24 @@ def main():
         file_contexts_file = os.path.join(tmpdir, "file_contexts")
         open(file_contexts_file, "w").write(file_contexts)
 
-    fs_basedir = os.path.join(tmpdir, "fs")
     fakeroot_statefile = os.path.join(tmpdir, "fakeroot.state")
-    os.mkdir(fs_basedir)
     # image_file = os.path.join(tmpdir, "partition.img")
     image_file = out_file
 
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
-    # prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
-    # strip_files(fs_basedir, fakeroot_statefile, strip_paths)
-    # subprocess.run(['sync'], check=True)
+    if limit_prefix or strip_paths:
+        fs_basedir = os.path.join(tmpdir, "fs")
+        os.mkdir(fs_basedir)
+        prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
+        strip_files(fs_basedir, fakeroot_statefile, strip_paths)
+        in_file = fs_basedir
+        subprocess.run(['sync'], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
-    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mke2fs", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file, "-d", in_file, str(image_size)]
+    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file] + (["-d", in_file] if in_file else []) + [str(image_size)]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     os.setxattr(image_file, "user.checksum.sha256", b"123441")
@@ -226,12 +229,12 @@ def main():
     # print("CONFIG: ")
     # print(fs_config_path)
     #
-    # e2fsdroid_args= ["faketime", "-f", "1970-1-1 0:0:0", "fakeroot", "-i", fakeroot_statefile, "e2fsdroid", "-e", "-a", "/", "-T", "0"]
+    e2fsdroid_args= ["faketime", "-f", "1970-1-1 0:0:0", "fakeroot", "-i", fakeroot_statefile, "e2fsdroid", "-e", "-a", "/", "-T", "0"]
     # e2fsdroid_args += ["-C", fs_config_path]
-    # if file_contexts_file:
-    #     e2fsdroid_args += ["-S", file_contexts_file]
-    # e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
-    # subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    if file_contexts_file:
+        e2fsdroid_args += ["-S", file_contexts_file]
+    e2fsdroid_args += [image_file]
+    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     # subprocess.run(['sync'], check=True)
     #

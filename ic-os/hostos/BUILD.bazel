@@ -9,9 +9,12 @@ exports_files([
 ])
 
 ext4_image(
-    name = "partition-config.tzst",
+    name = "partition-config.img",
     partition_size = "100M",
-    tags = ["manual"],
+    tags = [
+        "manual",
+        "no-cache",
+    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

@@ -119,7 +119,8 @@ def main():
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
 
-    image_file = os.path.join(tmpdir, "partition.img")
+    # image_file = os.path.join(tmpdir, "partition.img")
+    image_file = out_file
 
     def path_transform(path, limit_prefix=limit_prefix):
         if path.startswith(limit_prefix):
@@ -137,32 +138,32 @@ def main():
 
     install_extra_files(image_file, extra_files, path_transform)
 
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    temp_tar = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            image_file,
-            "--output",
-            temp_tar,
-        ],
-        check=True,
-    )
-
-    subprocess.run(
-        [
-            "zstd",
-            "-q",
-            "--threads=0",
-            temp_tar,
-            "-o",
-            out_file,
-        ],
-        check=True,
-    )
+    # # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # # If dflate is ever misbehaving, it can be replaced with:
+    # # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    # temp_tar = os.path.join(tmpdir, "partition.tar")
+    # subprocess.run(
+    #     [
+    #         args.dflate,
+    #         "--input",
+    #         image_file,
+    #         "--output",
+    #         temp_tar,
+    #     ],
+    #     check=True,
+    # )
+    #
+    # subprocess.run(
+    #     [
+    #         "zstd",
+    #         "-q",
+    #         "--threads=0",
+    #         temp_tar,
+    #         "-o",
+    #         out_file,
+    #     ],
+    #     check=True,
+    # )
 
 
 if __name__ == "__main__":
