@@ -2,8 +2,8 @@ name: Release Testing
 on:
   push:
     branches:
-      - 'hotfix-*'
-      - 'rc--*'
+      - "hotfix-*"
+      - "rc--*"
   workflow_dispatch:
 # new commits interrupt any running workflow on the same branch
 concurrency:
@@ -216,8 +216,45 @@ jobs:
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   trigger-qualifier-workflow:
     name: Qualify
-    needs: [ci-main, bazel-system-test-nightly, bazel-system-test-staging, bazel-system-test-hotfix, dependency-scan-release-cut]
+    needs:
+      [
+        ci-main,
+        bazel-system-test-nightly,
+        bazel-system-test-staging,
+        bazel-system-test-hotfix,
+        dependency-scan-release-cut,
+      ]
     uses: dfinity/dre/.github/workflows/qualify.yaml@main
     secrets: inherit
     with:
       version: ${{ github.sha }}
+  setup-guest-os-qualification:
+    runs-on: # Needs to be in Dfinity network
+      group: zh1
+      labels: dind-small
+    outputs:
+      matrix: ${{ steps.generate.outputs.output }}
+    steps:
+      - id: generate
+        name: Fetch beginning versions for qualification
+        shell: bash
+        run: |
+          sudo apt-get install -y jq curl
+          UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
+          echo "Will qualify starting from versions: ${UNIQUE_VERSIONS}"
+          echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
+  guest-os-qualification:
+    name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
+    needs: setup-guest-os-qualification
+    strategy:
+      matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
+    runs-on:
+      group: zh1
+      labels: dind-small
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run qualification for version ${{ matrix.version }}
+        shell: bash
+        run: |
+          ict t //rs/tests/dre:guest_os_qualification -- --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }} --test_env=NEW_VERSION=${{ github.sha }}
