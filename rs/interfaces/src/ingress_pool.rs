@@ -62,7 +62,7 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the ingress pool.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum ChangeAction {
     /// Moves an artifact from the unvalidated to validated section of the pool

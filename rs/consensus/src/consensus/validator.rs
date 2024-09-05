@@ -1,4 +1,3 @@
-#![allow(clippy::try_err)]
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
@@ -12,7 +11,7 @@ use crate::{
     dkg, idkg,
 };
 use ic_consensus_utils::{
-    active_high_threshold_transcript, active_low_threshold_transcript,
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version, is_time_to_make_block,
     membership::{Membership, MembershipError},
@@ -199,9 +198,9 @@ impl SignatureVerify for RandomTape {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == transcript.dkg_id {
+        if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
@@ -219,7 +218,7 @@ impl SignatureVerify for RandomTapeShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_low_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -227,7 +226,7 @@ impl SignatureVerify for RandomTapeShare {
             height,
             RandomTape::committee(),
         )?;
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }
@@ -240,9 +239,9 @@ impl SignatureVerify for RandomBeacon {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == transcript.dkg_id {
+        if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
@@ -260,7 +259,7 @@ impl SignatureVerify for RandomBeaconShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_low_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -269,7 +268,7 @@ impl SignatureVerify for RandomBeaconShare {
             RandomBeacon::committee(),
         )?;
 
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }
@@ -283,7 +282,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_high_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -291,7 +290,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
             height,
             CatchUpPackage::committee(),
         )?;
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }

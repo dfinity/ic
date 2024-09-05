@@ -5,7 +5,7 @@ use std::str::FromStr;
 /// used to deserialize `ExecuteNnsFunction.payload`,
 /// where `ExecuteNnsFunction.nns_function == NnsFunction::SubnetRentalRequest as i32`.
 /// Also used to serialize the subnet rental request payload in `ic-admin`.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
 pub struct SubnetRentalRequest {
     pub user: PrincipalId,
     pub rental_condition_id: RentalConditionId,
@@ -15,7 +15,7 @@ pub struct SubnetRentalRequest {
 // from the Subnet Rental Canister's repository and used
 // to serialize the payload passed to Subnet Rental Canister's
 // method `execute_rental_request_proposal`.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
 pub enum RentalConditionId {
     App13CH,
 }

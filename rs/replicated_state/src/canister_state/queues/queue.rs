@@ -23,7 +23,7 @@ mod tests;
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) enum CanisterQueueItem {
     /// Weak reference to a `Request` or `Response` held in the message pool.
     ///
@@ -95,7 +95,7 @@ impl CanisterQueueItem {
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of requests and responses.
     ///
@@ -563,7 +563,7 @@ impl QueueItem<Option<RequestOrResponse>> for Option<RequestOrResponse> {
 /// reserve a slot for a response; and later push the response into the reserved
 /// slot, consuming the slot reservation. Attempting to push a response with no
 /// reserved slot available will produce an error.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, ValidateEq)]
 struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone + ValidateEq> {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued
     /// at arbitrary points in time, response reservations cannot be explicitly
@@ -825,7 +825,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 
 /// Representation of a single canister input queue. There is an upper bound on
 /// the number of messages it can store.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, ValidateEq)]
 pub(super) struct InputQueue {
     #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<RequestOrResponse>,
@@ -953,7 +953,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// Additionally, an invariant is imposed such that there is always `Some` at the
 /// front. This is ensured when a message is popped off the queue by also popping
 /// any subsequent `None` items.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, ValidateEq)]
 pub(crate) struct OutputQueue {
     #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<Option<RequestOrResponse>>,
@@ -1334,7 +1334,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
 ///
 /// When `skip_ingress_input()` is called canister from the front of the
 /// `schedule` is moved to its back.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, ValidateEq)]
 pub(super) struct IngressQueue {
     // Schedule of canisters that have Ingress messages to be processed.
     // Because `effective_canister_id` of `Ingress` message has type Option<CanisterId>,

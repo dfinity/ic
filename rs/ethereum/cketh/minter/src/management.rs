@@ -8,7 +8,7 @@ use std::fmt;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallError {
     method: String,
     reason: Reason,
@@ -36,7 +36,7 @@ impl fmt::Display for CallError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// The reason for the management call failure.
 pub enum Reason {
     /// The canister does not have enough cycles to submit the request.

@@ -14,7 +14,7 @@ mod principal_id;
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
 use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
-    PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
+    PrincipalId, PrincipalIdClass, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
     PrincipalIdError as PrincipalIdParseError,
 };
 
@@ -108,7 +108,7 @@ impl From<CanisterIdError> for ProxyDecodeError {
 }
 
 /// Represents an error that can occur when constructing a [`SnapshotId`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SnapshotIdError {
     /// A [`SnapshotID`] with invalid length was given.
     InvalidLength(String),
@@ -127,7 +127,7 @@ impl fmt::Display for SnapshotIdError {
 
 /// A type representing a canister's snapshot ID.
 /// The ID is unique across all subnets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct SnapshotId {
     /// The length of the canister ID.
     len: usize,

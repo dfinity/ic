@@ -64,7 +64,7 @@ impl Registry {
 }
 
 /// The payload of a proposal to add nodes to an existing subnet.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct AddNodesToSubnetPayload {
     /// The subnet ID to add the nodes to.
     pub subnet_id: PrincipalId,

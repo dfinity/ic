@@ -6,17 +6,15 @@ use crate::{
     HasTimestamp,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolThrottler, PoolSection,
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, Bouncer, BouncerFactory, BouncerValue, ChangeResult,
-        MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
-    time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -27,7 +25,6 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 mod peer_counter;
 
@@ -353,31 +350,6 @@ impl IngressPoolThrottler for IngressPoolImpl {
         } else {
             false
         }
-    }
-}
-
-pub struct IngressPrioritizer {
-    time_source: Arc<dyn TimeSource>,
-}
-
-impl IngressPrioritizer {
-    pub fn new(time_source: Arc<dyn TimeSource>) -> Self {
-        Self { time_source }
-    }
-}
-
-impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
-    fn new_bouncer(&self, _pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
-        let time_source = self.time_source.clone();
-        Box::new(move |ingress_id| {
-            let start = time_source.get_relative_time();
-            let range = start..=start + MAX_INGRESS_TTL;
-            if range.contains(&ingress_id.expiry()) {
-                BouncerValue::Wants
-            } else {
-                BouncerValue::Unwanted
-            }
-        })
     }
 }
 

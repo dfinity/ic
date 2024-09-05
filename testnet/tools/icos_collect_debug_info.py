@@ -8,7 +8,7 @@ Collect various debug information from a testnet test deployment.
 - store them in the $experiment_dir/debug_info
 The collected debug information can be downloaded from the GitLab Web UI or using the command line:
 
-${REPO_ROOT}/gitlab-ci/src/artifacts/gitlab_artifacts_download.py --job-id <gitlab-job-id>
+${REPO_ROOT}/ci/src/artifacts/gitlab_artifacts_download.py --job-id <gitlab-job-id>
 """
 import argparse
 import json

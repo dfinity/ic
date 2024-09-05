@@ -39,20 +39,20 @@ use ic_neurons_fund::{
     PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
-    claim_swap_neurons_response::ClaimSwapNeuronsResult,
-    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
-    SetModeResponse,
+    claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsResponse,
+    NeuronId, SetMode, SetModeResponse,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
     memory,
     pb::v1::{
+        claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
         settle_neurons_fund_participation_response::NeuronsFundNeuron,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
+        ClaimSwapNeuronsRequest,
         Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
-        NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
-        *,
+        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NeuronIds as SwapNeuronIds,
+        SetDappControllersRequest, SetDappControllersResponse, *,
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
@@ -825,7 +825,6 @@ fn test_scenario_happy() {
     // SNS neuron baskets that will need to be created, so overall there should be 6 baskets,
     // `neurons_per_investor` neurons each. Finally, test that `Swap.create_sns_neuron_recipes`
     // produces the 18 expected neurons.
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
     let nns_governance = {
         let mut nns_governance = SpyNnsGovernanceClient::new(vec![
             NnsGovernanceClientReply::SettleNeuronsFundParticipation(
@@ -848,9 +847,6 @@ fn test_scenario_happy() {
                                             ),
                                             hotkeys: Some(Principals::from(Vec::new())),
                                             is_capped: Some(false),
-                                            hotkey_principal: Some(
-                                                neurons_fund_participant_principal_id.to_string(),
-                                            ),
                                         }
                                     },
                                 )
@@ -1146,7 +1142,6 @@ async fn test_finalize_swap_ok_matched_funding() {
         SpyLedger,
         SpyNnsGovernanceClient,
     > {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
         CanisterClients {
             sns_governance: SpySnsGovernanceClient::new(vec![
                 SnsGovernanceClientReply::ClaimSwapNeurons(ClaimSwapNeuronsResponse::new(
@@ -1196,9 +1191,6 @@ async fn test_finalize_swap_ok_matched_funding() {
                                     controller: Some(PrincipalId::new_user_test_id(1)),
                                     hotkeys: Some(Principals::from(Vec::new())),
                                     is_capped: Some(true),
-                                    hotkey_principal: Some(
-                                        PrincipalId::new_user_test_id(1).to_string(),
-                                    ),
                                 }],
                             },
                         )),
@@ -3475,7 +3467,10 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 investor: Some(Investor::CommunityFund(CfInvestment {
                     controller: Some(*TEST_USER2_PRINCIPAL),
                     hotkeys: Some(Principals::from(vec![*TEST_USER3_PRINCIPAL])),
-                    hotkey_principal: (*TEST_USER2_PRINCIPAL).to_string(),
+                    hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                        "hotkey_principal",
+                        Some("controller"),
+                    ),
                     nns_neuron_id: 100,
                 })),
                 sns: Some(TransferableAmount {
@@ -3512,28 +3507,25 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
             neuron_recipes: vec![
                 NeuronRecipe {
                     controller: Some(*TEST_USER1_PRINCIPAL),
-                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                        *TEST_USER1_PRINCIPAL,
-                        10,
+                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
+                        compute_neuron_staking_subaccount_bytes(*TEST_USER1_PRINCIPAL, 10),
                     ))),
                     stake_e8s: Some((10 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-                    followees: Some(NeuronIds {
-                        neuron_ids: vec![NeuronId::new_test_neuron_id(10)],
-                    }),
+                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
                     participant: Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {})),
                 },
                 NeuronRecipe {
                     controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
-                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                        NNS_GOVERNANCE_CANISTER_ID.get(),
-                        0,
+                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
+                        compute_neuron_staking_subaccount_bytes(
+                            NNS_GOVERNANCE_CANISTER_ID.get(),
+                            0,
+                        ),
                     ))),
                     stake_e8s: Some((20 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(0),
-                    followees: Some(NeuronIds {
-                        neuron_ids: vec![NeuronId::new_test_neuron_id(20)],
-                    }),
+                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
                     participant: Some(neuron_recipe::Participant::NeuronsFund(
                         neuron_recipe::NeuronsFund {
                             nns_neuron_id: Some(100),
@@ -3961,7 +3953,10 @@ fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_nf_pa
         cf_participants: vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(1001)),
-                hotkey_principal: PrincipalId::new_user_test_id(1001).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron {
                     nns_neuron_id: 1,
                     amount_icp_e8s: 50 * E8,
@@ -3971,7 +3966,10 @@ fn test_create_sns_neuron_recipes_skips_already_created_neuron_recipes_for_nf_pa
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(1002)),
-                hotkey_principal: PrincipalId::new_user_test_id(1002).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron {
                     nns_neuron_id: 2,
                     amount_icp_e8s: 50 * E8,
@@ -4027,7 +4025,10 @@ fn test_create_sns_neuron_recipes_includes_hotkeys() {
         neurons_fund_participation_icp_e8s: Some(100 * E8),
         cf_participants: vec![CfParticipant {
             controller: Some(PrincipalId::new_user_test_id(1001)),
-            hotkey_principal: PrincipalId::new_user_test_id(1001).to_string(),
+            hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                "hotkey_principal",
+                Some("controller"),
+            ),
             cf_neurons: vec![CfNeuron {
                 nns_neuron_id: 1,
                 amount_icp_e8s: 50 * E8,
@@ -4177,7 +4178,6 @@ async fn test_settle_neurons_fund_participation_returns_successfully_on_subseque
         ..Default::default()
     };
 
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
     let mut spy_nns_governance_client = SpyNnsGovernanceClient::new(vec![
         NnsGovernanceClientReply::SettleNeuronsFundParticipation(
             SettleNeuronsFundParticipationResponse {
@@ -4187,10 +4187,8 @@ async fn test_settle_neurons_fund_participation_returns_successfully_on_subseque
                             nns_neuron_id: Some(43),
                             amount_icp_e8s: Some(100 * E8),
                             controller: Some(PrincipalId::new_user_test_id(1)),
-
                             hotkeys: Some(Principals::from(Vec::new())),
                             is_capped: Some(true),
-                            hotkey_principal: Some(PrincipalId::new_user_test_id(1).to_string()),
                         }],
                     },
                 )),
@@ -4323,7 +4321,6 @@ async fn test_settle_neurons_fund_participation_handles_invalid_governance_respo
         ..Default::default()
     };
 
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed.
     let mut spy_nns_governance_client = SpyNnsGovernanceClient::new(vec![
         NnsGovernanceClientReply::SettleNeuronsFundParticipation(
             SettleNeuronsFundParticipationResponse {
@@ -4335,7 +4332,6 @@ async fn test_settle_neurons_fund_participation_handles_invalid_governance_respo
                             controller: Some(PrincipalId::new_user_test_id(1)),
                             hotkeys: Some(Principals::from(Vec::new())),
                             is_capped: Some(false),
-                            hotkey_principal: Some(PrincipalId::new_user_test_id(1).to_string()),
                         }],
                     },
                 )),
@@ -4356,7 +4352,7 @@ async fn test_settle_neurons_fund_participation_handles_invalid_governance_respo
                     Defects: [\"NNS governance returned an invalid NeuronsFundNeuron. Struct: NeuronsFundNeuron { \
                     nns_neuron_id: Some(0), amount_icp_e8s: Some(0), controller: Some(6fyp7-3ibaa-aaaaa-aaaap-4ai), \
                     hotkeys: Some(Principals { principals: [] }), is_capped: \
-                    Some(false), hotkey_principal: Some(\\\"6fyp7-3ibaa-aaaaa-aaaap-4ai\\\") }, Reason: nns_neuron_id must be specified\"]".to_string()),
+                    Some(false) }, Reason: nns_neuron_id must be specified\"]".to_string()),
             },
         )),
     };

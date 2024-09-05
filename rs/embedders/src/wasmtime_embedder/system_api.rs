@@ -1213,10 +1213,8 @@ pub(crate) fn syscalls<
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1231,10 +1229,8 @@ pub(crate) fn syscalls<
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }

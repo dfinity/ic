@@ -5,10 +5,10 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
-load("//ic-os/components/conformance:defs.bzl", "component_conformance_test")
+load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
@@ -186,8 +186,8 @@ def icos_build(
         tags = ["manual"],
     )
 
-    component_conformance_test(
-        name = name + "_component_conformance_test",
+    component_file_references_test(
+        name = name + "_component_file_references_test",
         image = ":partition-root-unsigned.tzst",
         component_files = image_deps["component_files"].keys(),
     )
@@ -377,20 +377,6 @@ def icos_build(
             tags = ["manual"],
         )
 
-        gzip_compress(
-            name = "update-img.tar.gz",
-            srcs = [":update-img.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img.tar.gz.sha256",
-            srcs = [":update-img.tar.gz"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -419,20 +405,6 @@ def icos_build(
         sha256sum2url(
             name = "update-img-test.tar.zst.cas-url",
             src = ":update-img-test.tar.zst.sha256",
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        gzip_compress(
-            name = "update-img-test.tar.gz",
-            srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img-test.tar.gz.sha256",
-            srcs = [":update-img-test.tar.gz"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -468,9 +440,7 @@ def icos_build(
                 name = "upload_update-img",
                 inputs = [
                     ":update-img.tar.zst",
-                    ":update-img.tar.gz",
                     ":update-img-test.tar.zst",
-                    ":update-img-test.tar.gz",
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
@@ -629,9 +599,7 @@ EOF
             ":disk-img.tar.zst",
         ] + ([
             ":update-img.tar.zst",
-            ":update-img.tar.gz",
             ":update-img-test.tar.zst",
-            ":update-img-test.tar.gz",
         ] if upgrades else []),
         visibility = visibility,
         tags = tags,

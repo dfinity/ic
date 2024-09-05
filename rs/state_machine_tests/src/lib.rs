@@ -186,7 +186,7 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum SubmitIngressError {
     HttpError(String),
     UserError(UserError),
@@ -1366,34 +1366,30 @@ impl StateMachine {
             .with_consensus_responses(http_responses)
             .with_query_stats(query_stats);
 
-        // Push responses to ECDSA management canister calls into `PayloadBuilder`.
-        let sign_with_ecdsa_contexts = state
+        // Process threshold signing requests.
+        for (id, context) in &state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts();
-        for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
-            let reply = {
-                if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-                    self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
-                {
-                    let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
-                        ecdsa_context.request.sender.get().as_slice(),
-                        &ecdsa_context.derivation_path,
-                    );
-                    let dk = k.derive_subkey(&path).0;
-                    let signature = dk
-                        .sign_digest_with_ecdsa(&ecdsa_context.ecdsa_args().message_hash)
-                        .to_vec();
-                    SignWithECDSAReply { signature }
-                } else {
-                    panic!("No ECDSA key with key id {} found", ecdsa_context.key_id());
+            .sign_with_threshold_contexts
+        {
+            match context.args {
+                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
+                    let response = self.build_sign_with_ecdsa_reply(context);
+                    payload.consensus_responses.push(ConsensusResponse::new(
+                        *id,
+                        MsgPayload::Data(response.encode()),
+                    ));
                 }
-            };
-
-            payload.consensus_responses.push(ConsensusResponse::new(
-                callback,
-                MsgPayload::Data(reply.encode()),
-            ));
+                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
+                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                }
+                _ => {}
+            }
         }
 
         // Finally execute the payload.
@@ -1681,7 +1677,7 @@ impl StateMachine {
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
-                            public_key: private_key.public_key().serialize_bip340(),
+                            public_key: private_key.public_key().serialize_sec1(true),
                         };
 
                         let private_key = SignatureSecretKey::SchnorrBip340(private_key);
@@ -2123,7 +2119,7 @@ impl StateMachine {
     fn build_sign_with_schnorr_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> SignWithSchnorrReply {
+    ) -> Option<SignWithSchnorrReply> {
         assert!(context.is_schnorr());
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
@@ -2140,7 +2136,11 @@ impl StateMachine {
                         message.copy_from_slice(&context.schnorr_args().message);
                         message
                     } else {
-                        panic!("Currently BIP340 signing of messages != 32 bytes not supported")
+                        error!(
+                            self.replica_logger,
+                            "Currently BIP340 signing of messages != 32 bytes not supported"
+                        );
+                        return None;
                     }
                 };
 
@@ -2160,7 +2160,7 @@ impl StateMachine {
             }
         };
 
-        SignWithSchnorrReply { signature }
+        Some(SignWithSchnorrReply { signature })
     }
 
     /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
@@ -2194,11 +2194,12 @@ impl StateMachine {
                     ));
                 }
                 ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    let response = self.build_sign_with_schnorr_reply(context);
-                    payload.consensus_responses.push(ConsensusResponse::new(
-                        *id,
-                        MsgPayload::Data(response.encode()),
-                    ));
+                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
                 }
                 _ => {}
             }

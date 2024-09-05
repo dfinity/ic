@@ -8,6 +8,8 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
@@ -22,7 +24,7 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Kind {
     Request = 0,
     Response = Self::BIT,
@@ -44,7 +46,7 @@ impl From<&RequestOrResponse> for Kind {
 
 /// Bit encoding the message context (inbound or outbound).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Context {
     Inbound = 0,
     Outbound = Self::BIT,
@@ -57,7 +59,7 @@ impl Context {
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Class {
     GuaranteedResponse = 0,
     BestEffort = Self::BIT,
@@ -81,7 +83,7 @@ impl From<&RequestOrResponse> for Class {
 /// A generated identifier for a message held in a `MessagePool` that also
 /// encodes the message kind (request or response), context (incoming or
 /// outgoing) and class (guaranteed response or best-effort).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub(super) struct Id(u64);
 
 impl Id {
@@ -169,9 +171,10 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_message_stats()` (only called during deserialization) execute in
 /// at most `O(log(N))` time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub(super) struct MessagePool {
     /// Pool contents.
+    #[validate_eq(CompareWithValidateEq)]
     messages: BTreeMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
@@ -733,7 +736,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
 ///
 /// All operations (computing stats deltas and retrieving the stats) are
 /// constant time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub(super) struct MessageStats {
     /// Total byte size of all messages in the pool.
     pub(super) size_bytes: usize,

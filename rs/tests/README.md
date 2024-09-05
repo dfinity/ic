@@ -204,31 +204,4 @@ Docker containers can be run in Universal VMs. Search for calls of "UniversalVm:
 
 Note that Universal VMs are created afresh for each pot. This means that if it runs a docker container the container's image needs to be fetched from the registry each time.
 
-Docker Hub has a rate limit which makes it is unsuitable for system-tests. Instead, please use the registry:
-
-https://gitlab.com/dfinity-lab/open/public-docker-registry/container_registry
-
-In order to fetch images from this registry you first need to ensure your image is pushed there. In order to do that first login using:
-
-```
-docker login registry.gitlab.com
-```
-
-Then push your image using the following shell function:
-
-```
-push_to_gitlab() {
-  image="$1"
-  docker pull --platform linux/amd64 "$image"
-  docker tag "$image" "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-  docker image push "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-}
-```
-
-You can then run this image in your Universal VM activation script as follows:
-
-```
-docker run "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-```
-
 ### Known Issues

@@ -31,7 +31,7 @@ criterion_group!(
      * bench_threshold_sig_100_nodes_threshold_34, */
 );
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]
