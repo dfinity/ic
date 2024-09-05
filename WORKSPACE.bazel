@@ -456,6 +456,24 @@ http_jar(
     url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-deps-202302091937.jar",
 )
 
+# Apalache model checker for TLA+
+http_archive(
+    name = "tla_apalache",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+  name = "contents",
+  srcs = [
+    "bin/apalache-mc",
+    "lib/apalache.jar",
+  ],
+)
+    """,
+    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
+    strip_prefix = "apalache-0.44.11",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+)
+
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(

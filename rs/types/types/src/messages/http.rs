@@ -337,7 +337,7 @@ impl HttpRequestContent for Query {
     fn sender(&self) -> UserId {
         match self.source {
             QuerySource::User { user_id, .. } => user_id,
-            QuerySource::Anonymous => UserId::from(PrincipalId::new_anonymous()),
+            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
         }
     }
 
