@@ -94,7 +94,7 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
 /// Generate a deterministic unformatted MAC address
 /// E.g. "6a01eb49a2b0"
 fn generate_mac_address_internal(
-    bmc_mac: &FormattedMacAddress,
+    mgmt_mac: &FormattedMacAddress,
     deployment_name: &str,
     node_type: &NodeType,
     version: char,
@@ -104,7 +104,7 @@ fn generate_mac_address_internal(
     }
 
     // Newline added to match behavior
-    let seed = format!("{}{}\n", bmc_mac.get(), deployment_name);
+    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_name);
     let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
     // When IPv4 and IPv6 were split, a different MAC for each bond was desired.
     // Leave for compatibility until later
@@ -121,19 +121,19 @@ fn generate_mac_address_internal(
 pub fn generate_mac_address(
     deployment_name: &str,
     node_type: &NodeType,
-    bmc_mac: &Option<FormattedMacAddress>,
+    mgmt_mac: &Option<FormattedMacAddress>,
 ) -> Result<UnformattedMacAddress> {
-    let bmc_mac = match bmc_mac {
-        Some(bmc_mac) => {
-            eprintln!("Using bmc_mac address found in config: {}", bmc_mac.get());
-            bmc_mac.clone()
+    let mgmt_mac = match mgmt_mac {
+        Some(mgmt_mac) => {
+            eprintln!("Using mgmt_mac address found in config: {}", mgmt_mac.get());
+            mgmt_mac.clone()
         }
         None => {
             let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
             get_mac_address_from_ipmitool_output(&ipmitool_output)?
         }
     };
-    generate_mac_address_internal(&bmc_mac, deployment_name, node_type, '6')
+    generate_mac_address_internal(&mgmt_mac, deployment_name, node_type, '6')
 }
 
 #[cfg(test)]
