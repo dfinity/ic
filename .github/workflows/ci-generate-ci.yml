@@ -3,8 +3,8 @@ name: CI Generate CI
 on:
   pull_request:
     paths:
-      - '.github/workflows-source/*.yml'
-      - '.github/workflows/*.yml' # trigger workflow on both to ensure they are in sync
+      - ".github/workflows-source/*.yml"
+      - ".github/workflows/*.yml" # trigger workflow on both to ensure they are in sync
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -23,18 +23,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - name: Run Generate CI
-        id: generate-ci
-        run: |
-          python $CI_PROJECT_DIR/.github/scripts/generate-ci.py
+          python-version: "3.10"
+      # - name: Run Generate CI
+      #   id: generate-ci
+      #   run: |
+      #     python $CI_PROJECT_DIR/.github/scripts/generate-ci.py
 
-          if [ -n "$(git status --porcelain)" ]; then
-            git config --global user.name "IDX GitHub Automation"
-            git config --global user.email "IDX GitHub Automation"
-            git add .
-            git commit -m "IDX GitHub Automation"
-            git push
-          else
-            echo "git working tree clean - no changes to be committed"
-          fi
+      #     if [ -n "$(git status --porcelain)" ]; then
+      #       git config --global user.name "IDX GitHub Automation"
+      #       git config --global user.email "IDX GitHub Automation"
+      #       git add .
+      #       git commit -m "IDX GitHub Automation"
+      #       git push
+      #     else
+      #       echo "git working tree clean - no changes to be committed"
+      #     fi
