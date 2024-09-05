@@ -237,20 +237,21 @@ impl From<String> for TokenSymbol {
     }
 }
 
-pub enum TokenId<'a> {
-    Erc20(&'a Erc20Token),
-    Other(&'a TokenSymbol),
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum TokenId {
+    Erc20(Erc20Token),
+    Other(TokenSymbol),
 }
 
-impl<'a> From<&'a Erc20Token> for TokenId<'a> {
-    fn from(value: &'a Erc20Token) -> Self {
-        Self::Erc20(value)
+impl From<&Erc20Token> for TokenId {
+    fn from(value: &Erc20Token) -> Self {
+        TokenId::Erc20(value.clone())
     }
 }
 
-impl<'a> From<&'a TokenSymbol> for TokenId<'a> {
-    fn from(value: &'a TokenSymbol) -> Self {
-        Self::Other(value)
+impl From<&TokenSymbol> for TokenId {
+    fn from(value: &TokenSymbol) -> Self {
+        TokenId::Other(value.clone())
     }
 }
 
@@ -478,8 +479,17 @@ impl State {
         &mut self.cycles_management
     }
 
-    pub fn all_managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
-        self.managed_canisters.canisters.iter()
+    pub fn all_managed_canisters_iter(&self) -> impl Iterator<Item = (TokenId, &Canisters)> {
+        self.managed_canisters
+            .canisters
+            .iter()
+            .map(|(key, value)| (TokenId::from(key), value))
+            .chain(
+                self.managed_canisters
+                    .other_canisters
+                    .iter()
+                    .map(|(key, value)| (TokenId::from(key), value)),
+            )
     }
 
     pub fn erc20_managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
@@ -499,10 +509,10 @@ impl State {
         self.managed_canisters.canisters.keys()
     }
 
-    pub fn managed_canisters<'a, T: Into<TokenId<'a>>>(&self, token_id: T) -> Option<&Canisters> {
+    pub fn managed_canisters<T: Into<TokenId>>(&self, token_id: T) -> Option<&Canisters> {
         match token_id.into() {
-            TokenId::Erc20(contract) => self.managed_canisters.canisters.get(contract),
-            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get(symbol),
+            TokenId::Erc20(contract) => self.managed_canisters.canisters.get(&contract),
+            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get(&symbol),
         }
     }
 
@@ -522,8 +532,11 @@ impl State {
         self.ledger_suite_version = Some(new_version);
     }
 
-    fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
-        self.managed_canisters.canisters.get_mut(contract)
+    fn managed_canisters_mut(&mut self, token_id: &TokenId) -> Option<&mut Canisters> {
+        match token_id {
+            TokenId::Erc20(contract) => self.managed_canisters.canisters.get_mut(contract),
+            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get_mut(symbol),
+        }
     }
 
     pub fn managed_status<'a, T: 'a>(
@@ -570,10 +583,15 @@ impl State {
         );
     }
 
-    pub fn record_archives(&mut self, contract: &Erc20Token, archives: Vec<Principal>) {
+    pub fn record_archives<T: Into<TokenId> + Debug>(
+        &mut self,
+        token_id: T,
+        archives: Vec<Principal>,
+    ) {
+        let token_id = token_id.into();
         let canisters = self
-            .managed_canisters_mut(contract)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
+            .managed_canisters_mut(&token_id)
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
         canisters.archives = archives;
     }
 
@@ -584,9 +602,10 @@ impl State {
     ) where
         Canisters: ManageSingleCanister<T>,
     {
+        let token_id = contract.into();
         let canisters = self
-            .managed_canisters_mut(contract)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
+            .managed_canisters_mut(&token_id)
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
         canisters
             .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
                 canister_id,
@@ -604,14 +623,15 @@ impl State {
     where
         Canisters: ManageSingleCanister<T>,
     {
+        let token_id = contract.into();
         let managed_canister = self
-            .managed_canisters_mut(contract)
+            .managed_canisters_mut(&token_id)
             .and_then(Canisters::get_mut)
             .unwrap_or_else(|| {
                 panic!(
                     "BUG: no managed canisters or no {} canister for {:?}",
                     Canisters::display_name(),
-                    contract
+                    token_id
                 )
             });
         let canister_id = *managed_canister.canister_id();

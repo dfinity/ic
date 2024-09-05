@@ -143,7 +143,7 @@ impl DashboardTemplate {
 
         Self {
             managed_canisters: state
-                .all_managed_canisters_iter()
+                .erc20_managed_canisters_iter()
                 .map(|(k, v)| {
                     (
                         k.clone(),
@@ -158,3 +158,5 @@ impl DashboardTemplate {
         }
     }
 }
+
+//TODO XC-189: add other canisters to dashboard

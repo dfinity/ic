@@ -11,7 +11,8 @@ use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
     mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, TokenSymbol, WasmHash,
+    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, TokenId, TokenSymbol,
+    WasmHash,
 };
 use crate::storage::{
     read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
@@ -386,7 +387,7 @@ impl UpgradeLedgerSuiteSubtask {
             }
             UpgradeLedgerSuiteSubtask::DiscoverArchives { contract } => {
                 log!(INFO, "Discovering archive canister(s) for {:?}", contract);
-                discover_archives(select_equal_to(contract), runtime)
+                discover_archives(select_equal_to(&TokenId::from(contract)), runtime)
                     .await
                     .map_err(UpgradeLedgerSuiteError::DiscoverArchivesError)
             }
@@ -1133,18 +1134,18 @@ async fn notify_erc20_added<R: CanisterRuntime>(
     }
 }
 
-async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
+async fn discover_archives<R: CanisterRuntime, F: Fn(&TokenId) -> bool>(
     selector: F,
     runtime: &R,
 ) -> Result<(), DiscoverArchivesError> {
     let ledgers: BTreeMap<_, _> = read_state(|s| {
         s.all_managed_canisters_iter()
             .filter(|(token, _)| selector(token))
-            .filter_map(|(token, canisters)| {
+            .filter_map(|(token_id, canisters)| {
                 canisters
                     .ledger_canister_id()
                     .cloned()
-                    .map(|ledger_id| (token.clone(), ledger_id))
+                    .map(|ledger_id| (token_id, ledger_id))
             })
             .collect()
     });
@@ -1162,8 +1163,8 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
             .map(|p| call_ledger_icrc3_get_archives(*p, runtime)),
     )
     .await;
-    let mut errors: Vec<(Erc20Token, Principal, DiscoverArchivesError)> = Vec::new();
-    for ((token, ledger), result) in ledgers.into_iter().zip(results) {
+    let mut errors: Vec<(TokenId, Principal, DiscoverArchivesError)> = Vec::new();
+    for ((token_id, ledger), result) in ledgers.into_iter().zip(results) {
         match result {
             Ok(archives) => {
                 //order is not guaranteed by the API of icrc3_get_archives.
@@ -1171,13 +1172,13 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
                 log!(
                     DEBUG,
                     "[discover_archives]: archives for ERC-20 token {:?} with ledger {}: {}",
-                    token,
+                    token_id,
                     ledger,
                     display_iter(&archives)
                 );
-                mutate_state(|s| s.record_archives(&token, archives.into_iter().collect()));
+                mutate_state(|s| s.record_archives(token_id, archives.into_iter().collect()));
             }
-            Err(e) => errors.push((token, ledger, e)),
+            Err(e) => errors.push((token_id, ledger, e)),
         }
     }
     if !errors.is_empty() {
