@@ -1789,6 +1789,7 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    // TODO(EXC-1722): remove after migrating to v2.
                     self.metrics
                         .canister_log_memory_usage
                         .observe(canister.system_state.canister_log.used_space() as f64);
