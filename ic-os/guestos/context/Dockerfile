@@ -127,6 +127,17 @@ RUN mkdir -p /var/lib/ic/backup \
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
 
+# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump.
+## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var.
+## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch.
+## When systemd-sysusers writes the shadow entry for these users, the 2nd field in the row (# days since the epoch) is set to (today - unix epoch).
+## This is not reproducible.
+## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the password timestamp.
+## Why not use `faketime`? Doesn't work with `podman --timestamp=0`.
+RUN systemd-sysusers && \
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump
+
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN ln -sf /bin/bash /usr/bin/sh
 
@@ -196,6 +207,11 @@ RUN addgroup filebeat && \
     adduser filebeat filebeat && \
     adduser filebeat systemd-journal && \
     chown root:root /usr/local/bin/filebeat
+
+# The "vector" account. Used to run vector binary to send logs of the
+# GuestOS.
+RUN useradd --system --create-home -d /var/lib/vector -s /usr/sbin/nologin -c "Vector user" -U -G systemd-journal vector && \
+    chown root:root /usr/local/bin/vector
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.

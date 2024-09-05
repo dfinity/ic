@@ -44,6 +44,8 @@ service are started in the IC-OS boot sequence:
 
 - Start filebeat
 
+- Start vector
+
 - Start node exporter
 
 == Mount +/boot+ filesystems
@@ -237,6 +239,15 @@ Service: +filebeat.service+. Pre-exec script +/opt/ic/bin/generate-filebeat-conf
 Depends on +bootstrap-ic-node.service+.
 
 This launches filebeat (if requested so by injected configuration). The configuration
+for the binary itself is generated dynamically from the configuration pieces held
+in the +config+ partition.
+
+== Start vector
+
+Service: +vector.service+. Pre-exec script +/opt/ic/bin/generate-vector-config.sh+.
+Depends on +bootstrap-ic-node.service+.
+
+This launches vector (if requested so by injected configuration). The configuration
 for the binary itself is generated dynamically from the configuration pieces held
 in the +config+ partition.
 

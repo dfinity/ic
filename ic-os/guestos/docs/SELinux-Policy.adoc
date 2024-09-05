@@ -64,6 +64,10 @@ labels contained in this template directory.
 
 Policy to confine the +filebeat+ 3rd party software.
 
+=== +vector+
+
+Policy to confine the +vector+ 3rd party software.
+
 === +node_exporter+
 
 Policy to confine the +node_exporter+ 3rd party software.
