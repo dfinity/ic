@@ -175,5 +175,3 @@ impl DashboardTemplate {
         }
     }
 }
-
-//TODO XC-189: add other canisters to dashboard
