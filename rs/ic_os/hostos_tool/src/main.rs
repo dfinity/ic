@@ -73,6 +73,9 @@ pub fn main() -> Result<()> {
                 }
             };
 
+            let deployment_name = deployment_name
+            .context("Error: Deployment name not found when attempting to generate mac address")?;
+
             generate_network_config(
                 &network_info,
                 deployment_name,

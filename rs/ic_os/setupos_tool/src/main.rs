@@ -3,8 +3,10 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
+use config::types::{deserialize_config, SetupOSConfig};
 use config::{
-    config_map_from_path, DEFAULT_SETUPOS_CONFIG_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
+    config_map_from_path, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, DEFAULT_SETUPOS_CONFIG_FILE_PATH,
+    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
 use network::generate_network_config;
 use network::info::NetworkInfo;
@@ -56,6 +58,8 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
+            let setup_config: SetupOSConfig = deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
+
             let config_map = config_map_from_path(Path::new(&opts.config))
                 .context("Please specify a valid config file with '--config'")?;
             eprintln!("Using config: {:?}", config_map);
@@ -63,18 +67,9 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file));
-            let deployment_name: Option<&str> = match &deployment {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
-
             generate_network_config(
                 &network_info,
-                deployment_name,
+                &setup_config.icos_settings.hostname,
                 NodeType::SetupOS,
                 Path::new(&output_directory),
             )

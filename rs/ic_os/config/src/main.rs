@@ -26,7 +26,7 @@ pub enum Commands {
         node_operator_private_key_path: String,
     },
     GenerateHostosConfig {
-        #[arg(long, default_value_t = config::DEFAULT_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
+        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
     },
 }
@@ -96,7 +96,7 @@ pub fn main() -> Result<()> {
                 guestos_settings,
             };
 
-            let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
+            let default_config_object_path = Path::new(config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH);
             serialize_and_write_config(default_config_object_path, &setupos_config)?;
 
             println!(

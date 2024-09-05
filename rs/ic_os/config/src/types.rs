@@ -1,5 +1,9 @@
+use anyhow::{Context, Result};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fs::File;
+use std::io::Read;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
@@ -73,4 +77,19 @@ pub struct GuestosDevConfig {
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
+}
+
+pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
+    let mut file =
+        File::open(file_path).with_context(|| format!("Failed to open file: {}", file_path))?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)
+        .with_context(|| format!("Failed to read file: {}", file_path))?;
+
+    let json_value: Value = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse JSON from file: {}", file_path))?;
+    let deserialized: T = serde_json::from_value(json_value)
+        .with_context(|| "Failed to deserialize JSON to the specified type".to_string())?;
+
+    Ok(deserialized)
 }
