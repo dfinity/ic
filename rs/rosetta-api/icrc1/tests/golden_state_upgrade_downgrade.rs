@@ -11,9 +11,9 @@ mod common;
 
 #[cfg(not(feature = "u256-tokens"))]
 #[test]
-fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
-    const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
-    const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
+fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
+    const CK_TEST_BTC_LEDGER: (&str, &str) = ("mc6ru-gyaaa-aaaar-qaaaq-cai", "ckTestBTC");
+    const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
 
     let ledger_wasm = Wasm::from_bytes(ledger_wasm());
     let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
@@ -30,51 +30,74 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
+    let ck_btc_burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
         minter: ck_btc_minter,
         burn_indexes: vec![
             100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
         ],
     };
 
-    let canister_id = CanisterId::unchecked_from_principal(
-        PrincipalId::from_str(CK_BTC_LEDGER_CANISTER_ID).unwrap(),
-    );
-    verify_ledger_state(
-        &state_machine,
-        canister_id,
-        Some(burns_without_spender.clone()),
-    );
-    upgrade_canister(
-        &state_machine,
-        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-        ledger_wasm.clone(),
-    );
-    // Upgrade again with bumped wasm timestamp to test pre_upgrade
-    upgrade_canister(
-        &state_machine,
-        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-        bump_gzip_timestamp(&ledger_wasm),
-    );
-    verify_ledger_state(&state_machine, canister_id, Some(burns_without_spender));
-    // Downgrade back to the mainnet ledger version
-    upgrade_canister(
-        &state_machine,
-        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-        mainnet_ledger_wasm,
-    );
+    let canister_ids_names_and_burns_without_spender = vec![
+        (CK_TEST_BTC_LEDGER, None),
+        (CK_BTC_LEDGER, Some(ck_btc_burns_without_spender)),
+    ];
+
+    for ((canister_id_str, canister_name), burns_without_spender) in
+        canister_ids_names_and_burns_without_spender
+    {
+        println!(
+            "Processing {} ledger, id {}",
+            canister_id_str, canister_name
+        );
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
+        verify_ledger_state(
+            &state_machine,
+            canister_id,
+            burns_without_spender.clone(),
+        );
+        upgrade_canister(
+            &state_machine,
+            (canister_id_str, canister_name),
+            ledger_wasm.clone(),
+        );
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        upgrade_canister(
+            &state_machine,
+            (canister_id_str, canister_name),
+            bump_gzip_timestamp(&ledger_wasm),
+        );
+        verify_ledger_state(&state_machine, canister_id, burns_without_spender);
+        // Downgrade back to the mainnet ledger version
+        upgrade_canister(
+            &state_machine,
+            (canister_id_str, canister_name),
+            mainnet_ledger_wasm.clone(),
+        );
+    }
 }
 
 #[cfg(feature = "u256-tokens")]
 #[test]
 fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
-    // u256 ledgers
+    // u256 testnet ledgers
+    const CK_SEPOLIA_ETH_LEDGER: (&str, &str) = ("apia6-jaaaa-aaaar-qabma-cai", "ckSepoliaETH");
+    const CK_SEPOLIA_LINK_LEDGER: (&str, &str) = ("r52mc-qaaaa-aaaar-qafzq-cai", "ckSepoliaLINK");
+    const CK_SEPOLIA_PEPE_LEDGER: (&str, &str) = ("hw4ru-taaaa-aaaar-qagdq-cai", "ckSepoliaPEPE");
+    const CK_SEPOLIA_USDC_LEDGER: (&str, &str) = ("yfumr-cyaaa-aaaar-qaela-cai", "ckSepoliaUSDC");
+    // u256 production ledgers
     const CK_ETH_LEDGER: (&str, &str) = ("ss2fx-dyaaa-aaaar-qacoq-cai", "ckETH");
+    const CK_EURC_LEDGER: (&str, &str) = ("pe5t5-diaaa-aaaar-qahwa-cai", "ckEURC");
     const CK_USDC_LEDGER: (&str, &str) = ("xevnm-gaaaa-aaaar-qafnq-cai", "ckUSDC");
     const CK_LINK_LEDGER: (&str, &str) = ("g4tto-rqaaa-aaaar-qageq-cai", "ckLINK");
     const CK_OCT_LEDGER: (&str, &str) = ("ebo5g-cyaaa-aaaar-qagla-cai", "ckOCT");
     const CK_PEPE_LEDGER: (&str, &str) = ("etik7-oiaaa-aaaar-qagia-cai", "ckPEPE");
     const CK_SHIB_LEDGER: (&str, &str) = ("fxffn-xiaaa-aaaar-qagoa-cai", "ckSHIB");
+    const CK_UNI_LEDGER: (&str, &str) = ("ilzky-ayaaa-aaaar-qahha-cai", "ckUNI");
+    const CK_USDT_LEDGER: (&str, &str) = ("cngnf-vqaaa-aaaar-qag4q-cai", "ckUSDT");
+    const CK_WBTC_LEDGER: (&str, &str) = ("bptq2-faaaa-aaaar-qagxq-cai", "ckWBTC");
+    const CK_WSTETH_LEDGER: (&str, &str) = ("j2tuh-yqaaa-aaaar-qahcq-cai", "ckWSTETH");
+    const CK_XAUT_LEDGER: (&str, &str) = ("nza5v-qaaaa-aaaar-qahzq-cai", "ckXAUT");
 
     let mainnet_ledger_wasm_u256 = Wasm::from_bytes(load_wasm_using_env_var(
         "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
@@ -97,12 +120,22 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let ledger_wasm_u256 = Wasm::from_bytes(ledger_wasm());
 
     let canister_ids_names_and_burns_without_spender = vec![
+        (CK_SEPOLIA_ETH_LEDGER, None),
+        (CK_SEPOLIA_LINK_LEDGER, None),
+        (CK_SEPOLIA_PEPE_LEDGER, None),
+        (CK_SEPOLIA_USDC_LEDGER, None),
         (CK_ETH_LEDGER, Some(ck_eth_burns_without_spender)),
+        (CK_EURC_LEDGER, None),
         (CK_USDC_LEDGER, None),
         (CK_LINK_LEDGER, None),
         (CK_OCT_LEDGER, None),
         (CK_PEPE_LEDGER, None),
         (CK_SHIB_LEDGER, None),
+        (CK_UNI_LEDGER, None),
+        (CK_USDT_LEDGER, None),
+        (CK_WBTC_LEDGER, None),
+        (CK_WSTETH_LEDGER, None),
+        (CK_XAUT_LEDGER, None),
     ];
 
     let state_machine =
