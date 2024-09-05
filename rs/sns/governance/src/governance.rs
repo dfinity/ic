@@ -3894,16 +3894,6 @@ impl Governance {
             return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
         };
 
-        // TODO(NNS1-3198): Remove this after `NeuronParameters` is fully removed
-        #[allow(deprecated)]
-        if !request.neuron_parameters.is_empty() {
-            log!(
-                ERROR,
-                "NeuronParameters is obselete. Please use NeuronRecipes instead."
-            );
-            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
-        }
-
         for neuron_recipe in Vec::<_>::from(neuron_recipes) {
             match neuron_recipe.validate(
                 neuron_minimum_stake_e8s,
