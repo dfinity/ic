@@ -905,26 +905,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "axum-server"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "447f28c85900215cc1bea282f32d4a2f22d55c5a300afdfbc661c8d6a632e063"
-dependencies = [
- "arc-swap",
- "bytes",
- "futures-util",
- "http 0.2.12",
- "http-body 0.4.6",
- "hyper 0.14.29",
- "pin-project-lite",
- "rustls 0.21.12",
- "rustls-pemfile 1.0.4",
- "tokio",
- "tokio-rustls 0.24.1",
- "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -5140,7 +5121,6 @@ dependencies = [
  "futures-util",
  "http 0.2.12",
  "hyper 0.14.29",
- "log",
  "rustls 0.21.12",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -5731,11 +5711,9 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "http 0.2.12",
- "http-body 0.4.6",
+ "http 1.1.0",
+ "http-body 1.0.1",
  "humantime",
- "hyper 0.14.29",
- "hyper-rustls 0.24.2",
  "ic-base-types",
  "ic-bn-lib",
  "ic-certification-test-utils",
@@ -16017,7 +15995,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "itertools 0.12.0",
- "reqwest 0.12.5",
+ "reqwest 0.12.7",
  "serde",
  "slog",
  "tests",
@@ -19808,7 +19786,7 @@ dependencies = [
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
  "os_qualification_utils",
- "reqwest 0.12.5",
+ "reqwest 0.12.7",
  "serde",
  "serde_json",
  "slog",
@@ -20457,30 +20435,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "tower-http"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
-dependencies = [
- "async-compression",
- "bitflags 2.6.0",
- "bytes",
- "futures-core",
- "futures-util",
- "http 0.2.12",
- "http-body 0.4.6",
- "http-range-header",
- "pin-project-lite",
- "tokio",
- "tokio-util",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -21897,38 +21851,6 @@ checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "winreg"
-version = "0.52.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
-dependencies = [
- "cfg-if 1.0.0",
- "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "wiremock"
-version = "0.5.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6f71803d3a1c80377a06221e0530be02035d5b3e854af56c6ece7ac20ac441d"
-dependencies = [
- "assert-json-diff",
- "async-trait",
- "base64 0.21.5",
- "deadpool",
- "futures",
- "futures-timer",
- "http-types",
- "hyper 0.14.29",
- "log",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
