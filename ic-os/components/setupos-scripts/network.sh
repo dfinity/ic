@@ -162,15 +162,12 @@ function ping_ipv6_gateway() {
     echo " "
 }
 
-function assemble_nns_nodes_list() {
-    nns_urls=$(get_config_value '.icos_settings.nns_urls')
-    nns_url_list=$(echo $nns_urls | sed 's@,@ @g')
-}
-
 function query_nns_nodes() {
     echo "* Querying NNS nodes..."
 
-    local urls=($(echo ${nns_url_string} | jq -r '.[]'))
+    nns_urls=$(get_config_value '.icos_settings.nns_urls')
+
+    local urls=($(echo ${nns_urls} | jq -r '.[]'))
     local success=false
 
     for url in "${urls[@]}"; do
@@ -207,7 +204,6 @@ main() {
     fi
 
     ping_ipv6_gateway
-    assemble_nns_nodes_list
     query_nns_nodes
     log_end "$(basename $0)"
 }
