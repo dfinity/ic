@@ -3,8 +3,8 @@ name: Release Testing
 on:
   push:
     branches:
-      - 'hotfix-*'
-      - 'rc--*'
+      - "hotfix-*"
+      - "rc--*"
   workflow_dispatch:
 
 # new commits interrupt any running workflow on the same branch
@@ -31,6 +31,17 @@ anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:748d5cd92d982531a25cd6c4f247bb6c0e484c9ac654164341f59a7d57d1fffc
   dind-large-setup: &dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      <<: *image
+      options: >-
+        -e NODE_NAME
+        --privileged --cgroupns host
+        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 180 # 3 hours
+  dind-small-setup: &dind-small-setup
     runs-on:
       group: zh1
       labels: dind-large
@@ -182,10 +193,37 @@ jobs:
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
 
-  trigger-qualifier-workflow:
-    name: Qualify
-    needs: [ci-main, bazel-system-test-nightly, bazel-system-test-staging, bazel-system-test-hotfix, dependency-scan-release-cut]
-    uses: dfinity/dre/.github/workflows/qualify.yaml@main
-    secrets: inherit
-    with:
-      version: ${{ github.sha }}
+  setup-guest-os-qualification:
+    <<: *dind-small-setup
+    outputs:
+      matrix: ${{ steps.generate.outputs.output }}
+    steps:
+      - id: generate
+        name: Fetch beginning versions for qualification
+        shell: bash
+        run: |
+          sudo apt-get install -y jq curl
+          UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
+          echo "Will qualify starting from versions: ${UNIQUE_VERSIONS}"
+          echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
+  guest-os-qualification:
+    name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
+    needs: setup-guest-os-qualification
+    strategy:
+      matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
+    <<: *dind-small-setup
+    steps:
+      - <<: *checkout
+      - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
+        uses: ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
+          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel --cache_test_results=no --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
+          # check if PR title contains release and set timeout filters accordingly
+          BAZEL_EXTRA_ARGS_RULES: ${{ env.BAZEL_EXTRA_ARGS_RULES || '' }}
+          # run on diff only if it is a pull request, otherwise run all targets
+          RUN_ON_DIFF_ONLY: false
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
