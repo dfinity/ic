@@ -41,17 +41,6 @@ anchors:
         --privileged --cgroupns host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
-  dind-small-setup: &dind-small-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      <<: *image
-      options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 180 # 3 hours
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -194,7 +183,7 @@ jobs:
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
 
   setup-guest-os-qualification:
-    <<: *dind-small-setup
+    <<: *dind-large-setup
     outputs:
       matrix: ${{ steps.generate.outputs.output }}
     steps:
@@ -211,7 +200,7 @@ jobs:
     needs: setup-guest-os-qualification
     strategy:
       matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
-    <<: *dind-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *checkout
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
