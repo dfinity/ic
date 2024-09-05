@@ -6,8 +6,6 @@
 
 set -eufo pipefail
 
-set -x
-
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
@@ -27,9 +25,6 @@ if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
         # get bazel targets that changed within the MR
         BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 
-        # pass info about bazel targets to bazel-targets file
-        echo "$BAZEL_TARGETS" >bazel-targets
-
         # if bazel targets is empty we don't need to run any tests
         if [ -z "${BAZEL_TARGETS:-}" ]; then
             echo "No bazel targets to build"
@@ -37,6 +32,9 @@ if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
         fi
     fi
 fi
+
+# pass info about bazel targets to bazel-targets file
+echo "$BAZEL_TARGETS" >bazel-targets
 
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
