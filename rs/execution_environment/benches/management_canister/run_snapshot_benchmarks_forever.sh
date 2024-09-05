@@ -11,7 +11,7 @@ fi
 
 # Benchmark command to run to generate benchmark results.
 DEF_BENCHMARK="bazel run //rs/execution_environment:management_canister_bench -- \
-    canister_snapshot --sample-size 10 --output-format=bencher"
+    canister_snapshot --warm-up-time 1 --sample-size 10 --output-format=bencher"
 BENCHMARK="${BENCHMARK:-${DEF_BENCHMARK}}"
 # `rg`-expression to extract benchmark results form the command run log.
 BENCH_RG="${BENCH_RG:-^test .* bench:}"
@@ -37,48 +37,45 @@ for i in $(seq 1000); do
     if ! [ -s "${MIN_FILE}" ]; then
         echo "    Setting the baseline in ${MIN_FILE}..."
         cat "${LOG_FILE}" | rg "${BENCH_RG}" >"${MIN_FILE}"
-        continue
-    fi
+    else
+        echo "    Merging the ${LOG_FILE} into ${MIN_FILE}..."
+        rm -f "${TMP_FILE}"
+        cat "${LOG_FILE}" | rg "${BENCH_RG}" | while read new_bench; do
+            name=$(echo "${new_bench}" | sed -E "${BENCH_NAME_SED}")
+            new_result=$(echo "${new_bench}" | sed -E "${BENCH_RESULT_SED}")
 
-    echo "    Merging the ${LOG_FILE} into ${MIN_FILE}..."
-    rm -f "${TMP_FILE}"
-    cat "${LOG_FILE}" | rg "${BENCH_RG}" | while read new_bench; do
-        name=$(echo "${new_bench}" | sed -E "${BENCH_NAME_SED}")
-        new_result=$(echo "${new_bench}" | sed -E "${BENCH_RESULT_SED}")
+            matches=$(rg -wF "${name}" "${MIN_FILE}" | wc -l)
+            if [ "${matches}" -gt 1 ]; then
+                echo "Error matching ${matches} times ${name} in ${MIN_FILE}"
+                exit 1
+            fi
+            min_bench=$(rg -F "${name}" "${MIN_FILE}" | head -1 || true)
+            min_result=$(echo "${min_bench}" | sed -E "${BENCH_RESULT_SED}")
 
-        matches=$(rg -wF "${name}" "${MIN_FILE}" | wc -l)
-        if [ "${matches}" -gt 1 ]; then
-            echo "Error matching ${matches} times ${name} in ${MIN_FILE}"
-            exit 1
-        fi
-        min_bench=$(rg -F "${name}" "${MIN_FILE}" | head -1 || true)
-        min_result=$(echo "${min_bench}" | sed -E "${BENCH_RESULT_SED}")
-
-        if [ -n "${min_result}" ]; then
-            if [ -n "${new_result}" -a "${new_result}" -lt "${min_result}" ]; then
-                echo "        ${name} is improved from ${min_result} to ${new_result}"
+            if [ -n "${min_result}" ]; then
+                if [ -n "${new_result}" -a "${new_result}" -lt "${min_result}" ]; then
+                    echo "        ${name} is improved from ${min_result} to ${new_result}"
+                    min_bench="${new_bench}"
+                fi
+            else
+                # There is no min result, so just take the new one.
                 min_bench="${new_bench}"
             fi
-        else
-            # There is no min result, so just take the new one.
-            min_bench="${new_bench}"
-        fi
-        echo "${min_bench}" >>"${TMP_FILE}"
-    done
-
-    echo "    Updating the min results in ${MIN_FILE}..."
-    mv -f "${TMP_FILE}" "${MIN_FILE}" || (echo "Error finding benchmark results" && exit 1)
-    if [ -n "${MD_FILE}" ]; then
-        echo "    Generating ${MD_FILE}..."
-        rm -f "${MD_FILE}"
-        printf "| %-60s | %-10s |\n" "Benchmark" "Result" >>"${MD_FILE}"
-        printf "| %-60s | %-10s |\n" "---" "---" >>"${MD_FILE}"
-        cat "${MIN_FILE}" | while read bench; do
-            name=$(echo "${bench}" | sed -E "${BENCH_NAME_SED}")
-            result_ns=$(echo "${bench}" | sed -E "${BENCH_RESULT_SED}")
-            result_ms=$(echo "scale=2; ${result_ns}/1000000" | bc -l)
-
-            printf "| %-60s | %-10s |\n" "${name}" "${result_ms} ms" >>"${MD_FILE}"
+            echo "${min_bench}" >>"${TMP_FILE}"
         done
+        echo "    Updating the min results in ${MIN_FILE}..."
+        mv -f "${TMP_FILE}" "${MIN_FILE}" || (echo "Error finding benchmark results" && exit 1)
     fi
+
+    echo "    Generating ${MD_FILE}..."
+    rm -f "${MD_FILE}"
+    printf "| %-60s | %-10s |\n" "Benchmark" "Result" >>"${MD_FILE}"
+    printf "| %-60s | %-10s |\n" "---" "---" >>"${MD_FILE}"
+    cat "${MIN_FILE}" | while read bench; do
+        name=$(echo "${bench}" | sed -E "${BENCH_NAME_SED}")
+        result_ns=$(echo "${bench}" | sed -E "${BENCH_RESULT_SED}")
+        result_ms=$(echo "scale=2; ${result_ns}/1000000" | bc -l)
+
+        printf "| %-60s | %-10s |\n" "${name}" "${result_ms} ms" >>"${MD_FILE}"
+    done
 done
