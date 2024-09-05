@@ -164,7 +164,10 @@ function ping_ipv6_gateway() {
 
 function assemble_nns_nodes_list() {
     nns_url_string=$(get_config_value '.icos_settings.nns_url')
+    echo ${nns_url_string}
     nns_url_list=$(echo $nns_url_string | sed 's@,@ @g')
+    echo ${nns_url_list}
+    sleep 10
 }
 
 function query_nns_nodes() {
@@ -175,13 +178,16 @@ function query_nns_nodes() {
     nodes=$(echo ${nns_url_list} | wc -w)
     # At least one of the provided URLs needs to work.
     verify=1
-    for url in $(echo $nns_url_list); do
+    echo ${nns_url_string} | jq -r '.[]' | while read -r url; do
+        echo ${url}
+        sleep 10
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
         curl --insecure --head --connect-timeout 3 --silent ${url} >/dev/null 2>&1
         if [ "${?}" -ne 0 ]; then
             echo "  fail: ${url}"
+            sleep 10
         else
             echo "  okay: ${url}"
             success=$((${success} + 1))
@@ -191,6 +197,7 @@ function query_nns_nodes() {
             echo "  success"
             break
         elif [ ${i} -eq ${nodes} ]; then
+            sleep 200
             log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
         fi
     done

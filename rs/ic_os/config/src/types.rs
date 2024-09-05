@@ -47,7 +47,7 @@ pub struct NetworkSettings {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ICOSSettings {
     pub nns_public_key_path: PathBuf,
-    pub nns_url: Vec<Url>,
+    pub nns_urls: Vec<Url>,
     pub elasticsearch_hosts: String,
     // help: elasticsearch_tags is a dev field?
     pub elasticsearch_tags: Option<String>,

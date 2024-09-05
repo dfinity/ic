@@ -68,12 +68,12 @@ pub fn main() -> Result<()> {
             let (network_settings, verbose) = get_config_ini_settings(config_ini_path)?;
 
             // get deployment.json variables
-            let (vm_memory, vm_cpu, nns_url, hostname, elasticsearch_hosts) =
+            let (vm_memory, vm_cpu, nns_urls, hostname, elasticsearch_hosts) =
                 get_deployment_settings(deployment_json_path);
 
             let icos_settings = ICOSSettings {
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
-                nns_url,
+                nns_urls,
                 elasticsearch_hosts,
                 elasticsearch_tags: None,
                 hostname,
