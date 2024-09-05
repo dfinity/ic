@@ -197,6 +197,11 @@ RUN addgroup filebeat && \
     adduser filebeat systemd-journal && \
     chown root:root /usr/local/bin/filebeat
 
+# The "vector" account. Used to run vector binary to send logs of the
+# GuestOS.
+RUN useradd --system --create-home -d /var/lib/vector -s /usr/sbin/nologin -c "Vector user" -U -G systemd-journal vector && \
+    chown root:root /usr/local/bin/vector
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \

@@ -35,6 +35,7 @@ cryptsetup
 curl
 faketime
 fdisk
+gettext-base
 iproute2
 isc-dhcp-client
 jq
@@ -64,4 +65,3 @@ policycoreutils
 # this package can be removed
 selinux-policy-dev
 checkpolicy
-

@@ -26,9 +26,61 @@ In the absence of a sealing key (which will be available in SEV-protected truste
 
 These configuration files should only be used for development and testing purposes.
 
+=== backup.conf
+
+This file configures the usage of the backup spool directory.
+
+Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
+
+- *backup_retention_time_secs*: The maximum age of any file or directory kept in the backup spool.
+
+- *backup_purging_interval_secs*: The interval at which the backup spool directory will be scanned for files to delete.
+
+This configuration file should only be used for testnet deployments (to achieve shorter retention times) and must be missing for production deployments, where suitable production default values are assumed.
+
+=== filebeat.conf
+
+Configures filebeat to export logs out of the system.
+
+Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
+
+- elasticsearch_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_tags: Space-separated list of tags to apply to exported log records.
+
+If left unspecified, filebeat will be left unconfigured and no logs are exported.
+
+=== vector.conf
+
+Configures vector to export logs out of the system.
+
+Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
+
+- elasticsearch_hosts: Space-separated lists of hosts to ship logs to.
+- elasticsearch_tags: Space-separated list of tags to apply to exported log records.
+
+If left unspecified, vector will be left unconfigured and no logs are exported.
+
+=== socks_proxy.conf
+
+Configuration for socks proxy.
+
+Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
+
+- socks_proxy: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080
+
+=== bitcoin_addr.conf
+
+Configuration for bitcoin adapter.
+
+Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
+
+- bitcoind_addr: Address of the bitcoind to be contacted by bitcoin adapter service.
+
+If left unspecified, the bitcoin adapter will not work properly due to lack of external system to contact.
+
 == Injecting external state
 
-*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS. 
+*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS.
 
 However, the typical bootstrap process can be modified such that the node is initialized using externally generated private keys and an externally generated initial state. All "registration" to the target IC is assumed to have been performed by other means.
 
@@ -43,3 +95,14 @@ This behavior is suitable for the following use cases:
 
 - Externally controlled join of a node to a subnet: In this case, ic-prep is used to prepare key material to the node, while ic-admin is used to modify the target NNS such that it "accepts" the new node as part of the IC.
 
+=== ic_crypto
+
+Externally generated cryptographic keys.
+
+Must be a directory with contents matching the internal representation of the ic_crypto directory. When given, this provides the private keys of the node. If not given, the node will generate its own private/public key pair.
+
+=== ic_registry_local_store
+
+Initial registry state.
+
+Must be a directory with contents matching the internal representation of the ic_registry_local_store. When given, this provides the initial state of the registry. If not given, the node will fetch (initial) registry state from the NNS.
