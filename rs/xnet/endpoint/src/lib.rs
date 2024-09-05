@@ -182,11 +182,10 @@ fn start_server(
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
-    let _guard = runtime_handle.enter();
-
     let listener = start_tcp_listener(address, &runtime_handle);
     let address = listener.local_addr().expect("Failed to get local addr.");
 
+    let _guard: runtime::EnterGuard<'_> = runtime_handle.enter();
     let ctx = Context {
         log: log.clone(),
         metrics: Arc::clone(&metrics),
@@ -202,8 +201,7 @@ fn start_server(
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
-    let http = hyper::server::conn::http1::Builder::new();
-
+    let server = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
     let graceful_shutdown = GracefulShutdown::new();
 
     let logger = log.clone();
@@ -222,10 +220,10 @@ fn start_server(
                         let _ = registry_client;
 
                         let io = TokioIo::new(stream);
-                        let conn = http.serve_connection(io, hyper_service);
-                        let wrapped = graceful_shutdown.watch(conn);
+                        let conn = server.serve_connection_with_upgrades(io, hyper_service);
+                        let conn = graceful_shutdown.watch(conn.into_owned());
                         tokio::spawn(async move {
-                            if let Err(err) = wrapped.await {
+                            if let Err(err) = conn.await {
                                 warn!(logger, "failed to serve connection: {err}");
                             }
                         });
@@ -251,10 +249,10 @@ fn start_server(
                         match tls_acceptor.accept(stream).await {
                             Ok(tls_stream) => {
                                 let io = TokioIo::new(tls_stream);
-                                let conn = http.serve_connection(io, hyper_service);
-                                let wrapped = graceful_shutdown.watch(conn);
+                                let conn = server.serve_connection_with_upgrades(io, hyper_service);
+                                let conn = graceful_shutdown.watch(conn.into_owned());
                                 tokio::spawn(async move {
-                                    if let Err(err) = wrapped.await {
+                                    if let Err(err) = conn.await {
                                         warn!(logger, "failed to serve connection: {err}");
                                     }
                                 });
