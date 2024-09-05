@@ -723,8 +723,8 @@ dependencies = [
  "bytes",
  "futures-util",
  "http 0.2.12",
- "http-body 0.4.5",
- "hyper 0.14.26",
+ "http-body 0.4.6",
+ "hyper 0.14.29",
  "itoa",
  "matchit",
  "memchr",
@@ -787,7 +787,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "http 0.2.12",
- "http-body 0.4.5",
+ "http-body 0.4.6",
  "mime",
  "rustversion",
  "tower-layer",
@@ -847,8 +847,8 @@ dependencies = [
  "bytes",
  "futures-util",
  "http 0.2.12",
- "http-body 0.4.5",
- "hyper 0.14.26",
+ "http-body 0.4.6",
+ "hyper 0.14.29",
  "pin-project-lite",
  "rustls 0.21.12",
  "rustls-pemfile 1.0.4",
@@ -4764,9 +4764,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
+checksum = "7ceab25649e9960c0311ea418d17bee82c0dcec1bd053b5f9a66e265a693bed2"
 dependencies = [
  "bytes",
  "http 0.2.12",
@@ -4885,7 +4885,7 @@ dependencies = [
  "form_urlencoded",
  "futures",
  "http 0.2.12",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "log",
  "once_cell",
  "regex",
@@ -4922,9 +4922,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "0.14.26"
+version = "0.14.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab302d72a6f11a3b910431ff93aae7e773078c769f0a3ef15fb9ec692ed147d4"
+checksum = "f361cde2f109281a220d4307746cdfd5ee3f410da58a70377762396775634b33"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -4932,12 +4932,12 @@ dependencies = [
  "futures-util",
  "h2 0.3.26",
  "http 0.2.12",
- "http-body 0.4.5",
+ "http-body 0.4.6",
  "httparse",
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.9",
+ "socket2 0.5.7",
  "tokio",
  "tower-service",
  "tracing",
@@ -4993,7 +4993,7 @@ checksum = "ec3efd23720e2049821a693cbc7e65ea87c72f1c58ff2f9522ff332b1491e590"
 dependencies = [
  "futures-util",
  "http 0.2.12",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "log",
  "rustls 0.21.12",
  "rustls-native-certs 0.6.2",
@@ -5042,7 +5042,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
@@ -5389,7 +5389,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "rand 0.8.5",
  "slog",
  "sync_wrapper 1.0.1",
@@ -5532,9 +5532,9 @@ dependencies = [
  "futures-util",
  "hex",
  "http 0.2.12",
- "http-body 0.4.5",
+ "http-body 0.4.6",
  "humantime",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "hyper-rustls 0.24.2",
  "ic-base-types",
  "ic-certification-test-utils",
@@ -8377,11 +8377,14 @@ dependencies = [
  "clap 4.4.6",
  "hex",
  "ic-agent",
+ "ic-crypto-ed25519",
+ "ic-crypto-secp256k1",
  "ic-icp-rosetta-runner",
  "ic-ledger-test-utils",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
  "icp-ledger",
+ "icrc-ledger-types",
  "num-bigint 0.4.6",
  "pocket-ic",
  "reqwest 0.12.5",
@@ -11100,7 +11103,9 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
+ "ic-icrc1",
  "ic-icrc1-test-utils",
+ "ic-icrc1-tokens-u256",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
@@ -12944,7 +12949,7 @@ name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
  "bytes",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12978,7 +12983,7 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
  "ic-interfaces-registry",
@@ -12995,7 +13000,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
@@ -14961,7 +14966,7 @@ dependencies = [
  "assert-json-diff",
  "colored",
  "futures",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "log",
  "rand 0.8.5",
  "regex",
@@ -15681,6 +15686,10 @@ dependencies = [
  "exec",
  "get_if_addrs",
  "hex",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.2",
+ "hyper-util",
  "ic-async-utils",
  "ic-canister-client",
  "ic-canister-client-sender",
@@ -15691,6 +15700,8 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-test-utils-tls",
+ "ic-crypto-tls-interfaces",
  "ic-dashboard",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -17421,8 +17432,8 @@ dependencies = [
  "futures-util",
  "h2 0.3.26",
  "http 0.2.12",
- "http-body 0.4.5",
- "hyper 0.14.26",
+ "http-body 0.4.6",
+ "hyper 0.14.29",
  "hyper-rustls 0.24.2",
  "ipnet",
  "js-sys",
@@ -20187,8 +20198,8 @@ dependencies = [
  "bytes",
  "h2 0.3.26",
  "http 0.2.12",
- "http-body 0.4.5",
- "hyper 0.14.26",
+ "http-body 0.4.6",
+ "hyper 0.14.29",
  "hyper-timeout 0.4.1",
  "percent-encoding",
  "pin-project",
@@ -20247,7 +20258,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "http 0.2.12",
- "http-body 0.4.5",
+ "http-body 0.4.6",
  "http-range-header",
  "pin-project-lite",
  "tokio",
@@ -20956,7 +20967,7 @@ dependencies = [
  "futures-util",
  "headers 0.3.8",
  "http 0.2.12",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "log",
  "mime",
  "mime_guess",
@@ -21678,7 +21689,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "http-types",
- "hyper 0.14.26",
+ "hyper 0.14.29",
  "log",
  "once_cell",
  "regex",

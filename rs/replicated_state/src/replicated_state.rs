@@ -166,11 +166,10 @@ impl<'a> OutputIterator<'a> {
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
-        let subnet_queues_iter = subnet_queues.output_into_iter();
-        // FIXME: Should we also use `has_output()` here?
-        if !subnet_queues_iter.is_empty() {
-            canister_iterators.push_front(subnet_queues_iter)
+        if subnet_queues.has_output() {
+            canister_iterators.push_front(subnet_queues.output_into_iter());
         }
+
         let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {

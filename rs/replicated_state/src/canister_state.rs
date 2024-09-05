@@ -326,7 +326,7 @@ impl CanisterState {
 
     /// Inducts messages from the output queue to `self` into the input queue
     /// from `self` while respecting queue capacity and subnet's available
-    /// guaranteed response memory.
+    /// guaranteed response memory (as given by the `subnet_available_memory` parameter).
     ///
     /// `subnet_available_memory` is updated to reflect the change in memory usage
     /// due to inducting any guaranteed response messages.

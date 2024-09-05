@@ -361,7 +361,7 @@ impl MessageRoutingMetrics {
             ),
             timed_out_messages_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_MESSAGES_TOTAL,
-                "Count of timed out requests.",
+                "Count of timed out messages.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
