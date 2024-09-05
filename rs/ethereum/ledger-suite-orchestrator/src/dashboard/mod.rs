@@ -31,6 +31,7 @@ mod filters {
 #[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
     managed_canisters: BTreeMap<Erc20Token, CanistersDashboardData>,
+    other_canisters: BTreeMap<String, Vec<CanisterDashboardData>>,
     wasm_store: Vec<DashboardStoredWasm>,
 }
 
@@ -141,7 +142,7 @@ impl DashboardTemplate {
             Reverse((w.timestamp, w.git_commit.clone(), w.wasm_hash.clone()))
         });
 
-        let (erc20_canisters, _other_canisters): (Vec<_>, Vec<_>) = state
+        let (erc20_canisters, other_canisters): (Vec<_>, Vec<_>) = state
             .all_managed_canisters_iter()
             .partition(|(token_id, _canisters)| match token_id {
                 TokenId::Erc20(_) => true,
@@ -158,6 +159,15 @@ impl DashboardTemplate {
                             ckerc20_token_symbol: v.metadata.token_symbol.clone(),
                             canisters: CanisterDashboardData::from_canisters(v),
                         },
+                    )
+                })
+                .collect(),
+            other_canisters: other_canisters
+                .into_iter()
+                .map(|(token_id, canisters)| {
+                    (
+                        token_id.into_other_unchecked().to_string(),
+                        CanisterDashboardData::from_canisters(canisters),
                     )
                 })
                 .collect(),
