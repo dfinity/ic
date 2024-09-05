@@ -42,7 +42,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout 7fbb84aad7188d1d5b3e17b170997c29d1598cb8
-./ci/container/build-ic.sh -c
+./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
 ```
 
@@ -51,7 +51,7 @@ Note that the git commit hash is different because it reuses the same version fo
 ```
 git fetch
 git checkout 4472b0064d347a88649beb526214fde204f906fb
-./ci/container/build-ic.sh -c
+./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
 sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
 ```

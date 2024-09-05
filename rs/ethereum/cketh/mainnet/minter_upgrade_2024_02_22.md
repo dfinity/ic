@@ -60,6 +60,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout f6d3e13cf080335c7ed7d5f9144f538241fa4122
-./ci/container/build-ic.sh -c
+./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-cketh-minter.wasm.gz
 ```

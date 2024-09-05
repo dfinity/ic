@@ -124,7 +124,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout de29a1a55b589428d173b31cdb8cec0923245657
-./ci/container/build-ic.sh -c
+./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
 ```
 
@@ -133,7 +133,7 @@ Verify that the hash of the gzipped WASM for the ledger, index and archive match
 ```
 git fetch
 git checkout de29a1a55b589428d173b31cdb8cec0923245657
-./ci/container/build-ic.sh -c
+./gitlab-ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
 sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
 sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
