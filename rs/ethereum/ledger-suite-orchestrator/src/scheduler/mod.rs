@@ -1327,14 +1327,6 @@ impl Erc20Token {
 #[serde(transparent)]
 pub struct ChainId(u64);
 
-impl ChainId {
-    pub const MAX: ChainId = ChainId(u64::MAX);
-
-    pub fn checked_decrement(&self) -> Option<Self> {
-        self.0.checked_sub(1).map(Self)
-    }
-}
-
 impl AsRef<u64> for ChainId {
     fn as_ref(&self) -> &u64 {
         &self.0
