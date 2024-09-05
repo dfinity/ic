@@ -261,4 +261,4 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }}
         shell: bash
         run: |
-          ict t //rs/tests/dre:guest_os_qualification -- --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }} --test_env=NEW_VERSION=${{ github.sha }}
+          bazel test //rs/tests/dre:guest_os_qualification --config=systest --cache_test_results=no --test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }} --test_env=NEW_VERSION=${{ github.sha }}
