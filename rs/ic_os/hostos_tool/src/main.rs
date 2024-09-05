@@ -99,12 +99,8 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let mgmt_mac = match deployment.deployment.mgmt_mac {
-                Some(mgmt_mac) => Some(FormattedMacAddress::try_from(mgmt_mac.as_str())?),
-                None => None,
-            };
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(&deployment.deployment.name, &node_type, &mgmt_mac)?;
+            let mac = generate_mac_address(&deployment.deployment.name, &node_type, deployment.deployment.mgmt_mac.as_deref())?;
             let ipv6_prefix = network_info
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
@@ -124,12 +120,8 @@ pub fn main() -> Result<()> {
                 .context("Please specify a valid deployment file with '--deployment-file'")?;
             eprintln!("Deployment config: {:?}", deployment);
 
-            let mgmt_mac = match deployment.deployment.mgmt_mac {
-                Some(mgmt_mac) => Some(FormattedMacAddress::try_from(mgmt_mac.as_str())?),
-                None => None,
-            };
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(&deployment.deployment.name, &node_type, &mgmt_mac)?;
+            let mac = generate_mac_address(&deployment.deployment.name, &node_type, deployment.deployment.mgmt_mac.as_deref())?;
             let mac = FormattedMacAddress::from(&mac);
             println!("{}", mac.get());
             Ok(())

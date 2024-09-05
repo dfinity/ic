@@ -121,18 +121,16 @@ fn generate_mac_address_internal(
 pub fn generate_mac_address(
     deployment_name: &str,
     node_type: &NodeType,
-    mgmt_mac: &Option<FormattedMacAddress>,
+    mgmt_mac: Option<&str>,
 ) -> Result<UnformattedMacAddress> {
-    let mgmt_mac = match mgmt_mac {
-        Some(mgmt_mac) => {
-            eprintln!("Using mgmt_mac address found in config: {}", mgmt_mac.get());
-            mgmt_mac.clone()
-        }
-        None => {
-            let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
-            get_mac_address_from_ipmitool_output(&ipmitool_output)?
-        }
-    };
+    let mgmt_mac = if let Some(mgmt_mac) = mgmt_mac {
+        let mgmt_mac = FormattedMacAddress::try_from(mgmt_mac)?;
+        eprintln!("Using mgmt_mac address found in config: {}", mgmt_mac.get());
+        Ok(mgmt_mac.clone())
+    } else {
+        let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
+        get_mac_address_from_ipmitool_output(&ipmitool_output)
+    }?;
     generate_mac_address_internal(&mgmt_mac, deployment_name, node_type, '6')
 }
 
