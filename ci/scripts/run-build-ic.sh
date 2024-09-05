@@ -9,7 +9,7 @@ cd "$CI_PROJECT_DIR"
 if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
 # if an override was requested to run all bazel targets with no release
-elif [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+elif [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b --no-release
 # check if the workflow was triggered by a pull request and if the job requested running only on diff
 elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then

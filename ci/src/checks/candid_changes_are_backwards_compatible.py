@@ -58,8 +58,8 @@ https://github.com/dfinity/candid/releases.
 
 Behavior affected by a couple of environment variables:
 
-1. CI_MERGE_REQUEST_TARGET_BRANCH_NAME: Described above.
-2. CI_MERGE_REQUEST_TITLE: See --also-reverse.
+1. CI_PULL_REQUEST_TARGET_BRANCH_NAME: Described above.
+2. CI_PULL_REQUEST_TITLE: See --also-reverse.
 """.strip()
 )
 
@@ -83,7 +83,7 @@ In addition to the usual `didc check after.did before.did`, also make sure that
 `didc check before.did after.did` passes. This is useful when it is expected
 that clients will "jump the gun", i.e. upgrade before servers. This is an
 unusual (but not unheard of) use case. This can be disabled if the
-CI_MERGE_REQUEST_TITLE environment variable contains "[override-also-reverse]".
+CI_PULL_REQUEST_TITLE environment variable contains "[override-also-reverse]".
 """.strip(),
 )
 
@@ -311,7 +311,7 @@ def main(argv):
     pprint.pprint(sorted((k, v) for k, v in os.environ.items() if "commit" in k.lower()))
     print()
 
-    override_didc_check = override_didc_check_string in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    override_didc_check = override_didc_check_string in os.environ.get("CI_PULL_REQUEST_TITLE", "")
     if override_didc_check:
         print(f"Found {override_didc_check_string} in merge request title. Skipping check.")
         return
@@ -330,7 +330,7 @@ def main(argv):
     diff_base = get_diff_base()
     print()
 
-    override_also_reverse = override_also_reverse_string in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    override_also_reverse = override_also_reverse_string in os.environ.get("CI_PULL_REQUEST_TITLE", "")
     also_reverse = args.also_reverse and not override_also_reverse
 
     try:

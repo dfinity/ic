@@ -9,7 +9,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 env:
-  CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
