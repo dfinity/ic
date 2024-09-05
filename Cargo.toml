@@ -384,6 +384,7 @@ members = [
     "rs/utils/ensure",
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",
+    "rs/utils/validate_eq",
     "rs/validator",
     "rs/validator/http_request_arbitrary",
     "rs/validator/ingress_message",
