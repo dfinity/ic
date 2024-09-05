@@ -16,8 +16,9 @@ if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BR
     s3_upload="True"
 fi
 
-# if we are on a pull_request check if RUN_ALL_BAZEL_TARGETS was requested
-if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
+# check if the workflow was triggered by a pull request and if the job requested running only on diff
+if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "$RUN_ON_DIFF_ONLY" == "true" ]]; then
+    # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
     if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
         s3_upload="True"
     else
