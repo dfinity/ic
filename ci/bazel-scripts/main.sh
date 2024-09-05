@@ -11,7 +11,7 @@ ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
 
 # if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
-if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
 fi
