@@ -444,17 +444,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::MoveToValidated(message) => {
-                    match &message {
-                        IDkgMessage::DealingSupport(_)
-                        | IDkgMessage::EcdsaSigShare(_)
-                        | IDkgMessage::SchnorrSigShare(_)
-                        | IDkgMessage::Dealing(_) => (),
-                        _ => mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
-                            artifact: message.clone(),
-                            // relayed
-                            is_latency_sensitive: false,
-                        })),
-                    }
+                    // IDKG messages aren't relayed
                     unvalidated_ops.remove(IDkgArtifactId::from(&message));
                     validated_ops.insert(message);
                 }
@@ -511,7 +501,9 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_types::artifact::IdentifiableArtifact;
+    use ic_types::consensus::idkg::IDkgComplaintContent;
     use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
+    use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, NodeId};
@@ -908,15 +900,36 @@ mod tests {
                     });
                     msg
                 };
+                let msg_4 = {
+                    let content = IDkgComplaintContent {
+                        idkg_complaint: IDkgComplaint {
+                            transcript_id: dummy_idkg_transcript_id_for_tests(100),
+                            dealer_id: NODE_2,
+                            internal_complaint_raw: vec![1],
+                        },
+                    };
+                    let msg = IDkgMessage::Complaint(SignedIDkgComplaint {
+                        content,
+                        signature: BasicSignature::fake(NODE_2),
+                    });
+                    idkg_pool.insert(UnvalidatedArtifact {
+                        message: msg.clone(),
+                        peer_id: NODE_1,
+                        timestamp: UNIX_EPOCH,
+                    });
+                    msg
+                };
                 check_state(&idkg_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
                 let result = idkg_pool.apply_changes(vec![
                     IDkgChangeAction::MoveToValidated(msg_2),
                     IDkgChangeAction::MoveToValidated(msg_3),
+                    IDkgChangeAction::MoveToValidated(msg_4),
                 ]);
                 assert!(result.mutations.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[msg_id_1, msg_id_2]);
+                assert_eq!(idkg_pool.validated().complaints().count(), 1);
             })
         })
     }

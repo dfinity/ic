@@ -112,6 +112,5 @@ try_from_u8!(
         CallWithBestEffortResponse = 82,
         MsgDeadline = 83,
         MemorySizeIsAtLeast = 84,
-        CallCyclesAdd128UpTo = 85,
     }
 );

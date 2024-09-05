@@ -2,6 +2,7 @@
 //! The ingress manager crate implements the selection and validation of
 //! ingresses on the internet computer block chain.
 
+pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
 

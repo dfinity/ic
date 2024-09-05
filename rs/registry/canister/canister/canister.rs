@@ -1,10 +1,10 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply, trap_with},
+    api::{arg_data, caller, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
@@ -26,7 +26,6 @@ use ic_registry_transport::{
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
-use ic_types::PrincipalId;
 use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
@@ -186,6 +185,32 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
+    // Only self-authenticating and anonymous principals are allowed to call us.
+    const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
+        Ok(PrincipalIdClass::SelfAuthenticating),
+        Ok(PrincipalIdClass::Anonymous),
+    ];
+    let class = caller().class();
+    if !ALLOWED_CALLER_CLASSES.contains(&class) {
+        let response = RegistryGetChangesSinceResponse {
+            error: Some(RegistryError {
+                code: Code::Authorization as i32,
+                reason: format!(
+                    "Caller must be self-authenticating, or anonymous (but was {:?}).",
+                    class,
+                ),
+                key: vec![],
+            }),
+            ..Default::default()
+        };
+
+        let response: Vec<u8> =
+            serialize_get_changes_since_response(response).expect("Error serializing response");
+
+        reply(&response);
+        return;
+    }
+
     let response_pb = match deserialize_get_changes_since_request(arg_data()) {
         Ok(version) => {
             let registry = registry();
