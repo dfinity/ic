@@ -1,12 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{get_config_ini_settings, get_deployment_settings, write_to_file};
+use config::{get_config_ini_settings, get_deployment_settings, serialize_and_write_config};
 use std::fs::File;
 use std::path::Path;
 
-use config::types::{
-    GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig,
-};
+use config::types::{GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -98,11 +96,8 @@ pub fn main() -> Result<()> {
                 guestos_settings,
             };
 
-            let serialized_config = serde_json::to_string_pretty(&setupos_config)
-                .expect("Failed to serialize SetuposConfig");
-
             let default_config_object_path = Path::new(config::DEFAULT_CONFIG_OBJECT_PATH);
-            write_to_file(default_config_object_path, &serialized_config)?;
+            serialize_and_write_config(default_config_object_path, &setupos_config)?;
 
             println!(
                 "SetuposConfig has been written to {}",
@@ -126,13 +121,13 @@ pub fn main() -> Result<()> {
                 guestos_settings: setupos_config.guestos_settings,
             };
 
-            let serialized_hostos_config = serde_json::to_string_pretty(&hostos_config)
-                .expect("Failed to serialize HostOSConfig");
+            let hostos_config_output_path = Path::new("/var/ic/config/config-hostos.json");
+            serialize_and_write_config(hostos_config_output_path, &hostos_config)?;
 
-            let output_path = Path::new("/var/ic/config/config-hostos.json");
-            write_to_file(output_path, &serialized_hostos_config)?;
-
-            println!("HostOSConfig has been written to {}", output_path.display());
+            println!(
+                "HostOSConfig has been written to {}",
+                hostos_config_output_path.display()
+            );
 
             Ok(())
         }

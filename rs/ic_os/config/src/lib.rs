@@ -202,18 +202,24 @@ fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
     )
 }
 
+pub fn serialize_and_write_config<T: serde::Serialize>(path: &Path, config: &T) -> Result<()> {
+    let serialized_config =
+        serde_json::to_string_pretty(config).expect("Failed to serialize configuration");
+    write_to_file(path, &serialized_config)
+}
+
+fn write_to_file(path: &Path, content: &str) -> Result<()> {
+    ensure_directory_exists(path)?;
+    let mut file = File::create(path)?;
+    file.write_all(content.as_bytes())?;
+    Ok(())
+}
+
 fn ensure_directory_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             create_dir_all(parent)?;
         }
     }
-    Ok(())
-}
-
-pub fn write_to_file(path: &Path, content: &str) -> Result<()> {
-    ensure_directory_exists(path)?;
-    let mut file = File::create(path)?;
-    file.write_all(content.as_bytes())?;
     Ok(())
 }
