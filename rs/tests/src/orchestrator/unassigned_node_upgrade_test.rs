@@ -116,8 +116,8 @@ pub fn test(env: TestEnv) {
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
-            new_replica_version.clone(),
-            sha256,
+            Some(new_replica_version.clone()),
+            Some(sha256),
             vec![upgrade_url],
             vec![],
         )

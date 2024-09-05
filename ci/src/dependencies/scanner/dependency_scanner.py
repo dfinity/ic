@@ -298,7 +298,7 @@ class DependencyScanner:
             for subscriber in self.subscribers:
                 subscriber.on_release_build_blocked(self.dependency_manager.get_scanner_id(), self.job_id)
             logging.error("Release job failed with failures.")
-            logging.debug(f"Release job failed with failures : {failures}")
+            logging.info(f"Release job failed with failures : {failures}")
 
             sys.exit(1)
         except Exception as err:

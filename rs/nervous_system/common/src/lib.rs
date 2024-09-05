@@ -113,6 +113,17 @@ macro_rules! assert_is_err {
     };
 }
 
+pub fn obsolete_string_field<T: AsRef<str>>(obselete_field: T, replacement: Option<T>) -> String {
+    match replacement {
+        Some(replacement) => format!(
+            "The field `{}` is obsolete. Please use `{}` instead.",
+            obselete_field.as_ref(),
+            replacement.as_ref(),
+        ),
+        None => format!("The field `{}` is obsolete.", obselete_field.as_ref()),
+    }
+}
+
 /// Besides dividing, this also converts to Decimal (from u64).
 ///
 /// The only way this can fail is if denominations_per_token is 0. Therefore, if you pass a positive

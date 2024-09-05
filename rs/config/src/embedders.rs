@@ -108,6 +108,8 @@ pub struct FeatureFlags {
     // TODO(IC-1674): remove this flag once the feature is enabled by default.
     /// Indicates whether the best-effort responses feature is enabled.
     pub best_effort_responses: FlagStatus,
+    /// Collect a backtrace from the canister when it panics.
+    pub canister_backtrace: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -118,6 +120,7 @@ impl FeatureFlags {
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Disabled,
             best_effort_responses: FlagStatus::Disabled,
+            canister_backtrace: FlagStatus::Disabled,
         }
     }
 }

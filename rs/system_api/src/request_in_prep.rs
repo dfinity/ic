@@ -190,10 +190,6 @@ impl RequestInPrep {
     pub(crate) fn add_cycles(&mut self, cycles: Cycles) {
         self.cycles += cycles;
     }
-
-    pub(crate) fn current_payload_size(&self) -> NumBytes {
-        ((self.method_payload.len() + self.method_name.len()) as u64).into()
-    }
 }
 
 pub(crate) struct RequestWithPrepayment {
