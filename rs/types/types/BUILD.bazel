@@ -6,10 +6,10 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/replica_types",
-    "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/types/base_types",

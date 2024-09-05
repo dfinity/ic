@@ -92,7 +92,6 @@ jobs:
           - "//rs/boundary_node/ic_boundary/..."
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash

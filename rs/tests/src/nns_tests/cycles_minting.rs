@@ -26,10 +26,10 @@ use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
 use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,

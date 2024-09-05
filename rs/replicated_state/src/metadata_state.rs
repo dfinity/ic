@@ -8,8 +8,8 @@ use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetric
 use ic_base_types::CanisterId;
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
-use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
