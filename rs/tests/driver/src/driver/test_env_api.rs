@@ -139,7 +139,7 @@ use super::{
 use crate::{
     driver::{
         boundary_node::BoundaryNodeVm,
-        constants::{self, kibana_link, SSH_USERNAME},
+        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -166,12 +166,17 @@ use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
+use ic_protobuf::registry::{
+    node::v1 as pb_node,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    subnet::v1 as pb_subnet,
+};
 use ic_registry_client_helpers::{
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -182,6 +187,8 @@ use ic_types::{
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
+use itertools::Itertools;
+use prost::Message;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, error, info, warn, Logger};
@@ -434,6 +441,63 @@ impl TopologySnapshot {
                 .collect::<Vec<_>>()
                 .into_iter(),
         )
+    }
+
+    pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .local_registry
+            .get_key_family(
+                "blessed_replica_versions",
+                self.local_registry.get_latest_version(),
+            )
+            .map_err(anyhow::Error::from)?
+            .iter()
+            .filter_map(|key| {
+                let r = self
+                    .local_registry
+                    .get_versioned_value(key, self.local_registry.get_latest_version())
+                    .unwrap_or_else(|_| {
+                        panic!("Failed to get entry {} for blessed replica versions", key)
+                    });
+
+                r.as_ref().map(|v| {
+                    BlessedReplicaVersions::decode(v.as_slice()).expect("Invalid registry value")
+                })
+            })
+            .collect_vec()
+            .first()
+            .ok_or(anyhow::anyhow!(
+                "Failed to find any blessed replica versions"
+            ))?
+            .blessed_version_ids
+            .clone())
+    }
+
+    pub fn replica_version_records(&self) -> anyhow::Result<Vec<(String, ReplicaVersionRecord)>> {
+        Ok(self
+            .local_registry
+            .get_key_family(
+                REPLICA_VERSION_KEY_PREFIX,
+                self.local_registry.get_latest_version(),
+            )
+            .map_err(anyhow::Error::from)?
+            .iter()
+            .map(|key| {
+                let r = self
+                    .local_registry
+                    .get_versioned_value(key, self.local_registry.get_latest_version())
+                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {}", key));
+                (
+                    key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
+                    r.as_ref()
+                        .map(|v| {
+                            ReplicaVersionRecord::decode(v.as_slice())
+                                .expect("Invalid registry value")
+                        })
+                        .unwrap(),
+                )
+            })
+            .collect_vec())
     }
 
     /// The subnet id of the root subnet.
@@ -1142,11 +1206,11 @@ fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> 
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String);
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String) {
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
         if self.get_json_path(GroupSetup::attribute_name()).exists() {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1155,7 +1219,10 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            let group_setup = GroupSetup::new(group_base_name.clone());
+            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // Afterwards, the group's TTL should be bumped via a keepalive task
+            let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
+            let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);

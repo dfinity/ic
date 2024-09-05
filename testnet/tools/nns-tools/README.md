@@ -26,9 +26,13 @@ my_useful_function() {
 
 ## Upgrade Testing via Bazel
 
-TL;DR:
-
 ```
+# Run from the usual place.
+ssh -A devenv
+cd src/ic
+./gitlab-ci/container/container-run.sh
+
+# Within the container.
 bazel test \
     --test_env=SSH_AUTH_SOCK \
     --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
@@ -37,16 +41,10 @@ bazel test \
     //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
 ```
 
-This is a new way of doing upgrade/release testing (as of May 2024). (The old way is still
+This takes about 5 min on my devenv.
+
+(This is a new way of doing upgrade/release testing (as of May 2024). The old way is still
 documented elsewhere in this README.)
-
-Perform these instructions from the usual place:
-
-```
-ssh -A devenv
-cd src/ic
-./gitlab-ci/container/container-run.sh
-```
 
 One special requirement for this to work is access to zh1-pyr07. This can be
 requested from the consensus team, e.g. Christian Müller.
@@ -367,10 +365,8 @@ Next, we test the upgrade
 * `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
 * `<TARGET_VERSION>` is the git hash of the version that has canisters available
   on the build system. You can find a suitable value by looking at the
-  [commits page](https://gitlab.com/dfinity-lab/public/ic/-/commits/master?ref_type=heads)
-  in Gitlab. In one of the columns towards the right, you will see some red Xs
-  and green checkmarks. If you click on the clipboard icon next to a green checkmark,
-  you will copy a suitable value.
+  [commits page](https://github.com/dfinity/ic/commits/master/)
+  in GitHub. You can copy the commit revision that has green checkmark.
 
 For example:
 
@@ -448,6 +444,9 @@ Optionally, you can test that your security hardware is ready by running
 
 ```bash
 pkcs11-tool --list-slots
+
+# If you want to practice entering your password:
+pkcs11-tool --login --test
 ```
 
 Finally, run
@@ -478,9 +477,7 @@ For example:
 
 The script validates your proposal text. Specifically, it enforces the following requirements:
 
-1. The proposed canister ID is consistent with the human-readable canister name in the title.
-2. The hash in the proposal matches the hash of the WASM generated for that git version.
-3. There are no TODO items left in the proposal text.
+1. There are no TODO items left in the proposal text.
 
 If your proposal text checks out, the script then prompts you for your HSM pin.
 
