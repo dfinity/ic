@@ -44,21 +44,21 @@ if [ -n "${UPDATE}" ]; then
     fi
 else
     # Runs the benchmark without updating the results file.
-    ${CANBENCH_BIN} --less-verbose > $CANBENCH_OUTPUT
+    ${CANBENCH_BIN} --less-verbose >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
         UPDATED_MSG="**\`$REPO_RESULTS_PATH\` is not up to date ❌**
-        If the performance change is expected, run \`canbench --persist\` to save the updated benchmark results.";
+        If the performance change is expected, run \`canbench --persist\` to save the updated benchmark results."
 
         # canbench results file not up to date. Fail the job.
         # echo "EXIT_STATUS=1" >> "$GITHUB_ENV"
         cat "$CANBENCH_OUTPUT"
         exit 1
     else
-        UPDATED_MSG="**\`$REPO_RESULTS_PATH\` is up to date ✅**";
+        UPDATED_MSG="**\`$REPO_RESULTS_PATH\` is up to date ✅**"
 
         # canbench results file is up to date. The job succeeds.
         #echo "EXIT_STATUS=0" >> "$GITHUB_ENV"
         cat "$CANBENCH_OUTPUT"
         exit 0
-    fi    
+    fi
 fi
