@@ -41,9 +41,9 @@ rust_decimal = "1.25"
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-tla-instrumentation = { path = "../../tla_instrumentation", package = "tla_instrumentation", optional = true }
-tla-instrumentation-proc-macros = { path = "../../tla_instrumentation", package = "tla_instrumentation_proc_macros", optional = true }
-local-key = { path = "../../tla_instrumentation", package = "local_key", optional = true }
+tla-instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
+tla-instrumentation-proc-macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
+local-key = { path = "../../tla_instrumentation/local_key", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
