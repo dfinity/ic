@@ -26,28 +26,18 @@ use crate::{
 /// that the transmission of the message was cancelled.
 struct SendStreamDropGuard {
     send_stream: SendStream,
-    armed: bool,
 }
 
 impl SendStreamDropGuard {
-    /// Disarm the guard, preventing it from sending a reset frame on drop.
-    fn disarm(mut self) {
-        self.armed = false;
-    }
-
     fn new(send_stream: SendStream) -> Self {
-        Self {
-            send_stream,
-            armed: true,
-        }
+        Self { send_stream }
     }
 }
 
 impl Drop for SendStreamDropGuard {
     fn drop(&mut self) {
-        if self.armed {
-            let _ = self.send_stream.reset(VarInt::from_u32(0));
-        }
+        // fails silently if the stream is already closed.
+        let _ = self.send_stream.reset(VarInt::from_u32(0));
     }
 }
 
@@ -147,7 +137,6 @@ impl ConnectionHandle {
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
-        send_stream_guard.disarm();
         in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
