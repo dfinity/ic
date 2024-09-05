@@ -125,7 +125,7 @@ pub fn test(env: TestEnv) {
         // Test: check that composite transform is actually executed
         test_results.push(
             test_canister_http_property(
-                "Check that transform is executed",
+                "Check that composite transform is executed",
                 &logger,
                 &proxy_canister,
                 RemoteHttpRequest {
