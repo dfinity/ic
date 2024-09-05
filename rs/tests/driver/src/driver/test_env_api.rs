@@ -139,7 +139,7 @@ use super::{
 use crate::{
     driver::{
         boundary_node::BoundaryNodeVm,
-        constants::{self, kibana_link, SSH_USERNAME},
+        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
@@ -1206,11 +1206,11 @@ fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> 
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String);
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String) {
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
         if self.get_json_path(GroupSetup::attribute_name()).exists() {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1219,7 +1219,10 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            let group_setup = GroupSetup::new(group_base_name.clone());
+            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // Afterwards, the group's TTL should be bumped via a keepalive task
+            let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
+            let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
