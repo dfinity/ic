@@ -73,6 +73,10 @@ component_files = {
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
+    Label("monitoring/vector/hostos/generate-vector-config.sh"): "/opt/ic/bin/generate-vector-config.sh",
+    Label("monitoring/vector/hostos/vector.yaml.template"): "/etc/vector/vector.yaml.template",
+    Label("monitoring/vector/setup-vector-permissions.sh"): "/opt/ic/bin/setup-vector-permissions.sh",
+    Label("monitoring/vector/vector.service"): "/etc/systemd/system/vector.service",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",

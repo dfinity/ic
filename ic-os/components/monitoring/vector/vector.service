@@ -1,0 +1,68 @@
+# Experimental service configuration for a hardened Vector
+#
+# This has not been widely tested on all OSes and with all Vector
+# configurations, but can be used as a basis for limiting the Vector service
+# capabilities
+
+[Unit]
+Description=Vector
+Documentation=https://vector.dev
+After=network-online.target
+Requires=network-online.target
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# We must wait for var to be mounted over before interacting with it
+After=var.mount
+Wants=var.mount
+# Only start Vector if configuration file exists
+ConditionPathExists=/boot/config/vector.conf
+
+[Service]
+EnvironmentFile=-/etc/default/vector
+User=vector
+Group=vector
+ExecStartPre=/opt/ic/bin/setup-vector-permissions.sh
+ExecStartPre=/opt/ic/bin/generate-vector-config.sh -j /boot/config/vector.conf -i /etc/vector/vector.yaml.template -o /run/ic-node/etc/vector/vector.yaml
+ExecStartPre=/usr/local/bin/vector validate --config-yaml /run/ic-node/etc/vector/vector.yaml
+ExecStart=/usr/local/bin/vector -c /run/ic-node/etc/vector/vector.yaml
+ExecReload=/usr/local/bin/vector validate --config-yaml /run/ic-node/etc/vector/vector.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+# capabilities
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# sandboxing
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectSystem=strict
+ReadWritePaths=/run/ic-node/etc/vector
+ProtectHome=yes
+StateDirectory=vector
+ProtectControlGroups=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+NoNewPrivileges=yes
+RemoveIPC=yes
+RestrictNamespaces=yes
+# syscall filtering
+SystemCallFilter=@system-service @debug
+SystemCallArchitectures=native
+# process properties
+UMask=077
+# Since systemd 229, should be in [Unit] but in order to support systemd <229,
+# it is also supported to have it here.
+StartLimitInterval=10
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

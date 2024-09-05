@@ -1,0 +1,7 @@
+= Vector configuration
+
+The Vector configuration is performed using a file +vector.conf+ in
+the bootstrap tarball. It must contain lines of "key=value= statements,
+with the following keys supported:
+
+* elasticsearch_hosts:    space-separated list of logging hosts
