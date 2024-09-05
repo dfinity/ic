@@ -308,7 +308,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     } else {
         result.unwrap();
 
-        let expected_subnet_available_memory = 
+        let expected_subnet_available_memory =
             initial_subnet_available_memory - MAX_RESPONSE_COUNT_BYTES as i64;
         assert_eq!(expected_subnet_available_memory, subnet_available_memory);
     }
