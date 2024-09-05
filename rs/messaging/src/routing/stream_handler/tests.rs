@@ -2,6 +2,7 @@ use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
+use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
@@ -442,6 +443,7 @@ fn with_induct_loopback_stream_setup(
     with_local_test_setup_and_config(
         config,
         subnet_type,
+        CURRENT_CERTIFICATION_VERSION,
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
@@ -2252,6 +2254,7 @@ fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
             ..Default::default()
         },
         subnet_type,
+        CURRENT_CERTIFICATION_VERSION,
         // An empty outgoing stream.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
@@ -2742,6 +2745,7 @@ fn with_test_setup(
     with_test_setup_and_config(
         HypervisorConfig::default(),
         SubnetType::Application,
+        CURRENT_CERTIFICATION_VERSION,
         stream_configs,
         slice_configs,
         test_impl,
@@ -2757,6 +2761,7 @@ fn with_test_setup(
 fn with_test_setup_and_config(
     hypervisor_config: HypervisorConfig,
     subnet_type: SubnetType,
+    certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
     slice_configs: BTreeMap<SubnetId, StreamSliceConfig<Vec<MessageBuilder>>>,
     test_impl: impl FnOnce(
@@ -2769,8 +2774,7 @@ fn with_test_setup_and_config(
     with_test_replica_logger(|log| {
         // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
         let mut state = ReplicatedState::new(LOCAL_SUBNET, subnet_type);
-        state.metadata.certification_version =
-            ic_certification_version::CURRENT_CERTIFICATION_VERSION;
+        state.metadata.certification_version = certification_version;
         let metrics_registry = MetricsRegistry::new();
         let stream_handler = StreamHandlerImpl::new(
             LOCAL_SUBNET,
@@ -2930,12 +2934,14 @@ fn with_local_test_setup(
 fn with_local_test_setup_and_config(
     hypervisor_config: HypervisorConfig,
     subnet_type: SubnetType,
+    certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_test_setup_and_config(
         hypervisor_config,
         subnet_type,
+        certification_version,
         stream_configs,
         btreemap![],
         |stream_handler, state, _, metrics| test_impl(stream_handler, state, metrics),
