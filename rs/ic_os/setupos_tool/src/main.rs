@@ -3,10 +3,9 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
-use config::types::{deserialize_config, SetupOSConfig};
 use config::{
     config_map_from_path, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, DEFAULT_SETUPOS_CONFIG_FILE_PATH,
-    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
+    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, deserialize_config,
 };
 use network::generate_network_config;
 use network::info::NetworkInfo;
@@ -58,7 +57,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let setup_config: SetupOSConfig = deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
+            let setup_config: config::types::SetupOSConfig = deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
             let config_map = config_map_from_path(Path::new(&opts.config))
                 .context("Please specify a valid config file with '--config'")?;

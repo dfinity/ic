@@ -4,6 +4,9 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
+use serde_json::Value;
+use std::io::Read;
+use serde::{Deserialize, Serialize};
 
 use anyhow::bail;
 use anyhow::{Context, Result};
@@ -202,7 +205,7 @@ fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
     )
 }
 
-pub fn serialize_and_write_config<T: serde::Serialize>(path: &Path, config: &T) -> Result<()> {
+pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
         serde_json::to_string_pretty(config).expect("Failed to serialize configuration");
     write_to_file(path, &serialized_config)
@@ -222,4 +225,19 @@ fn ensure_directory_exists(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
+    let mut file =
+        File::open(file_path).with_context(|| format!("Failed to open file: {}", file_path))?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)
+        .with_context(|| format!("Failed to read file: {}", file_path))?;
+
+    let json_value: Value = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse JSON from file: {}", file_path))?;
+    let deserialized: T = serde_json::from_value(json_value)
+        .with_context(|| "Failed to deserialize JSON to the specified type".to_string())?;
+
+    Ok(deserialized)
 }
