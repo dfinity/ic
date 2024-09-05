@@ -229,9 +229,9 @@ async fn get_or_fetch<P: Peers>(
 
 #[derive(Debug, PartialEq, Error)]
 pub(crate) enum InsertionError {
-    #[error("Trying to an ingress message which was never missing")]
+    #[error("Trying to insert an ingress message which was never missing")]
     NotNeeded,
-    #[error("Trying to an ingress message which was already inserted")]
+    #[error("Trying to insert an ingress message which was already inserted")]
     AlreadyInserted,
 }
 
