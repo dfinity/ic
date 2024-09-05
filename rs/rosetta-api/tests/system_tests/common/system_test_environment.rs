@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 pub struct RosettaTestingEnvironment {
-    pub _pocket_ic: PocketIc,
+    pub pocket_ic: PocketIc,
     pub _rosetta_context: RosettaContext,
     pub rosetta_client: RosettaClient,
     pub network_identifier: NetworkIdentifier,
@@ -194,7 +194,7 @@ impl RosettaTestingEnviornmentBuilder {
         }
 
         RosettaTestingEnvironment {
-            _pocket_ic: pocket_ic,
+            pocket_ic,
             _rosetta_context: rosetta_context,
             rosetta_client,
             network_identifier,

@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/ed25519",
     "//rs/crypto/secp256k1",
     "//rs/types/types",
+    "//rs/rosetta-api/icp_ledger",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:hex",

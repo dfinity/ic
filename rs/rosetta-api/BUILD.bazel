@@ -76,6 +76,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
+    "//rs/rosetta-api",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
@@ -145,7 +146,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(
