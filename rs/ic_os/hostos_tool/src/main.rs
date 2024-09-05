@@ -9,7 +9,7 @@ use config::{
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, FormattedMacAddress, UnformattedMacAddress};
+use network::mac_address::{generate_mac_address, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::deployment::read_deployment_file;
@@ -69,10 +69,7 @@ pub fn main() -> Result<()> {
             let deployment_name: Option<&str> = match &deployment {
                 Ok(deployment) => Some(deployment.deployment.name.as_str()),
                 Err(e) => {
-                    eprintln!(
-                        "Error retrieving deployment file: {}. Continuing without it",
-                        e
-                    );
+                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
                     None
                 }
             };
@@ -102,15 +99,11 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let node_type = node_type.parse::<NodeType>()?;
-
             let mgmt_mac = match deployment.deployment.mgmt_mac {
-                Some(mgmt_mac) => {
-                    let unformatted_mac = UnformattedMacAddress::try_from(mgmt_mac.as_str())?;
-                    Some(FormattedMacAddress::from(&unformatted_mac))
-                }
+                Some(mgmt_mac) => Some(FormattedMacAddress::try_from(mgmt_mac.as_str())?),
                 None => None,
             };
+            let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(&deployment.deployment.name, &node_type, &mgmt_mac)?;
             let ipv6_prefix = network_info
                 .ipv6_prefix
@@ -135,7 +128,6 @@ pub fn main() -> Result<()> {
                 Some(mgmt_mac) => Some(FormattedMacAddress::try_from(mgmt_mac.as_str())?),
                 None => None,
             };
-
             let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(&deployment.deployment.name, &node_type, &mgmt_mac)?;
             let mac = FormattedMacAddress::from(&mac);

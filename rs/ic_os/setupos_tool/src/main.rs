@@ -9,7 +9,7 @@ use config::{
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, FormattedMacAddress, UnformattedMacAddress};
+use network::mac_address::{generate_mac_address, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::deployment::read_deployment_file;
@@ -100,10 +100,7 @@ pub fn main() -> Result<()> {
             let node_type = node_type.parse::<NodeType>()?;
 
             let mgmt_mac = match deployment.deployment.mgmt_mac {
-                Some(mgmt_mac) => {
-                    let unformatted_mac = UnformattedMacAddress::try_from(mgmt_mac.as_str())?;
-                    Some(FormattedMacAddress::from(&unformatted_mac))
-                }
+                Some(mgmt_mac) => Some(FormattedMacAddress::try_from(mgmt_mac.as_str())?),
                 None => None,
             };
 
