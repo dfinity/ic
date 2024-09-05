@@ -118,6 +118,12 @@ RUN rm -rf \
         /usr/local/share/qemu/edk2-arm-code.fd \
         /usr/local/share/qemu/edk2-arm-vars.fd
 
+# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
+RUN systemd-sysusers && \
+    # Fix reproducibility issue. Notes in hostos/context/Dockerfile
+    usermod -p '!!' systemd-timesync && \
+    usermod -p '!!' systemd-coredump
+
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN ln -sf bash /usr/bin/sh
 
@@ -162,6 +168,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin systemd-journal && \
     adduser admin vsock && \
     adduser admin sudo
+
+# The "vector" account. Used to run vector binary to send logs and metrics of the
+# GuestOS.
+RUN useradd --system --create-home -d /var/lib/vector -s /usr/sbin/nologin -c "Vector user" -U -G systemd-journal vector && \
+    chown root:root /usr/local/bin/vector
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
