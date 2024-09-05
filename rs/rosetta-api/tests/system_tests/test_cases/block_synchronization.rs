@@ -65,14 +65,9 @@ fn test_block_synchronization() {
                         .await
                         .unwrap();
                     let encoded_blocks = query_encoded_blocks(&agent, None, 1).await;
-                    println!("Encoded blocks: {:?}", encoded_blocks);
                     assert_eq!(encoded_blocks.blocks.len(), 1);
                     let ledger_tip = encoded_blocks.blocks[0].clone();
 
-                    println!(
-                        "Block timestamp: {:?}",
-                        network_status.current_block_timestamp
-                    );
                     assert_eq!(
                         to_hash(&network_status.current_block_identifier.hash).unwrap(),
                         icp_ledger::Block::block_hash(&ledger_tip),

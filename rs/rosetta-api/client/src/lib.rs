@@ -346,8 +346,6 @@ impl RosettaClient {
         memo: Option<u64>,
         created_at_time: Option<u64>,
     ) -> anyhow::Result<ConstructionSubmitResponse> {
-        println!("Making payloads request");
-        println!("Operations: {:?}", operations);
         let payloads_response = self
             .construction_payloads(
                 network_identifier.clone(),
@@ -361,9 +359,7 @@ impl RosettaClient {
                 }),
             )
             .await?;
-        println!("Signing transaction");
         let signatures = Self::sign_transaction(signer_keypair, payloads_response.clone())?;
-        println!("Combining transaction");
         let combine_response = self
             .construction_combine(
                 network_identifier.clone(),
@@ -371,7 +367,6 @@ impl RosettaClient {
                 signatures,
             )
             .await?;
-        println!("Submitting transaction");
         let submit_response = self
             .construction_submit(
                 network_identifier.clone(),

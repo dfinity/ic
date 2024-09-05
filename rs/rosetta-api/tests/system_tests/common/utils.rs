@@ -116,7 +116,6 @@ pub async fn query_encoded_blocks(
         ),
         length: std::cmp::min(num_blocks, response.chain_length) as usize,
     };
-    println!("Querying blocks: {:?}", block_request);
     Decode!(
         &agent
             .query(&LEDGER_CANISTER_ID.into(), "query_encoded_blocks")
