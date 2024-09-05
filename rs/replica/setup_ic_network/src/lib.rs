@@ -305,15 +305,9 @@ fn start_consensus(
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
     {
-        let membership = Arc::new(Membership::new(
-            consensus_pool_cache.clone(),
-            registry_client.clone(),
-            subnet_id,
-        ));
         let consensus_impl = ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client),
-            Arc::clone(&membership) as Arc<_>,
             Arc::clone(&consensus_crypto),
             Arc::clone(&ingress_manager) as Arc<_>,
             xnet_payload_builder,
