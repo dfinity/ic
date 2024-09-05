@@ -19,11 +19,11 @@ their original version(s). Fails if the changes are not compatible.
 
 There are two modes of operation, which determine whence the originals come. By
 default, originals come from HEAD. Alternatively, if there is an environment
-variable named CI_MERGE_REQUEST_TARGET_BRANCH_NAME (available in the Gitlab CI
+variable named CI_PULL_REQUEST_TARGET_BRANCH_NAME (available in the Gitlab CI
 execution environment), then the originals are drawn from the following git
 commit:
 
-  git merge-base $(echo $CI_MERGE_REQUEST_TARGET_BRANCH_NAME) HEAD
+  git merge-base $(echo $CI_PULL_REQUEST_TARGET_BRANCH_NAME) HEAD
 
 A particularly egregious example of an incompatible change would be the removal
 of a method, because well-behaved clients will start seeing rejections from the
@@ -70,7 +70,7 @@ ARGUMENT_PARSER.add_argument(
 Path(s) to the working copy of .did files that are to be inspected for
 compatibility when compared with their originals. When run "conventionally"
 (i.e. outside Gitlab CI), the original version comes from HEAD. Otherwise,
-originals sourced based on the CI_MERGE_REQUEST_TARGET_BRANCH_NAME environment
+originals sourced based on the CI_PULL_REQUEST_TARGET_BRANCH_NAME environment
 variable (as described in the main help string).
 """.strip(),
 )
@@ -294,7 +294,7 @@ def retry(
 
 def get_diff_base():
     try:
-        target_branch = os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"]
+        target_branch = os.environ["CI_PULL_REQUEST_TARGET_BRANCH_NAME"]
     except KeyError:
         print('Looks like we are running "conventionally", i.e. not in Gitlab CI.')
         return "HEAD"

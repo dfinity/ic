@@ -6,7 +6,7 @@ VERSION=$(git rev-parse HEAD)
 cd "$CI_PROJECT_DIR"
 
 # run build with release on protected branches or if a pull_request is targeting an rc branch
-if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
 # if an override was requested to run all bazel targets with no release
 elif [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
