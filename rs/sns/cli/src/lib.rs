@@ -200,9 +200,7 @@ impl DeployTestflightArgs {
                     Err(err) => {
                         bail!("Invalid configuration in {:?}: {}", init_config_file, err);
                     }
-                    Ok(sns_init_payload) => {
-                        return Ok(sns_init_payload);
-                    }
+                    Ok(sns_init_payload) => Ok(sns_init_payload),
                 }
             }
             None => {
