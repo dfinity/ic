@@ -92,7 +92,6 @@ use ic_nns_governance::{
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
 };
@@ -11723,15 +11722,25 @@ lazy_static! {
         ..Default::default()
     };
 
-    static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
-        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-        create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-        proposal_id: 1,
-        random_swap_start_time: GlobalTimeOfDay {
-            seconds_after_utc_midnight: Some(RANDOM_U64)
-        },
-        neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
-    }).unwrap();
+    static ref SNS_INIT_PAYLOAD: SnsInitPayload = {
+        let sns_init_payload = Governance::make_sns_init_payload(
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+            NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+            ProposalId { id: 1 },
+            GlobalTimeOfDay {
+                seconds_after_utc_midnight: Some(RANDOM_U64)
+            },
+        ).expect(
+            "Cannot build SNS_INIT_PAYLOAD from \
+             CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."
+        );
+        sns_init_payload.validate_post_execution().expect(
+            "Cannot validate SNS_INIT_PAYLOAD built from \
+             CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."
+        );
+        sns_init_payload
+    };
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {

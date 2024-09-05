@@ -4718,7 +4718,8 @@ impl Governance {
         .await
     }
 
-    fn make_sns_init_payload(
+    // This function is public as it is used in various tests, also outside this crate.
+    pub fn make_sns_init_payload(
         create_service_nervous_system: CreateServiceNervousSystem,
         neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
         current_timestamp_seconds: u64,

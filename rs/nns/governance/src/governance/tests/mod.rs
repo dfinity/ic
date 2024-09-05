@@ -509,7 +509,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 #[cfg(feature = "test")]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
+mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
