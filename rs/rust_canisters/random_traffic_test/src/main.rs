@@ -85,9 +85,9 @@ fn seed_rng() {
 
 /// Probes a weighted binomial distribution to decide whether to make a reply (true) or a
 /// downstream call (false). Defaults to `true` for bad weights (i.e. both 0).
-fn make_reply() -> bool {
+fn should_reply(reply_weight: u32, call_weight: u32) -> bool {
     RNG.with_borrow_mut(|rng| {
-        WeightedIndex::new(&[REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
+        WeightedIndex::new(&[reply_weight, call_weight])
             .map(|dist| dist.sample(rng) == 0)
             .unwrap_or(true)
     })
@@ -99,7 +99,7 @@ fn insert_new_call_record(call_id: u32, record: Record) {
     })
 }
 
-fn set_reply(call_id: u32, reply: Reply) {
+fn set_reply_in_call_record(call_id: u32, reply: Reply) {
     RECORDS.with_borrow_mut(|records| {
         records.get_mut(&call_id).unwrap().reply = Some(reply);
     });
@@ -144,18 +144,39 @@ fn try_call(is_downstream_call: bool) -> Result<(), ()> {
 
     let call_id = next_call_id();
     let on_reply = move || {
-        set_reply(call_id, Reply::Bytes(api::arg_data().len() as u32));
-        if is_downstream_call {
-            reply();
+        set_reply_in_call_record(call_id, Reply::Bytes(api::arg_data().len() as u32));
+
+        if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
+            if !is_downstream_call {
+                reply();
+            }
+        } else {
+            // Try to make a downstream call; reply if it fails synchronously.
+            //
+            // Note: replies for all other cases are handled in the corresponding
+            // callbacks, so this function does reply on every branch.
+            if let Err(()) = try_call(true) {
+                reply();
+            }
         }
     };
     let on_reject = move || {
-        set_reply(
+        set_reply_in_call_record(
             call_id,
             Reply::AsynchronousRejection(api::reject_code(), api::reject_message()),
         );
-        if is_downstream_call {
-            reply();
+        if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
+            if !is_downstream_call {
+                reply();
+            }
+        } else {
+            // Try to make a downstream call; reply if it fails synchronously.
+            //
+            // Note: replies for all other cases are handled in the corresponding
+            // callbacks, so this function does reply on every branch.
+            if let Err(()) = try_call(true) {
+                reply();
+            }
         }
     };
 
@@ -208,7 +229,7 @@ fn reply() {
 /// Randomly determines whether to make a downstream call; reply if not or if the downstream call fails.
 #[export_name = "canister_update handle_call"]
 fn handle_call() {
-    if make_reply() {
+    if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
         reply();
     } else {
         // Try to make a downstream call; reply if it fails synchronously.
