@@ -843,7 +843,7 @@ pub trait StorageLayout {
 }
 
 impl dyn StorageLayout + '_ {
-    pub fn storage_size(&self) -> StorageResult<u64> {
+    pub fn storage_size_bytes(&self) -> StorageResult<u64> {
         let mut result = 0;
         for path in self.existing_files()? {
             result += std::fs::metadata(&path)
@@ -859,6 +859,28 @@ impl dyn StorageLayout + '_ {
         Ok(result)
     }
 
+    /// Number of pages required to load the PageMap into memory.
+    /// Implementation ignores the zero pages that we don't load, so it's the index of last page + 1.
+    pub fn memory_size_pages(&self) -> StorageResult<usize> {
+        let mut result = 0;
+        if let Some(base) = self.existing_base() {
+            result = (std::fs::metadata(&base)
+                .map_err(|err: _| {
+                    Box::new(PersistenceError::FileSystemError {
+                        path: base.display().to_string(),
+                        context: format!("Failed get existing file length: {}", base.display()),
+                        internal_error: err.to_string(),
+                    }) as Box<dyn std::error::Error + Send>
+                })?
+                .len() as usize)
+                / PAGE_SIZE;
+        }
+        for overlay in self.existing_overlays()? {
+            result = std::cmp::max(result, Self::num_overlay_logical_pages(&overlay)?);
+        }
+        debug_assert_eq!(result, Storage::load(self).unwrap().num_logical_pages());
+        Ok(result)
+    }
     fn existing_base(&self) -> Option<PathBuf> {
         if self.base().exists() {
             Some(self.base().to_path_buf())
@@ -890,7 +912,7 @@ impl dyn StorageLayout + '_ {
     // Read the number of memory pages from overlay.
     // Basically it's the index of the last page, which we read based on the offset from the end of
     // the file plus some error handling.
-    fn overlay_memory_pages(overlay: &Path) -> StorageResult<usize> {
+    fn num_overlay_logical_pages(overlay: &Path) -> StorageResult<usize> {
         let to_storage_err = |err: std::io::Error| -> Box<dyn std::error::Error + Send> {
             Box::new(PersistenceError::FileSystemError {
                 path: overlay.display().to_string(),
@@ -928,27 +950,6 @@ impl dyn StorageLayout + '_ {
             .map_err(|err| to_storage_err(err))?;
         let last_page_index_range = PageIndexRange::from(&last_page_index_range_buf);
         Ok(last_page_index_range.end_page.get() as usize)
-    }
-
-    pub fn memory_pages(&self) -> StorageResult<usize> {
-        let mut result = 0;
-        if let Some(base) = self.existing_base() {
-            result = std::fs::metadata(&base)
-                .map_err(|err: _| {
-                    Box::new(PersistenceError::FileSystemError {
-                        path: base.display().to_string(),
-                        context: format!("Failed get existing file length: {}", base.display()),
-                        internal_error: err.to_string(),
-                    }) as Box<dyn std::error::Error + Send>
-                })?
-                .len() as usize
-                / PAGE_SIZE;
-        }
-        for overlay in self.existing_overlays()? {
-            result = std::cmp::max(result, Self::overlay_memory_pages(&overlay)?);
-        }
-        debug_assert_eq!(result, Storage::load(self).unwrap().num_logical_pages());
-        Ok(result)
     }
 }
 
@@ -1084,7 +1085,7 @@ impl MergeCandidate {
         if existing_overlays.is_empty() {
             Ok(None)
         } else {
-            let storage_size = layout.storage_size()?;
+            let storage_size = layout.storage_size_bytes()?;
             Ok(Some(MergeCandidate {
                 overlays: existing_overlays.to_vec(),
                 base: if base_path.exists() {
@@ -1220,7 +1221,7 @@ impl MergeCandidate {
         } else {
             None
         };
-        let storage_size = layout.storage_size()?;
+        let storage_size = layout.storage_size_bytes()?;
         Ok(vec![MergeCandidate {
             overlays: layout.existing_overlays()?,
             base,

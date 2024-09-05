@@ -19,10 +19,8 @@ use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
-#[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory,
-    page_map::{Shard, StorageLayout, PAGE_SIZE},
+    page_map::{StorageLayout, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
@@ -617,8 +615,9 @@ fn merge_candidates_and_storage_info(
                 let pm_layout = page_map_type
                     .layout(layout)
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
-                storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
-                let num_pages = (&pm_layout as &dyn StorageLayout).memory_pages()? as usize;
+                storage_info.disk_size +=
+                    (&pm_layout as &dyn StorageLayout).storage_size_bytes()?;
+                let num_pages = (&pm_layout as &dyn StorageLayout).memory_size_pages()? as usize;
                 storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
                 Ok((
                     MergeCandidate::new(
@@ -836,7 +835,7 @@ fn merge_to_base(
             fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
         });
         let num_pages = (&pm_layout as &dyn StorageLayout)
-            .memory_pages()
+            .memory_size_pages()
             .unwrap_or_else(|err| fatal!(log, "Failed to get num storage host pages: {}", err));
         let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
             .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
