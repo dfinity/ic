@@ -6,7 +6,7 @@ use candid::Principal;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
     Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
-    WasmHash,
+    TokenId, WasmHash,
 };
 use ic_ledger_suite_orchestrator::storage::{StorableWasm, StoredWasm, WasmStore};
 use std::cmp::Reverse;
@@ -141,12 +141,19 @@ impl DashboardTemplate {
             Reverse((w.timestamp, w.git_commit.clone(), w.wasm_hash.clone()))
         });
 
+        let (erc20_canisters, _other_canisters): (Vec<_>, Vec<_>) = state
+            .all_managed_canisters_iter()
+            .partition(|(token_id, _canisters)| match token_id {
+                TokenId::Erc20(_) => true,
+                TokenId::Other(_) => false,
+            });
+
         Self {
-            managed_canisters: state
-                .erc20_managed_canisters_iter()
-                .map(|(k, v)| {
+            managed_canisters: erc20_canisters
+                .into_iter()
+                .map(|(token_id, v)| {
                     (
-                        k.clone(),
+                        token_id.into_erc20_unchecked().clone(),
                         CanistersDashboardData {
                             ckerc20_token_symbol: v.metadata.token_symbol.clone(),
                             canisters: CanisterDashboardData::from_canisters(v),

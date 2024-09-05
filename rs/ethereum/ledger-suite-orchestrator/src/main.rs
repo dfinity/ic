@@ -24,26 +24,36 @@ fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
 
 #[query]
 fn get_orchestrator_info() -> OrchestratorInfo {
-    read_state(|s| OrchestratorInfo {
-        managed_canisters: s
-            .erc20_managed_canisters_iter()
-            .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
-            .collect(),
-        cycles_management: s.cycles_management().clone(),
-        more_controller_ids: s.more_controller_ids().to_vec(),
-        minter_id: s.minter_id().cloned(),
-        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
-        managed_other_canisters: {
-            let canisters: Vec<_> = s
-                .other_managed_canisters_iter()
-                .map(|canisters| canisters.clone().into())
-                .collect();
-            if canisters.is_empty() {
-                None
-            } else {
-                Some(canisters)
-            }
-        },
+    read_state(|s| {
+        let (erc20_canisters, other_canisters): (Vec<_>, Vec<_>) = s
+            .all_managed_canisters_iter()
+            .partition(|(token_id, _canisters)| match token_id {
+                TokenId::Erc20(_) => true,
+                TokenId::Other(_) => false,
+            });
+        OrchestratorInfo {
+            managed_canisters: erc20_canisters
+                .into_iter()
+                .map(|(token_id, canisters)| {
+                    (token_id.into_erc20_unchecked(), canisters.clone()).into()
+                })
+                .collect(),
+            cycles_management: s.cycles_management().clone(),
+            more_controller_ids: s.more_controller_ids().to_vec(),
+            minter_id: s.minter_id().cloned(),
+            ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
+            managed_other_canisters: {
+                let canisters: Vec<_> = other_canisters
+                    .into_iter()
+                    .map(|(_token_id, canisters)| canisters.clone().into())
+                    .collect();
+                if canisters.is_empty() {
+                    None
+                } else {
+                    Some(canisters)
+                }
+            },
+        }
     })
 }
 
