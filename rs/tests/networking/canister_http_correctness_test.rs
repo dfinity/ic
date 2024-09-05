@@ -113,7 +113,45 @@ pub fn test(env: TestEnv) {
                 },
                 |response| {
                     let r = response.clone().expect("Http call should succeed");
-                    r.headers.len() == 1 && r.headers[0].0 == "hello" && r.headers[0].1 == "bonjour"
+                    r.headers.len() == 2
+                        && r.headers[0].0 == "hello"
+                        && r.headers[0].1 == "bonjour"
+                        && r.headers[1].0 == "caller"
+                        && r.headers[1].1 == "aaaaa-aa"
+                },
+            )
+            .await,
+        );
+        // Test: check that composite transform is actually executed
+        test_results.push(
+            test_canister_http_property(
+                "Check that transform is executed",
+                &logger,
+                &proxy_canister,
+                RemoteHttpRequest {
+                    request: CanisterHttpRequestArgs {
+                        url: format!("https://[{webserver_ipv6}]:20443"),
+                        headers: BoundedHttpHeaders::new(vec![]),
+                        method: HttpMethod::GET,
+                        body: Some("".as_bytes().to_vec()),
+                        transform: Some(TransformContext {
+                            function: TransformFunc(candid::Func {
+                                principal: proxy_canister.canister_id().get().0,
+                                method: "test_composite_transform".to_string(),
+                            }),
+                            context: vec![0, 1, 2],
+                        }),
+                        max_response_bytes: None,
+                    },
+                    cycles: 500_000_000_000,
+                },
+                |response| {
+                    let r = response.clone().expect("Http call should succeed");
+                    r.headers.len() == 2
+                        && r.headers[0].0 == "hello"
+                        && r.headers[0].1 == "bonjour"
+                        && r.headers[1].0 == "caller"
+                        && r.headers[1].1 == "aaaaa-aa"
                 },
             )
             .await,

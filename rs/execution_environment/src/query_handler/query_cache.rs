@@ -151,7 +151,7 @@ impl From<&Query> for EntryKey {
         Self {
             source: match query.source {
                 QuerySource::User { user_id, .. } => user_id,
-                QuerySource::Anonymous => UserId::from(PrincipalId::new_anonymous()),
+                QuerySource::Anonymous => UserId::from(PrincipalId::default()),
             },
             receiver: query.receiver,
             method_name: query.method_name.clone(),
