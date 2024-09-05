@@ -215,6 +215,7 @@ jobs:
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   setup-guest-os-qualification:
+    name: Setting up guest os qualification pipeline
     runs-on:
       group: zh1
       labels: dind-large
@@ -231,7 +232,7 @@ jobs:
         shell: bash
         run: |
           UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
-          echo "Will qualify starting from versions: ${UNIQUE_VERSIONS}"
+          echo "Will qualify, starting from versions: ${UNIQUE_VERSIONS}"
           echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
   guest-os-qualification:
     name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
