@@ -193,6 +193,20 @@ impl WasmResult {
             WasmResult::Reject(string) => string.as_bytes().to_vec(),
         }
     }
+
+    /// For use in tests.
+    /// Asserts that the result is a rejection containing the given message.
+    pub fn assert_contains_reject(&self, message: &str) {
+        match self {
+            Self::Reject(s) => {
+                assert!(
+                    s.contains(message),
+                    "Unable to match reject message {s} with expected {message}"
+                )
+            }
+            _ => panic!("Expected reject"),
+        }
+    }
 }
 
 impl fmt::Display for WasmResult {
