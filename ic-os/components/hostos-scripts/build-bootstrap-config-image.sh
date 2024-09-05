@@ -63,6 +63,14 @@ options may be specified:
     (make sure to quote the argument string so it appears as a single argument
     to the script, e.g. --elasticsearch_tags "testnet1 slo")
 
+  --prometheus_hosts hosts
+    Prometheus metrics compatible hosts to use. Can be multiple hosts separated by space with the format
+    <name>_<host> (make sure to quote the argument string so it appears as a single argument to
+    the script, e.g. --prometheus_hosts "dfinity1_vm1.domain.tld dfinity2_vm2.domain.tld").
+
+  --vector_tls path
+    Vector tls path where tls certificates are saved. Default: /run/ic-node/etc/vector
+
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by commas.
@@ -125,6 +133,8 @@ function build_ic_bootstrap_tar() {
     local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS
+    local PROMETHEUS_HOSTS
+    local VECTOR_TLS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local MALICIOUS_BEHAVIOR
     local QUERY_STATS_EPOCH_LENGTH
@@ -169,6 +179,12 @@ function build_ic_bootstrap_tar() {
                 ;;
             --elasticsearch_tags)
                 ELASTICSEARCH_TAGS="$2"
+                ;;
+            --prometheus_hosts)
+                PROMETHEUS_HOSTS="$2"
+                ;;
+            --vector_tls)
+                VECTOR_TLS="$2"
                 ;;
             --nns_url)
                 NNS_URL="$2"
@@ -230,9 +246,16 @@ ${DOMAIN:+domain=$DOMAIN}
 EOF
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
+        echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/vector.conf"
     fi
     if [ "${ELASTICSEARCH_TAGS}" != "" ]; then
         echo "elasticsearch_tags=$ELASTICSEARCH_TAGS" >>"${BOOTSTRAP_TMPDIR}/filebeat.conf"
+    fi
+    if [ "${PROMETHEUS_HOSTS}" != "" ]; then
+        echo "prometheus_hosts=$PROMETHEUS_HOSTS" >>"${BOOTSTRAP_TMPDIR}/vector.conf"
+    fi
+    if [ "${VECTOR_TLS}" != "" ]; then
+        echo "vector_tls=$VECTOR_TLS" >>"${BOOTSTRAP_TMPDIR}/vector.conf"
     fi
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
