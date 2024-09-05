@@ -255,7 +255,7 @@ impl CatchUpPackageProvider {
             client.request(
                 Request::builder()
                     .method(Method::POST)
-                    .header("content-type", "application/cbor")
+                    .header(hyper::header::CONTENT_TYPE, "application/cbor")
                     .uri(url)
                     .body(Full::from(body))
                     .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
