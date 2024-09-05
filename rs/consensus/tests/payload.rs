@@ -135,28 +135,27 @@ fn consensus_produces_expected_batches() {
 
         let (dummy_watcher, _) = watch::channel(Height::from(0));
 
-        let consensus: ic_consensus::consensus::ConsensusImpl =
-            ic_consensus::consensus::ConsensusImpl::new(
-                replica_config.clone(),
-                Arc::clone(&registry_client) as Arc<_>,
-                consensus_cache.clone(),
-                Arc::clone(&fake_crypto) as Arc<_>,
-                Arc::clone(&ingress_selector) as Arc<_>,
-                Arc::clone(&xnet_payload_builder) as Arc<_>,
-                Arc::clone(&self_validating_payload_builder) as Arc<_>,
-                Arc::clone(&canister_http_payload_builder) as Arc<_>,
-                query_stats_payload_builder,
-                Arc::clone(&dkg_pool) as Arc<_>,
-                Arc::clone(&idkg_pool) as Arc<_>,
-                dkg_key_manager.clone(),
-                Arc::clone(&router) as Arc<_>,
-                Arc::clone(&state_manager) as Arc<_>,
-                Arc::clone(&time_source) as Arc<_>,
-                0,
-                MaliciousFlags::default(),
-                metrics_registry.clone(),
-                no_op_logger(),
-            );
+        let consensus = ic_consensus::consensus::ConsensusImpl::new(
+            replica_config.clone(),
+            Arc::clone(&registry_client) as Arc<_>,
+            consensus_cache.clone(),
+            Arc::clone(&fake_crypto) as Arc<_>,
+            Arc::clone(&ingress_selector) as Arc<_>,
+            Arc::clone(&xnet_payload_builder) as Arc<_>,
+            Arc::clone(&self_validating_payload_builder) as Arc<_>,
+            Arc::clone(&canister_http_payload_builder) as Arc<_>,
+            query_stats_payload_builder,
+            Arc::clone(&dkg_pool) as Arc<_>,
+            Arc::clone(&idkg_pool) as Arc<_>,
+            dkg_key_manager.clone(),
+            Arc::clone(&router) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&time_source) as Arc<_>,
+            0,
+            MaliciousFlags::default(),
+            metrics_registry.clone(),
+            no_op_logger(),
+        );
         let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(router.clone());
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,
