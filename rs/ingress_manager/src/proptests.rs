@@ -58,6 +58,7 @@ proptest! {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();

@@ -779,6 +779,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
@@ -850,6 +851,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let mut time = UNIX_EPOCH;
                 let validation_context = ValidationContext {
@@ -976,6 +978,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1025,6 +1028,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1088,6 +1092,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -1156,6 +1161,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -1227,6 +1233,7 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
@@ -1265,6 +1272,7 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
@@ -1333,6 +1341,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let ingress_msg2 = SignedIngressBuilder::new()
@@ -1391,6 +1400,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = expiry_time_from_now();
                 let ingress_message1 = SignedIngressBuilder::new()
@@ -1514,6 +1524,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1572,6 +1583,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 let m1 = SignedIngressBuilder::new()
@@ -1616,6 +1628,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 // Canister 0 doesn't exist.
@@ -1658,6 +1671,7 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1710,6 +1724,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1759,6 +1774,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1950,6 +1966,7 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -2035,6 +2052,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let msg = SignedIngressBuilder::new()
                     .method_payload(vec![0; ALMOST_MAX_SIZE])
@@ -2174,6 +2192,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let validation_context = ValidationContext {
                     time,
@@ -2247,6 +2266,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let validation_context = ValidationContext {
                     time,

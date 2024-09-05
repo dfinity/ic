@@ -222,6 +222,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
                     .expiry_time(time + MAX_INGRESS_TTL)
@@ -241,6 +242,86 @@ mod tests {
 
                 let expected_change_action = ChangeAction::MoveToValidated(message_id);
                 assert!(change_set.contains(&expected_change_action));
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn test_ingress_on_state_change_too_many_get_removed() {
+        let time = UNIX_EPOCH;
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
+            .expect_consensus_time()
+            .return_const(Some(time));
+        let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
+        ingress_hist_reader
+            .expect_get_latest_status()
+            .returning(|| Box::new(|_| IngressStatus::Unknown {}));
+
+        setup_with_params(
+            Some(ingress_hist_reader),
+            None,
+            Some(Arc::new(consensus_time)),
+            None,
+            Some(1),
+            |ingress_manager, ingress_pool| {
+                let peer_id = node_test_id(0);
+                let peer_id_2 = node_test_id(1);
+
+                let ingress_message_1 = SignedIngressBuilder::new()
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .nonce(1)
+                    .sign_for_randomly_generated_sender()
+                    .build();
+                let ingress_message_2 = SignedIngressBuilder::new()
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .nonce(2)
+                    .sign_for_randomly_generated_sender()
+                    .build();
+                let ingress_message_3 = SignedIngressBuilder::new()
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .nonce(3)
+                    .sign_for_randomly_generated_sender()
+                    .build();
+
+                let message_id_1 = IngressMessageId::from(&ingress_message_1);
+                let message_id_2 = IngressMessageId::from(&ingress_message_2);
+                let message_id_3 = IngressMessageId::from(&ingress_message_3);
+                ingress_pool.write().unwrap().insert(UnvalidatedArtifact {
+                    message: ingress_message_1,
+                    peer_id,
+                    timestamp: time,
+                });
+                ingress_pool
+                    .write()
+                    .unwrap()
+                    .apply_changes(vec![ChangeAction::MoveToValidated(message_id_1)]);
+
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
+                    ingress_pool.insert(UnvalidatedArtifact {
+                        message: ingress_message_2,
+                        peer_id,
+                        timestamp: time,
+                    });
+                    ingress_pool.insert(UnvalidatedArtifact {
+                        message: ingress_message_3,
+                        peer_id: peer_id_2,
+                        timestamp: time,
+                    });
+
+                    ingress_manager.on_state_change(ingress_pool)
+                });
+
+                assert_eq!(
+                    change_set,
+                    vec![
+                        // `message_2` is removed because we already have too many ingresses from
+                        // `peer_0`.
+                        ChangeAction::RemoveFromUnvalidated(message_id_2),
+                        // `message_3` is valid and there is still space in the ingress pool for it
+                        ChangeAction::MoveToValidated(message_id_3)
+                    ]
+                );
             },
         )
     }
@@ -270,6 +351,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
                     .expiry_time(time + MAX_INGRESS_TTL)
@@ -316,6 +398,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 // Message should expire at the current time, and should not be selected
                 let ingress_message = SignedIngressBuilder::new()
@@ -372,6 +455,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
                     .expiry_time(time + MAX_INGRESS_TTL)
@@ -421,6 +505,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let good_msg = SignedIngressBuilder::new()
                     .expiry_time(current_time + MAX_INGRESS_TTL / 2)
