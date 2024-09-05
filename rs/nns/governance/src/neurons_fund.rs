@@ -422,10 +422,11 @@ impl NeuronsFundNeuronPortionPb {
                 maturity_equivalent_icp_e8s,
             });
         }
-        #[allow(deprecated)] // TODO(NNS1-3198): remove .or(hotkey_principal)
-        let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
-            NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
-        })?;
+        let Some(controller) = self.controller else {
+            return Err(NeuronsFundNeuronPortionError::UnspecifiedField(
+                "controller".to_string(),
+            ));
+        };
         let hotkeys = self.hotkeys.clone();
         let is_capped = self.is_capped.ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
@@ -1745,8 +1746,6 @@ where
                 is_capped: Some(neuron.is_capped),
                 controller: Some(neuron.controller),
                 hotkeys: neuron.hotkeys.clone(),
-                // TODO(NNS1-3198): remove due to the  very misleading name
-                hotkey_principal: Some(neuron.controller),
             })
             .collect();
         let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {

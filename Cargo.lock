@@ -5464,6 +5464,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
  "ic-protobuf",
@@ -5474,6 +5475,8 @@ dependencies = [
  "prost",
  "serde",
  "serde_cbor",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
@@ -13122,6 +13125,8 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
+ "chrono",
+ "futures",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
@@ -13146,6 +13151,7 @@ dependencies = [
  "registry-canister",
  "reqwest 0.12.5",
  "rsa",
+ "serde_json",
  "slog",
  "ssh2",
  "tempfile",
@@ -13160,7 +13166,6 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
- "chrono",
  "futures",
  "ic-agent",
  "ic-base-types",
@@ -15742,6 +15747,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a76df7075c7d4d01fdcb46c912dd17fba5b60c78ea480b475f2b6ab6f666584e"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "os_qualification_utils"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-canister-client",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "itertools 0.12.0",
+ "reqwest 0.12.5",
+ "serde",
+ "slog",
+ "tests",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -19541,6 +19569,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "os_qualification_utils",
  "reqwest 0.12.5",
  "serde",
  "serde_json",

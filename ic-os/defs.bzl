@@ -377,20 +377,6 @@ def icos_build(
             tags = ["manual"],
         )
 
-        gzip_compress(
-            name = "update-img.tar.gz",
-            srcs = [":update-img.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img.tar.gz.sha256",
-            srcs = [":update-img.tar.gz"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -419,20 +405,6 @@ def icos_build(
         sha256sum2url(
             name = "update-img-test.tar.zst.cas-url",
             src = ":update-img-test.tar.zst.sha256",
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        gzip_compress(
-            name = "update-img-test.tar.gz",
-            srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img-test.tar.gz.sha256",
-            srcs = [":update-img-test.tar.gz"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -468,9 +440,7 @@ def icos_build(
                 name = "upload_update-img",
                 inputs = [
                     ":update-img.tar.zst",
-                    ":update-img.tar.gz",
                     ":update-img-test.tar.zst",
-                    ":update-img-test.tar.gz",
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
@@ -629,9 +599,7 @@ EOF
             ":disk-img.tar.zst",
         ] + ([
             ":update-img.tar.zst",
-            ":update-img.tar.gz",
             ":update-img-test.tar.zst",
-            ":update-img-test.tar.gz",
         ] if upgrades else []),
         visibility = visibility,
         tags = tags,

@@ -961,6 +961,11 @@ pub struct SystemApiImpl {
     /// still be read through the hidden read API for speed on the first access.
     wasm_native_stable_memory: FlagStatus,
 
+    /// Canister backtraces are enabled. This means we should attempt to collect
+    /// a backtrace if the canister calls the trap API.
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1003,6 +1008,7 @@ impl SystemApiImpl {
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         wasm_native_stable_memory: FlagStatus,
+        canister_backtrace: FlagStatus,
         max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
@@ -1026,6 +1032,7 @@ impl SystemApiImpl {
             memory_usage,
             execution_parameters,
             wasm_native_stable_memory,
+            canister_backtrace,
             max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
