@@ -8,7 +8,7 @@ use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::{
     encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
 };
-use ic_ledger_suite_orchestrator::state::read_state;
+use ic_ledger_suite_orchestrator::state::{read_state, TokenId};
 use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
 
@@ -18,7 +18,8 @@ mod dashboard;
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
-    read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
+    let token_id = TokenId::from(contract);
+    read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
 
 #[query]

@@ -1,8 +1,10 @@
 mod manage_canister {
-    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
+    use crate::scheduler::test_fixtures::{
+        usdc, usdc_metadata, usdc_token_id, usdt, usdt_metadata, usdt_token_id,
+    };
     use crate::state::test_fixtures::{expect_panic_with_message, new_state};
     use crate::state::{
-        Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, WasmHash,
+        Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, TokenId, WasmHash,
     };
     use candid::Principal;
     use std::fmt::Debug;
@@ -14,7 +16,7 @@ mod manage_canister {
         let usdc_index_canister_id = Principal::from_slice(&[1_u8; 29]);
         state.record_created_canister::<Index>(&usdc(), usdc_index_canister_id);
         assert_eq!(
-            state.managed_status::<Index>(&usdc()),
+            state.managed_status::<Index>(&usdc_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdc_index_canister_id
             })
@@ -23,7 +25,7 @@ mod manage_canister {
         assert_ne!(usdc_index_canister_id, usdc_ledger_canister_id);
         state.record_created_canister::<Ledger>(&usdc(), usdc_ledger_canister_id);
         assert_eq!(
-            state.managed_status::<Ledger>(&usdc()),
+            state.managed_status::<Ledger>(&usdc_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdc_ledger_canister_id
             })
@@ -33,7 +35,7 @@ mod manage_canister {
         let usdt_ledger_canister_id = Principal::from_slice(&[3_u8; 29]);
         state.record_created_canister::<Ledger>(&usdt(), usdt_ledger_canister_id);
         assert_eq!(
-            state.managed_status::<Ledger>(&usdt()),
+            state.managed_status::<Ledger>(&usdt_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdt_ledger_canister_id
             })
@@ -41,7 +43,7 @@ mod manage_canister {
         let usdt_index_canister_id = Principal::from_slice(&[4_u8; 29]);
         state.record_created_canister::<Index>(&usdt(), usdt_index_canister_id);
         assert_eq!(
-            state.managed_status::<Index>(&usdt()),
+            state.managed_status::<Index>(&usdt_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdt_index_canister_id
             })
@@ -57,20 +59,21 @@ mod manage_canister {
             let mut state = new_state();
             let canister_id = Principal::from_slice(&[1_u8; 29]);
             let contract = usdc();
+            let token_id = TokenId::from(contract.clone());
 
-            assert_eq!(state.managed_status::<C>(&contract), None);
+            assert_eq!(state.managed_status::<C>(&token_id), None);
 
             state.record_new_erc20_token(contract.clone(), usdc_metadata());
             state.record_created_canister::<C>(&contract, canister_id);
             assert_eq!(
-                state.managed_status::<C>(&contract),
+                state.managed_status::<C>(&token_id),
                 Some(&ManagedCanisterStatus::Created { canister_id })
             );
 
             let wasm_hash = WasmHash::from([1_u8; 32]);
             state.record_installed_canister::<C>(&contract, wasm_hash.clone());
             assert_eq!(
-                state.managed_status::<C>(&contract),
+                state.managed_status::<C>(&token_id),
                 Some(&ManagedCanisterStatus::Installed {
                     canister_id,
                     installed_wasm_hash: wasm_hash,

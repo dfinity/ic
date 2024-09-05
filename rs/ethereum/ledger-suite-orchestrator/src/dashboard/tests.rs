@@ -106,8 +106,8 @@ fn should_display_managed_canisters() {
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH);
 
-    state.record_archives(&usdc(), vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()]);
-    state.record_archives(&usdt(), vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()]);
+    state.record_archives(usdc(), vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()]);
+    state.record_archives(usdt(), vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()]);
     DashboardAssert::assert_that_dashboard_from_state(&state)
         .has_erc20("ckUSDC", 1, USDC_ADDRESS)
         .has_ledger(USDC_LEDGER_ID, LEDGER_WASM_HASH)

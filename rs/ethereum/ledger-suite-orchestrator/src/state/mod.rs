@@ -237,10 +237,22 @@ impl From<String> for TokenSymbol {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum TokenId {
     Erc20(Erc20Token),
     Other(TokenSymbol),
+}
+
+impl From<Erc20Token> for TokenId {
+    fn from(value: Erc20Token) -> Self {
+        TokenId::Erc20(value)
+    }
+}
+
+impl From<TokenSymbol> for TokenId {
+    fn from(value: TokenSymbol) -> Self {
+        TokenId::Other(value)
+    }
 }
 
 impl From<&Erc20Token> for TokenId {
@@ -505,14 +517,14 @@ impl State {
             .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
-    pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
-        self.managed_canisters.canisters.keys()
+    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> + '_ {
+        self.all_managed_canisters_iter().map(|(id, _)| id)
     }
 
-    pub fn managed_canisters<T: Into<TokenId>>(&self, token_id: T) -> Option<&Canisters> {
-        match token_id.into() {
-            TokenId::Erc20(contract) => self.managed_canisters.canisters.get(&contract),
-            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get(&symbol),
+    pub fn managed_canisters(&self, token_id: &TokenId) -> Option<&Canisters> {
+        match token_id {
+            TokenId::Erc20(contract) => self.managed_canisters.canisters.get(contract),
+            TokenId::Other(symbol) => self.managed_canisters.other_canisters.get(symbol),
         }
     }
 
@@ -541,12 +553,12 @@ impl State {
 
     pub fn managed_status<'a, T: 'a>(
         &'a self,
-        contract: &Erc20Token,
+        token_id: &TokenId,
     ) -> Option<&'a ManagedCanisterStatus>
     where
         Canisters: ManageSingleCanister<T>,
     {
-        self.managed_canisters(contract)
+        self.managed_canisters(token_id)
             .and_then(|c| c.get().map(|c| &c.status))
     }
 
@@ -569,8 +581,9 @@ impl State {
     }
 
     pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
+        let token_id = TokenId::from(&contract);
         assert_eq!(
-            self.managed_canisters(&contract),
+            self.managed_canisters(&token_id),
             None,
             "BUG: ERC-20 token {:?} is already managed",
             contract
@@ -821,7 +834,8 @@ impl ManageOtherCanisters {
         args: crate::candid::ManageOtherCanisters,
     ) -> Result<ManageOtherCanisters, InvalidManageInstalledCanistersError> {
         let token_symbol = TokenSymbol(args.token_symbol);
-        if state.managed_canisters(&token_symbol).is_some() {
+        let token_id = TokenId::Other(token_symbol.clone());
+        if state.managed_canisters(&token_id).is_some() {
             return Err(InvalidManageInstalledCanistersError::TokenAlreadyManaged(
                 token_symbol,
             ));

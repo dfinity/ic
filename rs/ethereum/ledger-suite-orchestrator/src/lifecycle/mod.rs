@@ -33,6 +33,19 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
             mutate_state(|s| s.init_ledger_suite_version(ledger_suite_version));
         }
+        if let Some(manage_installed_canisters) = arg.manage_other_canisters.clone() {
+            for managed_canisters in manage_installed_canisters {
+                let canisters =
+                    read_state(|s| ManageOtherCanisters::validate(s, managed_canisters))
+                        .expect("ERROR: invalid manage installed canisters");
+                mutate_state(|s| s.record_manage_other_canisters(canisters.clone()));
+                log!(
+                    INFO,
+                    "[post_upgrade]: recorded manage installed canisters: {:?}",
+                    canisters
+                );
+            }
+        }
         match read_wasm_store(|w| UpgradeOrchestratorArgs::validate_upgrade_arg(w, arg.clone())) {
             Ok(valid_upgrade_args) => {
                 if valid_upgrade_args.upgrade_ledger_suite() {
@@ -46,11 +59,13 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
                                 .new_ledger_suite_version(current_ledger_suite_version),
                         )
                     });
-                    for erc20 in
-                        read_state(|s| s.managed_erc20_tokens_iter().cloned().collect::<Vec<_>>())
+                    for token_id in
+                        read_state(|s| s.all_managed_tokens_ids_iter().collect::<Vec<_>>())
                     {
                         schedule_now(
-                            Task::UpgradeLedgerSuite(valid_upgrade_args.clone().into_task(erc20)),
+                            Task::UpgradeLedgerSuite(
+                                valid_upgrade_args.clone().into_task(token_id),
+                            ),
                             &IC_CANISTER_RUNTIME,
                         );
                     }
@@ -61,19 +76,6 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
                     "[post_upgrade]: ERROR: invalid arguments to upgrade {:?}: {:?}",
                     arg, e
                 ));
-            }
-        }
-        if let Some(manage_installed_canisters) = arg.manage_other_canisters {
-            for managed_canisters in manage_installed_canisters {
-                let canisters =
-                    read_state(|s| ManageOtherCanisters::validate(s, managed_canisters))
-                        .expect("ERROR: invalid manage installed canisters");
-                mutate_state(|s| s.record_manage_other_canisters(canisters.clone()));
-                log!(
-                    INFO,
-                    "[post_upgrade]: recorded manage installed canisters: {:?}",
-                    canisters
-                );
             }
         }
         if let Some(update) = arg.cycles_management {

@@ -248,7 +248,7 @@ impl UpgradeLedgerSuite {
     /// where the ledger would be stopped before upgrading the index, since this would result in 2 canisters being stopped at the same time,
     /// which could be more problematic, especially if for some unexpected reason the upgrade fails.
     fn new(
-        contract: Erc20Token,
+        token_id: TokenId,
         ledger_compressed_wasm_hash: Option<WasmHash>,
         index_compressed_wasm_hash: Option<WasmHash>,
         archive_compressed_wasm_hash: Option<WasmHash>,
@@ -256,22 +256,22 @@ impl UpgradeLedgerSuite {
         let mut subtasks = Vec::new();
         if let Some(index_compressed_wasm_hash) = index_compressed_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeIndex {
-                contract: contract.clone(),
+                token_id: token_id.clone(),
                 compressed_wasm_hash: index_compressed_wasm_hash,
             });
         }
         if let Some(ledger_compressed_wasm_hash) = ledger_compressed_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeLedger {
-                contract: contract.clone(),
+                token_id: token_id.clone(),
                 compressed_wasm_hash: ledger_compressed_wasm_hash,
             });
         }
         if let Some(archive_compressed_wasm_hash) = archive_compressed_wasm_hash {
             subtasks.push(UpgradeLedgerSuiteSubtask::DiscoverArchives {
-                contract: contract.clone(),
+                token_id: token_id.clone(),
             });
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeArchives {
-                contract: contract.clone(),
+                token_id: token_id.clone(),
                 compressed_wasm_hash: archive_compressed_wasm_hash,
             });
         }
@@ -281,22 +281,22 @@ impl UpgradeLedgerSuite {
         }
     }
 
-    fn builder(erc20_token: Erc20Token) -> UpgradeLedgerSuiteBuilder {
-        UpgradeLedgerSuiteBuilder::new(erc20_token)
+    fn builder(token_id: TokenId) -> UpgradeLedgerSuiteBuilder {
+        UpgradeLedgerSuiteBuilder::new(token_id)
     }
 }
 
 struct UpgradeLedgerSuiteBuilder {
-    erc20_token: Erc20Token,
+    token_id: TokenId,
     ledger_wasm_hash: Option<WasmHash>,
     index_wasm_hash: Option<WasmHash>,
     archive_wasm_hash: Option<WasmHash>,
 }
 
 impl UpgradeLedgerSuiteBuilder {
-    fn new(erc20_token: Erc20Token) -> Self {
+    fn new(token_id: TokenId) -> Self {
         Self {
-            erc20_token,
+            token_id,
             ledger_wasm_hash: None,
             index_wasm_hash: None,
             archive_wasm_hash: None,
@@ -320,7 +320,7 @@ impl UpgradeLedgerSuiteBuilder {
 
     fn build(self) -> UpgradeLedgerSuite {
         UpgradeLedgerSuite::new(
-            self.erc20_token,
+            self.token_id,
             self.ledger_wasm_hash,
             self.index_wasm_hash,
             self.archive_wasm_hash,
@@ -331,18 +331,18 @@ impl UpgradeLedgerSuiteBuilder {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum UpgradeLedgerSuiteSubtask {
     UpgradeIndex {
-        contract: Erc20Token,
+        token_id: TokenId,
         compressed_wasm_hash: WasmHash,
     },
     UpgradeLedger {
-        contract: Erc20Token,
+        token_id: TokenId,
         compressed_wasm_hash: WasmHash,
     },
     DiscoverArchives {
-        contract: Erc20Token,
+        token_id: TokenId,
     },
     UpgradeArchives {
-        contract: Erc20Token,
+        token_id: TokenId,
         compressed_wasm_hash: WasmHash,
     },
 }
@@ -354,57 +354,53 @@ impl UpgradeLedgerSuiteSubtask {
     ) -> Result<(), UpgradeLedgerSuiteError> {
         match self {
             UpgradeLedgerSuiteSubtask::UpgradeIndex {
-                contract,
+                token_id,
                 compressed_wasm_hash,
             } => {
                 log!(
                     INFO,
                     "Upgrading index canister for {:?} to {}",
-                    contract,
+                    token_id,
                     compressed_wasm_hash
                 );
-                let canisters = read_state(|s| s.managed_canisters(contract).cloned()).ok_or(
-                    UpgradeLedgerSuiteError::Erc20TokenNotFound(contract.clone()),
-                )?;
-                let canister_id = ensure_canister_is_installed(contract, canisters.index)?;
+                let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
+                    .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
+                let canister_id = ensure_canister_is_installed(token_id, canisters.index)?;
                 upgrade_canister::<Index, _>(canister_id, compressed_wasm_hash, runtime).await
             }
             UpgradeLedgerSuiteSubtask::UpgradeLedger {
-                contract,
+                token_id,
                 compressed_wasm_hash,
             } => {
                 log!(
                     INFO,
                     "Upgrading ledger canister for {:?} to {}",
-                    contract,
+                    token_id,
                     compressed_wasm_hash
                 );
-                let canisters = read_state(|s| s.managed_canisters(contract).cloned()).ok_or(
-                    UpgradeLedgerSuiteError::Erc20TokenNotFound(contract.clone()),
-                )?;
-                let canister_id = ensure_canister_is_installed(contract, canisters.ledger)?;
+                let canisters = read_state(|s| s.managed_canisters(token_id).cloned())
+                    .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?;
+                let canister_id = ensure_canister_is_installed(token_id, canisters.ledger)?;
                 upgrade_canister::<Ledger, _>(canister_id, compressed_wasm_hash, runtime).await
             }
-            UpgradeLedgerSuiteSubtask::DiscoverArchives { contract } => {
-                log!(INFO, "Discovering archive canister(s) for {:?}", contract);
-                discover_archives(select_equal_to(&TokenId::from(contract)), runtime)
+            UpgradeLedgerSuiteSubtask::DiscoverArchives { token_id } => {
+                log!(INFO, "Discovering archive canister(s) for {:?}", token_id);
+                discover_archives(select_equal_to(token_id), runtime)
                     .await
                     .map_err(UpgradeLedgerSuiteError::DiscoverArchivesError)
             }
             UpgradeLedgerSuiteSubtask::UpgradeArchives {
-                contract,
+                token_id,
                 compressed_wasm_hash,
             } => {
-                let archives = read_state(|s| s.managed_canisters(contract).cloned())
-                    .ok_or(UpgradeLedgerSuiteError::Erc20TokenNotFound(
-                        contract.clone(),
-                    ))?
+                let archives = read_state(|s| s.managed_canisters(token_id).cloned())
+                    .ok_or(UpgradeLedgerSuiteError::TokenNotFound(token_id.clone()))?
                     .archives;
                 if archives.is_empty() {
                     log!(
                         INFO,
                         "No archive canisters found for {:?}. Skipping upgrade of archives.",
-                        contract
+                        token_id
                     );
                     return Ok(());
                 }
@@ -412,7 +408,7 @@ impl UpgradeLedgerSuiteSubtask {
                     INFO,
                     "Upgrading archive canisters {} for {:?} to {}",
                     display_iter(&archives),
-                    contract,
+                    token_id,
                     compressed_wasm_hash
                 );
                 //We expect usually 0 or 1 archive, so a simple sequential strategy is good enough.
@@ -498,8 +494,8 @@ impl UpgradeOrchestratorArgs {
             || self.archive_compressed_wasm_hash.is_some()
     }
 
-    pub fn into_task(self, contract: Erc20Token) -> UpgradeLedgerSuite {
-        UpgradeLedgerSuite::builder(contract)
+    pub fn into_task(self, token_id: TokenId) -> UpgradeLedgerSuite {
+        UpgradeLedgerSuite::builder(token_id)
             .ledger_wasm_hash(self.ledger_compressed_wasm_hash)
             .index_wasm_hash(self.index_compressed_wasm_hash)
             .archive_wasm_hash(self.archive_compressed_wasm_hash)
@@ -550,6 +546,7 @@ impl InstallLedgerSuiteArgs {
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+        let token_id = TokenId::from(&contract);
         let minter_id =
             state
                 .minter_id()
@@ -557,7 +554,7 @@ impl InstallLedgerSuiteArgs {
                 .ok_or(InvalidAddErc20ArgError::InternalError(
                     "ERROR: minter principal not set in state".to_string(),
                 ))?;
-        if let Some(_canisters) = state.managed_canisters(&contract) {
+        if let Some(_canisters) = state.managed_canisters(&token_id) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
                 contract,
             ));
@@ -650,9 +647,9 @@ impl From<DiscoverArchivesError> for TaskError {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum UpgradeLedgerSuiteError {
-    Erc20TokenNotFound(Erc20Token),
+    TokenNotFound(TokenId),
     CanisterNotReady {
-        erc20_token: Erc20Token,
+        token_id: TokenId,
         status: Option<ManagedCanisterStatus>,
         message: String,
     },
@@ -667,7 +664,7 @@ pub enum UpgradeLedgerSuiteError {
 impl UpgradeLedgerSuiteError {
     fn is_recoverable(&self) -> bool {
         match self {
-            UpgradeLedgerSuiteError::Erc20TokenNotFound(_) => false,
+            UpgradeLedgerSuiteError::TokenNotFound(_) => false,
             UpgradeLedgerSuiteError::CanisterNotReady { .. } => true,
             UpgradeLedgerSuiteError::WasmHashNotFound(_) => false,
             UpgradeLedgerSuiteError::WasmStoreError(_) => false,
@@ -886,8 +883,9 @@ async fn install_ledger_suite<R: CanisterRuntime>(
 }
 
 fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata) {
+    let token_id = TokenId::from(&contract);
     mutate_state(|s| {
-        if s.managed_canisters(&contract).is_some() {
+        if s.managed_canisters(&token_id).is_some() {
             return;
         }
         s.record_new_erc20_token(contract, metadata);
@@ -971,8 +969,9 @@ where
     Canisters: ManageSingleCanister<C>,
     R: CanisterRuntime,
 {
+    let token_id = TokenId::from(contract);
     if let Some(canister_id) = read_state(|s| {
-        s.managed_status::<C>(contract)
+        s.managed_status::<C>(&token_id)
             .map(ManagedCanisterStatus::canister_id)
             .cloned()
     }) {
@@ -1033,7 +1032,8 @@ where
     R: CanisterRuntime,
     I: Debug + CandidType,
 {
-    let canister_id = match read_state(|s| s.managed_status::<C>(contract).cloned()) {
+    let token_id = TokenId::from(contract);
+    let canister_id = match read_state(|s| s.managed_status::<C>(&token_id).cloned()) {
         None => {
             panic!(
                 "BUG: {} canister is not yet created",
@@ -1112,7 +1112,8 @@ async fn notify_erc20_added<R: CanisterRuntime>(
     minter_id: &Principal,
     runtime: &R,
 ) -> Result<(), TaskError> {
-    let managed_canisters = read_state(|s| s.managed_canisters(token).cloned());
+    let token_id = TokenId::from(token);
+    let managed_canisters = read_state(|s| s.managed_canisters(&token_id).cloned());
     match managed_canisters {
         Some(Canisters {
             ledger: Some(ledger),
@@ -1228,19 +1229,19 @@ async fn upgrade_ledger_suite<R: CanisterRuntime>(
 }
 
 fn ensure_canister_is_installed<T>(
-    erc20_token: &Erc20Token,
+    token_id: &TokenId,
     canister: Option<Canister<T>>,
 ) -> Result<Principal, UpgradeLedgerSuiteError> {
     match canister {
         None => Err(UpgradeLedgerSuiteError::CanisterNotReady {
-            erc20_token: erc20_token.clone(),
+            token_id: token_id.clone(),
             status: None,
             message: "canister not yet created".to_string(),
         }),
         Some(canister) => match canister.status() {
             ManagedCanisterStatus::Created { canister_id } => {
                 Err(UpgradeLedgerSuiteError::CanisterNotReady {
-                    erc20_token: erc20_token.clone(),
+                    token_id: token_id.clone(),
                     status: Some(ManagedCanisterStatus::Created {
                         canister_id: *canister_id,
                     }),

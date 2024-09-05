@@ -1,6 +1,6 @@
 use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, CanisterRuntime, Reason};
-use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
+use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
@@ -37,7 +37,7 @@ async fn should_install_ledger_suite() {
     assert_eq!(task.execute(&runtime).await, Ok(()));
 
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -167,7 +167,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
     assert_eq!(task.execute(&runtime).await, Ok(()));
 
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -212,7 +212,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
         Err(TaskError::InstallCodeError(expected_error))
     );
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
@@ -241,7 +241,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
         Err(TaskError::CanisterCreationError(expected_error))
     );
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -274,7 +274,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
         Err(TaskError::InstallCodeError(expected_error))
     );
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -293,7 +293,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     runtime.expect_install_code().times(1).return_const(Ok(()));
     assert_eq!(task.execute(&runtime).await, Ok(()));
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -335,7 +335,7 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     runtime.checkpoint();
 
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
@@ -373,7 +373,7 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
     runtime.checkpoint();
 
     assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc()).cloned()),
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
         Some(Canisters {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: LEDGER_PRINCIPAL,
@@ -572,7 +572,7 @@ mod discover_archives {
         expect_call_canister_icrc3_get_archives, init_state, LEDGER_PRINCIPAL,
     };
     use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
-    use crate::state::{mutate_state, read_state, Ledger};
+    use crate::state::{mutate_state, read_state, Ledger, TokenId};
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
 
@@ -684,26 +684,31 @@ mod discover_archives {
     }
 
     fn archives_from_state(contract: &Erc20Token) -> Vec<Principal> {
-        read_state(|s| s.managed_canisters(contract).unwrap().archives.clone())
+        read_state(|s| {
+            s.managed_canisters(&TokenId::from(contract.clone()))
+                .unwrap()
+                .archives
+                .clone()
+        })
     }
 }
 
 mod upgrade_ledger_suite {
     use crate::management::CallError;
-    use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
     use crate::scheduler::tests::{
         execute_now, expect_call_canister_icrc3_get_archives, init_state,
         mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
         read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
     };
-    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, Erc20TokenNotFound};
+    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, TokenNotFound};
     use crate::scheduler::{
         pop_if_ready, Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError,
         UpgradeLedgerSuiteSubtask,
     };
     use crate::state::{
-        mutate_state, Index, Ledger, ManagedCanisterStatus, WasmHash, ARCHIVE_NODE_BYTECODE,
-        INDEX_BYTECODE, LEDGER_BYTECODE,
+        mutate_state, Index, Ledger, ManagedCanisterStatus, TokenId, WasmHash,
+        ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
     };
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
@@ -717,34 +722,36 @@ mod upgrade_ledger_suite {
         let index_wasm_hash = WasmHash::from([2_u8; 32]);
         let archive_wasm_hash = WasmHash::from([3_u8; 32]);
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc()).build().collect();
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
+            .build()
+            .collect();
         assert_eq!(subtasks, vec![]);
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .ledger_wasm_hash(ledger_wasm_hash.clone())
             .build()
             .collect();
         assert_eq!(
             subtasks,
             vec![UpgradeLedger {
-                contract: usdc(),
+                token_id: usdc_token_id(),
                 compressed_wasm_hash: ledger_wasm_hash.clone()
             },]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .index_wasm_hash(index_wasm_hash.clone())
             .build()
             .collect();
         assert_eq!(
             subtasks,
             vec![UpgradeIndex {
-                contract: usdc(),
+                token_id: usdc_token_id(),
                 compressed_wasm_hash: index_wasm_hash.clone()
             },]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .ledger_wasm_hash(ledger_wasm_hash.clone())
             .index_wasm_hash(index_wasm_hash.clone())
             .build()
@@ -753,32 +760,34 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![
                 UpgradeIndex {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: index_wasm_hash.clone()
                 },
                 UpgradeLedger {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
             ]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .archive_wasm_hash(archive_wasm_hash.clone())
             .build()
             .collect();
         assert_eq!(
             subtasks,
             vec![
-                DiscoverArchives { contract: usdc() },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
                 UpgradeArchives {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
                 }
             ]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .ledger_wasm_hash(ledger_wasm_hash.clone())
             .archive_wasm_hash(archive_wasm_hash.clone())
             .build()
@@ -787,18 +796,20 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![
                 UpgradeLedger {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
-                DiscoverArchives { contract: usdc() },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
                 UpgradeArchives {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
                 }
             ]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .index_wasm_hash(index_wasm_hash.clone())
             .archive_wasm_hash(archive_wasm_hash.clone())
             .build()
@@ -807,18 +818,20 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![
                 UpgradeIndex {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: index_wasm_hash.clone()
                 },
-                DiscoverArchives { contract: usdc() },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
                 UpgradeArchives {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
                 }
             ]
         );
 
-        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
+        let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc_token_id())
             .ledger_wasm_hash(ledger_wasm_hash.clone())
             .index_wasm_hash(index_wasm_hash.clone())
             .archive_wasm_hash(archive_wasm_hash.clone())
@@ -828,16 +841,18 @@ mod upgrade_ledger_suite {
             subtasks,
             vec![
                 UpgradeIndex {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: index_wasm_hash.clone()
                 },
                 UpgradeLedger {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
-                DiscoverArchives { contract: usdc() },
+                DiscoverArchives {
+                    token_id: usdc_token_id()
+                },
                 UpgradeArchives {
-                    contract: usdc(),
+                    token_id: usdc_token_id(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
                 }
             ]
@@ -846,7 +861,7 @@ mod upgrade_ledger_suite {
 
     #[test]
     fn should_implement_exact_size_iterator() {
-        let mut subtasks = UpgradeLedgerSuite::builder(usdc())
+        let mut subtasks = UpgradeLedgerSuite::builder(usdc_token_id())
             .ledger_wasm_hash(WasmHash::from([0_u8; 32]))
             .index_wasm_hash(WasmHash::from([1_u8; 32]))
             .archive_wasm_hash(WasmHash::from([2_u8; 32]))
@@ -869,11 +884,12 @@ mod upgrade_ledger_suite {
     async fn should_be_no_op_when_no_canisters_to_upgrade() {
         init_state();
         let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
         });
         let runtime = MockCanisterRuntime::new();
-        let task = Task::UpgradeLedgerSuite(UpgradeLedgerSuite::builder(usdc).build());
+        let task = Task::UpgradeLedgerSuite(UpgradeLedgerSuite::builder(usdc_token_id).build());
 
         let result = execute_now(task.clone(), &runtime).await;
 
@@ -886,7 +902,7 @@ mod upgrade_ledger_suite {
         init_state();
         let runtime = MockCanisterRuntime::new();
         let task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc())
+            UpgradeLedgerSuite::builder(usdc_token_id())
                 .ledger_wasm_hash(read_ledger_wasm_hash())
                 .build(),
         );
@@ -895,8 +911,8 @@ mod upgrade_ledger_suite {
 
         assert_eq!(
             result,
-            Err(TaskError::UpgradeLedgerSuiteError(Erc20TokenNotFound(
-                usdc()
+            Err(TaskError::UpgradeLedgerSuiteError(TokenNotFound(
+                usdc_token_id()
             )))
         );
         assert_eq!(task_queue_from_state(), vec![]);
@@ -907,6 +923,7 @@ mod upgrade_ledger_suite {
         init_state();
         let runtime = MockCanisterRuntime::new();
         let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
@@ -917,7 +934,7 @@ mod upgrade_ledger_suite {
 
         let wrong_ledger_wasm_hash = WasmHash::from([1_u8; 32]);
         let task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc)
+            UpgradeLedgerSuite::builder(usdc_token_id)
                 .ledger_wasm_hash(wrong_ledger_wasm_hash.clone())
                 .build(),
         );
@@ -939,17 +956,18 @@ mod upgrade_ledger_suite {
     async fn should_error_when_canister_to_upgrade_not_installed_yet() {
         init_state();
         let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
         });
         let runtime = MockCanisterRuntime::new();
         let update_index_task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc.clone())
+            UpgradeLedgerSuite::builder(usdc_token_id.clone())
                 .index_wasm_hash(read_index_wasm_hash())
                 .build(),
         );
         let update_ledger_task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc.clone())
+            UpgradeLedgerSuite::builder(usdc_token_id.clone())
                 .ledger_wasm_hash(read_ledger_wasm_hash())
                 .build(),
         );
@@ -963,7 +981,7 @@ mod upgrade_ledger_suite {
             assert_eq!(
                 error,
                 TaskError::UpgradeLedgerSuiteError(CanisterNotReady {
-                    erc20_token: usdc.clone(),
+                    token_id: usdc_token_id.clone(),
                     status: None,
                     message: "canister not yet created".to_string(),
                 })
@@ -987,7 +1005,7 @@ mod upgrade_ledger_suite {
             assert_eq!(
                 error,
                 TaskError::UpgradeLedgerSuiteError(CanisterNotReady {
-                    erc20_token: usdc.clone(),
+                    token_id: usdc_token_id.clone(),
                     status: Some(ManagedCanisterStatus::Created { canister_id }),
                     message: "canister not yet installed".to_string(),
                 })
@@ -999,6 +1017,7 @@ mod upgrade_ledger_suite {
     async fn should_upgrade_ledger_suite_without_archives() {
         init_state();
         let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
@@ -1008,7 +1027,7 @@ mod upgrade_ledger_suite {
         });
         let mut runtime = MockCanisterRuntime::new();
         let task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc)
+            UpgradeLedgerSuite::builder(usdc_token_id)
                 .ledger_wasm_hash(read_ledger_wasm_hash())
                 .index_wasm_hash(read_index_wasm_hash())
                 .build(),
@@ -1051,6 +1070,7 @@ mod upgrade_ledger_suite {
     async fn should_upgrade_ledger_suite_with_archives() {
         init_state();
         let usdc = usdc();
+        let usdc_token_id = TokenId::from(usdc.clone());
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
@@ -1060,7 +1080,7 @@ mod upgrade_ledger_suite {
         });
         let mut runtime = MockCanisterRuntime::new();
         let task = Task::UpgradeLedgerSuite(
-            UpgradeLedgerSuite::builder(usdc)
+            UpgradeLedgerSuite::builder(usdc_token_id)
                 .ledger_wasm_hash(read_ledger_wasm_hash())
                 .index_wasm_hash(read_index_wasm_hash())
                 .archive_wasm_hash(read_archive_wasm_hash())
