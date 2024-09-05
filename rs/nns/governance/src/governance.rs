@@ -296,21 +296,18 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
             controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
             hotkeys: neuron.hotkeys,
-            hotkey_principal: Some(neuron.controller),
         }
     }
 }
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         Self {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
             hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
-            hotkey_principal: Some(neuron.controller.to_string()),
         }
     }
 }
