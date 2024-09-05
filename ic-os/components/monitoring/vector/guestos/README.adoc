@@ -5,3 +5,5 @@ the bootstrap tarball. It must contain lines of "key=value= statements,
 with the following keys supported:
 
 * elasticsearch_hosts:    space-separated list of logging hosts
+* prometheus_hosts:       space-separated list of metrics endpoints. Endpoint format: `<name>_<host>_<path>`  Path is optional, by default `/api/v1/write`
+* vector_tls:             vector TLS path, by default `/run/ic-node/etc/vector`
