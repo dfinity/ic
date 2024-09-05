@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# This script should only be executed from the gitlab-ci job context.
+# This script should only be executed from the ci job context.
 # To reproduce a build, invoke the Bazel command directly.
 # e.g. follow the buildfarm link -> details -> explicit command line.
 

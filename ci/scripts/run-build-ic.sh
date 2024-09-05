@@ -11,7 +11,7 @@ cd "$CI_PROJECT_DIR"
 
 if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] \
     || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
-    gitlab-ci/container/build-ic.sh -i -c -b
+    ci/container/build-ic.sh -i -c -b
 elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
@@ -39,9 +39,9 @@ elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
         touch build-ic.tar
         exit 0
     fi
-    gitlab-ci/container/build-ic.sh "${ARGS[@]}"
+    ci/container/build-ic.sh "${ARGS[@]}"
 else
-    gitlab-ci/container/build-ic.sh -i -c -b --no-release
+    ci/container/build-ic.sh -i -c -b --no-release
 fi
 
 if [ -d artifacts/icos ]; then

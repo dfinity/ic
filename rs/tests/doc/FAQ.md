@@ -40,7 +40,7 @@ the closing of "summary" and "details".
   TL;DR: CI runs the `system-tests` binary directly, it does the necessary configuration explicitly.
 
   The CI aspect of system testing is owned by IDX. Still, if you want to see the gory details, check the relevant config files.
-  As of Mar 22, 2021, [these are the relevant config files](../../../gitlab-ci/config/40--cargo-test--child-pipeline.yml), but
+  As of Mar 22, 2021, [these are the relevant config files](../../../ci/config/40--cargo-test--child-pipeline.yml), but
   they might be moved in the future.
 </details>
 
