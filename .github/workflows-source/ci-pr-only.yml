@@ -159,6 +159,8 @@ jobs:
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
 
+  # Copied & adapted (job name, version label) from
+  # https://github.com/ytanikin/PRConventionalCommits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
   validate-pr-title:
     name: Validate PR Title
     runs-on: ubuntu-latest
@@ -168,8 +170,6 @@ jobs:
         with:
           task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert"]'
 
-# Copied & adapted (job name, version label) from
-# https://github.com/ytanikin/PRConventionalCommits?tab=readme-ov-file#usage-with-labeling-where-label-is-just-a-task-type
   pr-title-check:
     name: Check PR Title for Deprecated Flags
     runs-on: ubuntu-latest
