@@ -1792,6 +1792,9 @@ impl Scheduler for SchedulerImpl {
                     self.metrics
                         .canister_log_memory_usage
                         .observe(canister.system_state.canister_log.used_space() as f64);
+                    self.metrics
+                        .canister_log_memory_usage_v2
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();

@@ -12,7 +12,7 @@ use prometheus::{
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, ScopedMetrics,
+    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -28,6 +28,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
     pub(super) canister_log_memory_usage: Histogram,
+    pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -123,6 +124,9 @@ pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
 pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
 
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
+
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
@@ -150,6 +154,26 @@ impl SchedulerMetrics {
                 "canister_log_memory_usage_bytes",
                 "Canisters log memory usage distribution in bytes.",
                 metrics_registry,
+            ),
+            canister_log_memory_usage_v2: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v2",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                ])
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
