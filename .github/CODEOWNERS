@@ -68,8 +68,8 @@ go_deps.bzl               @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
-/.pre-commit-config.yaml                                                @dfinity/idx
-/pre-commit/                                                            @dfinity/idx
+/.pre-commit-config.yaml                                                 @dfinity/idx
+/pre-commit/                                                             @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
