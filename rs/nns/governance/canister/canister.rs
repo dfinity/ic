@@ -7,11 +7,8 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{
-    cmc::CMCCanister,
-    ledger::IcpLedgerCanister,
-    memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
-};
+use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},

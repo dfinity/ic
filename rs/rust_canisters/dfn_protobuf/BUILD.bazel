@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
     # Keep sorted.
+    "//rs/nervous_system/canisters:__pkg__",
     "//rs/nervous_system/common:__pkg__",
     "//rs/nns:__subpackages__",
     "//rs/rosetta-api:__pkg__",

@@ -1,0 +1,17 @@
+[package]
+name = "ic-nervous-system-canisters"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_nervous_system_canisters"
+path = "src/lib.rs"
+
+[dependencies]
+ic-nervous-system-common = { path = "../common" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }

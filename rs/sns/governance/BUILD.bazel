@@ -146,6 +146,7 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
