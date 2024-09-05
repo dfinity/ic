@@ -6,6 +6,8 @@
 
 set -eufo pipefail
 
+set -x
+
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
