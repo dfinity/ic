@@ -10,16 +10,11 @@ use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::{
-    governance::Governance,
-    pb::v1::{
-        manage_neuron::{self, NeuronIdOrSubaccount},
-        manage_neuron_response::{self, MakeProposalResponse},
-        ManageNeuron, ManageNeuronResponse, Proposal,
-    },
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{self, NeuronIdOrSubaccount},
+    manage_neuron_response::{self, MakeProposalResponse},
+    ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
@@ -31,7 +26,6 @@ use std::{
     process::{Command, Output},
     str::FromStr,
     sync::Once,
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
 
@@ -202,24 +196,7 @@ impl DeployTestflightArgs {
                         .neurons_fund_participation = Some(false);
                 }
 
-                // Smoke test: If we were to submit this proposal (under some plausible assumptions)
-                // would this proposal yield a valid SnsInitPayload structure?
-                let sns_init_payload = Governance::make_sns_init_payload(
-                    create_service_nervous_system,
-                    // Mock dynamic data using "plausible" values.
-                    None,
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                    ProposalId { id: 10 },
-                    GlobalTimeOfDay {
-                        seconds_after_utc_midnight: Some(0),
-                    },
-                )
-                .and_then(|sns_init_payload| sns_init_payload.validate_post_execution());
-
-                match sns_init_payload {
+                match SnsInitPayload::try_from(create_service_nervous_system) {
                     Err(err) => {
                         bail!("Invalid configuration in {:?}: {}", init_config_file, err);
                     }

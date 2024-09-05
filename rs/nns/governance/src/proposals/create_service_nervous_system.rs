@@ -1,7 +1,6 @@
 use crate::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
-use ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints;
 
 impl CreateServiceNervousSystem {
     pub fn sns_token_e8s(&self) -> Option<u64> {

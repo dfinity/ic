@@ -548,16 +548,46 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
         let proposal_id = 1000;
 
         // Step 2: Call the code under test.
-        let converted = Governance::make_sns_init_payload(
-            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-            Some(NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone()),
-            current_timestamp_seconds,
-            ProposalId { id: proposal_id },
-            GlobalTimeOfDay {
-                seconds_after_utc_midnight: Some(0),
-            },
-        )
-        .unwrap();
+        let converted = {
+            let create_service_nervous_system =
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+            // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+            // is inlined from `Governance::make_sns_init_payload`.
+            let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+                let random_swap_start_time = GlobalTimeOfDay {
+                    seconds_after_utc_midnight: Some(0),
+                };
+
+                let start_time = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.start_time);
+
+                let duration = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.duration);
+
+                CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                    start_time.unwrap_or(random_swap_start_time),
+                    duration.unwrap_or_default(),
+                    current_timestamp_seconds,
+                )
+                .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
+            };
+
+            let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system).unwrap();
+
+            SnsInitPayload {
+                neurons_fund_participation_constraints: Some(
+                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+                ),
+                nns_proposal_id: Some(proposal_id),
+                swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+                swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+                ..sns_init_payload
+            }
+        };
 
         converted.validate_post_execution().unwrap();
 

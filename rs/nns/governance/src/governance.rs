@@ -4719,45 +4719,38 @@ impl Governance {
     }
 
     // This function is public as it is used in various tests, also outside this crate.
-    pub fn make_sns_init_payload(
+    fn make_sns_init_payload(
         create_service_nervous_system: CreateServiceNervousSystem,
         neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
         current_timestamp_seconds: u64,
         proposal_id: ProposalId,
         random_swap_start_time: GlobalTimeOfDay,
     ) -> Result<SnsInitPayload, String> {
-        let start_time = create_service_nervous_system
-            .swap_parameters
-            .as_ref()
-            .and_then(|swap_parameters| swap_parameters.start_time);
+        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+            let start_time = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.start_time);
 
-        let duration = create_service_nervous_system
-            .swap_parameters
-            .as_ref()
-            .and_then(|swap_parameters| swap_parameters.duration);
+            let duration = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.duration);
 
-        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)?;
-
-        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
             CreateServiceNervousSystem::swap_start_and_due_timestamps(
                 start_time.unwrap_or(random_swap_start_time),
                 duration.unwrap_or_default(),
                 current_timestamp_seconds,
             )
-            .map(
-                |(swap_start_timestamp_seconds, swap_due_timestamp_seconds)| {
-                    (
-                        Some(swap_start_timestamp_seconds),
-                        Some(swap_due_timestamp_seconds),
-                    )
-                },
-            )?;
+        }?;
+
+        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)?;
 
         Ok(SnsInitPayload {
             neurons_fund_participation_constraints,
             nns_proposal_id: Some(proposal_id.id),
-            swap_start_timestamp_seconds,
-            swap_due_timestamp_seconds,
+            swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+            swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
             ..sns_init_payload
         })
     }
