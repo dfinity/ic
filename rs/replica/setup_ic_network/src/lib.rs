@@ -260,7 +260,6 @@ fn start_consensus(
 
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
-    let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
@@ -456,7 +455,7 @@ fn start_consensus(
             idkg_tx,
             idkg::IDkgImpl::new(
                 node_id,
-                Arc::clone(&consensus_block_cache),
+                consensus_pool.read().unwrap().get_block_cache(),
                 Arc::clone(&consensus_crypto),
                 Arc::clone(&state_reader),
                 metrics_registry.clone(),
@@ -472,7 +471,7 @@ fn start_consensus(
 
         let bouncer = Arc::new(idkg::IDkgBouncer::new(
             subnet_id,
-            Arc::clone(&consensus_block_cache),
+            consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&state_reader),
         ));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
