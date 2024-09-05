@@ -237,7 +237,7 @@ commands:
 
 ```
 # Clone the DFINITY Git repository
-git clone git@gitlab.com:dfinity-lab/core/ic.git
+git clone git@github.com:dfinity/ic.git
 cd ic/
 
 
