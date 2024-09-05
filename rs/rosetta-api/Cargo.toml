@@ -71,6 +71,8 @@ tempfile = { workspace = true }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
+ic-icrc1 = { path = "./icrc1" }
+ic-icrc1-tokens-u256 = { path = "./icrc1/tokens_u256" }
 
 [features]
 rosetta-blocks = []
