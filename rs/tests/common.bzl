@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/certification",
     "//rs/config",
-    "//rs/constants",
+    "//rs/limits",
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
