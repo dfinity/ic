@@ -233,7 +233,7 @@ fn start_server(
                     {
                         // Creates a new TLS server config and uses it to accept the request.
                         let registry_version = registry_client.get_latest_version();
-                        let server_config = match tls.server_config(
+                        let mut server_config = match tls.server_config(
                             ic_crypto_tls_interfaces::SomeOrAllNodes::All,
                             registry_version,
                         ) {
@@ -243,7 +243,15 @@ fn start_server(
                                 return;
                             }
                         };
+                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
+                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+                        const ALPN_HTTP2: &[u8; 2] = b"h2";
 
+                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
+                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+                        const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+
+                        server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
                         let tls_acceptor =
                             tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
                         match tls_acceptor.accept(stream).await {

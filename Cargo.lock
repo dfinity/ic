@@ -13039,7 +13039,6 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
- "tracing",
  "url",
 ]
 
