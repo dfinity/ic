@@ -1,7 +1,12 @@
 import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_for_rust, get_ic_repo_merge_request_base_url
+from model.ic import (
+    IS_PRIVATE,
+    get_ic_repo_ci_pipeline_base_url,
+    get_ic_repo_for_rust,
+    get_ic_repo_merge_request_base_url,
+)
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
 from scanner.dependency_scanner import DependencyScanner
@@ -9,7 +14,10 @@ from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyMan
 from scanner.scanner_job_type import ScannerJobType
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    if IS_PRIVATE:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
     scanner_job = ScannerJobType.RELEASE_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:

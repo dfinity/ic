@@ -2136,7 +2136,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
@@ -2144,7 +2143,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -2160,7 +2158,6 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -4085,7 +4082,6 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -4100,7 +4096,6 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
