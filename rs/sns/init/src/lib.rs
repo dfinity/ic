@@ -3432,7 +3432,6 @@ mod test {
         // Happy scenario: Test that if the constraints are satisfied, the validation passes.
         {
             let sns_init_payload = SnsInitPayload {
-                // This value being high enough ensures there wouldn't be too many SNS neurons.
                 min_participant_icp_e8s: Some(20_000 * E8),
                 ..sns_init_payload.clone()
             };
@@ -3445,7 +3444,7 @@ mod test {
         // Test that if the constraints are violated, the validation, indeed, fails.
         {
             let sns_init_payload = SnsInitPayload {
-                // This value being so low ensures there would be too many SNS neurons.
+                // This value being so low ensures there would be a problem.
                 min_participant_icp_e8s: Some(1),
                 ..sns_init_payload
             };
@@ -3455,12 +3454,23 @@ mod test {
                 .validate_participation_constraints()
                 .unwrap_err();
             {
-                let expected_error_fragment = "min_participant_icp_e8s=1 is too small.";
+                let expected_error_fragment_a = "min_participant_icp_e8s=1 is too small.";
                 assert!(
-                    error.contains(expected_error_fragment),
+                    error.contains(expected_error_fragment_a),
                     "Unexpected error: `{}`\nExpected `{}`",
                     error,
-                    expected_error_fragment
+                    expected_error_fragment_a,
+                );
+
+                let expecrted_error_fragment_b = "the following inequality must hold: \
+                     min_participant_icp_e8s >= neuron_basket_count \
+                     * (neuron_minimum_stake_e8s + transaction_fee_e8s) \
+                     * max_direct_participation_icp_e8s / initial_swap_amount_e8s";
+                assert!(
+                    error.contains(expecrted_error_fragment_b),
+                    "Unexpected error: `{}`\nExpected `{}`",
+                    error,
+                    expecrted_error_fragment_b,
                 );
             }
         }
