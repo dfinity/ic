@@ -18,7 +18,7 @@ fi
 
 # if we are on a pull_request check if RUN_ALL_BAZEL_TARGETS was requested
 if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
-    if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then    
+    if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
         s3_upload="True"
     else
         # get bazel targets that changed within the MR
