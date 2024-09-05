@@ -273,7 +273,8 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     let avg_ingress_messages = average(&metrics[INGRESS_MESSAGES_SUM_METRIC]);
     let avg_ingress_bytes = average(&metrics[INGRESS_BYTES_SUM_METRIC]);
     let avg_latency_sum = average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS]);
-    let avg_latency_count = average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS]);
+    let avg_latency_count =
+        average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS]);
 
     ConsensusMetrics {
         delivered_blocks: avg_blocks,
