@@ -83,18 +83,13 @@ pub fn main() -> Result<()> {
                 ssh_authorized_keys_path,
             };
 
-            let guestos_settings = GuestOSSettings {
-                ic_crypto_path: None,
-                ic_state_path: None,
-                ic_registry_local_store_path: None,
-                guestos_dev: GuestosDevConfig::default(),
-            };
-
             let hostos_settings = HostOSSettings {
                 vm_memory,
                 vm_cpu,
                 verbose,
             };
+
+            let guestos_settings = GuestOSSettings::default();
 
             let setupos_config = SetupOSConfig {
                 network_settings,

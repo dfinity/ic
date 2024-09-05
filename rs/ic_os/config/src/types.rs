@@ -56,7 +56,7 @@ pub struct ICOSSettings {
     pub ssh_authorized_keys_path: Option<PathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct GuestOSSettings {
     pub ic_crypto_path: Option<PathBuf>,
     pub ic_state_path: Option<PathBuf>,
