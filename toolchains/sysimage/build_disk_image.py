@@ -207,7 +207,7 @@ def main():
         subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
 
     print("setting sha", flush=True)
-    os.setxattr(out_file, "user.checksum.sha256", b"123441")
+    # os.setxattr(out_file, "trusted.md5sum", b"123441")
     # # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # # If dflate is ever misbehaving, it can be replaced with:
     # # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>

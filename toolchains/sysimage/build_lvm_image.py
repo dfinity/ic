@@ -82,7 +82,7 @@ def main():
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
-    os.setxattr(out_file, "user.checksum.sha256", b"123441")
+    # os.setxattr(out_file, "trusted.md5sum", b"123441")
 
     print("FINISHED")
     # # We use our tool, dflate, to quickly create a sparse, deterministic, tar.

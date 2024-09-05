@@ -333,6 +333,8 @@ def main():
     print(destination_tar_filename)
     subprocess.check_call(f"tar -cvf {destination_tar_filename} *", cwd=container_dir, shell=True)
 
+    # os.setxattr(destination_tar_filename, "trusted.md5sum", b"123441")
+
     # # Override the base image with a local tar file?
     # def only_one_defined(a,b) -> bool:
     #     return (a and not b) or (b and not a)

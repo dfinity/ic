@@ -218,7 +218,7 @@ def main():
     mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file] + (["-d", in_file] if in_file else []) + [str(image_size)]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
-    os.setxattr(image_file, "user.checksum.sha256", b"123441")
+    # os.setxattr(image_file, "trusted.md5sum", b"123441")
 
 
 # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
