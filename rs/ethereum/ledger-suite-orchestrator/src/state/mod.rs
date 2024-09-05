@@ -255,18 +255,6 @@ impl From<TokenSymbol> for TokenId {
     }
 }
 
-impl From<&Erc20Token> for TokenId {
-    fn from(value: &Erc20Token) -> Self {
-        TokenId::Erc20(value.clone())
-    }
-}
-
-impl From<&TokenSymbol> for TokenId {
-    fn from(value: &TokenSymbol) -> Self {
-        TokenId::Other(value.clone())
-    }
-}
-
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Canisters {
     pub ledger: Option<LedgerCanister>,
@@ -495,12 +483,12 @@ impl State {
         self.managed_canisters
             .canisters
             .iter()
-            .map(|(key, value)| (TokenId::from(key), value))
+            .map(|(key, value)| (TokenId::from(key.clone()), value))
             .chain(
                 self.managed_canisters
                     .other_canisters
                     .iter()
-                    .map(|(key, value)| (TokenId::from(key), value)),
+                    .map(|(key, value)| (TokenId::from(key.clone()), value)),
             )
     }
 
@@ -581,7 +569,7 @@ impl State {
     }
 
     pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
-        let token_id = TokenId::from(&contract);
+        let token_id = TokenId::from(contract.clone());
         assert_eq!(
             self.managed_canisters(&token_id),
             None,
@@ -596,14 +584,9 @@ impl State {
         );
     }
 
-    pub fn record_archives<T: Into<TokenId> + Debug>(
-        &mut self,
-        token_id: T,
-        archives: Vec<Principal>,
-    ) {
-        let token_id = token_id.into();
+    pub fn record_archives(&mut self, token_id: &TokenId, archives: Vec<Principal>) {
         let canisters = self
-            .managed_canisters_mut(&token_id)
+            .managed_canisters_mut(token_id)
             .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
         canisters.archives = archives;
     }
@@ -615,7 +598,7 @@ impl State {
     ) where
         Canisters: ManageSingleCanister<T>,
     {
-        let token_id = contract.into();
+        let token_id = TokenId::from(contract.clone());
         let canisters = self
             .managed_canisters_mut(&token_id)
             .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
@@ -636,7 +619,7 @@ impl State {
     where
         Canisters: ManageSingleCanister<T>,
     {
-        let token_id = contract.into();
+        let token_id = TokenId::from(contract.clone());
         let managed_canister = self
             .managed_canisters_mut(&token_id)
             .and_then(Canisters::get_mut)

@@ -546,7 +546,7 @@ impl InstallLedgerSuiteArgs {
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
-        let token_id = TokenId::from(&contract);
+        let token_id = TokenId::from(contract.clone());
         let minter_id =
             state
                 .minter_id()
@@ -883,7 +883,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
 }
 
 fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata) {
-    let token_id = TokenId::from(&contract);
+    let token_id = TokenId::from(contract.clone());
     mutate_state(|s| {
         if s.managed_canisters(&token_id).is_some() {
             return;
@@ -969,7 +969,7 @@ where
     Canisters: ManageSingleCanister<C>,
     R: CanisterRuntime,
 {
-    let token_id = TokenId::from(contract);
+    let token_id = TokenId::from(contract.clone());
     if let Some(canister_id) = read_state(|s| {
         s.managed_status::<C>(&token_id)
             .map(ManagedCanisterStatus::canister_id)
@@ -1032,7 +1032,7 @@ where
     R: CanisterRuntime,
     I: Debug + CandidType,
 {
-    let token_id = TokenId::from(contract);
+    let token_id = TokenId::from(contract.clone());
     let canister_id = match read_state(|s| s.managed_status::<C>(&token_id).cloned()) {
         None => {
             panic!(
@@ -1112,7 +1112,7 @@ async fn notify_erc20_added<R: CanisterRuntime>(
     minter_id: &Principal,
     runtime: &R,
 ) -> Result<(), TaskError> {
-    let token_id = TokenId::from(token);
+    let token_id = TokenId::from(token.clone());
     let managed_canisters = read_state(|s| s.managed_canisters(&token_id).cloned());
     match managed_canisters {
         Some(Canisters {
@@ -1177,7 +1177,7 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&TokenId) -> bool>(
                     ledger,
                     display_iter(&archives)
                 );
-                mutate_state(|s| s.record_archives(token_id, archives.into_iter().collect()));
+                mutate_state(|s| s.record_archives(&token_id, archives.into_iter().collect()));
             }
             Err(e) => errors.push((token_id, ledger, e)),
         }

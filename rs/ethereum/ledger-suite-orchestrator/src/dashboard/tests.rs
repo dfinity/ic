@@ -1,5 +1,5 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::tests::fixtures::usdc_metadata;
+use crate::dashboard::tests::fixtures::{usdc_metadata, usdc_token_id, usdt_token_id};
 use crate::dashboard::DashboardTemplate;
 use candid::Principal;
 use fixtures::{usdc, usdt, USDC_ADDRESS, USDT_ADDRESS};
@@ -106,8 +106,14 @@ fn should_display_managed_canisters() {
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH);
 
-    state.record_archives(usdc(), vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()]);
-    state.record_archives(usdt(), vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()]);
+    state.record_archives(
+        &usdc_token_id(),
+        vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()],
+    );
+    state.record_archives(
+        &usdt_token_id(),
+        vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()],
+    );
     DashboardAssert::assert_that_dashboard_from_state(&state)
         .has_erc20("ckUSDC", 1, USDC_ADDRESS)
         .has_ledger(USDC_LEDGER_ID, LEDGER_WASM_HASH)
@@ -430,7 +436,7 @@ mod assertions {
 
 mod fixtures {
     use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
-    use ic_ledger_suite_orchestrator::state::CanistersMetadata;
+    use ic_ledger_suite_orchestrator::state::{CanistersMetadata, TokenId};
 
     pub const USDC_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
     pub const USDT_ADDRESS: &str = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
@@ -457,5 +463,13 @@ mod fixtures {
         }
         .try_into()
         .unwrap()
+    }
+
+    pub fn usdc_token_id() -> TokenId {
+        TokenId::from(usdc())
+    }
+
+    pub fn usdt_token_id() -> TokenId {
+        TokenId::from(usdt())
     }
 }
