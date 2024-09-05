@@ -12968,6 +12968,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower",
+ "tracing",
  "url",
 ]
 
@@ -13038,6 +13039,7 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tracing",
  "url",
 ]
 

@@ -56,6 +56,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{runtime, sync::mpsc};
+use tracing::instrument;
 
 /// Message and signal indices into a XNet stream or stream slice.
 ///
@@ -413,6 +414,7 @@ impl XNetPayloadBuilderImpl {
     ///
     /// Returns the default value `(0, 0)` when no stream or slices from the
     /// given subnet exist.
+    #[instrument(skip_all)]
     fn expected_indices_for_stream(
         &self,
         subnet_id: SubnetId,
@@ -454,6 +456,7 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Computes the expected message and signal indices for every known subnet.
+    #[instrument(skip_all)]
     fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
@@ -494,6 +497,7 @@ impl XNetPayloadBuilderImpl {
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
     ///     and
+    #[instrument(skip_all)]
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -587,6 +591,7 @@ impl XNetPayloadBuilderImpl {
     ///
     /// Returns the validation result, including the `CountBytes`-like estimate
     /// (deterministic, but not exact) of the slice size in bytes if valid.
+    #[instrument(skip_all)]
     fn validate_slice(
         &self,
         subnet_id: SubnetId,
@@ -777,6 +782,7 @@ impl XNetPayloadBuilderImpl {
 
     /// Implementation of `get_xnet_payload()` that returns a `Result`, so it
     /// can use the `?` operator internally for clean and simple error handling.
+    #[instrument(skip_all)]
     fn get_xnet_payload_impl(
         &self,
         validation_context: &ValidationContext,
@@ -1227,6 +1233,7 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
+    #[instrument(skip_all)]
     async fn refill_pool(
         &self,
         pool_byte_size_soft_cap: usize,
@@ -1312,17 +1319,21 @@ impl PoolRefillTask {
 
                 match query_result {
                     Ok(slice) => {
-                        let res = if witness_begin != msg_begin {
-                            // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
-                        } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
-                        };
+                        let res = tokio::task::spawn_blocking(move || {
+                            if witness_begin != msg_begin {
+                                // Pulled a stream suffix, append to pooled slice.
+                                pool.lock()
+                                    .unwrap()
+                                    .append(subnet_id, slice, registry_version, log)
+                            } else {
+                                // Pulled a complete stream, replace pooled slice (if any).
+                                pool.lock()
+                                    .unwrap()
+                                    .put(subnet_id, slice, registry_version, log)
+                            }
+                        })
+                        .await
+                        .unwrap();
                         let status = match res {
                             Ok(()) => STATUS_SUCCESS,
                             Err(e) => e.to_label_value(),
