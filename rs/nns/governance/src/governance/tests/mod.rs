@@ -547,23 +547,19 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                    .clone(),
-                proposal_id,
-                random_swap_start_time: GlobalTimeOfDay {
-                    seconds_after_utc_midnight: Some(0),
-                },
-                neurons_fund_participation_constraints: Some(
-                    NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
-                ),
-            };
-
         // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+        let converted = Governance::make_sns_init_payload(
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+            Some(NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone()),
+            current_timestamp_seconds,
+            ProposalId { id: proposal_id },
+            GlobalTimeOfDay {
+                seconds_after_utc_midnight: Some(0),
+            },
+        )
+        .unwrap();
+
+        converted.validate_post_execution().unwrap();
 
         // Step 3: Inspect the result.
 
