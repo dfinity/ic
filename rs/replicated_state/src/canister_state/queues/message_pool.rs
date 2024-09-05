@@ -142,19 +142,6 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
     }
 }
 
-/// A placeholder for a potential late inbound best-effort response.
-///
-/// Does not implement `Clone` or `Copy` to ensure that it can only be used
-/// once.
-pub(super) struct ResponsePlaceholder(Id);
-
-impl ResponsePlaceholder {
-    /// Returns the message ID within.
-    pub(super) fn id(&self) -> Id {
-        self.0
-    }
-}
-
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
 ///
@@ -310,47 +297,6 @@ impl MessagePool {
         }
 
         id
-    }
-
-    /// Prepares a placeholder for a potential late inbound best-effort response.
-    pub(super) fn insert_inbound_timeout_response(&mut self) -> ResponsePlaceholder {
-        ResponsePlaceholder(self.next_message_id(
-            Kind::Response,
-            Context::Inbound,
-            Class::BestEffort,
-        ))
-    }
-
-    /// Inserts a late inbound best-effort response into a response placeholder.
-    pub(super) fn replace_inbound_timeout_response(
-        &mut self,
-        placeholder: ResponsePlaceholder,
-        msg: RequestOrResponse,
-    ) {
-        // Message must be a best-effort response.
-        match &msg {
-            RequestOrResponse::Response(rep) if rep.deadline != NO_DEADLINE => {}
-            _ => panic!("Message must be a best-effort response"),
-        }
-
-        let id = placeholder.0;
-        debug_assert!(Context::Inbound == id.context());
-        debug_assert!(Class::BestEffort == id.class());
-        debug_assert!(Kind::Response == id.kind());
-        let size_bytes = msg.count_bytes();
-
-        // Update message stats.
-        self.message_stats += MessageStats::stats_delta(&msg, id.context());
-
-        // Insert. Cannot lead to a conflict because the placeholder is consumed on use.
-        assert!(self.messages.insert(id, msg).is_none());
-        debug_assert_eq!(
-            Self::calculate_message_stats(&self.messages),
-            self.message_stats
-        );
-
-        // Record in load shedding queue only.
-        self.size_queue.insert((size_bytes, id));
     }
 
     /// Reserves and returns a new message ID.
