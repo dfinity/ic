@@ -1,5 +1,5 @@
 {
-  "checksum": "3d676cd45bf79880542d9d248ec8cd98b46c6de30c352b1a5180335522fcbc12",
+  "checksum": "bc3326bc96361e72a9f9b6d58c1c2608aaa8e5890b432cabfa610ba3d71c5a1d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -60214,7 +60214,6 @@
             "erased-serde",
             "max_level_trace",
             "nested-values",
-            "release_max_level_debug",
             "release_max_level_trace",
             "std"
           ],
