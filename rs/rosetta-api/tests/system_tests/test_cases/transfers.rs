@@ -1,9 +1,10 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
-use crate::common::utils::bytebuf_to_u64;
 use crate::common::utils::get_custom_agent;
+use crate::common::utils::memo_bytebuf_to_u64;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_icrc1_tokens_u256::U256;
@@ -76,32 +77,9 @@ fn test_icp_transfer() {
                             icrc1_transaction.operation,
                             ic_icrc1::Operation::Burn { .. }
                         ) {
-                            let caller_agent = Icrc1Agent {
-                                agent: get_custom_agent(
-                                    arg_with_caller.caller.clone(),
-                                    rosetta_testing_environment
-                                        .pocket_ic
-                                        .url()
-                                        .unwrap()
-                                        .port()
-                                        .unwrap(),
-                                )
-                                .await,
-                                ledger_canister_id: LEDGER_CANISTER_ID.into(),
-                            };
-                            match arg_with_caller.arg {
-                                LedgerEndpointArg::TransferArg(mut transfer_arg) => {
-                                    // ICP Rosetta cannot handle subaccounts, so we have to eliminate them
-                                    transfer_arg.from_subaccount = None;
-                                    transfer_arg.to.subaccount = None;
-                                    caller_agent
-                                        .transfer(transfer_arg.clone())
-                                        .await
-                                        .unwrap()
-                                        .unwrap()
-                                }
-                                _ => panic!("Expected TransferArg for Mint and Burns"),
-                            };
+                            rosetta_testing_environment
+                                .generate_blocks(vec![arg_with_caller])
+                                .await;
                             continue;
                         }
 
@@ -113,31 +91,25 @@ fn test_icp_transfer() {
                             }
                             _ => panic!("Expected TransferArg"),
                         };
+                        let mut args_builder =
+                            RosettaTransferArgs::builder(transfer_args.to, transfer_args.amount);
+                        if let Some(from_subaccount) = transfer_args.from_subaccount {
+                            args_builder = args_builder.with_from_subaccount(from_subaccount);
+                        }
+                        if let Some(memo) = transfer_args.memo {
+                            args_builder =
+                                args_builder.with_memo(memo_bytebuf_to_u64(&memo.0).unwrap());
+                        }
+                        if let Some(created_at_time) = transfer_args.created_at_time {
+                            args_builder = args_builder.with_created_at_time(created_at_time);
+                        }
 
-                        let transfer_operations = rosetta_testing_environment
-                            .rosetta_client
-                            .build_transfer_operations(
-                                arg_with_caller.caller.sender().unwrap(),
-                                transfer_args.from_subaccount,
-                                transfer_args.to,
-                                transfer_args.amount,
-                                rosetta_testing_environment.network_identifier.clone(),
-                            )
-                            .await
-                            .unwrap();
-
-                        // This submit wrapper will also wait for the transaction to be finalized
                         rosetta_testing_environment
                             .rosetta_client
-                            .make_submit_and_wait_for_transaction(
-                                &arg_with_caller.caller,
+                            .transfer(
+                                args_builder.build(),
                                 rosetta_testing_environment.network_identifier.clone(),
-                                transfer_operations,
-                                // We don't care about the specific memo, only that there exists a memo
-                                transfer_args
-                                    .memo
-                                    .map(|memo| bytebuf_to_u64(memo.0.as_slice()).unwrap_or(0)),
-                                transfer_args.created_at_time,
+                                arg_with_caller.caller,
                             )
                             .await
                             .unwrap();

@@ -1,5 +1,5 @@
 use crate::common::utils::get_custom_agent;
-use crate::common::utils::wait_for_rosetta_block;
+use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
@@ -7,6 +7,7 @@ use crate::common::{
 use candid::{Encode, Principal};
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
+use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
@@ -26,24 +27,80 @@ use tempfile::TempDir;
 
 pub struct RosettaTestingEnvironment {
     pub pocket_ic: PocketIc,
-    pub _rosetta_context: RosettaContext,
+    pub rosetta_context: RosettaContext,
     pub rosetta_client: RosettaClient,
     pub network_identifier: NetworkIdentifier,
 }
 
 impl RosettaTestingEnvironment {
-    pub fn builder() -> RosettaTestingEnviornmentBuilder {
-        RosettaTestingEnviornmentBuilder::new()
+    pub fn builder() -> RosettaTestingEnvironmentBuilder {
+        RosettaTestingEnvironmentBuilder::new()
+    }
+
+    pub async fn generate_blocks(&self, args_with_caller: Vec<ArgWithCaller>) {
+        let replica_port = self.pocket_ic.url().unwrap().port().unwrap();
+        for ArgWithCaller {
+            caller,
+            arg,
+            principal_to_basic_identity: _,
+        } in args_with_caller.clone().into_iter()
+        {
+            let caller_agent = Icrc1Agent {
+                agent: get_custom_agent(caller.clone(), replica_port).await,
+                ledger_canister_id: LEDGER_CANISTER_ID.into(),
+            };
+            match arg {
+                LedgerEndpointArg::ApproveArg(approve_arg) => caller_agent
+                    .approve(approve_arg.clone())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .to_u64()
+                    .unwrap(),
+                LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
+                    .transfer(transfer_arg.clone())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .0
+                    .to_u64()
+                    .unwrap(),
+            };
+        }
+    }
+
+    pub async fn restart_rosetta_node(mut self, options: RosettaOptions) -> anyhow::Result<Self> {
+        let rosetta_state_directory = self.rosetta_context.state_directory.clone();
+        self.rosetta_context.kill();
+
+        assert!(rosetta_state_directory.exists());
+
+        let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
+        let rosetta_state_directory =
+            TempDir::new().expect("failed to create a temporary directory");
+        self.rosetta_context = start_rosetta(
+            &rosetta_bin,
+            Some(rosetta_state_directory.path().to_owned()),
+            options,
+        )
+        .await;
+
+        self.rosetta_client =
+            RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
+                .expect("Unable to parse url");
+
+        Ok(self)
     }
 }
 
-pub struct RosettaTestingEnviornmentBuilder {
+pub struct RosettaTestingEnvironmentBuilder {
     pub transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     pub minting_account: Option<Account>,
     pub initial_balances: Option<HashMap<AccountIdentifier, icp_ledger::Tokens>>,
 }
 
-impl RosettaTestingEnviornmentBuilder {
+impl RosettaTestingEnvironmentBuilder {
     pub fn new() -> Self {
         Self {
             transfer_args_for_block_generating: None,
@@ -180,7 +237,7 @@ impl RosettaTestingEnviornmentBuilder {
 
         // Wait for rosetta to catch up with the ledger
         if let Some(last_block_idx) = block_idxes.last() {
-            let rosetta_last_block_idx = wait_for_rosetta_block(
+            let rosetta_last_block_idx = wait_for_rosetta_to_sync_up_to_block(
                 &rosetta_client,
                 network_identifier.clone(),
                 *last_block_idx,
@@ -195,7 +252,7 @@ impl RosettaTestingEnviornmentBuilder {
 
         RosettaTestingEnvironment {
             pocket_ic,
-            _rosetta_context: rosetta_context,
+            rosetta_context,
             rosetta_client,
             network_identifier,
         }

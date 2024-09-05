@@ -43,7 +43,7 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     agent
 }
 
-pub async fn wait_for_rosetta_block(
+pub async fn wait_for_rosetta_to_sync_up_to_block(
     rosetta_client: &RosettaClient,
     network_identifier: NetworkIdentifier,
     block_index: u64,
@@ -116,7 +116,6 @@ pub async fn query_encoded_blocks(
         ),
         length: std::cmp::min(num_blocks, response.chain_length) as usize,
     };
-    println!("Querying blocks: {:?}", block_request);
     Decode!(
         &agent
             .query(&LEDGER_CANISTER_ID.into(), "query_encoded_blocks")

@@ -2,7 +2,7 @@ use crate::common::system_test_environment::RosettaTestingEnvironment;
 use crate::common::utils::get_custom_agent;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::test_identity;
-use crate::common::utils::wait_for_rosetta_block;
+use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use candid::Nat;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
@@ -126,7 +126,7 @@ fn test_account_balances() {
                         block_indices.insert(block_idx);
                     }
 
-                    wait_for_rosetta_block(
+                    wait_for_rosetta_to_sync_up_to_block(
                         &rosetta_testing_environment.rosetta_client,
                         rosetta_testing_environment.network_identifier.clone(),
                         *block_indices.iter().last().unwrap(),
