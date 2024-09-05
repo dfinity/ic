@@ -43,12 +43,11 @@ mod tests;
 /// following soft invariants:
 ///
 ///  * All non-empty input queues are scheduled exactly once.
-///  * A sender is enqueued in `local_sender_schedule` or
-///    `remote_sender_schedule` iff it is present in `scheduled_senders`.
-///  * Local senders are enqueued in the `local_sender_schedule`; remote senders
-///    may be ensured in either schedule (this is because we rely on
-///    `ReplicatedState::canister_states` to decide whether a canister is local,
-///    and this will mis-identify a recently deleted local sender as remote).
+///  * A sender is enqueued in the local or remote input schedule iff present in
+///    the `scheduled_senders` set.
+///  * Local canisters (including ourselves) are scheduled in the local sender
+///    schedule. Canisters that are not known to be local (including potentially
+///    deleted local canisters) may be scheduled in either input schedule.
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub(super) struct InputSchedule {
     /// The input source (local senders, ingress or remote senders) at the front

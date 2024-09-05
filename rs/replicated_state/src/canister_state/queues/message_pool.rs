@@ -176,6 +176,12 @@ pub(super) struct MessagePool {
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
+    ///
+    /// Invariants:
+    ///  * Contains all outbound guaranteed requests:
+    ///    `outbound_guaranteed_request_deadlines.keys().collect() == messages.keys().filter(|id| (id.context(), id.class(), id.kind()) == (Context::Outbound, Class::GuaranteedResponse, Kind::Request)).collect()`
+    ///  * The deadline matches the one recorded in `deadline_queue`:
+    ///    `outbound_guaranteed_request_deadlines.iter().all(|(id, deadline)| deadline_queue.contains(&(deadline, id)))`
     outbound_guaranteed_request_deadlines: BTreeMap<Id, CoarseTime>,
 
     /// Running message stats for the pool.
@@ -489,6 +495,8 @@ impl MessagePool {
     /// Time complexity: `O(log(self.len()))`.
     pub(super) fn shed_largest_message(&mut self) -> Option<(Id, RequestOrResponse)> {
         if let Some((_, id)) = self.size_queue.pop_last() {
+            debug_assert_eq!(Class::BestEffort, id.class());
+
             let msg = self.take_impl(id).unwrap();
             self.remove_from_deadline_queue(id, &msg);
 

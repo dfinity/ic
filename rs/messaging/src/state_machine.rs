@@ -16,7 +16,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
-const PHASE_TIME_OUT_REQUESTS: &str = "time_out_requests";
+const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -109,12 +109,12 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        // Time out requests.
-        let timed_out_requests = state.time_out_requests();
+        // Time out expired messages.
+        let timed_out_messages = state.time_out_requests();
         self.metrics
-            .timed_out_requests_total
-            .inc_by(timed_out_requests);
-        self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &since);
+            .timed_out_messages_total
+            .inc_by(timed_out_messages as u64);
+        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();

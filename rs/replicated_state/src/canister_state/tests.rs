@@ -277,7 +277,7 @@ fn system_subnet_local_push_input_request_ignores_subnet_memory() {
 /// queue type; and ensures that the limits are / are not enforced, depending on
 /// the value of the `should_enforce_limit` parameter.
 fn canister_state_push_input_request_memory_limit_test_impl(
-    subnet_available_memory: i64,
+    initial_subnet_available_memory: i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
     should_enforce_limit: bool,
@@ -285,11 +285,11 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     let mut canister_state = CanisterStateFixture::new().canister_state;
 
     let request = default_input_request();
-    let mut subnet_available_memory_ = subnet_available_memory;
+    let mut subnet_available_memory = initial_subnet_available_memory;
 
     let result = canister_state.push_input(
         request.clone(),
-        &mut subnet_available_memory_,
+        &mut subnet_available_memory,
         own_subnet_type,
         input_queue_type,
     );
@@ -298,15 +298,19 @@ fn canister_state_push_input_request_memory_limit_test_impl(
             Err((
                 StateError::OutOfMemory {
                     requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                    available: subnet_available_memory,
+                    available: initial_subnet_available_memory,
                 },
                 request,
             )),
             result
         );
-        assert_eq!(subnet_available_memory, subnet_available_memory_);
+        assert_eq!(initial_subnet_available_memory, subnet_available_memory);
     } else {
         result.unwrap();
+
+        let expected_subnet_available_memory = 
+            initial_subnet_available_memory - MAX_RESPONSE_COUNT_BYTES as i64;
+        assert_eq!(expected_subnet_available_memory, subnet_available_memory);
     }
 }
 
