@@ -272,4 +272,23 @@ mod tests {
         assert!(is_valid_ipv6_prefix("2a00:111:11:11"));
         assert!(is_valid_ipv6_prefix("2602:fb2b:100:10"));
     }
+
+    #[test]
+    fn test_parse_config_line() {
+        assert_eq!(
+            parse_config_line("key=value"),
+            Some(("key".to_string(), "value".to_string()))
+        );
+        assert_eq!(
+            parse_config_line("   key   =   value   "),
+            Some(("key".to_string(), "value".to_string()))
+        );
+        assert_eq!(parse_config_line(""), None);
+        assert_eq!(parse_config_line("# this is a comment"), None);
+        assert_eq!(parse_config_line("keywithoutvalue"), None);
+        assert_eq!(
+            parse_config_line("key=value=extra"),
+            Some(("key".to_string(), "value=extra".to_string()))
+        );
+    }
 }
