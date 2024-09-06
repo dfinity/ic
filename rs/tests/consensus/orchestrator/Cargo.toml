@@ -57,3 +57,7 @@ path = "unstuck_subnet_test.rs"
 [[bin]]
 name = "ic-systest-node-assign-test"
 path = "node_assign_test.rs"
+
+[[bin]]
+name = "ic-systest-unassigned-node-upgrade"
+path = "unassigned_node_upgrade_test.rs"
