@@ -83,13 +83,11 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         .get("ipv6_address")
         .map(|address| {
             // ipv6_address might be formatted with the trailing suffix. Remove it.
-
-            let address = address
-                .strip_suffix(&format!("/{}", ipv6_subnet))
-                .unwrap_or(address);
             address
-                .parse::<Ipv6Addr>()
-                .context(format!("Invalid IPv6 address: {}", address))
+            .strip_suffix(&format!("/{}", ipv6_subnet))
+            .unwrap_or(address)
+            .parse::<Ipv6Addr>()
+            .context(format!("Invalid IPv6 address: {}", address))
         })
         .transpose()?;
 
