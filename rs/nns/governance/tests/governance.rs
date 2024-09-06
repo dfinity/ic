@@ -92,7 +92,6 @@ use ic_nns_governance::{
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
 };
@@ -11723,15 +11722,51 @@ lazy_static! {
         ..Default::default()
     };
 
-    static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
-        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-        create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-        proposal_id: 1,
-        random_swap_start_time: GlobalTimeOfDay {
-            seconds_after_utc_midnight: Some(RANDOM_U64)
-        },
-        neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
-    }).unwrap();
+    static ref SNS_INIT_PAYLOAD: SnsInitPayload = {
+        let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+
+        // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+        // is inlined from `Governance::make_sns_init_payload`.
+        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+            let random_swap_start_time = GlobalTimeOfDay {
+                seconds_after_utc_midnight: Some(RANDOM_U64)
+            };
+
+            let start_time = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.start_time);
+
+            let duration = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.duration);
+
+            CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                start_time.unwrap_or(random_swap_start_time),
+                duration.unwrap_or_default(),
+                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+            )
+            .expect(
+                "Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds \
+                 for SNS_INIT_PAYLOAD."
+            )
+        };
+
+        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)
+            .expect(
+                "Cannot build SNS_INIT_PAYLOAD from \
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."
+            );
+
+        SnsInitPayload {
+            neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+            nns_proposal_id: Some(1),
+            swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+            swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+            ..sns_init_payload
+        }
+    };
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {
