@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::{get_config_ini_settings, get_deployment_settings, serialize_and_write_config};
+use config::{get_config_ini_settings, serialize_and_write_config};
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use utils::deployment::read_deployment_file;
 
 use config::types::{
     GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig, SetupOSSettings,
@@ -70,8 +71,16 @@ pub fn main() -> Result<()> {
             let (network_settings, verbose) = get_config_ini_settings(config_ini_path)?;
 
             // get deployment.json variables
-            let (vm_memory, vm_cpu, nns_urls, hostname, elasticsearch_hosts) =
-                get_deployment_settings(deployment_json_path)?;
+            let deployment_json = read_deployment_file(deployment_json_path)?;
+            let vm_memory = deployment_json.resources.memory;
+            let vm_cpu = deployment_json
+                .resources
+                .cpu
+                .clone()
+                .unwrap_or("kvm".to_string());
+            let nns_urls = deployment_json.nns.url.clone();
+            let hostname = deployment_json.deployment.name.to_string();
+            let elasticsearch_hosts = deployment_json.logging.hosts.to_string();
 
             let icos_settings = ICOSSettings {
                 nns_public_key_path: nns_public_key_path.to_path_buf(),

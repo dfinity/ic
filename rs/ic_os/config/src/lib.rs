@@ -10,8 +10,6 @@ use std::path::Path;
 
 use anyhow::bail;
 use anyhow::{Context, Result};
-use url::Url;
-use utils::deployment::read_deployment_file;
 
 pub mod types;
 use crate::types::NetworkSettings;
@@ -28,23 +26,6 @@ pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
 
 pub static DEFAULT_HOSTOS_CONFIG_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
-
-pub fn get_deployment_settings(
-    deployment_json_path: &Path,
-) -> Result<(u32, String, Vec<Url>, String, String)> {
-    let deployment_json = read_deployment_file(deployment_json_path)?;
-    Ok((
-        deployment_json.resources.memory,
-        deployment_json
-            .resources
-            .cpu
-            .clone()
-            .unwrap_or("kvm".to_string()),
-        deployment_json.nns.url.clone(),
-        deployment_json.deployment.name.to_string(),
-        deployment_json.logging.hosts.to_string(),
-    ))
-}
 
 fn parse_config_line(line: &str) -> Option<(String, String)> {
     // Skip blank lines and comments
