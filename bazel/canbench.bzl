@@ -74,4 +74,5 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
             data = data,
             env = env,
             tags = ["requires-network"],
+            args = ["--test"],
         )

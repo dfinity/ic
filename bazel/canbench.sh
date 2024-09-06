@@ -12,9 +12,6 @@
 
 set -eEuo pipefail
 
-# Whether to update the results file.
-UPDATE=${1:-}
-
 RUNFILES="$PWD"
 REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
@@ -33,7 +30,10 @@ fi
 
 echo ${RUNFILES}
 
-if [ -n "${UPDATE}" ]; then
+if [ $# -eq 0 ]; then
+    # Runs the benchmark without updating the results file.
+    ${CANBENCH_BIN}
+elif [ "$1" = "--update" ]; then
     # Runs the benchmark while updating the results file.
     ${CANBENCH_BIN} --persist
 
@@ -43,22 +43,16 @@ if [ -n "${UPDATE}" ]; then
         cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 else
-    # Runs the benchmark without updating the results file.
-    ${CANBENCH_BIN} --less-verbose >$CANBENCH_OUTPUT
+    # Runs the benchmark test that fails if the diffs are new or above the threshold.
+    ${CANBENCH_BIN} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
-        UPDATED_MSG="**\`$REPO_RESULTS_PATH\` is not up to date ❌**
-        If the performance change is expected, run \`canbench --persist\` to save the updated benchmark results."
-
-        # canbench results file not up to date. Fail the job.
-        # echo "EXIT_STATUS=1" >> "$GITHUB_ENV"
         cat "$CANBENCH_OUTPUT"
+        echo "**\`$REPO_RESULTS_PATH\` is not up to date ❌**
+        If the performance change is expected, run \`_update\` target to save the updated benchmark results."
         exit 1
     else
-        UPDATED_MSG="**\`$REPO_RESULTS_PATH\` is up to date ✅**"
-
-        # canbench results file is up to date. The job succeeds.
-        #echo "EXIT_STATUS=0" >> "$GITHUB_ENV"
         cat "$CANBENCH_OUTPUT"
+        echo "**\`$REPO_RESULTS_PATH\` is up to date ✅**"
         exit 0
     fi
 fi
