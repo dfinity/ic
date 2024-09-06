@@ -2302,15 +2302,9 @@ mod test_functions_tests {
         F: InvertibleFunction + AnalyticallyInvertibleFunction,
     {
         let Ok(expected) = function.invert_analytically(target_y) else {
-            // println!(
-            //     "Cannot run inverse test as a u64 analytical inverse does not exist for {}.",
-            //     target_y,
-            // );
             return;
         };
         let observed = function.invert(target_y).unwrap();
-        // println!("{}, target_y = {target_y}", std::any::type_name::<F>(),);
-
         // Sometimes exact equality cannot be reached with our search strategy. We tolerate errors
         // up to 1 E8.
         assert!(
