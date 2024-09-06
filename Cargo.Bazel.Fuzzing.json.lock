@@ -1,5 +1,5 @@
 {
-  "checksum": "d363f2ee7bfb824995ac6ae7b8ee5339fb984e8ff87b80643dbeaf0876e53a95",
+  "checksum": "d5df3c4abc15a738eace4dc09b45a30daafdb0323821fdd79230310a49331ded",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18579,6 +18579,10 @@
             {
               "id": "ssh2 0.9.4",
               "target": "ssh2"
+            },
+            {
+              "id": "static_assertions 1.1.0",
+              "target": "static_assertions"
             },
             {
               "id": "strum 0.26.2",
@@ -78069,6 +78073,7 @@
     "slog-term 2.9.1",
     "socket2 0.5.7",
     "ssh2 0.9.4",
+    "static_assertions 1.1.0",
     "strum 0.26.2",
     "strum_macros 0.26.2",
     "stubborn-io 0.3.2",

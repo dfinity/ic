@@ -630,7 +630,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
-                rev = "3be26b5a2c71bf56e05b910951c1935a1ac550c4",
+                tag = "0.1.0-b0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -1243,6 +1243,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ssh2": crate.spec(
                 version = "0.9.4",
+            ),
+            "static_assertions": crate.spec(
+                version = "1.1.0",
             ),
             "strum": crate.spec(
                 version = "^0.26.2",

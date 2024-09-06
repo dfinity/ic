@@ -172,28 +172,6 @@ fn test_modify_neuron_update_indexes() {
 }
 
 #[test]
-fn test_heap_range_with_begin_and_limit() {
-    let neuron_1 = simple_neuron_builder(1).build();
-    let neuron_3 = simple_neuron_builder(3).build();
-    let neuron_7 = simple_neuron_builder(7).build();
-    let neuron_12 = simple_neuron_builder(12).build();
-
-    let neuron_store = NeuronStore::new(btreemap! {
-        1 => neuron_1,
-        3 => neuron_3.clone(),
-        7 => neuron_7.clone(),
-        12 => neuron_12,
-    });
-
-    let observed_neurons: Vec<_> = neuron_store
-        .range_heap_neurons(NeuronId { id: 3 }..)
-        .take(2)
-        .collect();
-
-    assert_eq!(observed_neurons, vec![neuron_3, neuron_7],);
-}
-
-#[test]
 fn test_add_neurons() {
     // Step 1.1: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());

@@ -54,7 +54,6 @@ members = [
     "rs/consensus",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
@@ -152,6 +151,7 @@ members = [
     "rs/interfaces/registry/mocks",
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
+    "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -368,6 +368,9 @@ members = [
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",
     "rs/tests/testing_verification/testnets",
+    "rs/tla_instrumentation/local_key",
+    "rs/tla_instrumentation/tla_instrumentation",
+    "rs/tla_instrumentation/tla_instrumentation_proc_macros",
     "rs/tree_deserializer",
     "rs/types/types",
     "rs/types/types_test_utils",
@@ -639,6 +642,7 @@ slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+static_assertions = "1.1.0"
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
@@ -678,7 +682,7 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
-wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
+wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
 wasmparser = "0.212.0"
 wasmprinter = "0.212.0"
 wast = "212.0.0"
