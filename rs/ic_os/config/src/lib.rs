@@ -177,8 +177,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env::temp_dir;
     use std::path::PathBuf;
+    use tempfile::{tempdir, NamedTempFile};
     use types::{
         GuestOSConfig, GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings,
         ICOSSettings, SetupOSConfig, SetupOSSettings,
@@ -242,10 +242,10 @@ mod tests {
             guestos_settings: guestos_settings.clone(),
         };
 
-        let temp_dir = temp_dir();
-        let json_setupos_file = temp_dir.join("test_setupos_config.json");
-        let json_hostos_file = temp_dir.join("test_hostos_config.json");
-        let json_guestos_file = temp_dir.join("test_guestos_config.json");
+        let temp_dir = tempdir().expect("Failed to create temp directory");
+        let json_setupos_file = temp_dir.path().join("test_setupos_config.json");
+        let json_hostos_file = temp_dir.path().join("test_hostos_config.json");
+        let json_guestos_file = temp_dir.path().join("test_guestos_config.json");
 
         assert!(serialize_and_write_config(&json_setupos_file, &setupos_config_struct).is_ok());
         assert!(serialize_and_write_config(&json_hostos_file, &hostos_config_struct).is_ok());
@@ -294,15 +294,14 @@ mod tests {
 
     #[test]
     fn test_config_map_from_path() -> Result<()> {
-        let mut file_path = PathBuf::from(std::env::temp_dir());
-        file_path.push("test_config_file.txt");
+        let mut temp_file = NamedTempFile::new()?;
+        let file_path = temp_file.path().to_path_buf();
 
-        let mut file = File::create(&file_path)?;
-        writeln!(file, "key1=value1")?;
-        writeln!(file, "key2=value2")?;
-        writeln!(file, "# This is a comment")?;
-        writeln!(file, "key3=value3")?;
-        writeln!(file, "")?;
+        writeln!(temp_file, "key1=value1")?;
+        writeln!(temp_file, "key2=value2")?;
+        writeln!(temp_file, "# This is a comment")?;
+        writeln!(temp_file, "key3=value3")?;
+        writeln!(temp_file, "")?;
 
         let config_map = config_map_from_path(&file_path)?;
 
@@ -311,14 +310,17 @@ mod tests {
         assert_eq!(config_map.get("key3"), Some(&"value3".to_string()));
         assert_eq!(config_map.get("bad_key"), None);
 
-        let mut file_path_crlf = PathBuf::from(std::env::temp_dir());
-        file_path_crlf.push("test_config_file_crlf.txt");
-        let mut file_crlf = File::create(&file_path_crlf)?;
-        writeln!(file_crlf, "key4=value4\r\nkey5=value5\r\n")?;
+        // CRLF test
+        let mut temp_file_crlf = NamedTempFile::new()?;
+        let file_path_crlf = temp_file_crlf.path().to_path_buf();
+
+        writeln!(temp_file_crlf, "key4=value4\r\nkey5=value5\r\n")?;
 
         let config_map_crlf = config_map_from_path(&file_path_crlf)?;
+
         assert_eq!(config_map_crlf.get("key4"), Some(&"value4".to_string()));
         assert_eq!(config_map_crlf.get("key5"), Some(&"value5".to_string()));
+        assert_eq!(config_map.get("bad_key"), None);
 
         std::fs::remove_file(&file_path)?;
         std::fs::remove_file(&file_path_crlf)?;
