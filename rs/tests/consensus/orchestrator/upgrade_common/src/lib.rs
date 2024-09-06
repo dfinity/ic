@@ -1,22 +1,21 @@
 /* tag::catalog[]
-   Title:: Upgradability from/to the mainnet replica version.
+Title:: Upgradability from/to the mainnet replica version.
 
-   Goal:: Ensure the upgradability of the branch version against the oldest used replica version
+Goal:: Ensure the upgradability of the branch version against the oldest used replica version
 
-   Runbook::
-   . Setup an IC with 4-nodes (App/NNS) subnet under test using the mainnet replica version.
-   . Upgrade each type of subnet to the branch version, and downgrade again.
-   . During both upgrades simulate a disconnected node and make sure it catches up.
+Runbook::
+. Setup an IC with 4-nodes (App/NNS) subnet under test using the mainnet replica version.
+. Upgrade each type of subnet to the branch version, and downgrade again.
+. During both upgrades simulate a disconnected node and make sure it catches up.
 
-   Success:: Upgrades work into both directions for all subnet types.
+Success:: Upgrades work into both directions for all subnet types.
 
-   end::catalog[] */
+end::catalog[] */
 
 use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries,
-     store_message,
+    can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
@@ -27,10 +26,7 @@ use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{
-        test_env::TestEnv,
-        test_env_api::*,
-    },
+    driver::{test_env::TestEnv, test_env_api::*},
     util::{block_on, MessageCanister},
 };
 use ic_types::SubnetId;
@@ -54,13 +50,13 @@ pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String 
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     block_on(bless_replica_version(
-            nns_node,
-            &original_branch_version,
-            UpdateImageType::ImageTest,
-            &logger,
-            &sha256,
-            vec![upgrade_url.to_string()],
-            ));
+        nns_node,
+        &original_branch_version,
+        UpdateImageType::ImageTest,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
     info!(&logger, "Blessed branch version");
     branch_version
 }
@@ -75,13 +71,13 @@ pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String
     let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
     let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
     block_on(bless_replica_version(
-            nns_node,
-            &mainnet_version,
-            UpdateImageType::Image,
-            &logger,
-            &sha256,
-            vec![upgrade_url.to_string()],
-            ));
+        nns_node,
+        &mainnet_version,
+        UpdateImageType::Image,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
     info!(&logger, "Blessed mainnet version");
     mainnet_version
 }
