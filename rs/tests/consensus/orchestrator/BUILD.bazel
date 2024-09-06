@@ -23,7 +23,6 @@ rust_library(
     crate_name = "ic_consensus_system_test_upgrade_common",
     deps = [
         # Keep sorted.
-        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
@@ -35,7 +34,6 @@ rust_library(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
-        "@crate_index//:tokio",
     ],
 )
 
@@ -414,6 +412,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:tokio",
     ]
 )
 

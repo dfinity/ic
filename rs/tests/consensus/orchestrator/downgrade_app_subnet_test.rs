@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::downgrade_app_subnet;
+use ic_consensus_system_test_upgrade_common::{
+    bless_mainnet_version, get_chain_key_canister_and_public_key, upgrade,
+};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -10,7 +12,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+};
 use ic_system_test_driver::systest;
 use ic_types::Height;
 
@@ -44,6 +48,28 @@ fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+}
+
+// Tests a downgrade of the app subnet to the mainnet version
+fn downgrade_app_subnet(env: TestEnv) {
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let mainnet_version = bless_mainnet_version(&env, &nns_node);
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let ecdsa_state = get_chain_key_canister_and_public_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        make_key_ids_for_all_schemes(),
+    );
+
+    upgrade(
+        &env,
+        &nns_node,
+        &mainnet_version,
+        SubnetType::Application,
+        Some(&ecdsa_state),
+    );
 }
 
 fn main() -> Result<()> {

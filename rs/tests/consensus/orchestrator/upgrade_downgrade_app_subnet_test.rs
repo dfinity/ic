@@ -2,18 +2,29 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::upgrade_downgrade_app_subnet;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
+use ic_consensus_system_test_upgrade_common::{
+    bless_branch_version, get_chain_key_canister_and_public_key, start_workload, upgrade,
+};
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg_with_retries, install_nns_and_check_progress,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, ChainSignatureRequest,
+};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::{
+    read_dependency_to_string, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+};
 use ic_system_test_driver::systest;
+use ic_system_test_driver::util::{block_on, get_app_subnet_and_node, MessageCanister};
 use ic_types::Height;
+use tokio::runtime::{Builder, Runtime};
 
+const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 9;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
@@ -45,6 +56,70 @@ fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+}
+
+// Tests an upgrade of the app subnet to the branch version and a downgrade back to the mainnet version
+fn upgrade_downgrade_app_subnet(env: TestEnv) {
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let branch_version = bless_branch_version(&env, &nns_node);
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let key_ids = make_key_ids_for_all_schemes();
+    get_chain_key_canister_and_public_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        key_ids.clone(),
+    );
+
+    let logger = env.logger();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+
+    let principal = block_on(MessageCanister::new_with_cycles(
+        &app_agent,
+        app_node.effective_canister_id(),
+        u128::MAX,
+    ))
+    .canister_id();
+
+    let requests = key_ids
+        .iter()
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone(), SCHNORR_MSG_SIZE_BYTES))
+        .collect::<Vec<_>>();
+
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(16)
+        .max_blocking_threads(16)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.spawn(start_workload(app_subnet, requests, logger));
+
+    let (faulty_node, can_id, msg) = upgrade(
+        &env,
+        &nns_node,
+        &branch_version,
+        SubnetType::Application,
+        None,
+    );
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    upgrade(
+        &env,
+        &nns_node,
+        &mainnet_version,
+        SubnetType::Application,
+        None,
+    );
+    // Make sure we can still read the message stored before the first upgrade
+    assert!(can_read_msg_with_retries(
+        &env.logger(),
+        &faulty_node.get_public_url(),
+        can_id,
+        &msg,
+        /*retries=*/ 3
+    ));
 }
 
 fn main() -> Result<()> {
