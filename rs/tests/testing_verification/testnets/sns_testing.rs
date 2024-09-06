@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create sns_testing --lifetime-mins=180 --output-dir=./sns_testing -- --test_tmpdir=./sns_testing
 //
 // The --output-dir=./sns_testing will store the debug output of the test driver in the specified directory.

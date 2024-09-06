@@ -1203,7 +1203,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
 #[test]
 fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes";
+    let metric = "canister_log_memory_usage_bytes_v2";
     const PAYLOAD_SIZE: usize = 1_000;
     let (env, canister_id, _controller) = setup_with_controller(
         wat_canister()

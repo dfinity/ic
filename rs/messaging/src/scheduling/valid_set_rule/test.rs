@@ -1,7 +1,7 @@
 use super::*;
 
 use assert_matches::assert_matches;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00,

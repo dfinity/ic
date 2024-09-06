@@ -11,7 +11,7 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }

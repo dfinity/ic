@@ -39,7 +39,7 @@ def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
 
     This seems to work across environments:
       - CI - running K8S containerd runners
-      - gitlab-ci/container/container-run.sh
+      - ci/container/container-run.sh
 
     Returns the unique tmpfs mount point
     """
