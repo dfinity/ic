@@ -22,7 +22,7 @@ while test $# -gt 0; do
 done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-DOCKER_IMG_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
+DOCKER_IMG_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 
 pushd "$REPO_ROOT"
 
@@ -42,7 +42,7 @@ DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t docker.io/dfinity/ic-build:latest \
     -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     --build-arg RUST_VERSION="$RUST_VERSION" \
-    -f gitlab-ci/container/Dockerfile .
+    -f ci/container/Dockerfile .
 
 if [ "${ONLY_BAZEL:-false}" == "true" ]; then
     popd
