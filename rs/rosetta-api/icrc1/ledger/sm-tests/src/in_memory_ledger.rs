@@ -10,6 +10,7 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::Instant;
 
 #[cfg(test)]
 mod tests;
@@ -240,12 +241,16 @@ where
     ) {
         let key = K::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            let current_allowance = self
+            let current_allowance_amount = self
                 .allowances
                 .get(&key)
-                .unwrap_or_else(|| panic!("No current allowance but expected allowance set"));
-            if current_allowance.amount != *expected_allowance {
-                panic!("Expected allowance does not match current allowance");
+                .map(|allowance| allowance.amount.clone())
+                .unwrap_or(Tokens::zero());
+            if current_allowance_amount != *expected_allowance {
+                panic!(
+                    "Expected allowance ({:?}) does not match current allowance ({:?})",
+                    expected_allowance, current_allowance_amount
+                );
             }
         }
         if amount == &Tokens::zero() {
@@ -324,6 +329,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 
     pub fn ingest_icrc1_ledger_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
+        let start = Instant::now();
         for block in blocks {
             if let Some(fee_collector) = block.fee_collector {
                 self.fee_collector = Some(fee_collector);
@@ -364,6 +370,11 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
             blocks.last().unwrap().timestamp,
         ));
+        println!(
+            "initialized InMemoryLedger with {} blocks in {:?}",
+            blocks.len(),
+            start.elapsed()
+        );
     }
 
     pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
@@ -429,12 +440,20 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
 }
 
 pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+    let start = Instant::now();
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
-    println!("retrieved all ledger and archive blocks");
+    println!(
+        "retrieved all ledger and archive blocks in {:?}",
+        start.elapsed()
+    );
     let mut expected_ledger_state = InMemoryLedger::new();
     expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
-    println!("recreated expected ledger state");
+    println!("recreated expected ledger state in {:?}", start.elapsed());
+    let start = Instant::now();
     expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
-    println!("ledger state verified successfully");
+    println!(
+        "ledger state verified successfully in {:?}",
+        start.elapsed()
+    );
 }

@@ -15,15 +15,16 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::str::FromStr;
-use std::time::UNIX_EPOCH;
+use std::time::{Instant, UNIX_EPOCH};
 
 mod common;
 
-const NUM_TRANSACTIONS_PER_TYPE: usize = 1;
-const MINT_AMOUNT: u64 = 100_000_000;
-const TRANSFER_AMOUNT: u64 = 10_000_000;
-const APPROVE_AMOUNT: u64 = 1_000_000;
-const TRANSFER_FROM_AMOUNT: u64 = 100_000;
+const NUM_TRANSACTIONS_PER_TYPE: usize = 20;
+const MINT_AMOUNT: u64 = 1_000_000_000;
+const TRANSFER_AMOUNT: u64 = 100_000_000;
+const APPROVE_AMOUNT: u64 = 10_000_000;
+const TRANSFER_FROM_AMOUNT: u64 = 1_000_000;
+const BURN_AMOUNT: u64 = 100_000;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -172,8 +173,12 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     for (canister_id_str, canister_name) in canister_id_and_names {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
+        let start = Instant::now();
         let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
-        println!("retrieved all ledger and archive blocks");
+        println!(
+            "retrieved all ledger and archive blocks in {:?}",
+            start.elapsed()
+        );
         let mut initial_expected_ledger_state =
             ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new();
         initial_expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
@@ -197,6 +202,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
             (canister_id_str, canister_name),
             bump_gzip_timestamp(&ledger_wasm),
         );
+        generate_transactions(
+            &state_machine,
+            canister_id,
+            &mut initial_expected_ledger_state,
+        );
         ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state(
             &state_machine,
             canister_id,
@@ -207,7 +217,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
             (canister_id_str, canister_name),
             mainnet_ledger_wasm.clone(),
         );
-        assert_eq!(1, 64);
+        generate_transactions(
+            &state_machine,
+            canister_id,
+            &mut initial_expected_ledger_state,
+        );
     }
 }
 
@@ -216,6 +230,7 @@ fn generate_transactions(
     canister_id: CanisterId,
     in_memory_ledger: &mut InMemoryLedger<ApprovalKey, Account, Tokens>,
 ) {
+    let start = Instant::now();
     let minter_account = ic_icrc1_ledger_sm_tests::minting_account(&state_machine, canister_id)
         .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
     let fee = Tokens::from(ic_icrc1_ledger_sm_tests::fee(&state_machine, canister_id));
@@ -232,6 +247,7 @@ fn generate_transactions(
     }
     // Mint
     let mut minted = 0usize;
+    println!("minting");
     for to in &accounts {
         send_transfer(
             &state_machine,
@@ -239,14 +255,14 @@ fn generate_transactions(
             minter_account.owner,
             &TransferArg {
                 from_subaccount: minter_account.subaccount,
-                to: to.copy(),
-                fee: Some(Nat::from(fee)),
+                to: *to,
+                fee: None,
                 created_at_time: Some(
                     state_machine
                         .time()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_millis() as u64,
+                        .as_nanos() as u64,
                 ),
                 memo: Some(Memo::from(minted as u64)),
                 amount: Nat::from(MINT_AMOUNT),
@@ -260,6 +276,7 @@ fn generate_transactions(
         }
     }
     // Transfer
+    println!("transferring");
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let to = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
@@ -276,7 +293,7 @@ fn generate_transactions(
                         .time()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_millis() as u64,
+                        .as_nanos() as u64,
                 ),
                 memo: Some(Memo::from(i as u64)),
                 amount: Nat::from(TRANSFER_AMOUNT),
@@ -292,6 +309,7 @@ fn generate_transactions(
         );
     }
     // Approve
+    println!("approving");
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
@@ -307,7 +325,7 @@ fn generate_transactions(
             .unwrap()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_millis() as u64;
+            .as_nanos() as u64;
         ic_icrc1_ledger_sm_tests::send_approval(
             &state_machine,
             canister_id,
@@ -325,7 +343,7 @@ fn generate_transactions(
                         .time()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_millis() as u64,
+                        .as_nanos() as u64,
                 ),
             },
         )
@@ -347,6 +365,7 @@ fn generate_transactions(
         );
     }
     // Transfer From
+    println!("transferring from");
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
@@ -367,7 +386,7 @@ fn generate_transactions(
                         .time()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
-                        .as_millis() as u64,
+                        .as_nanos() as u64,
                 ),
             },
         )
@@ -380,6 +399,43 @@ fn generate_transactions(
             &Some(fee),
         );
     }
+    // Burn
+    println!("burning");
+    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
+        let from = accounts[i];
+        send_transfer(
+            &state_machine,
+            canister_id,
+            from.owner,
+            &TransferArg {
+                from_subaccount: from.subaccount,
+                to: minter_account,
+                fee: None,
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(i as u64)),
+                amount: Nat::from(BURN_AMOUNT),
+            },
+        )
+        .expect("should be able to transfer");
+        in_memory_ledger.process_transfer(
+            &from,
+            &minter_account,
+            &None,
+            &Tokens::from(BURN_AMOUNT),
+            &None,
+        );
+    }
+    println!(
+        "generated {} transactions in {:?}",
+        NUM_TRANSACTIONS_PER_TYPE * 5,
+        start.elapsed()
+    );
 }
 
 fn upgrade_canister(
@@ -387,10 +443,16 @@ fn upgrade_canister(
     (canister_id_str, canister_name): (&str, &str),
     ledger_wasm: Wasm,
 ) {
+    let start = Instant::now();
     let canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
     upgrade_ledger(state_machine, ledger_wasm, canister_id);
-    println!("Upgraded {} '{}'", canister_name, canister_id_str);
+    println!(
+        "Upgraded {} '{}' in {:?}",
+        canister_name,
+        canister_id_str,
+        start.elapsed()
+    );
 }
 
 fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: CanisterId) {
