@@ -78,3 +78,7 @@ path = "upgrade_with_alternative_urls.rs"
 [[bin]]
 name = "ic-systest-upgrade-app-subnet"
 path = "upgrade_app_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-downgrade-app-subnet"
+path = "downgrade_app_subnet_test.rs"
