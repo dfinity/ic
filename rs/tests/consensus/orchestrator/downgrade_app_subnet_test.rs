@@ -38,7 +38,6 @@ fn setup(env: TestEnv) {
         });
 
     InternetComputer::new()
-        .with_mainnet_config()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(subnet_under_test)
         .setup_and_start(&env)
