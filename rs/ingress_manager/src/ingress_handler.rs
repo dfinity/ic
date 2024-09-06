@@ -59,7 +59,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 let ingress_object = &artifact.message;
 
                 // If the ingress pool is full, discard the message
-                if pool.exceeds_limit(&ingress_object.peer_id) {
+                if pool.exceeds_limit(&ingress_object.originator_id) {
                     return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
                 }
 

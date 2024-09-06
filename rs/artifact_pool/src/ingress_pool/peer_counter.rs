@@ -40,39 +40,41 @@ impl PeerCounters {
     }
 
     pub(super) fn observe(&mut self, ingress_message: &IngressPoolObject) {
-        self.message_counters.add(ingress_message.peer_id, 1);
+        self.message_counters.add(ingress_message.originator_id, 1);
         self.bytes_counters
-            .add(ingress_message.peer_id, ingress_message.count_bytes());
+            .add(ingress_message.originator_id, ingress_message.count_bytes());
     }
 
     pub(super) fn forget(&mut self, ingress_message: &IngressPoolObject) {
-        self.message_counters.subtract(ingress_message.peer_id, 1);
+        self.message_counters
+            .subtract(ingress_message.originator_id, 1);
         self.bytes_counters
-            .subtract(ingress_message.peer_id, ingress_message.count_bytes());
+            .subtract(ingress_message.originator_id, ingress_message.count_bytes());
     }
 
     pub(super) fn count_total_bytes(&self) -> usize {
         self.bytes_counters.total()
     }
 
-    pub(super) fn get_counters(&self, peer_id: &NodeId) -> Counter {
+    pub(super) fn get_counters(&self, originator_id: &NodeId) -> Counter {
         Counter {
             bytes: self
                 .bytes_counters
                 .counter_per_peer
-                .get(peer_id)
+                .get(originator_id)
                 .copied()
                 .unwrap_or_default(),
             messages: self
                 .message_counters
                 .counter_per_peer
-                .get(peer_id)
+                .get(originator_id)
                 .copied()
                 .unwrap_or_default(),
         }
     }
 }
 
+// TODO: find a better name for this structure
 #[derive(Clone)]
 struct PeerCounter {
     counter_per_peer: BTreeMap<NodeId, usize>,
@@ -87,12 +89,12 @@ impl PeerCounter {
         }
     }
 
-    fn add(&mut self, peer_id: NodeId, count: usize) {
-        *self.counter_per_peer.entry(peer_id).or_default() += count;
+    fn add(&mut self, originator_id: NodeId, count: usize) {
+        *self.counter_per_peer.entry(originator_id).or_default() += count;
     }
 
-    fn subtract(&mut self, peer_id: NodeId, count: usize) {
-        match self.counter_per_peer.entry(peer_id) {
+    fn subtract(&mut self, originator_id: NodeId, count: usize) {
+        match self.counter_per_peer.entry(originator_id) {
             Entry::Occupied(mut entry) => {
                 let counter = entry.get_mut();
                 *counter = counter.saturating_sub(count);
@@ -104,13 +106,13 @@ impl PeerCounter {
             Entry::Vacant(_) => {
                 warn!(
                     self.log,
-                    "Attempting to subtract the counter for unknown peer: {}", peer_id
+                    "Attempting to subtract the counter for unknown node: {}", originator_id
                 );
 
                 if cfg!(debug_assertions) {
                     panic!(
-                        "Attempting to subtract the counter for unknown peer: {}",
-                        peer_id
+                        "Attempting to subtract the counter for unknown node: {}",
+                        originator_id
                     );
                 }
             }
@@ -179,7 +181,10 @@ mod tests {
         );
     }
 
-    fn fake_ingress_pool_object(peer_id: NodeId, nonce: u64) -> IngressPoolObject {
-        IngressPoolObject::new(peer_id, SignedIngressBuilder::new().nonce(nonce).build())
+    fn fake_ingress_pool_object(originator_id: NodeId, nonce: u64) -> IngressPoolObject {
+        IngressPoolObject::new(
+            originator_id,
+            SignedIngressBuilder::new().nonce(nonce).build(),
+        )
     }
 }
