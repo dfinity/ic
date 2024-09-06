@@ -82,10 +82,10 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         .map(|address| {
             // ipv6_address might be formatted with the trailing suffix. Remove it.
             address
-            .strip_suffix(&format!("/{}", ipv6_subnet))
-            .unwrap_or(address)
-            .parse::<Ipv6Addr>()
-            .context(format!("Invalid IPv6 address: {}", address))
+                .strip_suffix(&format!("/{}", ipv6_subnet))
+                .unwrap_or(address)
+                .parse::<Ipv6Addr>()
+                .context(format!("Invalid IPv6 address: {}", address))
         })
         .transpose()?;
 
@@ -174,8 +174,9 @@ fn ensure_directory_exists(path: &Path) -> Result<()> {
 }
 
 pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
-    let file = File::open(file_path)
-        .context(format!("Failed to open file: {}", file_path))?;
-    serde_json::from_reader(file)
-        .context(format!("Failed to deserialize JSON from file: {}", file_path))
+    let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
+    serde_json::from_reader(file).context(format!(
+        "Failed to deserialize JSON from file: {}",
+        file_path
+    ))
 }
