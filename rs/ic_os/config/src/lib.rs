@@ -265,4 +265,11 @@ mod tests {
         assert_eq!(hostos_config_struct, deserialized_hostos_config);
         assert_eq!(guestos_config_struct, deserialized_guestos_config);
     }
+
+    #[test]
+    fn test_is_valid_ipv6_prefix() {
+        assert!(is_valid_ipv6_prefix("2a00:1111:1111:1111"));
+        assert!(is_valid_ipv6_prefix("2a00:111:11:11"));
+        assert!(is_valid_ipv6_prefix("2602:fb2b:100:10"));
+    }
 }
