@@ -270,6 +270,7 @@ rust_test(
             "@crate_index//:ic-cdk-macros",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
+        add_test = True,
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",

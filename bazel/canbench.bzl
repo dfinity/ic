@@ -5,7 +5,7 @@ This module defines functions to run benchmarks using canbench.
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
-def rust_canbench(name, results_file, **kwargs):
+def rust_canbench(name, results_file, add_test=False, **kwargs):
     """ Run a Rust benchmark using canbench. 
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
@@ -14,6 +14,7 @@ def rust_canbench(name, results_file, **kwargs):
     Args:
         name: The name of the rule.
         results_file: The file used store the benchmark results for future comparison.
+        add_test: If True add an additional _test target that fails if canbench benchmark fails.
         **kwargs: Additional arguments to pass to rust_binary.
     """
 
@@ -64,11 +65,13 @@ def rust_canbench(name, results_file, **kwargs):
         args = ["--update"],
     )
 
-    native.sh_test(
-        name = name + "_test",
-        srcs = [
-            "//bazel:canbench.sh",
-        ],
-        data = data,
-        env = env,
-    )
+    if add_test:
+        native.sh_test(
+            name = name + "_test",
+            srcs = [
+                "//bazel:canbench.sh",
+            ],
+            data = data,
+            env = env,
+            tags = ["requires-network"],
+        )
