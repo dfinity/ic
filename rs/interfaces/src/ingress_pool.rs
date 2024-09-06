@@ -19,22 +19,24 @@ pub struct IngressPoolObject {
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
 
-    /// Which peer the node has received the ingress message from.
-    pub peer_id: NodeId,
+    // TODO: Once/if we start signing ingress messages, determine the `originator_id` by extracting
+    // the signer from the signature.
+    /// Which the ingress message originates from.
+    pub originator_id: NodeId,
 
     /// Byte size of the ingress message.
     byte_size: usize,
 }
 
 impl IngressPoolObject {
-    pub fn new(peer_id: NodeId, signed_ingress: SignedIngress) -> Self {
+    pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
         let message_id = signed_ingress.id();
         let byte_size = signed_ingress.count_bytes();
 
         Self {
             signed_ingress,
             message_id,
-            peer_id,
+            originator_id,
             byte_size,
         }
     }
@@ -112,8 +114,8 @@ pub trait IngressPool: Send + Sync {
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
 
-    /// Check whether we already have too many messages from the given peer.
-    fn exceeds_limit(&self, peer_id: &NodeId) -> bool;
+    /// Check whether we already have too many messages from the node.
+    fn exceeds_limit(&self, originator_id: &NodeId) -> bool;
 }
 
 /// Interface to throttle user ingress messages
