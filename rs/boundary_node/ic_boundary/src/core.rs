@@ -158,10 +158,19 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         dns_resolver: Some(dns_resolver),
     };
 
+    // HTTP client for health checks
+    let http_client_check = http::client::ReqwestClient::new(
+        http::client::new(http_client_opts.clone())
+            .context("unable to create HTTP client for checks")?,
+    );
+    let http_client_check = Arc::new(http_client_check);
+
+    // HTTP client for normal requests
     let http_client = http::client::ReqwestClientRoundRobin::new(
         http_client_opts,
         cli.listen.http_client_count as usize,
-    )?;
+    )
+    .context("unable to create HTTP client")?;
     let http_client = WithMetrics(
         http_client,
         MetricParams::new_with_opts(
@@ -202,7 +211,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let router = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
-        http_client.clone(),
+        http_client,
         bouncer,
         Some(generic_limiter.clone()),
         &cli,
@@ -319,7 +328,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                     &cli,
                     registry_snapshot.clone(),
                     WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-                    http_client.clone(),
+                    http_client_check,
                     &metrics_registry,
                 )?;
 
@@ -418,7 +427,7 @@ fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client: Arc<dyn http::Client>,
+    http_client_check: Arc<dyn http::Client>,
     metrics_registry: &Registry,
 ) -> Result<RegistrySetupResult, Error> {
     // Registry Client
@@ -466,7 +475,10 @@ fn setup_registry(
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
-    let checker = Checker::new(http_client, Duration::from_millis(cli.health.check_timeout));
+    let checker = Checker::new(
+        http_client_check,
+        Duration::from_millis(cli.health.check_timeout),
+    );
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
 
     let check_runner = CheckRunner::new(
