@@ -12,7 +12,7 @@ mod common;
 #[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
-    const CK_TEST_BTC_LEDGER: (&str, &str) = ("mc6ru-gyaaa-aaaar-qaaaq-cai", "ckTestBTC");
+    // const CK_TEST_BTC_LEDGER: (&str, &str) = ("mc6ru-gyaaa-aaaar-qaaaq-cai", "ckTestBTC");
     const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
 
     let ledger_wasm = Wasm::from_bytes(ledger_wasm());
@@ -81,7 +81,7 @@ fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     // u256 testnet ledgers
-    const CK_SEPOLIA_ETH_LEDGER: (&str, &str) = ("apia6-jaaaa-aaaar-qabma-cai", "ckSepoliaETH");
+    // const CK_SEPOLIA_ETH_LEDGER: (&str, &str) = ("apia6-jaaaa-aaaar-qabma-cai", "ckSepoliaETH");
     const CK_SEPOLIA_LINK_LEDGER: (&str, &str) = ("r52mc-qaaaa-aaaar-qafzq-cai", "ckSepoliaLINK");
     const CK_SEPOLIA_PEPE_LEDGER: (&str, &str) = ("hw4ru-taaaa-aaaar-qagdq-cai", "ckSepoliaPEPE");
     const CK_SEPOLIA_USDC_LEDGER: (&str, &str) = ("yfumr-cyaaa-aaaar-qaela-cai", "ckSepoliaUSDC");
