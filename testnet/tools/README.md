@@ -7,7 +7,7 @@ The procedure currently works on a linux host only.
 * Reserve a static testnet using Dee
 * Build and deploy IC-OS to static testnet
   ```bash
-  ./gitlab-ci/container/container-run.sh -f
+  ./ci/container/container-run.sh -f
   export ANSIBLE_REMOTE_USER=<sshuser>
   bazel run //testnet/tools:icos_deploy --config=testnet -- <testnet>
   ```

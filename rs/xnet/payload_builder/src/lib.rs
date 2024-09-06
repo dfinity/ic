@@ -16,7 +16,6 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -28,6 +27,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
