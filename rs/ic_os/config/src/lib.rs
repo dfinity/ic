@@ -170,9 +170,7 @@ fn write_to_file(path: &Path, content: &str) -> Result<()> {
 
 fn ensure_directory_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            create_dir_all(parent)?;
-        }
+        create_dir_all(parent)?;
     }
     Ok(())
 }
