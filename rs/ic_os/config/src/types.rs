@@ -8,6 +8,7 @@ use url::Url;
 pub struct SetupOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
+    pub setupos_settings: SetupOSSettings,
     pub hostos_settings: HostOSSettings,
     pub guestos_settings: GuestOSSettings,
 }
@@ -26,6 +27,9 @@ pub struct GuestOSConfig {
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SetupOSSettings;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HostOSSettings {

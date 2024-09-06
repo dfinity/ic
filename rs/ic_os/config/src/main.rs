@@ -4,7 +4,9 @@ use config::{get_config_ini_settings, get_deployment_settings, serialize_and_wri
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::types::{GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig};
+use config::types::{
+    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig, SetupOSSettings,
+};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -81,6 +83,8 @@ pub fn main() -> Result<()> {
                 ssh_authorized_keys_path,
             };
 
+            let setupos_settings = SetupOSSettings;
+
             let hostos_settings = HostOSSettings {
                 vm_memory,
                 vm_cpu,
@@ -92,6 +96,7 @@ pub fn main() -> Result<()> {
             let setupos_config = SetupOSConfig {
                 network_settings,
                 icos_settings,
+                setupos_settings,
                 hostos_settings,
                 guestos_settings,
             };
