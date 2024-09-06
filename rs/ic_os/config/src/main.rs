@@ -24,6 +24,9 @@ pub enum Commands {
 
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH.to_string(), value_name = "node_operator_private_key.pem")]
         node_operator_private_key_path: String,
+
+        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
+        setupos_config_json_path: String,
     },
     /// Creates HostOSConfig object from an existing setupos config.json file
     GenerateHostosConfig {
@@ -49,6 +52,7 @@ pub fn main() -> Result<()> {
             nns_public_key_path,
             ssh_authorized_keys_path,
             node_operator_private_key_path,
+            setupos_config_json_path,
         }) => {
             let config_ini_path = Path::new(&config_ini_path);
             let deployment_json_path = Path::new(&deployment_json_path);
@@ -92,12 +96,12 @@ pub fn main() -> Result<()> {
                 guestos_settings,
             };
 
-            let default_config_object_path = Path::new(config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH);
-            serialize_and_write_config(default_config_object_path, &setupos_config)?;
+            let setupos_config_json_path = Path::new(&setupos_config_json_path);
+            serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
 
             println!(
                 "SetuposConfig has been written to {}",
-                default_config_object_path.display()
+                setupos_config_json_path.display()
             );
 
             Ok(())
