@@ -2,7 +2,9 @@ use crate::common::{ledger_wasm, load_wasm_using_env_var};
 use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger_sm_tests::in_memory_ledger::{verify_ledger_state, ApprovalKey, InMemoryLedger, InMemoryLedgerState,};
+use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
+    verify_ledger_state, ApprovalKey, InMemoryLedger, InMemoryLedgerState,
+};
 use ic_icrc1_ledger_sm_tests::{get_all_ledger_and_archive_blocks, send_transfer};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
@@ -18,11 +20,11 @@ use std::time::{Instant, UNIX_EPOCH};
 mod common;
 
 const NUM_TRANSACTIONS_PER_TYPE: usize = 20;
-const MINT_AMOUNT: u64 = 1_000_000_000;
-const TRANSFER_AMOUNT: u64 = 100_000_000;
-const APPROVE_AMOUNT: u64 = 10_000_000;
-const TRANSFER_FROM_AMOUNT: u64 = 1_000_000;
-const BURN_AMOUNT: u64 = 100_000;
+const MINT_MULTIPLIER: u64 = 10_000;
+const TRANSFER_MULTIPLIER: u64 = 1000;
+const APPROVE_MULTIPLIER: u64 = 100;
+const TRANSFER_FROM_MULTIPLIER: u64 = 10;
+const BURN_MULTIPLIER: u64 = 1;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -77,6 +79,11 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
         bump_gzip_timestamp(&ledger_wasm),
     );
+    let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
+    let mut expected_ledger_state =
+        ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(None);
+    expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
+    generate_transactions(&state_machine, canister_id, &mut expected_ledger_state);
     verify_ledger_state(&state_machine, canister_id, Some(burns_without_spender));
     // Downgrade back to the mainnet ledger version
     upgrade_canister(
@@ -151,6 +158,11 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
             (canister_id_str, canister_name),
             bump_gzip_timestamp(&ledger_wasm_u256),
         );
+        let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
+        let mut expected_ledger_state =
+            ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(None);
+        expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
+        generate_transactions(&state_machine, canister_id, &mut expected_ledger_state);
         // Downgrade back to the mainnet ledger version
         upgrade_canister(
             &state_machine,
@@ -232,8 +244,12 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     for (canister_id_str, canister_name) in canister_id_and_names {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-        // TODO: Uncomment once mainnet ledgers have been upgraded to include `ledger_num_approvals` metric
-        // verify_ledger_state(&state_machine, canister_id, None);
+        // TODO: Verify the ledger state here already once mainnet ledgers have been upgraded to include `ledger_num_approvals` metric
+        let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
+        let mut expected_ledger_state =
+            ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(None);
+        expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
+        generate_transactions(&state_machine, canister_id, &mut expected_ledger_state);
         upgrade_canister(
             &state_machine,
             (canister_id_str, canister_name),
@@ -245,6 +261,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
             (canister_id_str, canister_name),
             bump_gzip_timestamp(&ledger_wasm),
         );
+        let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
+        let mut expected_ledger_state =
+            ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(None);
+        expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
+        generate_transactions(&state_machine, canister_id, &mut expected_ledger_state);
         verify_ledger_state(&state_machine, canister_id, None);
         // Downgrade back to the mainnet ledger version
         upgrade_canister(
@@ -263,7 +284,37 @@ fn generate_transactions(
     let start = Instant::now();
     let minter_account = ic_icrc1_ledger_sm_tests::minting_account(&state_machine, canister_id)
         .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
-    let fee = Tokens::from(ic_icrc1_ledger_sm_tests::fee(&state_machine, canister_id));
+    let u64_fee = ic_icrc1_ledger_sm_tests::fee(&state_machine, canister_id);
+    let fee = Tokens::from(u64_fee);
+    let burn_amount = Tokens::from(
+        u64_fee
+            .checked_mul(BURN_MULTIPLIER)
+            .unwrap_or_else(|| panic!("burn amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_amount =
+        Tokens::from(u64_fee.checked_mul(TRANSFER_MULTIPLIER).unwrap_or_else(|| {
+            panic!("transfer amount overflowed for canister {:?}", canister_id)
+        }));
+    let mint_amount = Tokens::from(
+        u64_fee
+            .checked_mul(MINT_MULTIPLIER)
+            .unwrap_or_else(|| panic!("mint amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_from_amount = Tokens::from(
+        u64_fee
+            .checked_mul(TRANSFER_FROM_MULTIPLIER)
+            .unwrap_or_else(|| {
+                panic!(
+                    "transfer_from amount overflowed for canister {:?}",
+                    canister_id
+                )
+            }),
+    );
+    let approve_amount = Tokens::from(
+        u64_fee
+            .checked_mul(APPROVE_MULTIPLIER)
+            .unwrap_or_else(|| panic!("approve amount overflowed for canister {:?}", canister_id)),
+    );
     let mut accounts = vec![];
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let subaccount = match i {
@@ -295,11 +346,11 @@ fn generate_transactions(
                         .as_nanos() as u64,
                 ),
                 memo: Some(Memo::from(minted as u64)),
-                amount: Nat::from(MINT_AMOUNT),
+                amount: Nat::from(mint_amount),
             },
         )
-            .expect("should be able to mint");
-        in_memory_ledger.process_mint(&to, &Tokens::from(MINT_AMOUNT));
+        .expect("should be able to mint");
+        in_memory_ledger.process_mint(&to, &Tokens::from(mint_amount));
         minted += 1;
         if minted >= NUM_TRANSACTIONS_PER_TYPE {
             break;
@@ -326,15 +377,15 @@ fn generate_transactions(
                         .as_nanos() as u64,
                 ),
                 memo: Some(Memo::from(i as u64)),
-                amount: Nat::from(TRANSFER_AMOUNT),
+                amount: Nat::from(transfer_amount),
             },
         )
-            .expect("should be able to transfer");
+        .expect("should be able to transfer");
         in_memory_ledger.process_transfer(
             &from,
             &to,
             &None,
-            &Tokens::from(TRANSFER_AMOUNT),
+            &Tokens::from(transfer_amount),
             &Some(fee),
         );
     }
@@ -343,12 +394,9 @@ fn generate_transactions(
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        let approval_key = ApprovalKey::from((&from, &spender));
-        let default_allowance = Allowance::default();
         let current_allowance = in_memory_ledger
-            .allowances
-            .get(&approval_key)
-            .unwrap_or(&default_allowance);
+            .get_allowance_if_set(&from, &spender)
+            .unwrap_or(Allowance::default());
         let expires_at = state_machine
             .time()
             .checked_add(std::time::Duration::from_secs(3600))
@@ -363,7 +411,7 @@ fn generate_transactions(
             &ApproveArgs {
                 from_subaccount: from.subaccount,
                 spender,
-                amount: Nat::from(APPROVE_AMOUNT),
+                amount: Nat::from(approve_amount),
                 expected_allowance: Some(Nat::from(current_allowance.amount)),
                 expires_at: Some(expires_at),
                 fee: Some(Nat::from(fee)),
@@ -377,11 +425,11 @@ fn generate_transactions(
                 ),
             },
         )
-            .expect("should be able to transfer");
+        .expect("should be able to transfer");
         in_memory_ledger.process_approve(
             &from,
             &spender,
-            &Tokens::from(APPROVE_AMOUNT),
+            &Tokens::from(approve_amount),
             &Some(current_allowance.amount),
             &Some(expires_at),
             &Some(fee),
@@ -408,7 +456,7 @@ fn generate_transactions(
                 spender_subaccount: spender.subaccount,
                 from,
                 to,
-                amount: Nat::from(TRANSFER_FROM_AMOUNT),
+                amount: Nat::from(transfer_from_amount),
                 fee: Some(Nat::from(fee)),
                 memo: Some(Memo::from(i as u64)),
                 created_at_time: Some(
@@ -420,12 +468,12 @@ fn generate_transactions(
                 ),
             },
         )
-            .expect("should be able to transfer from");
+        .expect("should be able to transfer from");
         in_memory_ledger.process_transfer(
             &from,
             &to,
             &Some(spender),
-            &Tokens::from(TRANSFER_FROM_AMOUNT),
+            &Tokens::from(transfer_from_amount),
             &Some(fee),
         );
     }
@@ -449,15 +497,15 @@ fn generate_transactions(
                         .as_nanos() as u64,
                 ),
                 memo: Some(Memo::from(i as u64)),
-                amount: Nat::from(BURN_AMOUNT),
+                amount: Nat::from(burn_amount),
             },
         )
-            .expect("should be able to transfer");
+        .expect("should be able to transfer");
         in_memory_ledger.process_transfer(
             &from,
             &minter_account,
             &None,
-            &Tokens::from(BURN_AMOUNT),
+            &Tokens::from(burn_amount),
             &None,
         );
     }

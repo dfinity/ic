@@ -31,9 +31,15 @@ impl From<ApprovalKey> for (Account, Account) {
     }
 }
 
-trait InMemoryLedgerState {
+pub trait InMemoryLedgerState {
     type AccountId;
     type Tokens;
+
+    fn get_allowance_if_set(
+        &self,
+        from: &Self::AccountId,
+        spender: &Self::AccountId,
+    ) -> Option<Allowance<Self::Tokens>>;
 
     fn process_approve(
         &mut self,
@@ -84,6 +90,15 @@ where
 {
     type AccountId = AccountId;
     type Tokens = Tokens;
+
+    fn get_allowance_if_set(
+        &self,
+        from: &Self::AccountId,
+        spender: &Self::AccountId,
+    ) -> Option<Allowance<Self::Tokens>> {
+        let key = K::from((from, spender));
+        self.allowances.get(&key).map(|allowance| allowance.clone())
+    }
 
     fn process_approve(
         &mut self,
@@ -257,12 +272,16 @@ where
     ) {
         let key = K::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            let current_allowance = self
+            let current_allowance_amount = self
                 .allowances
                 .get(&key)
-                .unwrap_or_else(|| panic!("No current allowance but expected allowance set"));
-            if current_allowance.amount != *expected_allowance {
-                panic!("Expected allowance does not match current allowance");
+                .map(|allowance| allowance.amount.clone())
+                .unwrap_or(Tokens::zero());
+            if current_allowance_amount != *expected_allowance {
+                panic!(
+                    "Expected allowance ({:?}) does not match current allowance ({:?})",
+                    expected_allowance, current_allowance_amount
+                );
             }
         }
         if amount == &Tokens::zero() {
@@ -336,34 +355,32 @@ where
 }
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
-    fn new_from_icrc1_ledger_blocks(
-        blocks: &[ic_icrc1::Block<Tokens>],
-        burns_without_spender: Option<BurnsWithoutSpender<Account>>,
-    ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger {
+    pub fn new(burns_without_spender: Option<BurnsWithoutSpender<Account>>) -> Self {
+        InMemoryLedger {
             burns_without_spender,
             ..Default::default()
-        };
+        }
+    }
+
+    pub fn ingest_icrc1_ledger_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
         for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
-                state.fee_collector = Some(fee_collector);
+                self.fee_collector = Some(fee_collector);
             }
             match &block.transaction.operation {
-                Operation::Mint { to, amount } => state.process_mint(to, amount),
+                Operation::Mint { to, amount } => self.process_mint(to, amount),
                 Operation::Transfer {
                     from,
                     to,
                     spender,
                     amount,
                     fee,
-                } => {
-                    state.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee))
-                }
+                } => self.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee)),
                 Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => state.process_burn(from, spender, amount, index),
+                } => self.process_burn(from, spender, amount, index),
                 Operation::Approve {
                     from,
                     spender,
@@ -371,7 +388,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     expected_allowance,
                     expires_at,
                     fee,
-                } => state.process_approve(
+                } => self.process_approve(
                     from,
                     spender,
                     amount,
@@ -381,12 +398,11 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            state.validate_invariants();
+            self.validate_invariants();
         }
-        state.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+        self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
             blocks.last().unwrap().timestamp,
         ));
-        state
     }
 
     pub fn apply_arg_with_caller(
@@ -522,8 +538,8 @@ pub fn verify_ledger_state(
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
     println!("retrieved all ledger and archive blocks");
-    let expected_ledger_state =
-        InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks, burns_without_spender);
+    let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
+    expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
     expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
     println!("ledger state verified successfully");
