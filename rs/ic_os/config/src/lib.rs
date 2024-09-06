@@ -327,4 +327,70 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_get_config_ini_settings() -> Result<()> {
+        // Test valid config.ini
+        let mut temp_file = NamedTempFile::new()?;
+        writeln!(temp_file, "ipv6_prefix=2a00:fb01:400:200")?;
+        writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::/64")?;
+        writeln!(temp_file, "ipv6_gateway=2a00:fb01:400:200::1")?;
+        writeln!(temp_file, "ipv4_address=212.71.124.178")?;
+        writeln!(temp_file, "ipv4_gateway=212.71.124.177")?;
+        writeln!(temp_file, "ipv4_prefix_length=28")?;
+        writeln!(temp_file, "domain=example.com")?;
+        writeln!(temp_file, "verbose=false")?;
+
+        let temp_file_path = temp_file.path().to_path_buf();
+
+        let (networking, verbose) = get_config_ini_settings(&temp_file_path)?;
+
+        assert_eq!(
+            networking.ipv6_prefix.unwrap(),
+            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
+        );
+        assert_eq!(
+            networking.ipv6_address.unwrap(),
+            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
+        );
+        assert_eq!(
+            networking.ipv6_gateway,
+            "2a00:fb01:400:200::1".parse::<Ipv6Addr>()?
+        );
+        assert_eq!(
+            networking.ipv4_address.unwrap(),
+            "212.71.124.178".parse::<Ipv4Addr>()?
+        );
+        assert_eq!(
+            networking.ipv4_gateway.unwrap(),
+            "212.71.124.177".parse::<Ipv4Addr>()?
+        );
+        assert_eq!(networking.ipv4_prefix_length.unwrap(), 28);
+        assert_eq!(networking.domain, Some("example.com".to_string()));
+        assert_eq!(verbose, false);
+
+        // Test missing ipv6
+        let mut temp_file_missing = NamedTempFile::new()?;
+        writeln!(temp_file_missing, "ipv4_address=212.71.124.178")?;
+        writeln!(temp_file_missing, "ipv4_gateway=212.71.124.177")?;
+        writeln!(temp_file_missing, "ipv4_prefix_length=28")?;
+
+        let temp_file_path_missing = temp_file_missing.path().to_path_buf();
+        let result = get_config_ini_settings(&temp_file_path_missing);
+        assert!(result.is_err());
+
+        // Test invalid IPv6 address
+        let mut temp_file_invalid_ipv6 = NamedTempFile::new()?;
+        writeln!(temp_file_invalid_ipv6, "ipv6_prefix=invalid_ipv6_prefix")?;
+        writeln!(temp_file_invalid_ipv6, "ipv6_gateway=2001:db8:85a3:0000::1")?;
+        writeln!(temp_file_invalid_ipv6, "ipv4_address=192.168.1.1")?;
+        writeln!(temp_file_invalid_ipv6, "ipv4_gateway=192.168.1.254")?;
+        writeln!(temp_file_invalid_ipv6, "ipv4_prefix_length=24")?;
+
+        let temp_file_path_invalid_ipv6 = temp_file_invalid_ipv6.path().to_path_buf();
+        let result_invalid_ipv6 = get_config_ini_settings(&temp_file_path_invalid_ipv6);
+        assert!(result_invalid_ipv6.is_err());
+
+        Ok(())
+    }
 }
