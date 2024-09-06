@@ -24,7 +24,21 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ]
 )
 
 system_test_nns(

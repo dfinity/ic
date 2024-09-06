@@ -271,10 +271,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-node-assign-test"
-path = "consensus/orchestrator/node_assign_test.rs"
-
-[[bin]]
 name = "ic-systest-rejoin-test"
 path = "message_routing/rejoin_test.rs"
 

@@ -53,3 +53,7 @@ path = "rotate_ecdsa_idkg_key_test.rs"
 [[bin]]
 name = "ic-systest-unstuck-subnet"
 path = "unstuck_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-node-assign-test"
+path = "node_assign_test.rs"
