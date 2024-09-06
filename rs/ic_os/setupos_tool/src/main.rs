@@ -3,11 +3,11 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
+use config::types::SetupOSConfig;
 use config::{
     config_map_from_path, deserialize_config, DEFAULT_SETUPOS_CONFIG_FILE_PATH,
     DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
-use config::types::SetupOSConfig;
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
