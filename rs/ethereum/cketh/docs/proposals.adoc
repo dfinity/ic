@@ -28,4 +28,4 @@
 . https://dashboard.internetcomputer.org/proposal/132130[132130]: upgrade the ckERC20 ledger suite orchestrator to add ckXAUT
 . https://dashboard.internetcomputer.org/proposal/132131[132131]: upgrade the ckERC20 ledger suite orchestrator
 . https://dashboard.internetcomputer.org/proposal/132132[132132]: upgrade the ckETH minter canister
-. https://dashboard.internetcomputer.org/proposal/TODO[TODO], https://dashboard.internetcomputer.org/proposal/TODO[TODO] and https://dashboard.internetcomputer.org/proposal/TODO[TODO]: add the ledger suite orchestrator as a controller to the ckETH ledger suite (index, ledger and archive, respectively).
+. https://dashboard.internetcomputer.org/proposal/132371[132371], https://dashboard.internetcomputer.org/proposal/132370[132370] and https://dashboard.internetcomputer.org/proposal/132372[132372]: add the ledger suite orchestrator as a controller to the ckETH ledger suite (index, ledger and archive, respectively).
