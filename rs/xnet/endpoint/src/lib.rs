@@ -1,12 +1,11 @@
 #[cfg(test)]
-mod config_tests;
-#[cfg(test)]
 mod tests;
 
 use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
 use hyper::{body::Incoming, Request, Response, StatusCode};
 use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
 use ic_async_utils::start_tcp_listener;
+use ic_config::message_routing::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
@@ -14,12 +13,11 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_types::{xnet::StreamIndex, NodeId, PrincipalId, SubnetId};
+use ic_types::{xnet::StreamIndex, PrincipalId, SubnetId};
 use prometheus::{Histogram, HistogramVec};
 use serde::Serialize;
 use std::convert::Infallible;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -282,16 +280,21 @@ impl XNetEndpoint {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient + Send + Sync>,
-        config: XNetEndpointConfig,
+        config: Config,
         metrics: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
 
         let shutdown_notify = Arc::new(Notify::new());
+        let localhost_v4 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let addr = SocketAddr::new(
+            config.xnet_ip_addr.parse().unwrap_or(localhost_v4),
+            config.xnet_port,
+        );
 
         let address = start_server(
-            config.address,
+            addr,
             metrics,
             certified_stream_store,
             runtime_handle.clone(),
@@ -520,70 +523,4 @@ fn range_not_satisfiable<T: Into<Body>>(msg: T) -> Response<Body> {
         .status(StatusCode::RANGE_NOT_SATISFIABLE)
         .body(msg.into())
         .unwrap()
-}
-
-/// The socket address for `XNetEndpoint` to listen on.
-#[derive(Eq, PartialEq, Debug)]
-pub struct XNetEndpointConfig {
-    address: SocketAddr,
-}
-
-impl XNetEndpointConfig {
-    /// Retrieves the `XNetEndpointConfig` for a given node from the latest
-    /// available registry version.
-    ///
-    /// Logs an error message and returns the default value (`127.0.0.1:0`) if
-    /// the `NodeRecord` registry entry does not exist; its `xnet` field is
-    /// `None`; `xnet.ip_addr` is empty; or `xnet.port` is 0.
-    ///
-    /// # Panics
-    ///
-    /// Panics if registry reading fails or the IP address cannot be parsed.
-    pub fn from(
-        registry: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        log: &ReplicaLogger,
-    ) -> XNetEndpointConfig {
-        XNetEndpointConfig::try_from(registry, node_id)
-            // If the node is not in the registry or has default values, return the default.
-            .unwrap_or_else(|| {
-                info!(log, "No XNet configuration for node {}. This is an error in production, but may be ignored in single-subnet test deployments.", node_id);
-                Default::default()
-            })
-    }
-
-    fn try_from(registry: Arc<dyn RegistryClient>, node_id: NodeId) -> Option<XNetEndpointConfig> {
-        let version = registry.get_latest_version();
-        let node_record = registry
-            .get_node_record(node_id, version)
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Could not retrieve registry record for node {}: {}",
-                    node_id, e
-                )
-            })?;
-
-        let endpoint = node_record.xnet?;
-
-        // Return None if fields have default values.
-        if endpoint.port == 0 || endpoint.ip_addr.is_empty() {
-            return None;
-        }
-
-        let address: SocketAddr = SocketAddr::new(
-            endpoint.ip_addr.parse().unwrap(),
-            u16::try_from(endpoint.port).unwrap(),
-        );
-
-        Some(XNetEndpointConfig { address })
-    }
-}
-
-impl Default for XNetEndpointConfig {
-    /// By default listen on 127.0.0.1, on a free port assigned by the OS.
-    fn default() -> XNetEndpointConfig {
-        XNetEndpointConfig {
-            address: SocketAddr::from(([127, 0, 0, 1], 0)),
-        }
-    }
 }
