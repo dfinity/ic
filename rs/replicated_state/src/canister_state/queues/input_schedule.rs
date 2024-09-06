@@ -147,7 +147,8 @@ impl InputSchedule {
             InputQueueType::LocalSubnet => self.local_sender_schedule.pop_front(),
             InputQueueType::RemoteSubnet => self.remote_sender_schedule.pop_front(),
         }?;
-        debug_assert!(self.scheduled_senders.remove(&sender));
+        let removed = self.scheduled_senders.remove(&sender);
+        debug_assert!(removed);
         Some(sender)
     }
 

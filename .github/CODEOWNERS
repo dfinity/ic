@@ -109,7 +109,6 @@ go_deps.bzl               @dfinity/idx
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus
-/rs/constants/                                          @dfinity/ic-interface-owners
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
 /rs/cross-chain/                                        @dfinity/cross-chain-team
 /rs/crypto/                                             @dfinity/crypto-team
@@ -147,6 +146,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/p2p.rs                               @dfinity/networking
 /rs/interfaces/src/p2p/                                 @dfinity/networking
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
+/rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/networking
