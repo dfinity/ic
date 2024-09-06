@@ -248,7 +248,20 @@ system_test_nns(
         MAINNET_REVISION_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/recovery",
+        "//rs/recovery/subnet_splitting",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+
+    ]
 )
 
 system_test(

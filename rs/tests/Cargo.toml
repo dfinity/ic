@@ -106,7 +106,6 @@ ic-sns-init = { path = "../sns/init" }
 ic-sns-root = { path = "../sns/root" }
 ic-sns-swap = { path = "../sns/swap" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
-ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-sys = { path = "../sys" }
 ic-system-test-driver = { path = "./driver" }
 ic-test-identity = { path = "../test_utilities/identity" }
@@ -394,10 +393,6 @@ path = "consensus/orchestrator/sr_app_large_with_tecdsa_test.rs"
 [[bin]]
 name = "ic-systest-subnet-recovery-nns-same-nodes"
 path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-splitting"
-path = "consensus/subnet_splitting_test.rs"
 
 [[bin]]
 name = "ic-systest-network-reliability"
