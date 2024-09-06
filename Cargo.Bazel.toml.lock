@@ -3280,6 +3280,7 @@ dependencies = [
  "slog-term",
  "socket2 0.5.7",
  "ssh2",
+ "static_assertions",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "stubborn-io",
@@ -5296,7 +5297,7 @@ dependencies = [
 [[package]]
 name = "ic-http-gateway"
 version = "0.0.0"
-source = "git+https://github.com/dfinity/http-gateway?rev=3be26b5a2c71bf56e05b910951c1935a1ac550c4#3be26b5a2c71bf56e05b910951c1935a1ac550c4"
+source = "git+https://github.com/dfinity/http-gateway?tag=0.1.0-b0#3be26b5a2c71bf56e05b910951c1935a1ac550c4"
 dependencies = [
  "bytes",
  "candid",

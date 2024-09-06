@@ -54,7 +54,6 @@ members = [
     "rs/consensus",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
@@ -152,6 +151,7 @@ members = [
     "rs/interfaces/registry/mocks",
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
+    "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -642,6 +642,7 @@ slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+static_assertions = "1.1.0"
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
