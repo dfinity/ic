@@ -7,6 +7,7 @@ use config::{
     config_map_from_path, deserialize_config, DEFAULT_SETUPOS_CONFIG_FILE_PATH,
     DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
+use config::types::SetupOSConfig;
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
@@ -57,7 +58,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let setup_config: config::types::SetupOSConfig =
+            let setup_config: SetupOSConfig =
                 deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
             let config_map = config_map_from_path(Path::new(&opts.config))
