@@ -65,13 +65,14 @@ function copy_config_files() {
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config generate-hostos-config
 
-    echo "* Copying 'config-hostos.json' to hostOS config partition..."
-    if [ -f "/var/ic/config/config-hostos.json" ]; then
-        cp /var/ic/config/config-hostos.json /media/config.json
-        log_and_halt_installation_on_error "${?}" "Unable to copy 'config-hostos.json' to hostOS config partition."
-    else
-        log_and_halt_installation_on_error "1" "Configuration file 'config-hostos.json' does not exist."
-    fi
+    # TODO: NODE-1466: Configuration revamp (HostOS and GuestOS integration)
+    # echo "* Copying 'config-hostos.json' to hostOS config partition..."
+    # if [ -f "/var/ic/config/config-hostos.json" ]; then
+    #     cp /var/ic/config/config-hostos.json /media/config.json
+    #     log_and_halt_installation_on_error "${?}" "Unable to copy 'config-hostos.json' to hostOS config partition."
+    # else
+    #     log_and_halt_installation_on_error "1" "Configuration file 'config-hostos.json' does not exist."
+    # fi
 }
 
 function insert_hsm_if_necessary() {
