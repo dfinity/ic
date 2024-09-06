@@ -1075,32 +1075,8 @@ where
         // `neurons_fund_reserves.total_amount_icp_e8s()`, the sum of (pre-rounded) `u64` values.
         let (neurons_fund_reserves, allocated_neurons_fund_participation_icp_e8s) =
             if total_maturity_equivalent_icp_e8s == 0 {
-                #[cfg(not(test))]
-                {
-                    println!(
-                        "{}WARNING: Neurons' Fund has zero total maturity.",
-                        governance::LOG_PREFIX
-                    );
-                }
                 (NeuronsFundSnapshot::empty(), Decimal::ZERO)
             } else if intended_neurons_fund_participation_icp_e8s == 0 {
-                #[cfg(not(test))]
-                {
-                    println!(
-                        "{}WARNING: intended_neurons_fund_participation_icp_e8s is zero, matching \
-                    direct_participation_icp_e8s = {}. total_maturity_equivalent_icp_e8s = {}. \
-                    ideal_matched_participation_function = {:?}\n \
-                    Plot: \n{:?}",
-                        governance::LOG_PREFIX,
-                        direct_participation_icp_e8s,
-                        total_maturity_equivalent_icp_e8s,
-                        ideal_matched_participation_function,
-                        ideal_matched_participation_function
-                            .plot(NonZeroU64::try_from(50).unwrap())
-                            .map(|plot| format!("{:?}", plot))
-                            .unwrap_or_else(|e| e),
-                    );
-                }
                 (NeuronsFundSnapshot::empty(), Decimal::ZERO)
             } else {
                 // Unlike in most other places, here we keep the ICP values in e8s (even after converting
@@ -1146,29 +1122,9 @@ where
                     if ideal_participation_amount_icp_e8s < min_participant_icp_e8s
                         || ideal_participation_amount_icp_e8s < Decimal::ONE {
                         // Do not include neurons that cannot participate under any circumstances.
-                        #[cfg(not(test))] {
-                            println!(
-                                "{}INFO: discarding neuron {:?} ({} ICP e8s maturity equivalent) as it \
-                            cannot participate in the swap with its proportional participation \
-                            amount ({}) that is less than `min_participant_icp_e8s` ({}) or 1 e8.",
-                                governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
-                                ideal_participation_amount_icp_e8s,
-                                min_participant_icp_e8s,
-                            );
-                        }
                         return Ok((overall_neuron_portions, allocated_neurons_fund_participation_icp_e8s));
                     }
                     let (amount_icp_e8s, is_capped) = if ideal_participation_amount_icp_e8s > max_participant_icp_e8s {
-                        #[cfg(not(test))] {
-                            println!(
-                                "{}INFO: capping neuron {:?} ({} ICP e8s maturity equivalent) as it \
-                            cannot participate in the swap with all of its proportional \
-                            participation amount ({}) that exceeds `max_participant_icp_e8s` ({}).",
-                                governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
-                                ideal_participation_amount_icp_e8s,
-                                max_participant_icp_e8s,
-                            );
-                        }
                         (max_participant_icp_e8s, true)
                     } else {
                         (ideal_participation_amount_icp_e8s, false)
