@@ -315,10 +315,6 @@ name = "ic-systest-general-execution"
 path = "execution/general_execution_test.rs"
 
 [[bin]]
-name = "ic-systest-downgrade-app-subnet"
-path = "consensus/orchestrator/downgrade_app_subnet_test.rs"
-
-[[bin]]
 name = "ic-systest-backup-manager"
 path = "consensus/backup_manager_test.rs"
 

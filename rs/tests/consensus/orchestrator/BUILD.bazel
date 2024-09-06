@@ -414,7 +414,7 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:slog",
         "@crate_index//:tokio",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -440,8 +440,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-    ]
-
+    ],
 )
 
 system_test_nns(
@@ -464,7 +463,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -487,7 +486,7 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -512,7 +511,7 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-    ]
+    ],
 )
 
 system_test_nns(
