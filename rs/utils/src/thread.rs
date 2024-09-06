@@ -27,6 +27,24 @@ where
         .collect()
 }
 
+/// parallel_map(...) if thread_pool is Some(); map if None.
+pub fn maybe_parallel_map<S, T, I, F>(
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+    items: I,
+    f: F,
+) -> Vec<T>
+where
+    S: Send,
+    T: Send,
+    I: Iterator<Item = S>,
+    F: Fn(&S) -> T + Send + Copy,
+{
+    match thread_pool {
+        Some(thread_pool) => parallel_map(thread_pool, items, f),
+        None => items.map(|x| f(&x)).collect::<Vec<T>>(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
