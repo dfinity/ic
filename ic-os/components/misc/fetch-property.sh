@@ -6,6 +6,8 @@ set -o pipefail
 
 # Fetch configuration property
 
+source /opt/ic/bin/logging.sh
+
 SCRIPT="$(basename $0)[$$]"
 
 # Get keyword arguments
@@ -46,16 +48,6 @@ function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${KEY}" == "" -o "${METRIC}" == "" ]; then
         $0 --help
     fi
-}
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
 }
 
 try_write_metric() {

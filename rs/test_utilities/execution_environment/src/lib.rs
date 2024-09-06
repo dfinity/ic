@@ -7,7 +7,6 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
@@ -25,6 +24,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -1959,6 +1959,15 @@ impl ExecutionTestBuilder {
             .embedders_config
             .stable_memory_accessed_page_limit = stable_memory_access_limit;
 
+        self
+    }
+
+    pub fn with_max_canister_http_requests_in_flight(
+        mut self,
+        max_canister_http_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config.max_canister_http_requests_in_flight =
+            max_canister_http_requests_in_flight;
         self
     }
 

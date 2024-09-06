@@ -95,7 +95,7 @@ impl ICWasmModule {
         }
         for index in &exported_globals_index {
             if let Some(global) =
-                get_persisted_global(*global_section.get(*index as usize).unwrap())
+                get_persisted_global(global_section.get(*index as usize).unwrap().clone())
             {
                 persisted_globals.push(global);
             }
@@ -107,7 +107,7 @@ impl ICWasmModule {
                 .enumerate()
                 .filter(|(i, _)| !exported_globals_index.contains(&(*i as u32)))
                 .filter(|(_, global)| global.ty.mutable)
-                .filter_map(|(_, global)| get_persisted_global(*global))
+                .filter_map(|(_, global)| get_persisted_global(global.clone()))
                 .collect::<Vec<Global>>(),
         );
 
@@ -154,8 +154,8 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
+        memory64_enabled: true,
 
-        memory64_enabled: false,
         threads_enabled: false,
         relaxed_simd_enabled: false,
         canonicalize_nans: false,
@@ -238,6 +238,7 @@ fn generate_exports(
             GlobalType {
                 val_type: wasm_encoder::ValType::I32,
                 mutable: u.ratio(2, 3)?,
+                shared: false,
             },
             &wasm_encoder::ConstExpr::i32_const(0_i32),
         );

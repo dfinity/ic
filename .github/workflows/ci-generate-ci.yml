@@ -3,7 +3,8 @@ name: CI Generate CI
 on:
   pull_request:
     paths:
-      - '.github/workflows-source/*.yml'
+      - ".github/workflows-source/*.yml"
+      - ".github/workflows/*.yml" # trigger workflow on both to ensure they are in sync
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -22,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
       - name: Run Generate CI
         id: generate-ci
         run: |

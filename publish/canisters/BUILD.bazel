@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 # The list of canisters that are being published/uploaded as artifacts to our CDN (download.dfinity.systems) include
 # 1. Officially released canisters that can be downloaded/verified by 3rd parties - https://github.com/dfinity/ic/blob/master/.github/workflows/tag-release.yml
@@ -85,9 +85,9 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "cycles-minting-canister.wasm.gz": "5",
     "genesis-token-canister.wasm.gz": "3",
-    "governance-canister.wasm.gz": "12",
-    "governance-canister_test.wasm.gz": "12",
-    "registry-canister.wasm.gz": "12",
+    "governance-canister.wasm.gz": "14",
+    "governance-canister_test.wasm.gz": "14",
+    "registry-canister.wasm.gz": "13",
     "root-canister.wasm.gz": "4",
 }
 

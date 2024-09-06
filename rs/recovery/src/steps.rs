@@ -831,7 +831,7 @@ cd {};
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
 mkdir ic_registry_local_store;
-tar zxf ic_registry_local_store.tar.gz -C ic_registry_local_store;
+tar zxf ic_registry_local_store.tar.zst -C ic_registry_local_store;
 sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
@@ -899,7 +899,10 @@ impl Step for UploadCUPAndTar {
                 rsync(
                     &self.logger,
                     Vec::<String>::default(),
-                    &format!("{}/ic_registry_local_store.tar.gz", self.work_dir.display()),
+                    &format!(
+                        "{}/ic_registry_local_store.tar.zst",
+                        self.work_dir.display()
+                    ),
                     &target,
                     self.require_confirmation,
                     self.key_file.as_ref(),

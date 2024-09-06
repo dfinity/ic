@@ -40,7 +40,7 @@ fn ledger_id() -> CanisterId {
     ic_icrc1_index::ledger_id()
 }
 
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

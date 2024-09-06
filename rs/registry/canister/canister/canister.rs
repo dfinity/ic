@@ -1,16 +1,19 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply, trap_with},
+    api::{arg_data, caller, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
+};
+use ic_registry_canister_api::{
+    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -23,7 +26,6 @@ use ic_registry_transport::{
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
-use ic_types::PrincipalId;
 use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
@@ -49,7 +51,6 @@ use registry_canister::{
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
-        do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::{
@@ -62,17 +63,16 @@ use registry_canister::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         },
         node_management::{
-            do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
+            do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
             do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
-            do_update_node_ipv4_config_directly::UpdateNodeIPv4ConfigDirectlyPayload,
         },
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
-        SubnetForCanister,
+        ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, GetSubnetForCanisterRequest,
+        NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
@@ -185,6 +185,32 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
+    // Only self-authenticating and anonymous principals are allowed to call us.
+    const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
+        Ok(PrincipalIdClass::SelfAuthenticating),
+        Ok(PrincipalIdClass::Anonymous),
+    ];
+    let class = caller().class();
+    if !ALLOWED_CALLER_CLASSES.contains(&class) {
+        let response = RegistryGetChangesSinceResponse {
+            error: Some(RegistryError {
+                code: Code::Authorization as i32,
+                reason: format!(
+                    "Caller must be self-authenticating, or anonymous (but was {:?}).",
+                    class,
+                ),
+                key: vec![],
+            }),
+            ..Default::default()
+        };
+
+        let response: Vec<u8> =
+            serialize_get_changes_since_response(response).expect("Error serializing response");
+
+        reply(&response);
+        return;
+    }
+
     let response_pb = match deserialize_get_changes_since_request(arg_data()) {
         Ok(version) => {
             let registry = registry();
@@ -881,6 +907,28 @@ fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRe
     registry().get_node_providers_monthly_xdr_rewards()
 }
 
+#[export_name = "canister_query get_api_boundary_node_ids"]
+fn get_api_boundary_node_ids() {
+    over(
+        candid_one,
+        |arg: GetApiBoundaryNodeIdsRequest| -> Result<Vec<ApiBoundaryNodeIdRecord>, String> {
+            get_api_boundary_node_ids_(arg)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_api_boundary_node_ids")]
+fn get_api_boundary_node_ids_(
+    _arg: GetApiBoundaryNodeIdsRequest,
+) -> Result<Vec<ApiBoundaryNodeIdRecord>, String> {
+    let ids = registry().get_api_boundary_node_ids()?;
+    let ids = ids
+        .iter()
+        .map(|k| ApiBoundaryNodeIdRecord { id: Some(k.get()) })
+        .collect();
+    Ok(ids)
+}
+
 #[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]
 fn get_node_operators_and_dcs_of_node_provider() {
     over(
@@ -1056,25 +1104,18 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-// This makes this Candid service self-describing, so that for example Candid
-// UI, but also other tools, can seamlessly integrate with it.
-// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-// works.
-//
-// We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unnecessary
-// runtime computation
-
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("registry.did").to_string())
 }
 
-/// Currently (May, 2024), unlike our other canisters, registry.did is NOT
-/// automatically generated by main. Instead, it is hand-crafted. We might later
-/// change our other canisters to do the same thing. registry is a trial balloon
-/// of sorts in this regard.
-fn main() {}
+fn main() {
+    // This block is intentionally left blank.
+}
 
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
 mod tests;

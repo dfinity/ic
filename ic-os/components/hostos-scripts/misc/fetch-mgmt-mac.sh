@@ -4,6 +4,7 @@ set -e
 
 # Fetch the management MAC address of the physical machine.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -37,16 +38,6 @@ function read_variables() {
             "mgmt_mac") mgmt_mac="${value}" ;;
         esac
     done <"${CONFIG}"
-}
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
 }
 
 # Fetch the management MAC address of the physical machine.

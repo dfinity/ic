@@ -1,14 +1,14 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::Project;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SubnetId};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::{StreamHeader, StreamIndexedQueue},
@@ -36,20 +36,17 @@ struct SubnetPairProxy {
 }
 
 impl SubnetPairProxy {
-    const LOCAL_SUBNET_ID_U64: u64 = 1;
-    const REMOTE_SUBNET_ID_U64: u64 = 2;
-    const DESTINATION_SUBNET_ID_U64: u64 = 3;
+    const LOCAL_SUBNET_ID: SubnetId = SUBNET_0;
+    const REMOTE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     /// Generates a new proxy of new subnets using default subnet ids.
     fn with_new_subnets() -> Self {
-        let local_subnet_id = subnet_test_id(Self::LOCAL_SUBNET_ID_U64);
-        let remote_subnet_id = subnet_test_id(Self::REMOTE_SUBNET_ID_U64);
-
         let routing_table = Self::make_routing_table();
         let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
 
         let local_env = StateMachineBuilder::new()
-            .with_subnet_id(local_subnet_id)
+            .with_subnet_id(Self::LOCAL_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(routing_table.clone())
             .build();
@@ -63,7 +60,7 @@ impl SubnetPairProxy {
             .expect("Installing xnet-test-canister failed");
 
         let remote_env = StateMachineBuilder::new()
-            .with_subnet_id(remote_subnet_id)
+            .with_subnet_id(Self::REMOTE_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(routing_table)
             .build();
@@ -83,9 +80,9 @@ impl SubnetPairProxy {
     fn make_routing_table() -> RoutingTable {
         let mut routing_table = RoutingTable::new();
         for subnet_id in [
-            subnet_test_id(Self::LOCAL_SUBNET_ID_U64),
-            subnet_test_id(Self::REMOTE_SUBNET_ID_U64),
-            subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+            Self::LOCAL_SUBNET_ID,
+            Self::REMOTE_SUBNET_ID,
+            Self::DESTINATION_SUBNET_ID,
         ] {
             routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
         }
@@ -223,7 +220,7 @@ impl SubnetPairProxy {
             env.prepare_canister_migrations(
                 self.remote_canister_id..=self.remote_canister_id,
                 self.remote_env.get_subnet_id(),
-                subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+                Self::DESTINATION_SUBNET_ID,
             );
         }
     }
@@ -235,7 +232,7 @@ impl SubnetPairProxy {
     fn move_remote_canister_to_destination_subnet(&self) -> Result<Self, String> {
         // New destination env using the same routing table as `self`.
         let destination_env = StateMachineBuilder::new()
-            .with_subnet_id(subnet_test_id(Self::DESTINATION_SUBNET_ID_U64))
+            .with_subnet_id(Self::DESTINATION_SUBNET_ID)
             .with_subnet_type(SubnetType::Application)
             .with_routing_table(Self::make_routing_table())
             .with_checkpoints_enabled(true)
@@ -252,7 +249,7 @@ impl SubnetPairProxy {
         for env in [&self.local_env, &self.remote_env, &destination_env] {
             env.reroute_canister_range(
                 self.remote_canister_id..=self.remote_canister_id,
-                subnet_test_id(Self::DESTINATION_SUBNET_ID_U64),
+                Self::DESTINATION_SUBNET_ID,
             );
         }
 

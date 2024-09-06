@@ -1,8 +1,6 @@
 use crate::pb::v1::{
     neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
 };
-use ic_nns_common::pb::v1::NeuronId;
-use std::ops::RangeBounds;
 
 pub mod dissolve_state_and_age;
 pub use dissolve_state_and_age::*;
@@ -45,22 +43,6 @@ impl NeuronProto {
             None => NeuronState::Dissolved,
         }
     }
-}
-
-/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
-/// that operate on NeuronId ranges with internal u64 representations in data.
-pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
-    let first = match range.start_bound() {
-        std::ops::Bound::Included(start) => start.id,
-        std::ops::Bound::Excluded(start) => start.id + 1,
-        std::ops::Bound::Unbounded => 0,
-    };
-    let last = match range.end_bound() {
-        std::ops::Bound::Included(end) => end.id,
-        std::ops::Bound::Excluded(end) => end.id - 1,
-        std::ops::Bound::Unbounded => u64::MAX,
-    };
-    first..=last
 }
 
 /// Given two quantities of stake with possible associated age, return the

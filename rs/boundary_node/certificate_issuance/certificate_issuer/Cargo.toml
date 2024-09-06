@@ -25,7 +25,7 @@ ic-http-certification = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 idna = { workspace = true }
-instant-acme = "0.3.2"
+instant-acme = "0.7.1"
 leb128 = "0.2.5"
 mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics", "trace"] }

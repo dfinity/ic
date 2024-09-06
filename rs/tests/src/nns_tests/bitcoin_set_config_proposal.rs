@@ -7,19 +7,23 @@ use ic_agent::Agent;
 use ic_btc_interface::{Config as BitcoinConfig, Flag, Network, SetConfigRequest};
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::governance::BitcoinNetwork;
+use ic_nns_governance_api::bitcoin::BitcoinNetwork;
 use ic_nns_test_utils::governance::{
     bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv};
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
+    },
+    nns::{get_governance_canister, vote_execute_proposal_assert_failed},
+    util::{block_on, runtime_from_url},
 };
-use ic_system_test_driver::nns::{get_governance_canister, vote_execute_proposal_assert_failed};
-use ic_system_test_driver::util::{block_on, runtime_from_url};
 use std::str::FromStr;
 
 pub fn config(env: TestEnv) {

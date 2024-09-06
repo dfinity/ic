@@ -198,8 +198,6 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 controller: Some(nf_neurons_controller),
                 hotkeys: Vec::new(),
                 is_capped: Some(false),
-                // TODO(NNS1-3198): Remove this field once it's deprecated
-                hotkey_principal: Some(nf_neurons_controller),
             }],
         }),
         swap_participation_limits: Some(SwapParticipationLimits {
@@ -229,7 +227,6 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 )),
                 ..Default::default()
             }),
-            cf_participants: vec![],
             neurons_fund_data: Some(NeuronsFundData {
                 initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
                 final_neurons_fund_participation: None,

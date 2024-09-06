@@ -28,11 +28,11 @@ use ic_prep_lib::{
     node::{InitializedNode, NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
+use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -477,9 +477,10 @@ fn create_config_disk_image(
         );
         cmd.arg("--ipv4_address").arg(format!(
             "{}/{:?}",
-            ipv4_config.ip_addr, ipv4_config.prefix_length
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
         ));
-        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
+        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
     }
 
     if let Some(domain) = domain {
@@ -583,7 +584,7 @@ fn configure_setupos_image(
 
     let mac = nested_vm.get_vm()?.mac6;
     let memory = "16";
-    let cpu_mode = "qemu";
+    let cpu = "qemu";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
@@ -643,8 +644,8 @@ fn configure_setupos_image(
         .arg(&gateway)
         .arg("--memory-gb")
         .arg(memory)
-        .arg("--cpu-mode")
-        .arg(cpu_mode)
+        .arg("--cpu")
+        .arg(cpu)
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")

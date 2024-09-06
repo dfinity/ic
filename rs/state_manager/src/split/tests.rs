@@ -467,7 +467,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
 
     // Sanity checks.
     assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
-    let checkpoint = layout.checkpoint(HEIGHT).unwrap();
+    let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
     assert_eq!(
         checkpoint.canister_ids().unwrap(),
         vec![CANISTER_1, CANISTER_2, CANISTER_3]
@@ -550,7 +550,9 @@ fn compute_manifest(
     log: &ReplicaLogger,
 ) -> (Manifest, Height) {
     let last_checkpoint_height = state_layout.checkpoint_heights().unwrap().pop().unwrap();
-    let last_checkpoint_layout = state_layout.checkpoint(last_checkpoint_height).unwrap();
+    let last_checkpoint_layout = state_layout
+        .checkpoint_verified(last_checkpoint_height)
+        .unwrap();
     let manifest = crate::manifest::compute_manifest(
         &mut thread_pool(),
         manifest_metrics,
