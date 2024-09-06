@@ -31,24 +31,19 @@ pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.
 
 pub fn get_deployment_settings(
     deployment_json_path: &Path,
-) -> (u32, String, Vec<Url>, String, String) {
-    match read_deployment_file(deployment_json_path) {
-        Ok(deployment_json) => (
-            deployment_json.resources.memory,
-            deployment_json
-                .resources
-                .cpu
-                .clone()
-                .unwrap_or("kvm".to_string()),
-            deployment_json.nns.url.clone(),
-            deployment_json.deployment.name.to_string(),
-            deployment_json.logging.hosts.to_string(),
-        ),
-        Err(err) => {
-            eprintln!("Error retrieving deployment file: {err}. Using default values.");
-            default_deployment_values()
-        }
-    }
+) -> Result<(u32, String, Vec<Url>, String, String)> {
+    let deployment_json = read_deployment_file(deployment_json_path)?;
+    Ok((
+        deployment_json.resources.memory,
+        deployment_json
+            .resources
+            .cpu
+            .clone()
+            .unwrap_or("kvm".to_string()),
+        deployment_json.nns.url.clone(),
+        deployment_json.deployment.name.to_string(),
+        deployment_json.logging.hosts.to_string(),
+    ))
 }
 
 fn parse_config_line(line: &str) -> Option<(String, String)> {
@@ -179,26 +174,6 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         .unwrap_or(false);
 
     Ok((networking, verbose))
-}
-
-fn default_deployment_values() -> (u32, String, Vec<Url>, String, String) {
-    (
-        490,
-        "kvm".to_string(),
-        vec![
-            Url::parse("https://icp-api.io").unwrap(),
-            Url::parse("https://icp0.io").unwrap(),
-            Url::parse("https://ic0.app").unwrap(),
-        ],
-        "mainnet".to_string(),
-        [
-            "elasticsearch-node-0.mercury.dfinity.systems:443",
-            "elasticsearch-node-1.mercury.dfinity.systems:443",
-            "elasticsearch-node-2.mercury.dfinity.systems:443",
-            "elasticsearch-node-3.mercury.dfinity.systems:443",
-        ]
-        .join(" "),
-    )
 }
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {

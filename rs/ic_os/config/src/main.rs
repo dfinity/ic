@@ -71,7 +71,7 @@ pub fn main() -> Result<()> {
 
             // get deployment.json variables
             let (vm_memory, vm_cpu, nns_urls, hostname, elasticsearch_hosts) =
-                get_deployment_settings(deployment_json_path);
+                get_deployment_settings(deployment_json_path)?;
 
             let icos_settings = ICOSSettings {
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
