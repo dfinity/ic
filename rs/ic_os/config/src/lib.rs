@@ -291,4 +291,38 @@ mod tests {
             Some(("key".to_string(), "value=extra".to_string()))
         );
     }
+
+    #[test]
+    fn test_config_map_from_path() -> Result<()> {
+        let mut file_path = PathBuf::from(std::env::temp_dir());
+        file_path.push("test_config_file.txt");
+
+        let mut file = File::create(&file_path)?;
+        writeln!(file, "key1=value1")?;
+        writeln!(file, "key2=value2")?;
+        writeln!(file, "# This is a comment")?;
+        writeln!(file, "key3=value3")?;
+        writeln!(file, "")?;
+
+        let config_map = config_map_from_path(&file_path)?;
+
+        assert_eq!(config_map.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(config_map.get("key2"), Some(&"value2".to_string()));
+        assert_eq!(config_map.get("key3"), Some(&"value3".to_string()));
+        assert_eq!(config_map.get("bad_key"), None);
+
+        let mut file_path_crlf = PathBuf::from(std::env::temp_dir());
+        file_path_crlf.push("test_config_file_crlf.txt");
+        let mut file_crlf = File::create(&file_path_crlf)?;
+        writeln!(file_crlf, "key4=value4\r\nkey5=value5\r\n")?;
+
+        let config_map_crlf = config_map_from_path(&file_path_crlf)?;
+        assert_eq!(config_map_crlf.get("key4"), Some(&"value4".to_string()));
+        assert_eq!(config_map_crlf.get("key5"), Some(&"value5".to_string()));
+
+        std::fs::remove_file(&file_path)?;
+        std::fs::remove_file(&file_path_crlf)?;
+
+        Ok(())
+    }
 }
