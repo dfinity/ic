@@ -327,11 +327,11 @@ def main():
     shutil.copy("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
     shutil.copymode("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
 
-    subprocess.run(["sudo", "chroot", container_dir, "/etc/setup.sh"], check=True)
+    subprocess.run(["sudo", "time", "chroot", container_dir, "/etc/setup.sh"], check=True)
     subprocess.run(["sudo", "chown", "ubuntu", "-R", container_dir], check=True)
 
     print(destination_tar_filename)
-    subprocess.check_call(f"tar -cvf {destination_tar_filename} *", cwd=container_dir, shell=True)
+    subprocess.check_call(f"time tar -cf {destination_tar_filename} *", cwd=container_dir, shell=True)
 
     # os.setxattr(destination_tar_filename, "trusted.md5sum", b"123441")
 
