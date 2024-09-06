@@ -126,14 +126,6 @@ fn test_account_balances() {
                         block_indices.insert(block_idx);
                     }
 
-                    wait_for_rosetta_to_sync_up_to_block(
-                        &rosetta_testing_environment.rosetta_client,
-                        rosetta_testing_environment.network_identifier.clone(),
-                        *block_indices.iter().last().unwrap(),
-                    )
-                    .await
-                    .unwrap();
-
                     let mut current_balances = HashMap::new();
                     for account in involved_accounts.clone().into_iter() {
                         current_balances.insert(account, Nat(BigUint::zero()));
@@ -141,6 +133,14 @@ fn test_account_balances() {
 
                     let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
                     block_indices_iter.sort();
+
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &rosetta_testing_environment.rosetta_client,
+                        rosetta_testing_environment.network_identifier.clone(),
+                        *block_indices_iter.iter().last().unwrap(),
+                    )
+                    .await
+                    .unwrap();
 
                     // Iterate over every account at every block index and make sure the balances of the balances of the ledger match the balances of the rosetta storage
                     for idx in block_indices_iter.into_iter() {

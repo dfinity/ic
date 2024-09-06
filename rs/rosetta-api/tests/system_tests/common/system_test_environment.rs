@@ -7,11 +7,13 @@ use crate::common::{
 use candid::{Encode, Principal};
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
+use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
+use ic_icrc1_tokens_u256::U256;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_test_utils::path_from_env;
@@ -25,11 +27,14 @@ use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
+use super::utils::memo_bytebuf_to_u64;
+
 pub struct RosettaTestingEnvironment {
     pub pocket_ic: PocketIc,
     pub rosetta_context: RosettaContext,
     pub rosetta_client: RosettaClient,
     pub network_identifier: NetworkIdentifier,
+    pub minting_account: Account,
 }
 
 impl RosettaTestingEnvironment {
@@ -37,44 +42,96 @@ impl RosettaTestingEnvironment {
         RosettaTestingEnvironmentBuilder::new()
     }
 
+    /// This function generates blocks by using ICP Rosetta whenever possible. It falls back to using the ledger agent directly for operations that are not supported by Rosetta.
     pub async fn generate_blocks(&self, args_with_caller: Vec<ArgWithCaller>) {
         let replica_port = self.pocket_ic.url().unwrap().port().unwrap();
-        for ArgWithCaller {
-            caller,
-            arg,
-            principal_to_basic_identity: _,
-        } in args_with_caller.clone().into_iter()
-        {
-            let caller_agent = Icrc1Agent {
-                agent: get_custom_agent(caller.clone(), replica_port).await,
-                ledger_canister_id: LEDGER_CANISTER_ID.into(),
+
+        for mut arg_with_caller in args_with_caller.into_iter() {
+            let icrc1_transaction: ic_icrc1::Transaction<U256> =
+                arg_with_caller.to_transaction(self.minting_account);
+
+            // Rosetta does not support subaccounts
+            match arg_with_caller.arg {
+                LedgerEndpointArg::TransferArg(mut transfer_args) => {
+                    transfer_args.from_subaccount = None;
+                    transfer_args.to.subaccount = None;
+                    arg_with_caller.arg = LedgerEndpointArg::TransferArg(transfer_args);
+                }
+                LedgerEndpointArg::ApproveArg(mut approve_arg) => {
+                    approve_arg.from_subaccount = None;
+                    approve_arg.spender.subaccount = None;
+                    arg_with_caller.arg = LedgerEndpointArg::ApproveArg(approve_arg);
+                }
             };
-            match arg {
-                LedgerEndpointArg::ApproveArg(approve_arg) => caller_agent
-                    .approve(approve_arg.clone())
-                    .await
-                    .unwrap()
-                    .unwrap()
-                    .0
-                    .to_u64()
-                    .unwrap(),
-                LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
-                    .transfer(transfer_arg.clone())
-                    .await
-                    .unwrap()
-                    .unwrap()
-                    .0
-                    .to_u64()
-                    .unwrap(),
+
+            // Rosetta does not support mint, burn or approve operations
+            // To keep the balances in sync we need to call the ledger agent directly and then go to the next iteration of args with caller
+            if !matches!(
+                icrc1_transaction.operation,
+                ic_icrc1::Operation::Transfer { .. }
+            ) {
+                let caller_agent = Icrc1Agent {
+                    agent: get_custom_agent(arg_with_caller.caller.clone(), replica_port).await,
+                    ledger_canister_id: LEDGER_CANISTER_ID.into(),
+                };
+                match arg_with_caller.arg {
+                    LedgerEndpointArg::ApproveArg(approve_arg) => caller_agent
+                        .approve(approve_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
+                    LedgerEndpointArg::TransferArg(transfer_arg) => caller_agent
+                        .transfer(transfer_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
+                };
+                continue;
+            }
+
+            let transfer_args = match arg_with_caller.arg {
+                LedgerEndpointArg::TransferArg(transfer_args) => transfer_args,
+                _ => panic!("Expected TransferArg"),
             };
+            let mut args_builder =
+                RosettaTransferArgs::builder(transfer_args.to, transfer_args.amount);
+            if let Some(from_subaccount) = transfer_args.from_subaccount {
+                args_builder = args_builder.with_from_subaccount(from_subaccount);
+            }
+            if let Some(memo) = transfer_args.memo {
+                args_builder = args_builder.with_memo(memo_bytebuf_to_u64(&memo.0).unwrap());
+            }
+            if let Some(created_at_time) = transfer_args.created_at_time {
+                args_builder = args_builder.with_created_at_time(created_at_time);
+            }
+
+            self.rosetta_client
+                .transfer(
+                    args_builder.build(),
+                    self.network_identifier.clone(),
+                    arg_with_caller.caller,
+                )
+                .await
+                .unwrap();
         }
     }
 
-    pub async fn restart_rosetta_node(mut self, options: RosettaOptions) -> anyhow::Result<Self> {
-        let rosetta_state_directory = self.rosetta_context.state_directory.clone();
-        self.rosetta_context.kill();
+    pub async fn restart_rosetta_node(mut self, options: RosettaOptions) -> Self {
+        let ledger_tip = self
+            .rosetta_client
+            .network_status(self.network_identifier.clone())
+            .await
+            .unwrap()
+            .current_block_identifier
+            .index;
 
-        assert!(rosetta_state_directory.exists());
+        self.rosetta_context.kill();
 
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
         let rosetta_state_directory =
@@ -89,8 +146,14 @@ impl RosettaTestingEnvironment {
         self.rosetta_client =
             RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
                 .expect("Unable to parse url");
-
-        Ok(self)
+        wait_for_rosetta_to_sync_up_to_block(
+            &self.rosetta_client,
+            self.network_identifier.clone(),
+            ledger_tip,
+        )
+        .await
+        .unwrap();
+        self
     }
 }
 
@@ -141,12 +204,11 @@ impl RosettaTestingEnvironmentBuilder {
             .await
             .expect("Unable to create the canister in which the Ledger would be installed");
 
+        let minting_account = self
+            .minting_account
+            .unwrap_or_else(|| minter_identity().sender().unwrap().into());
         let init_args = LedgerCanisterInitPayload::builder()
-            .minting_account(
-                self.minting_account
-                    .unwrap_or_else(|| minter_identity().sender().unwrap().into())
-                    .into(),
-            )
+            .minting_account(minting_account.into())
             .initial_values(self.initial_balances.unwrap_or_else(|| {
                 HashMap::from([(
                     AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
@@ -255,6 +317,7 @@ impl RosettaTestingEnvironmentBuilder {
             rosetta_context,
             rosetta_client,
             network_identifier,
+            minting_account,
         }
     }
 }
