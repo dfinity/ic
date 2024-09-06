@@ -264,13 +264,13 @@ rust_test(
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
+        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
-        add_test = True,
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",

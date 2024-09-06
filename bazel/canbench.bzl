@@ -5,7 +5,7 @@ This module defines functions to run benchmarks using canbench.
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
-def rust_canbench(name, results_file, add_test=False, **kwargs):
+def rust_canbench(name, results_file, add_test = False, **kwargs):
     """ Run a Rust benchmark using canbench. 
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
