@@ -13,7 +13,6 @@
    end::catalog[] */
 
 use candid::Principal;
-use futures::future::join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries,
@@ -25,20 +24,15 @@ use ic_consensus_system_test_utils::upgrade::{
     UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test, ChainSignatureRequest,
+    run_chain_key_signature_test,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetricsProvider;
-use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
 use ic_system_test_driver::{
-    canister_agent::HasCanisterAgentCapability,
-    canister_requests,
     driver::{
         test_env::TestEnv,
         test_env_api::*,
     },
-    generic_workload_engine::engine::Engine,
     util::{block_on, MessageCanister},
 };
 use ic_types::SubnetId;
@@ -46,39 +40,10 @@ use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-
 const ALLOWED_FAILURES: usize = 1;
-
-const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
-
-pub async fn start_workload(subnet: SubnetSnapshot, requests: Vec<ChainSignatureRequest>, log: Logger) {
-    let agents = join_all(
-        subnet
-        .nodes()
-        .map(|n| async move { n.build_canister_agent().await }),
-        )
-        .await;
-
-    let generator = move |idx: usize| {
-        let request = requests[idx % requests.len()].clone();
-        let agent = agents[idx % agents.len()].clone();
-        async move {
-            let request_outcome = canister_requests![
-                idx,
-                1 * agent => request,
-            ];
-            request_outcome.into_test_outcome()
-        }
-    };
-
-    Engine::new(log.clone(), generator, 4.0, UP_DOWNGRADE_OVERALL_TIMEOUT)
-        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-        .execute_simply(log.clone())
-        .await;
-}
 
 pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let logger = env.logger();

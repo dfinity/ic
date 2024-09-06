@@ -31,7 +31,6 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
-        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:slog",
     ],
@@ -412,6 +411,8 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
         "@crate_index//:tokio",
     ]
 )
