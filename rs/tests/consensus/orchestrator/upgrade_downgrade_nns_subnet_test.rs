@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::{
-    bless_branch_version, get_chain_key_canister_and_public_key, upgrade,
-};
+use ic_consensus_system_test_upgrade_common::{bless_branch_version, upgrade};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
