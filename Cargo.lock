@@ -19754,6 +19754,7 @@ dependencies = [
  "lifeline",
  "maplit",
  "nix 0.24.3",
+ "num-traits",
  "num_cpus",
  "on_wire",
  "once_cell",
