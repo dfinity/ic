@@ -301,7 +301,7 @@ mod tests {
         writeln!(temp_file, "key2=value2")?;
         writeln!(temp_file, "# This is a comment")?;
         writeln!(temp_file, "key3=value3")?;
-        writeln!(temp_file, "")?;
+        writeln!(temp_file)?;
 
         let config_map = config_map_from_path(&file_path)?;
 
@@ -367,7 +367,7 @@ mod tests {
         );
         assert_eq!(networking.ipv4_prefix_length.unwrap(), 28);
         assert_eq!(networking.domain, Some("example.com".to_string()));
-        assert_eq!(verbose, false);
+        assert!(!verbose);
 
         // Test missing ipv6
         let mut temp_file_missing = NamedTempFile::new()?;
