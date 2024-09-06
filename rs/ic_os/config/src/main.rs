@@ -8,7 +8,7 @@ use config::types::{GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings,
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Creates SetuposConfig object
+    /// Creates SetupOSConfig object
     CreateSetuposConfig {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "config.ini")]
         config_ini_path: String,
@@ -25,6 +25,7 @@ pub enum Commands {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH.to_string(), value_name = "node_operator_private_key.pem")]
         node_operator_private_key_path: String,
     },
+    /// Creates HostOSConfig object from an existing setupos config.json file
     GenerateHostosConfig {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
