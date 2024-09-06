@@ -47,7 +47,7 @@ fn test_instrument_module_rename_memory_table() {
                 r#"
                         (module
                             (memory (export "mem") 1 2)
-                            (table (export "tab") 2 2 anyfunc)
+                            (table (export "tab") 2 2 funcref)
                             (func $run (export "run")
                                 (drop (i32.const 123))
                             )
@@ -79,7 +79,7 @@ fn test_instrument_module_export_memory_table() {
                 r#"
                         (module
                             (memory 1 2)
-                            (table 2 2 anyfunc)
+                            (table 2 2 funcref)
                             (func $run (export "run")
                                 (drop (i32.const 123))
                             )

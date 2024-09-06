@@ -45,7 +45,7 @@ pub type LedgerWasm = Wasm<Ledger>;
 pub type IndexWasm = Wasm<Index>;
 pub type ArchiveWasm = Wasm<Archive>;
 
-#[derive(Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize, Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[serde(from = "serde_bytes::ByteArray<N>", into = "serde_bytes::ByteArray<N>")]
 pub struct Hash<const N: usize>([u8; N]);
 
@@ -211,12 +211,12 @@ impl<T> From<&[u8]> for Wasm<T> {
 /// see [Git Revision Selection](https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection).
 pub type GitCommitHash = Hash<GIT_COMMIT_HASH_LENGTH>;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ManagedCanisters {
     canisters: BTreeMap<Erc20Token, Canisters>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Canisters {
     pub ledger: Option<LedgerCanister>,
     pub index: Option<IndexCanister>,
@@ -224,7 +224,7 @@ pub struct Canisters {
     pub metadata: CanistersMetadata,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanistersMetadata {
     pub ckerc20_token_symbol: String,
 }
@@ -328,7 +328,7 @@ pub type IndexCanister = Canister<Index>;
 #[derive(Debug)]
 pub enum Archive {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ManagedCanisterStatus {
     /// Canister created with the given principal
     /// but wasm module is not yet installed.
@@ -362,7 +362,7 @@ impl ManagedCanisterStatus {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LedgerSuiteVersion {
     pub ledger_compressed_wasm_hash: WasmHash,
     pub index_compressed_wasm_hash: WasmHash,
@@ -370,7 +370,7 @@ pub struct LedgerSuiteVersion {
 }
 
 /// Configuration state of the ledger orchestrator.
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 enum ConfigState {
     #[default]
     Uninitialized,
@@ -416,7 +416,7 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
         .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct State {
     managed_canisters: ManagedCanisters,
     cycles_management: CyclesManagement,
@@ -576,7 +576,7 @@ pub trait ManageSingleCanister<T> {
     fn try_insert(&mut self, canister: Canister<T>) -> Result<(), OccupiedError<Canister<T>>>;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct OccupiedError<T> {
     value: T,
 }
@@ -635,7 +635,7 @@ impl ManageSingleCanister<Index> for Canisters {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidStateError {
     TooManyAdditionalControllers { max: usize, actual: usize },
 }

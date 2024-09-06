@@ -88,7 +88,7 @@ fn execute_instance(
                     let mut priority = instance.driver.consensus_priority.borrow_mut();
                     if priority.last_updated + PRIORITY_FN_REFRESH_INTERVAL < timestamp {
                         priority.refresh(
-                            &instance.driver.consensus_gossip,
+                            &instance.driver.consensus_bouncer,
                             &*instance.driver.consensus_pool.read().unwrap(),
                             timestamp,
                         );

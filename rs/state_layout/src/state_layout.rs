@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{LogVisibility, LogVisibilityV2};
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -19,7 +19,7 @@ use ic_replicated_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
-    page_map::{Shard, StorageLayout},
+    page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
@@ -179,7 +179,7 @@ pub struct CanisterStateBits {
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CanisterSnapshotBits {
     /// The ID of the canister snapshot.
     pub snapshot_id: SnapshotId,
@@ -201,6 +201,8 @@ pub struct CanisterSnapshotBits {
     pub wasm_memory_size: NumWasmPages,
     /// The total size of the snapshot in bytes.
     pub total_size: NumBytes,
+    /// State of the exported Wasm globals.
+    pub exported_globals: Vec<Global>,
 }
 
 #[derive(Clone)]
@@ -1728,67 +1730,66 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     }
 
     /// List of overlay files on disk.
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(self.existing_overlays()?)
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
     }
 
     /// Get overlay height as encoded in the file name.
-    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .next()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16)
             .map(Height::new)
             .map_err(|err| {
-                LayoutError::CorruptedLayout {
+                Box::new(LayoutError::CorruptedLayout {
                     path: overlay.to_path_buf(),
                     message: format!("failed to get height for overlay {}: {}", hex, err),
-                }
-                .into()
+                }) as Box<dyn std::error::Error + Send>
             })
     }
 
     /// Get overlay shard as encoded in the file name.
-    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .nth(1)
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
-            LayoutError::CorruptedLayout {
+            Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: format!("failed to get shard for overlay {}: {}", hex, err),
-            }
-            .into()
+            }) as Box<dyn std::error::Error + Send>
         })
     }
 }
@@ -2297,10 +2298,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: pb_canister_state_bits::LogVisibility::from(&LogVisibility::from(
-                item.log_visibility.clone(),
-            ))
-            .into(),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
             canister_log_records: item
@@ -2383,33 +2380,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
-        // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
-        // This should populate `allowed_viewers` correctly with the list of principals.
-        let log_visibility: LogVisibilityV2 = match try_from_option_field::<
-            pb_canister_state_bits::LogVisibilityV2,
-            LogVisibilityV2,
-            _,
-        >(
-            value.log_visibility_v2,
-            "CanisterStateBits::log_visibility_v2",
-        ) {
-            Ok(log_visibility_v2) => log_visibility_v2,
-            Err(_) => {
-                let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
-                    value.log_visibility,
-                )
-                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
-                    typ: "LogVisibility",
-                    err: format!(
-                        "Unexpected value of log visibility: {}",
-                        value.log_visibility
-                    ),
-                })?;
-                LogVisibilityV2::from(LogVisibility::from(pb_log_visibility))
-            }
-        };
-
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -2476,7 +2446,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility,
+            log_visibility: try_from_option_field(
+                value.log_visibility_v2,
+                "CanisterStateBits::log_visibility_v2",
+            )
+            .unwrap_or_default(),
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
@@ -2569,6 +2543,11 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             stable_memory_size: item.stable_memory_size.get() as u64,
             wasm_memory_size: item.wasm_memory_size.get() as u64,
             total_size: item.total_size.get(),
+            exported_globals: item
+                .exported_globals
+                .iter()
+                .map(|global| global.into())
+                .collect(),
         }
     }
 }
@@ -2593,6 +2572,12 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             }
             None => None,
         };
+
+        let mut exported_globals = Vec::with_capacity(item.exported_globals.len());
+        for global in item.exported_globals.into_iter() {
+            exported_globals.push(global.try_into()?);
+        }
+
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
@@ -2608,6 +2593,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             stable_memory_size: NumWasmPages::from(item.stable_memory_size as usize),
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
             total_size: NumBytes::from(item.total_size),
+            exported_globals,
         })
     }
 }
@@ -2629,7 +2615,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum FilePermissions {
     ReadOnly,
     ReadWrite,
@@ -2718,7 +2704,7 @@ fn sync_and_mark_files_readonly(
     Ok(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum FSync {
     Yes,
     No,

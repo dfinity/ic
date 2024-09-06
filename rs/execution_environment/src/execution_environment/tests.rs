@@ -679,24 +679,28 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     test.set_user_id(user_test_id(13));
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: ic00::IC_00.get(),
-            user_id: user_test_id(13),
-            time: test.time(),
-            state: IngressState::Failed(UserError::new(
-                ErrorCode::CanisterInvalidController,
-                format!(
-                    "Only the controllers of the canister {} can control it.\n\
+    let IngressStatus::Known {
+        receiver,
+        user_id,
+        time,
+        state: IngressState::Failed(error),
+    } = ingress_status
+    else {
+        panic!("Unexpected ingress status {ingress_status:?}")
+    };
+    assert_eq!(receiver, ic00::IC_00.get());
+    assert_eq!(user_id, user_test_id(13));
+    assert_eq!(time, test.time());
+    error.assert_contains(
+        ErrorCode::CanisterInvalidController,
+        &format!(
+            "Only the controllers of the canister {} can control it.\n\
                     Canister's controllers: {}\n\
                     Sender's ID: {}",
-                    canister_id,
-                    controller.get(),
-                    user_test_id(13).get()
-                )
-            )),
-        }
+            canister_id,
+            controller.get(),
+            user_test_id(13).get()
+        ),
     );
 }
 

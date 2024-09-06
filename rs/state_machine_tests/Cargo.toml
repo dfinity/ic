@@ -17,7 +17,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
@@ -62,6 +62,7 @@ ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 maplit = "1.0.2"
 rand = { workspace = true }
+rcgen = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -72,10 +73,10 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-proptest = "1.0"
+proptest = { workspace = true }

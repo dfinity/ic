@@ -25,8 +25,10 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
     },
+    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -36,6 +38,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -78,7 +81,7 @@ pub(crate) mod tests;
 
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SchedulerRoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     instructions: RoundInstructions,
@@ -531,7 +534,7 @@ impl SchedulerImpl {
         state
     }
 
-    /// Invokes `ExecutionEnvironmnet` to execute a subnet message.
+    /// Invokes `ExecutionEnvironment` to execute a subnet message.
     fn execute_subnet_message(
         &self,
         msg: CanisterMessage,
@@ -662,7 +665,7 @@ impl SchedulerImpl {
 
         // Start iteration loop:
         //      - Execute subnet messages.
-        //      - Execute hearbeat and global timer tasks.
+        //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
         //      - Induct messages on the same subnet.
         let mut state = loop {
@@ -1340,7 +1343,36 @@ impl SchedulerImpl {
                 }
             }
         }
+        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
+    }
+
+    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
+        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
+            // Returns the larger of the two:
+            // - the default value
+            // - the average between the current usage and the hard limit.
+            default.max(NumBytes::new(
+                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
+            ))
+        }
+
+        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
+        for (_id, canister) in state.canister_states.iter_mut() {
+            if canister.system_state.wasm_memory_limit.is_none() {
+                let num_wasm_pages = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
+                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
+                    canister.system_state.wasm_memory_limit =
+                        Some(compute_default_wasm_memory_limit(
+                            default_wasm_memory_limit,
+                            wasm_memory_usage,
+                        ));
+                }
+            }
+        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.
@@ -1757,8 +1789,12 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    // TODO(EXC-1722): remove after migrating to v2.
                     self.metrics
                         .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
+                    self.metrics
+                        .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
@@ -1840,6 +1876,13 @@ impl Scheduler for SchedulerImpl {
                         registry_settings.subnet_size,
                     );
                 }
+
+                self.metrics
+                    .canister_snapshots_memory_usage
+                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
+                self.metrics
+                    .num_canister_snapshots
+                    .set(final_state.canister_snapshots.count() as i64);
             }
             self.finish_round(&mut final_state, current_round_type);
             final_state
@@ -2194,10 +2237,10 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    let streams_response_bytes = state
+    let streams_guaranteed_response_bytes = state
         .metadata
         .streams()
-        .responses_size_bytes()
+        .guaranteed_responses_size_bytes()
         .values()
         .sum();
 
@@ -2271,7 +2314,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
-    metrics.observe_streams_response_bytes(streams_response_bytes);
+    metrics.observe_streams_response_bytes(streams_guaranteed_response_bytes);
 
     metrics
         .ingress_history_length

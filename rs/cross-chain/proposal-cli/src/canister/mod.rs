@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
-#[derive(Debug, EnumIter, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, EnumIter)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
     CkBtcArchive,
@@ -118,7 +118,7 @@ impl TargetCanister {
     pub fn artifact_file_name(&self) -> &str {
         match &self {
             TargetCanister::CkBtcArchive => "ic-icrc1-archive.wasm.gz",
-            TargetCanister::CkBtcIndex => "ic-icrc1-index.wasm.gz",
+            TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
             TargetCanister::CkBtcKyt => "ic-ckbtc-kyt.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",

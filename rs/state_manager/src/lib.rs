@@ -63,6 +63,7 @@ use ic_types::{
     SubnetId,
 };
 use ic_utils_thread::JoinOnDrop;
+use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::convert::{From, TryFrom};
@@ -103,6 +104,10 @@ const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
 /// See note [Replicated State Invariants].
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =
     "state_manager_checkpoint_soft_invariant_broken";
+
+/// Critical error tracking ReplicatedState altering after checkpoint.
+const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
+    "state_manager_replicated_state_altered_after_checkpoint";
 
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
@@ -186,6 +191,7 @@ pub struct CheckpointMetrics {
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
+    replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
@@ -220,6 +226,9 @@ impl CheckpointMetrics {
         let load_checkpoint_soft_invariant_broken =
             metrics_registry.error_counter(CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN);
 
+        let replicated_state_altered_after_checkpoint = metrics_registry
+            .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
+
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
             "Duration to execute requests to Tip handling thread in seconds.",
@@ -242,6 +251,7 @@ impl CheckpointMetrics {
             load_checkpoint_step_duration,
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
+            replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
@@ -624,14 +634,14 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
     meta_manifest: Arc<MetaManifest>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct StateMetadata {
     /// We don't persist the checkpoint layout because we re-create it every
     /// time we discover a checkpoint on disk.
@@ -900,21 +910,11 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
             is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
-}
-
-fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    let mut result = Vec::new();
-    for entry in PageMapType::list_all_including_snapshots(state) {
-        if let Some(page_map) = entry.get(state) {
-            result.push((entry, page_map.num_host_pages()));
-        }
-    }
-    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -1066,7 +1066,7 @@ struct PopulatedMetadata {
 /// When adding additional PageMaps, add an appropriate entry here
 /// to enable all relevant state manager features, e.g. incremental
 /// manifest computations
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
@@ -1153,7 +1153,7 @@ impl PageMapType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct DirtyPageMap {
     pub height: Height,
     pub page_type: PageMapType,
@@ -2553,6 +2553,26 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
+                .with_label_values(&["validate_eq"])
+                .start_timer();
+            if let Err(err) = checkpointed_state.validate_eq(state) {
+                error!(
+                    self.log,
+                    "{}: Replicated state altered: {}",
+                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+                    err
+                );
+                self.metrics
+                    .checkpoint_metrics
+                    .replicated_state_altered_after_checkpoint
+                    .inc();
+            }
+        }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
             switch_to_checkpoint(state, &checkpointed_state);
@@ -2610,7 +2630,7 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 }]
             } else {
@@ -3826,7 +3846,7 @@ fn maliciously_alter_certified_hash(
     certification
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CheckpointError {
     /// Wraps a stringified `std::io::Error`, a message and the path of the
     /// affected file/directory.

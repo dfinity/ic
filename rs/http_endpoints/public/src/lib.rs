@@ -24,9 +24,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{
-    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
-};
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -135,7 +133,7 @@ const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 /// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
 const TLS_HANDHAKE_BYTES: u8 = 22;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
@@ -301,17 +299,19 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    enable_synchronous_call_handler_for_v3_endpoint: bool,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
 
+    let _enter = rt_handle.enter();
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr, &rt_handle);
-    let _enter = rt_handle.enter();
+    let tcp_listener = start_tcp_listener(addr);
+
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
@@ -345,16 +345,32 @@ pub fn start_server(
     );
 
     let call_router =
-        call::CallServiceV2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
-    let call_v3_router = call::CallServiceV3::new_router(
-        call_handler,
-        ingress_watcher_handle,
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        delegation_from_nns.clone(),
-        state_reader.clone(),
-    );
+    let call_v3_router = if enable_synchronous_call_handler_for_v3_endpoint {
+        call_v3::new_router(
+            call_handler,
+            ingress_watcher_handle,
+            metrics.clone(),
+            config.ingress_message_certificate_timeout_seconds,
+            delegation_from_nns.clone(),
+            state_reader.clone(),
+        )
+    } else {
+        call_v3::new_asynchronous_call_service_router(
+            call_handler.clone(),
+            Some(ingress_watcher_handle.clone()),
+        )
+        // We only want to enforce the global concurrency limit for the asynchronous call handler.
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(map_box_error_to_response))
+                .load_shed()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                )),
+        )
+    };
 
     let query_router = QueryServiceBuilder::builder(
         log.clone(),
@@ -1124,10 +1140,8 @@ mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new()
-                .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new()
-                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(

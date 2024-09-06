@@ -1,11 +1,15 @@
+use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
+use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
+use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
@@ -41,6 +45,7 @@ use icrc_ledger_types::icrc3::transactions::Transfer;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
+use std::sync::Arc;
 use std::{
     cmp,
     collections::{BTreeMap, HashMap},
@@ -80,7 +85,7 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -96,13 +101,13 @@ pub struct InitArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
@@ -114,7 +119,7 @@ pub struct UpgradeArgs {
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
-#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct ChangeArchiveOptions {
     pub trigger_threshold: Option<usize>,
     pub num_blocks_to_archive: Option<usize>,
@@ -127,7 +132,7 @@ pub struct ChangeArchiveOptions {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
@@ -2464,9 +2469,129 @@ pub fn icrc1_test_block_transformation<T>(
     }
 }
 
-pub fn icrc1_test_approval_upgrade<T>(
+fn apply_arg_with_caller(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    arg: &ArgWithCaller,
+) -> BlockIndex {
+    match &arg.arg {
+        LedgerEndpointArg::ApproveArg(approve_arg) => {
+            send_approval(env, ledger_id, arg.caller.sender().unwrap(), approve_arg)
+                .expect("approval failed")
+        }
+        LedgerEndpointArg::TransferArg(transfer_arg) => {
+            send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
+                .expect("transfer failed")
+        }
+    }
+}
+
+pub fn test_upgrade_serialization(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
+    ledger_wasm_nextmigrationversionmemorymanager: Option<Vec<u8>>,
+    init_args: Vec<u8>,
+    upgrade_args: Vec<u8>,
+    minter: Arc<BasicIdentity>,
+    verify_blocks: bool,
+) {
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter_principal: Principal = minter.sender().unwrap();
+    const INITIAL_TX_BATCH_SIZE: usize = 100;
+    const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 6 * ADDITIONAL_TX_BATCH_SIZE;
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                minter,
+                FEE,
+                TOTAL_TX_COUNT,
+                now,
+            ),),
+            |(transactions,)| {
+                let env = StateMachine::new();
+                env.set_time(now);
+                let ledger_id = env
+                    .install_canister(ledger_wasm_mainnet.clone(), init_args.clone(), None)
+                    .unwrap();
+
+                let mut in_memory_ledger = InMemoryLedger::default();
+
+                let mut tx_index = 0;
+                let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
+
+                let mut add_tx_and_verify = || {
+                    while tx_index < tx_index_target {
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
+                        in_memory_ledger.apply_arg_with_caller(
+                            &transactions[tx_index],
+                            TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
+                                env.time(),
+                            )),
+                            minter_principal,
+                            Some(FEE.into()),
+                        );
+                        tx_index += 1;
+                    }
+                    tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
+                    in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
+                };
+                add_tx_and_verify();
+
+                let mut test_upgrade = |ledger_wasm: Vec<u8>| {
+                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
+                        .unwrap();
+                    add_tx_and_verify();
+                };
+
+                // Test if the old serialized approvals and balances are correctly deserialized
+                test_upgrade(ledger_wasm_current.clone());
+                // Test the new wasm serialization
+                test_upgrade(ledger_wasm_current.clone());
+                if let Some(ledger_wasm_nextmigrationversionmemorymanager) =
+                    ledger_wasm_nextmigrationversionmemorymanager.clone()
+                {
+                    // Test serializing to the memory manager
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
+                    // Test upgrade to memory manager again
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
+
+                    // Current mainnet wasm cannot deserialize from memory manager
+                    match env.upgrade_canister(
+                        ledger_id,
+                        ledger_wasm_mainnet.clone(),
+                        upgrade_args.clone(),
+                    ) {
+                        Ok(_) => {
+                            panic!("Upgrade from memory manager directly to mainnet should fail!")
+                        }
+                        Err(e) => {
+                            assert!(e.description().contains("failed to decode ledger state"))
+                        }
+                    };
+                }
+                // Test deserializing from memory manager
+                test_upgrade(ledger_wasm_current.clone());
+                // Test downgrade to mainnet wasm
+                test_upgrade(ledger_wasm_mainnet.clone());
+                if verify_blocks {
+                    // This will also verify the ledger blocks.
+                    // The current implementation of the InMemoryLedger cannot get blocks
+                    // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
+                    verify_ledger_state(&env, ledger_id, None);
+                }
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    ledger_wasm_nextmigrationversionmemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2491,11 +2616,9 @@ pub fn icrc1_test_approval_upgrade<T>(
         },
     ];
     let mut initial_balances = vec![];
-    for account in &accounts {
-        initial_balances.push((*account, 10_000_000u64));
-    }
-    for account in &additional_accounts {
-        initial_balances.push((*account, 10_000_000u64));
+    let all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
+    for (index, account) in all_accounts.iter().enumerate() {
+        initial_balances.push((*account, 10_000_000u64 + index as u64));
     }
 
     // Setup ledger as it is deployed on the mainnet.
@@ -2527,8 +2650,12 @@ pub fn icrc1_test_approval_upgrade<T>(
             expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
         }
     }
+    let mut balances = BTreeMap::new();
+    for account in &all_accounts {
+        balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
+    }
 
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
+    let test_upgrade = |ledger_wasm: Vec<u8>, balances: BTreeMap<&Account, Nat>| {
         env.upgrade_canister(
             canister_id,
             ledger_wasm,
@@ -2548,12 +2675,28 @@ pub fn icrc1_test_approval_upgrade<T>(
             }
         }
         assert_eq!(expected_allowances, allowances);
+
+        for account in &all_accounts {
+            assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
+        }
     };
 
-    // Test if the old serialized approvals are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
-    test_upgrade(ledger_wasm_current);
+    // Test if the old serialized approvals and balances are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test serializing to the memory manager
+    test_upgrade(
+        ledger_wasm_nextmigrationversionmemorymanager.clone(),
+        balances.clone(),
+    );
+    // Test upgrade to memory manager again
+    test_upgrade(
+        ledger_wasm_nextmigrationversionmemorymanager,
+        balances.clone(),
+    );
+    // Test deserializing from memory manager
+    test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
     for a1 in &accounts {
@@ -2561,16 +2704,18 @@ pub fn icrc1_test_approval_upgrade<T>(
             let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
             approve_args.from_subaccount = a1.subaccount;
             send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+            balances.insert(a1, balances[a1].clone() - approve_args.fee.unwrap());
 
             let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
             approve_args.expires_at = Some(expiration);
             approve_args.from_subaccount = a2.subaccount;
             send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+            balances.insert(a2, balances[a2].clone() - approve_args.fee.unwrap());
         }
     }
 
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
+    // Test downgrade to mainnet wasm
+    test_upgrade(ledger_wasm_mainnet, balances);
 
     // See if the additional approvals are there
     for a1 in &accounts {

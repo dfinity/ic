@@ -44,6 +44,12 @@ pub struct RosettaOptions {
     pub ic_url: String,
 }
 
+impl RosettaOptions {
+    pub fn builder(ic_url: String) -> RosettaOptionsBuilder {
+        RosettaOptionsBuilder::new(ic_url)
+    }
+}
+
 pub struct RosettaOptionsBuilder {
     ledger_id: Option<Principal>,
     persistent_storage: bool,
