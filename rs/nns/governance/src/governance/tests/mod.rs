@@ -509,7 +509,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 #[cfg(feature = "test")]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
+mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
@@ -547,23 +547,49 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                    .clone(),
-                proposal_id,
-                random_swap_start_time: GlobalTimeOfDay {
+        // Step 2: Call the code under test.
+        let converted = {
+            let create_service_nervous_system =
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+            // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+            // is inlined from `Governance::make_sns_init_payload`.
+            let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+                let random_swap_start_time = GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
-                },
+                };
+
+                let start_time = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.start_time);
+
+                let duration = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.duration);
+
+                CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                    start_time.unwrap_or(random_swap_start_time),
+                    duration.unwrap_or_default(),
+                    current_timestamp_seconds,
+                )
+                .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
+            };
+
+            let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system).unwrap();
+
+            SnsInitPayload {
                 neurons_fund_participation_constraints: Some(
                     NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
                 ),
-            };
+                nns_proposal_id: Some(proposal_id),
+                swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+                swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+                ..sns_init_payload
+            }
+        };
 
-        // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+        converted.validate_post_execution().unwrap();
 
         // Step 3: Inspect the result.
 

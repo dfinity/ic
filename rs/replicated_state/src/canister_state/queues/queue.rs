@@ -111,17 +111,22 @@ pub(crate) struct CanisterQueue {
     capacity: usize,
 
     /// Number of enqueued request references.
+    ///
+    /// Invariants:
+    ///  * `request_slots == queue.iter().filter(|item| !item.is_response()).count()`
+    ///  * `request_slots <= capacity`
     request_slots: usize,
 
     /// Number of slots used by response references or reserved for expected
     /// responses.
+    ///
+    /// Invariants:
+    ///  * `response_slots >= queue.iter().filter(|item| item.is_response()).count()`
+    ///  * `response_slots <= capacity`
     response_slots: usize,
 }
 
 impl CanisterQueue {
-    /// The memory overhead of an empty `CanisterQueue`, in bytes.
-    pub const EMPTY_SIZE_BYTES: usize = size_of::<CanisterQueue>();
-
     /// Creates a new `CanisterQueue` with the given capacity.
     pub(super) fn new(capacity: usize) -> Self {
         Self {
@@ -217,7 +222,7 @@ impl CanisterQueue {
 
         if item.is_response() {
             debug_assert!(self.response_slots > 0);
-            self.response_slots -= 1;
+            self.response_slots = self.response_slots.saturating_sub(1);
         } else {
             debug_assert!(self.request_slots > 0);
             self.request_slots -= 1;

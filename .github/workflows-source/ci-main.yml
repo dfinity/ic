@@ -40,7 +40,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:748d5cd92d982531a25cd6c4f247bb6c0e484c9ac654164341f59a7d57d1fffc
+    image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -128,14 +128,13 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          RUN_ON_DIFF_ONLY: "true"
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS_RULES: ${{ env.BAZEL_EXTRA_ARGS_RULES || '' }}
-          # run on diff only if it is a pull request, otherwise run all targets
-          RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-upload
       - <<: *bazel-bep
@@ -154,11 +153,6 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
-          # run on diff only if it is a pull request, otherwise run all targets
-          #RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
-          # TODO: disabling until the following issue is resolved
-          # https://github.com/dfinity/ic/actions/runs/9699415138/job/26768332602
-          RUN_ON_DIFF_ONLY: false
       - <<: *bazel-bep
 
   bazel-test-macos-intel:
@@ -271,8 +265,8 @@ jobs:
               "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
-          RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
+          RUN_ON_DIFF_ONLY: "true"
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:

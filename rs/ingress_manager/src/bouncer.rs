@@ -1,11 +1,11 @@
 //! Contains bouncer logic for the ingress pool(s).
 
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_pool::IngressPoolThrottler,
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue},
     time_source::TimeSource,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_types::artifact::IngressMessageId;
 use std::sync::Arc;
 use std::time::Duration;

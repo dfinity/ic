@@ -37,8 +37,8 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/constants",
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/limits",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/consensus",
