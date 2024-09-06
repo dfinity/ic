@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::{get_config_ini_settings, get_deployment_settings, serialize_and_write_config};
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use config::types::{GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig};
 
@@ -52,18 +52,13 @@ pub fn main() -> Result<()> {
         }) => {
             let config_ini_path = Path::new(&config_ini_path);
             let deployment_json_path = Path::new(&deployment_json_path);
-            // help: nns_public_key_path is copied to GuestOS (and it's contents are not copied into ic.json)
             let nns_public_key_path = Path::new(&nns_public_key_path);
-            let ssh_authorized_keys_path = Path::new(&ssh_authorized_keys_path);
-            let node_operator_private_key_path = Path::new(&node_operator_private_key_path);
+            let ssh_authorized_keys_path = Some(PathBuf::from(ssh_authorized_keys_path));
 
-            let ssh_authorized_keys_path = Some(ssh_authorized_keys_path.to_path_buf());
-
-            let node_operator_private_key_path = if node_operator_private_key_path.exists() {
-                Some(node_operator_private_key_path.to_path_buf())
-            } else {
-                None
-            };
+            let node_operator_private_key_path = PathBuf::from(&node_operator_private_key_path);
+            let node_operator_private_key_path = node_operator_private_key_path
+                .exists()
+                .then_some(node_operator_private_key_path);
 
             // get config.ini variables
             let (network_settings, verbose) = get_config_ini_settings(config_ini_path)?;
