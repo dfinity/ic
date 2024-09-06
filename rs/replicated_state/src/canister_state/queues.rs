@@ -130,7 +130,7 @@ pub struct CanisterQueues {
     /// Per remote canister input and output queues. Queues hold references into the
     /// message pool, some of which may be stale due to expiration or load shedding.
     ///
-    /// The item at the head of each queue, if any, is guaranteed to be non-stale.
+    /// The item at the front of each queue, if any, is guaranteed to be non-stale.
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
@@ -160,7 +160,7 @@ pub struct CanisterQueues {
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
     /// Priority queue of non-empty output queues. The next message to be popped
-    /// / peeked is the one at the head of the first queue.
+    /// / peeked is the one at the front of the first queue.
     queues: VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>,
 
     pool: &'a mut MessagePool,
@@ -193,7 +193,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         let item = queue.peek().expect("Empty queue in iterator.");
 
         let msg = self.pool.get(item.id());
-        assert!(msg.is_some(), "stale reference at the head of output queue");
+        assert!(msg.is_some(), "stale reference at front of output queue");
         msg
     }
 
@@ -206,7 +206,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         debug_assert!(self.size >= queue.len());
         self.size -= queue.len();
 
-        // Queue must be non-empty and message at the head of queue non-stale.
+        // Queue must be non-empty and message at the front of queue non-stale.
         let msg = pop_and_advance(queue, self.pool).expect("Empty queue in output iterator.");
         debug_assert_eq!(Ok(()), canister_queue_ok(queue, self.pool, receiver));
 
@@ -430,7 +430,7 @@ impl CanisterQueues {
 
     /// Pops the next canister input queue message.
     ///
-    /// Note: We pop senders from the head of `input_schedule` and insert them
+    /// Note: We pop senders from the front of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
     fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
@@ -485,7 +485,7 @@ impl CanisterQueues {
                 let msg = self
                     .pool
                     .get(item.id())
-                    .expect("stale reference at the head of input queue");
+                    .expect("stale reference at the front of input queue");
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
                 return Some(msg.clone().into());
@@ -725,13 +725,13 @@ impl CanisterQueues {
         debug_assert_eq!(Ok(()), self.test_invariants());
     }
 
-    /// Returns a reference to the (non-stale) message at the head of the respective
+    /// Returns a reference to the (non-stale) message at the front of the respective
     /// output queue, if any.
     pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         let output_queue = &self.canister_queues.get(canister_id)?.1;
 
         let msg = self.pool.get(output_queue.peek()?.id());
-        assert!(msg.is_some(), "stale reference at the head of output queue");
+        assert!(msg.is_some(), "stale reference at front of output queue");
         msg
     }
 
@@ -984,7 +984,7 @@ impl CanisterQueues {
         };
 
         // Ensure that the first reference in a queue is never stale: if we dropped the
-        // message at the head of a queue, advance to the first non-stale reference.
+        // message at the front of a queue, advance to the first non-stale reference.
         //
         // Defensive check, reference may have already been popped by an earlier
         // `on_message_dropped()` call if multiple messages expired at once (e.g. given
@@ -1145,14 +1145,14 @@ fn get_or_insert_queues<'a>(
     (input_queue, output_queue)
 }
 
-/// Pops and returns the item at the head of the queue and advances the queue
+/// Pops and returns the item at the front of the queue and advances the queue
 /// to the next non-stale item.
 fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<RequestOrResponse> {
     let item = queue.pop()?;
     queue.pop_while(|item| pool.get(item.id()).is_none());
 
     let msg = pool.take(item.id());
-    assert!(msg.is_some(), "stale reference at the head of queue");
+    assert!(msg.is_some(), "stale reference at the front of queue");
     msg
 }
 
@@ -1170,7 +1170,7 @@ fn canister_queue_ok(
         let id = item.id();
         if pool.get(id).is_none() {
             return Err(format!(
-                "Stale reference at the head of {:?} queue to/from {}",
+                "Stale reference at the front of {:?} queue to/from {}",
                 id.context(),
                 canister_id
             ));
