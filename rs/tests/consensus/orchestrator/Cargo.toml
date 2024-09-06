@@ -70,3 +70,7 @@ path = "node_assign_test.rs"
 [[bin]]
 name = "ic-systest-unassigned-node-upgrade"
 path = "unassigned_node_upgrade_test.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-with-alternative-urls"
+path = "upgrade_with_alternative_urls.rs"

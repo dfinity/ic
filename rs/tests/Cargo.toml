@@ -399,10 +399,6 @@ name = "ic-systest-network-large"
 path = "networking/network_large_test.rs"
 
 [[bin]]
-name = "ic-systest-upgrade-with-alternative-urls"
-path = "consensus/orchestrator/upgrade_with_alternative_urls.rs"
-
-[[bin]]
 name = "ic-systest-query-workload-long-test"
 path = "networking/query_workload_long_test.rs"
 
