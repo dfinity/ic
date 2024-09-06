@@ -13,28 +13,28 @@ use config::types::{
 pub enum Commands {
     /// Creates SetupOSConfig object
     CreateSetuposConfig {
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "config.ini")]
-        config_ini_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH, value_name = "config.ini")]
+        config_ini_path: PathBuf,
 
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH.to_string(), value_name = "deployment.json")]
-        deployment_json_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
+        deployment_json_path: PathBuf,
 
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH.to_string(), value_name = "nns_public_key.pem")]
-        nns_public_key_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH, value_name = "nns_public_key.pem")]
+        nns_public_key_path: PathBuf,
 
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH.to_string(), value_name = "ssh_authorized_keys")]
-        ssh_authorized_keys_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH, value_name = "ssh_authorized_keys")]
+        ssh_authorized_keys_path: PathBuf,
 
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH.to_string(), value_name = "node_operator_private_key.pem")]
-        node_operator_private_key_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH, value_name = "node_operator_private_key.pem")]
+        node_operator_private_key_path: PathBuf,
 
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
-        setupos_config_json_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        setupos_config_json_path: PathBuf,
     },
     /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
-        #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
-        setupos_config_json_path: String,
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        setupos_config_json_path: PathBuf,
     },
 }
 
@@ -57,21 +57,19 @@ pub fn main() -> Result<()> {
             node_operator_private_key_path,
             setupos_config_json_path,
         }) => {
-            let config_ini_path = Path::new(&config_ini_path);
-            let deployment_json_path = Path::new(&deployment_json_path);
-            let nns_public_key_path = Path::new(&nns_public_key_path);
-            let ssh_authorized_keys_path = Some(PathBuf::from(ssh_authorized_keys_path));
+            let ssh_authorized_keys_path = ssh_authorized_keys_path
+                .exists()
+                .then_some(ssh_authorized_keys_path);
 
-            let node_operator_private_key_path = PathBuf::from(&node_operator_private_key_path);
             let node_operator_private_key_path = node_operator_private_key_path
                 .exists()
                 .then_some(node_operator_private_key_path);
 
             // get config.ini variables
-            let (network_settings, verbose) = get_config_ini_settings(config_ini_path)?;
+            let (network_settings, verbose) = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
-            let deployment_json = read_deployment_file(deployment_json_path)?;
+            let deployment_json = read_deployment_file(&deployment_json_path)?;
             let vm_memory = deployment_json.resources.memory;
             let vm_cpu = deployment_json
                 .resources
