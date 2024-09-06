@@ -1345,6 +1345,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        Memory::new_for_testing().size,
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1417,6 +1418,7 @@ fn push_output_request_respects_memory_limits() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        Memory::new_for_testing().size,
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1528,6 +1530,7 @@ fn push_output_request_oversized_request_memory_limits() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        Memory::new_for_testing().size,
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );

@@ -733,6 +733,7 @@ impl MemoryUsage {
         wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         stable_memory_usage: NumBytes,
+        wasm_memory_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
         memory_allocation: MemoryAllocation,
@@ -750,18 +751,13 @@ impl MemoryUsage {
                 limit
             );
         }
-        let (wasm_memory_usage, overflow) = current_usage
-            .get()
-            .overflowing_sub(stable_memory_usage.get());
-
-        debug_assert!(!overflow);
 
         Self {
             limit,
             wasm_memory_limit,
             current_usage,
             stable_memory_usage,
-            wasm_memory_usage: NumBytes::new(wasm_memory_usage),
+            wasm_memory_usage,
             current_message_usage,
             subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
@@ -946,11 +942,6 @@ impl MemoryUsage {
             }
         }
 
-        debug_assert_eq!(
-            self.current_usage.get(),
-            self.stable_memory_usage.get() + self.wasm_memory_usage.get()
-        );
-
         Ok(())
     }
 
@@ -1085,6 +1076,7 @@ impl SystemApiImpl {
         wasm_native_stable_memory: FlagStatus,
         max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
+        wasm_memory_size: NumWasmPages,
         out_of_instructions_handler: Rc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
@@ -1095,6 +1087,12 @@ impl SystemApiImpl {
             .map(|v| NumBytes::new(v as u64))
             .expect("Stable memory size is larger than maximal allowed.");
 
+        let wasm_memory_usage = wasm_memory_size
+            .get()
+            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
+            .map(|v| NumBytes::new(v as u64))
+            .expect("Wasm memory size is larger than maximal allowed.");
+
         let memory_usage = MemoryUsage::new(
             log.clone(),
             sandbox_safe_system_state.canister_id,
@@ -1102,6 +1100,7 @@ impl SystemApiImpl {
             execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             stable_memory_usage,
+            wasm_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
             execution_parameters.memory_allocation,
