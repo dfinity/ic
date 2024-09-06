@@ -156,23 +156,15 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
         serde_json::to_string_pretty(config).expect("Failed to serialize configuration");
-    write_to_file(path, &serialized_config)
-}
 
-fn write_to_file(path: &Path, content: &str) -> Result<()> {
-    ensure_directory_exists(path)?;
-    let mut file = File::create(path)?;
-    file.write_all(content.as_bytes())?;
-    Ok(())
-}
-
-fn ensure_directory_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         create_dir_all(parent)?;
     }
+
+    let mut file = File::create(path)?;
+    file.write_all(serialized_config.as_bytes())?;
     Ok(())
 }
-
 pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
     let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
     serde_json::from_reader(file).context(format!(
