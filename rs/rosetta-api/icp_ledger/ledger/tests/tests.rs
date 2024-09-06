@@ -2,11 +2,13 @@ use candid::Principal;
 use candid::{Decode, Encode, Nat};
 use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
+use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_ledger_sm_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     get_allowance, send_approval, send_transfer_from, supported_standards, transfer, MINTER,
 };
+use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
@@ -27,6 +29,7 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
@@ -977,6 +980,35 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn test_upgrade_serialization() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_current = ledger_wasm();
+
+    let minter = Arc::new(minter_identity());
+    let minter_principal = minter.sender().unwrap();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(minter_principal.into())
+        .icrc1_minting_account(minter_principal.into())
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+
+    let init_args = CandidOne(payload).into_bytes().unwrap();
+    let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
+    ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
+        ledger_wasm_mainnet,
+        ledger_wasm_current,
+        None,
+        init_args,
+        upgrade_args,
+        minter,
+        false,
+    );
+}
+
+#[test]
 fn test_approval_upgrade() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
@@ -1435,6 +1467,7 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
+            None,
             encode_init_args,
             encode_upgrade_args,
         );

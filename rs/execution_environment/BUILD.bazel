@@ -7,7 +7,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/prng",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
@@ -16,6 +15,7 @@ DEPENDENCIES = [
     "//rs/embedders",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",
@@ -149,9 +149,9 @@ BENCH_DEPENDENCIES = [
     # Keep sorted.
     ":execution_environment",
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",

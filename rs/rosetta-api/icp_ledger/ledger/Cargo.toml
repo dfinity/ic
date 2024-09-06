@@ -21,7 +21,7 @@ dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-constants = { path = "../../../constants" }
+ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
@@ -40,7 +40,9 @@ serde_cbor = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
+ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 
