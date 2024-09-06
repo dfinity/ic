@@ -374,9 +374,9 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
     // Verify `num_logical_pages`.
     assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
     assert_eq!(
-        (expected_num_pages as usize) * PAGE_SIZE,
+        expected_num_pages as usize,
         (&storage_layout as &dyn StorageLayout)
-            .memory_size_bytes()
+            .memory_size_pages()
             .unwrap()
     );
 

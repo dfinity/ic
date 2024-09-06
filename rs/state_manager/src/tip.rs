@@ -599,7 +599,7 @@ fn merge_candidates_and_storage_info(
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
-    let _timer = request_timer(&metrics, "merge_candidates_and_storage_info");
+    let _timer = request_timer(metrics, "merge_candidates_and_storage_info");
     let layout = &tip_handler
         .tip(height)
         .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
@@ -617,7 +617,7 @@ fn merge_candidates_and_storage_info(
                     .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
                 storage_info.disk_size +=
                     (&pm_layout as &dyn StorageLayout).storage_size_bytes()?;
-                let num_pages = (&pm_layout as &dyn StorageLayout).memory_size_pages()? as usize;
+                let num_pages = (&pm_layout as &dyn StorageLayout).memory_size_pages()?;
                 storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
                 Ok((
                     MergeCandidate::new(

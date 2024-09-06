@@ -946,7 +946,7 @@ impl dyn StorageLayout + '_ {
             -((VERSION_NUM_BYTES + SIZE_NUM_BYTES + PAGE_INDEX_RANGE_NUM_BYTES) as i64),
         ))
         .map_err(|err| to_storage_err(err))?;
-        file.read_exact(&mut last_page_index_range_buf.as_flattened_mut())
+        file.read_exact(last_page_index_range_buf.as_flattened_mut())
             .map_err(|err| to_storage_err(err))?;
         let last_page_index_range = PageIndexRange::from(&last_page_index_range_buf);
         Ok(last_page_index_range.end_page.get() as usize)

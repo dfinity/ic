@@ -1735,9 +1735,8 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
 
     /// List of overlay files on disk.
     fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
-        Ok(self
-            .existing_overlays()
-            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?)
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
     }
 
     /// Get overlay height as encoded in the file name.

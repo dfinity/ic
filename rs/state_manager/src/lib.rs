@@ -2593,7 +2593,7 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 }]
             } else {
