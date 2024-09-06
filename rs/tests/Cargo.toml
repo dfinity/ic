@@ -315,14 +315,6 @@ name = "ic-systest-general-execution"
 path = "execution/general_execution_test.rs"
 
 [[bin]]
-name = "ic-systest-upgrade-downgrade-app-subnet"
-path = "consensus/orchestrator/upgrade_downgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-downgrade-nns-subnet"
-path = "consensus/orchestrator/upgrade_downgrade_nns_subnet_test.rs"
-
-[[bin]]
 name = "ic-systest-downgrade-app-subnet"
 path = "consensus/orchestrator/downgrade_app_subnet_test.rs"
 
