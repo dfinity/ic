@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -14,6 +15,29 @@ STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
     # Keep sorted.
     "//rs/tests:static-file-server_image",
 ]
+
+rust_library(
+    name = "upgrade_common",
+    testonly = True,
+    srcs = ["upgrade_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_upgrade_common",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
 
 system_test_nns(
     name = "node_assign_test",
@@ -411,7 +435,16 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        ":upgrade_common",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ]
 )
 
 system_test_nns(

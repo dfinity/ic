@@ -74,3 +74,7 @@ path = "unassigned_node_upgrade_test.rs"
 [[bin]]
 name = "ic-systest-upgrade-with-alternative-urls"
 path = "upgrade_with_alternative_urls.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-app-subnet"
+path = "upgrade_app_subnet_test.rs"
