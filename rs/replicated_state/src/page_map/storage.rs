@@ -923,8 +923,8 @@ impl dyn StorageLayout + '_ {
 
         let mut file = OpenOptions::new()
             .read(true)
-            .open(&overlay)
-            .map_err(|err| to_storage_err(err))?;
+            .open(overlay)
+            .map_err(to_storage_err)?;
 
         let mut version_buf = [0u8; VERSION_NUM_BYTES];
         file.seek(SeekFrom::End(-(VERSION_NUM_BYTES as i64)))
