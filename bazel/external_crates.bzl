@@ -989,12 +989,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.11.4",
+                version = "^0.11.5",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                version = "^0.5.4",
+                version = "^0.5.5",
             ),
             "quote": crate.spec(
                 version = "^1.0",
@@ -1315,7 +1315,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.39.3",
+                version = "^1.40.0",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
@@ -1352,7 +1352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.2",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.11",
+                version = "^0.7.12",
                 features = [
                     "codec",
                     "time",
