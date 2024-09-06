@@ -738,7 +738,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.5",
             ),
             "libc": crate.spec(
-                version = "^0.2.155",
+                version = "^0.2.158",
             ),
             "libflate": crate.spec(
                 version = "^2.1.0",

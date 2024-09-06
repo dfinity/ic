@@ -1,5 +1,5 @@
 {
-  "checksum": "993cd4c226e5e79524bcfa3cba065143289b83c9d5a2320ab9e00d0496b0dcb5",
+  "checksum": "acb21312469917406d1682cea118293a6ca91b32b8bddd476a9d130541782554",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
