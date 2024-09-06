@@ -30,7 +30,7 @@ Cloud Config is being daily tested on official [Ubuntu 22.04 Image](https://clou
 ## Building IC-OS
 
 ```bash
-$ ./gitlab-ci/container/build-ic.sh -i
+$ ./ci/container/build-ic.sh -i
 $ # artifacts are available under ./artifacts directory
 $ tree artifacts/
 ```
@@ -42,7 +42,7 @@ $ tree artifacts/
 Only binaries:
 
 ```bash
-$ ./gitlab-ci/container/build-ic.sh -b
+$ ./ci/container/build-ic.sh -b
 $ # artifacts are available under ./artifacts/binaries directory
 $ ls -l artifacts/binaries
 ```
@@ -50,7 +50,7 @@ $ ls -l artifacts/binaries
 Only canisters:
 
 ```bash
-$ ./gitlab-ci/container/build-ic.sh -c
+$ ./ci/container/build-ic.sh -c
 $ # artifacts are available under ./artifacts/canisters directory
 $ ls -l artifacts/canisters
 ```
@@ -58,7 +58,7 @@ $ ls -l artifacts/canisters
 Both binaries and canisters:
 
 ```bash
-$ ./gitlab-ci/container/build-ic.sh -b -c
+$ ./ci/container/build-ic.sh -b -c
 ```
 
 ## Using `container-run.sh`
@@ -107,5 +107,5 @@ By default `container-run.sh` bind-mounts `~/.cache` which is used for (output_b
 
 ```bash
 mkdir ~/.cache2
-./gitlab-ci/container/container-run.sh -c ~/.cache2
+./ci/container/container-run.sh -c ~/.cache2
 ```

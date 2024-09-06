@@ -7,8 +7,8 @@ cd "$(git rev-parse --show-toplevel)"
 INPUT_FILES=(
     .bazelversion
     rust-toolchain.toml
-    gitlab-ci/container/Dockerfile
-    gitlab-ci/container/files/*
+    ci/container/Dockerfile
+    ci/container/files/*
 )
 
 # print sha of relevant files

@@ -10,7 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../crypto/standalone-sig-verifier" }
