@@ -1,5 +1,4 @@
 pub mod node_assign_test;
-pub mod rotate_ecdsa_idkg_key;
 pub mod subnet_recovery_app_subnet;
 pub mod subnet_recovery_nns_subnet;
 pub mod subnet_splitting;
