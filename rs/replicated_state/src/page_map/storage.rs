@@ -928,9 +928,8 @@ impl dyn StorageLayout + '_ {
 
         let mut version_buf = [0u8; VERSION_NUM_BYTES];
         file.seek(SeekFrom::End(-(VERSION_NUM_BYTES as i64)))
-            .map_err(|err| to_storage_err(err))?;
-        file.read_exact(&mut version_buf)
-            .map_err(|err| to_storage_err(err))?;
+            .map_err(to_storage_err)?;
+        file.read_exact(&mut version_buf).map_err(to_storage_err)?;
         static_assertions::const_assert_eq!(MAX_SUPPORTED_OVERLAY_VERSION as u32, 0);
         let version = u32::from_le_bytes(version_buf);
         if version > MAX_SUPPORTED_OVERLAY_VERSION as u32 {
@@ -945,9 +944,9 @@ impl dyn StorageLayout + '_ {
         file.seek(SeekFrom::End(
             -((VERSION_NUM_BYTES + SIZE_NUM_BYTES + PAGE_INDEX_RANGE_NUM_BYTES) as i64),
         ))
-        .map_err(|err| to_storage_err(err))?;
+        .map_err(to_storage_err)?;
         file.read_exact(last_page_index_range_buf.as_flattened_mut())
-            .map_err(|err| to_storage_err(err))?;
+            .map_err(to_storage_err)?;
         let last_page_index_range = PageIndexRange::from(&last_page_index_range_buf);
         Ok(last_page_index_range.end_page.get() as usize)
     }
