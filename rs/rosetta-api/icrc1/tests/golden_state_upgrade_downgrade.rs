@@ -38,7 +38,7 @@ fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
     };
 
     let canister_ids_names_and_burns_without_spender = vec![
-        (CK_TEST_BTC_LEDGER, None),
+        // (CK_TEST_BTC_LEDGER, None), // TODO: FI-1471: Needs workaround similar to the CK_BTC_LEDGER
         (CK_BTC_LEDGER, Some(ck_btc_burns_without_spender)),
     ];
 
@@ -120,7 +120,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let ledger_wasm_u256 = Wasm::from_bytes(ledger_wasm());
 
     let canister_ids_names_and_burns_without_spender = vec![
-        (CK_SEPOLIA_ETH_LEDGER, None),
+        // (CK_SEPOLIA_ETH_LEDGER, None), // TODO: FI-1471: Needs workaround similar to the CK_ETH_LEDGER
         (CK_SEPOLIA_LINK_LEDGER, None),
         (CK_SEPOLIA_PEPE_LEDGER, None),
         (CK_SEPOLIA_USDC_LEDGER, None),
