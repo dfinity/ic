@@ -287,12 +287,11 @@ impl XNetEndpoint {
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
 
         let shutdown_notify = Arc::new(Notify::new());
-        let localhost_v4 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        let addr = SocketAddr::new(
-            config.xnet_ip_addr.parse().unwrap_or(localhost_v4),
-            config.xnet_port,
-        );
-
+        let localhost_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
+        let addr = match config.xnet_ip_addr.parse() {
+            Ok(ip_addr) => SocketAddr::new(ip_addr, config.xnet_port),
+            Err(_) => localhost_v4,
+        };
         let address = start_server(
             addr,
             metrics,

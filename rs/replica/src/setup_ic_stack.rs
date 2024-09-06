@@ -251,14 +251,12 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
-    let message_router = Arc::new(message_router);
-    let xnet_addr = SocketAddr::new(IpAddr::new(config.message_routing.xnet_ip_addr), config.message_routing.port);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_http.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        xnet_addr,
+        config.message_routing,
         metrics_registry,
         log.clone(),
     );
@@ -330,7 +328,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        message_router,
+        Arc::new(message_router),
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
