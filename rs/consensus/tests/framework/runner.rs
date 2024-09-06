@@ -10,6 +10,7 @@ use ic_consensus::{
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -127,7 +128,7 @@ impl<'a> ConsensusRunner<'a> {
     /// instance.
     pub fn add_instance(
         &mut self,
-        membership: Arc<Membership>,
+        consensus_cache: Arc<dyn ConsensusPoolCache>,
         consensus_crypto: Arc<dyn ConsensusCrypto>,
         certification_crypto: Arc<dyn CertificationCrypto>,
         modifier: Option<ComponentModifier>,
@@ -152,7 +153,7 @@ impl<'a> ConsensusRunner<'a> {
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             deps.replica_config.clone(),
             Arc::clone(&deps.registry_client),
-            membership.clone(),
+            consensus_cache,
             consensus_crypto.clone(),
             deps.ingress_selector.clone(),
             deps.xnet_payload_builder.clone(),
