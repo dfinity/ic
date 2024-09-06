@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_insert_and_remove() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_add_to_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -596,7 +596,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_move_to_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -645,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_remove_all() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -720,7 +720,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_handle_invalid() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -757,7 +757,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_contains_unvalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn test_certification_pool_contains() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool = CertificationPoolImpl::new(
                 node_test_id(0),
                 pool_config,
@@ -837,7 +837,7 @@ mod tests {
 
     #[test]
     fn test_get_all_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node = node_test_id(3);
             let mut pool = CertificationPoolImpl::new(
                 node,

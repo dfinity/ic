@@ -298,7 +298,7 @@ mod tests {
     /// block, expecting both to succeed.
     #[test]
     fn test_validate_payload() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 4;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies {
@@ -505,7 +505,7 @@ mod tests {
         subnet_id: SubnetId,
         committee: &[NodeId],
     ) -> ValidationResult<PayloadValidationError> {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
 
             let Dependencies {

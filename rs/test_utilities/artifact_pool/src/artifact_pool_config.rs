@@ -3,14 +3,14 @@ use ic_config::artifact_pool::{
 };
 use tempfile::Builder;
 
-/// Creates a new ArtifactPoolConfig, based on the default, for tests.
+/// Creates a new [`ArtifactPoolConfig`], based on the default, for tests.
 /// It removes the persistent pool directory afterwards.
 pub fn with_test_pool_config<T>(run: impl FnOnce(ArtifactPoolConfig) -> T) -> T {
     let tempdir = Builder::new().prefix("persistent-pool").tempdir().unwrap();
     run(ArtifactPoolConfig::new(tempdir.path().to_path_buf()))
 }
 
-/// Creates a new RocksDBConfig, based on the default, for tests.
+/// Creates a new [`RocksDBConfig`], based on the default, for tests.
 /// It removes the persistent pool directory afterwards.
 pub fn with_test_rocksdb_pool_config<T>(run: impl FnOnce(RocksDBConfig) -> T) -> T {
     let tempdir = Builder::new().prefix("persistent-pool").tempdir().unwrap();
@@ -23,7 +23,7 @@ pub fn with_test_rocksdb_pool_config<T>(run: impl FnOnce(RocksDBConfig) -> T) ->
     run(config)
 }
 
-/// Creates a new LMDBConfig, based on the default, for tests.
+/// Creates a new [`LMDBConfig`], based on the default, for tests.
 /// It removes the persistent pool directory afterwards.
 pub fn with_test_lmdb_pool_config<T>(run: impl FnOnce(LMDBConfig) -> T) -> T {
     let tempdir = Builder::new().prefix("persistent-pool").tempdir().unwrap();
@@ -36,7 +36,7 @@ pub fn with_test_lmdb_pool_config<T>(run: impl FnOnce(LMDBConfig) -> T) -> T {
     run(config)
 }
 
-/// Creates a set of ArtifactPoolConfig(s), based on the default, for tests.
+/// Creates a set of [`ArtifactPoolConfig`](s), based on the default, for tests.
 /// It removes all persistent pool directories afterwards.
 pub fn with_test_pool_configs<T>(num: usize, run: impl FnOnce(Vec<ArtifactPoolConfig>) -> T) -> T {
     let configs = (0..num)

@@ -536,7 +536,7 @@ mod tests {
     #[test]
     fn test_block_maker() {
         let subnet_id = subnet_test_id(0);
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
             let dkg_interval_length = 300;
             let Dependencies {
@@ -719,7 +719,7 @@ mod tests {
     }
 
     fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 3;
             let node_ids = [node_test_id(0)];
             let Dependencies {
@@ -869,7 +869,7 @@ mod tests {
 
     #[test]
     fn test_stable_registry_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 3;
             let node_ids = [node_test_id(0)];
             let record = SubnetRecordBuilder::from(&node_ids)

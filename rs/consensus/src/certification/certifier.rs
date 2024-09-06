@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_certification_prio_func() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     mut pool,
@@ -747,7 +747,7 @@ mod tests {
 
     #[test]
     fn test_certification_purger() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     mut pool,
@@ -882,7 +882,7 @@ mod tests {
     /// aggregation, too few and just enough.
     #[test]
     fn test_certification_aggregation() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 pool,
                 replica_config,
@@ -958,7 +958,7 @@ mod tests {
     /// specified height.
     #[test]
     fn test_certification_validate() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // We must choose a membership size of the form 3i + 1 for some integer
             // i, to ensure that all nodes will be part of the committee.
             let Dependencies {
@@ -1031,7 +1031,7 @@ mod tests {
     /// Simply tests creating new certification shares.
     #[test]
     fn test_certification_sign() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 replica_config,
@@ -1103,7 +1103,7 @@ mod tests {
     /// certification, even if multiple are available.
     #[test]
     fn test_certification_validate_2() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     mut pool,
@@ -1172,7 +1172,7 @@ mod tests {
     /// Test that an unexpected hash leads to marking the certification as invalid.
     #[test]
     fn test_invalidate_certificate_with_incorrect_state() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,
@@ -1225,7 +1225,7 @@ mod tests {
     /// aggregation, too few and just enough.
     #[test]
     fn test_invalidate_a_second_certification_share_from_the_same_signer() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 pool,
                 replica_config,
@@ -1323,7 +1323,7 @@ mod tests {
     ///     than the last transmitted height.
     #[test]
     fn test_certified_heights_are_transmitted() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
                     pool,

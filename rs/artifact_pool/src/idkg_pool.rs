@@ -795,7 +795,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_insert_remove() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_add_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_move_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
@@ -936,7 +936,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_remove_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id_1 = {
@@ -999,7 +999,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_remove_unvalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id = {
@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_handle_invalid_unvalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 let msg_id = {
@@ -1051,7 +1051,7 @@ mod tests {
 
     #[test]
     fn test_idkg_pool_handle_invalid_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
 
@@ -1077,7 +1077,7 @@ mod tests {
 
     #[test]
     fn test_idkg_prefix_search_unvalidated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 check_search_by_prefix(&mut idkg_pool, true);
@@ -1087,7 +1087,7 @@ mod tests {
 
     #[test]
     fn test_idkg_prefix_search_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut idkg_pool = create_idkg_pool(pool_config, logger);
                 check_search_by_prefix(&mut idkg_pool, false);

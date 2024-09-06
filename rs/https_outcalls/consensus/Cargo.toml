@@ -29,6 +29,7 @@ ic-consensus-mocks = { path = "../../consensus/mocks" }
 ic-error-types = { path = "../../types/error_types" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }

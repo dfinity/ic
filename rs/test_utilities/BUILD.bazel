@@ -58,8 +58,6 @@ rust_test(
     crate = ":test_utilities",
     deps = [
         # Keep sorted.
-        "//rs/artifact_pool",
-        "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",
@@ -73,7 +71,6 @@ rust_doc_test(
     crate = ":test_utilities",
     deps = [
         # Keep sorted.
-        "//rs/artifact_pool",
         "@crate_index//:rusty-fork",
     ],
 )

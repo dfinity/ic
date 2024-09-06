@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let nodes: Vec<_> = (0..1).map(node_test_id).collect();
                 let dkg_interval_len = 3;

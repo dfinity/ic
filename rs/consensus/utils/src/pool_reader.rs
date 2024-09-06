@@ -636,7 +636,7 @@ pub mod test {
 
     #[test]
     fn test_get_dkg_summary_block() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
                 pool_config,
@@ -733,7 +733,7 @@ pub mod test {
 
     #[test]
     fn test_get_finalized_block_at_height_without_finalization() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let start = pool.make_next_block();
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
@@ -758,7 +758,7 @@ pub mod test {
 
     #[test]
     fn test_get_notarized_finalized_height() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = vec![node_test_id(0)];
             let interval_length = 4;
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
@@ -791,7 +791,7 @@ pub mod test {
     // Tests that both the in-memory and the persisted pool return artifacts
     // sorted in ascending order.
     fn test_get_by_height_range() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let rounds = 30;
             let replicas = 10;
             let f = 3;
@@ -844,7 +844,7 @@ pub mod test {
 
     #[test]
     fn test_registry_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 3;
             let total_length = interval_length + 1; // account for the summary block
             let record = SubnetRecordBuilder::from(&[node_test_id(0)])

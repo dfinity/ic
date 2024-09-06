@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",

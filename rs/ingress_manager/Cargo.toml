@@ -34,6 +34,7 @@ ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }

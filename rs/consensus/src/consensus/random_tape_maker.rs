@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_random_tape_maker() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 replica_config,

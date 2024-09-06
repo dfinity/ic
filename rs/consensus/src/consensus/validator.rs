@@ -2036,7 +2036,7 @@ pub mod test {
 
     #[test]
     fn test_validate_catch_up_package_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 state_manager,
@@ -2117,7 +2117,7 @@ pub mod test {
 
     #[test]
     fn test_validate_catch_up_package_shares_with_registry_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 state_manager,
@@ -2243,7 +2243,7 @@ pub mod test {
     /// unless a Notarization exists in `validated` for the associated block
     #[test]
     fn test_finalization_requires_notarization() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 mut pool,
@@ -2314,7 +2314,7 @@ pub mod test {
 
     #[test]
     fn test_random_beacon_validation() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 mut pool,
@@ -2369,7 +2369,7 @@ pub mod test {
 
     #[test]
     fn test_random_tape_validation() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 state_manager,
@@ -2483,7 +2483,7 @@ pub mod test {
 
     #[test]
     fn test_block_validation() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
@@ -2584,7 +2584,7 @@ pub mod test {
 
     #[test]
     fn test_block_validation_with_old_replica_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
@@ -2658,7 +2658,7 @@ pub mod test {
     // Construct a proposal block with a non-notarized parent and make sure we're
     // not validating this block until the parent gets notarized.
     fn test_block_validation_without_notarized_parent() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
@@ -2737,7 +2737,7 @@ pub mod test {
 
     #[test]
     fn test_block_validation_with_registry_versions() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
@@ -2814,7 +2814,7 @@ pub mod test {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_certified_height_change() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -2875,7 +2875,7 @@ pub mod test {
 
     #[test]
     fn test_block_context_time() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -2945,7 +2945,7 @@ pub mod test {
 
     #[test]
     fn test_notarization_requires_at_least_threshold_signatures() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
                 mut pool,
@@ -2995,7 +2995,7 @@ pub mod test {
 
     #[test]
     fn test_notarization_deduped_by_content() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3048,7 +3048,7 @@ pub mod test {
 
     #[test]
     fn test_finalization_deduped_by_content() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3134,7 +3134,7 @@ pub mod test {
         held_back_duration: Duration,
         expected_to_validate: bool,
     ) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3180,7 +3180,7 @@ pub mod test {
 
     #[test]
     fn test_should_not_validate_catch_up_package_when_wrong_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3221,7 +3221,7 @@ pub mod test {
 
     #[test]
     fn test_out_of_sync_validation() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -3351,7 +3351,7 @@ pub mod test {
 
     #[test]
     fn test_block_validated_through_notarization() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -3487,7 +3487,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_invalid_for_identical_hashes() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with identical hashes
             proof.hash2 = proof.hash1.clone();
@@ -3504,7 +3504,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_invalid_for_wrong_subnet_id() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with incorrect subnet ID
             proof.subnet_id = subnet_test_id(1337);
@@ -3521,7 +3521,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_invalid_for_signer_not_in_subnet() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Don't validate if signer is not part of subnet
             proof.signer = node_test_id(10);
@@ -3538,7 +3538,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_invalid_for_signer_not_blockmaker() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Some test id that's different from the block maker, but still part of the subnet
             let non_blockmaker_node = node_test_id(3);
@@ -3558,7 +3558,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_validates() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
             // Validate a well-formed equivocation proof, with the correct subnet ID
             pool.insert_unvalidated(proof.clone());
@@ -3573,7 +3573,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_ignored_if_below_finalized_height() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
@@ -3585,7 +3585,7 @@ pub mod test {
 
     #[test]
     fn test_equivocation_validate_only_one_per_height_and_signer() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Insert two different proofs for the same height and signer
             pool.insert_unvalidated(proof.clone());
@@ -3611,7 +3611,7 @@ pub mod test {
     /// which there exists a valid notarization.
     #[test]
     fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -3650,7 +3650,7 @@ pub mod test {
 
     #[test]
     fn test_create_equivocation_proof() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -3715,7 +3715,7 @@ pub mod test {
     /// verification, and not be able to create an equivocation proof.
     #[test]
     fn test_cannot_disqualify_with_incorrect_rank() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
@@ -3749,7 +3749,7 @@ pub mod test {
     /// In this case, we should not create an equivocation proof.
     #[test]
     fn test_cannot_disqualify_with_proposal_from_different_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let dkg_interval = 9;
             let ValidatorAndDependencies {
@@ -3807,7 +3807,7 @@ pub mod test {
 
     #[test]
     fn test_ignore_disqualified_ranks() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..7).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,

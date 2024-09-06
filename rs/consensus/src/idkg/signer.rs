@@ -907,7 +907,7 @@ mod tests {
     }
 
     fn test_signature_shares_purging(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer, state_manager) =
                     create_signer_dependencies_and_state_manager(pool_config, logger);
@@ -1016,7 +1016,7 @@ mod tests {
         );
 
         // Test using CryptoReturningOK
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
@@ -1050,7 +1050,7 @@ mod tests {
         });
 
         // Test using crypto without keys
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies_with_crypto(
                     pool_config,
@@ -1149,7 +1149,7 @@ mod tests {
         );
 
         // Test using CryptoReturningOK
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
@@ -1180,7 +1180,7 @@ mod tests {
     }
 
     fn test_send_signature_shares_when_failure(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
@@ -1246,7 +1246,7 @@ mod tests {
     }
 
     fn test_send_signature_shares_with_complaints(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
@@ -1314,7 +1314,7 @@ mod tests {
 
     fn test_crypto_verify_sig_share(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let (dealers, receivers) = env.choose_dealers_and_receivers(
@@ -1465,7 +1465,7 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
@@ -1480,7 +1480,7 @@ mod tests {
         });
 
         // Simulate failure when resolving transcripts
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
@@ -1557,7 +1557,7 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
@@ -1657,7 +1657,7 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
@@ -1682,7 +1682,7 @@ mod tests {
     }
 
     fn test_duplicate_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1735,7 +1735,7 @@ mod tests {
     }
 
     fn test_duplicate_signature_shares_in_batch(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1803,7 +1803,7 @@ mod tests {
     }
 
     fn test_purge_unvalidated_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1873,7 +1873,7 @@ mod tests {
     }
 
     fn test_purge_validated_signature_shares(key_id: MasterPublicKeyId) {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1928,7 +1928,7 @@ mod tests {
     #[test]
     fn test_ecdsa_get_completed_signature() {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -2070,7 +2070,7 @@ mod tests {
 
     fn test_schnorr_get_completed_signature(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
                 let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));

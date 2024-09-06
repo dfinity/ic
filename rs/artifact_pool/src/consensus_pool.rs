@@ -1077,7 +1077,7 @@ mod tests {
 
     #[test]
     fn test_timestamp() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let time_0 = time_source.get_relative_time();
             let mut pool = new_from_cup_without_bytes(
@@ -1137,7 +1137,7 @@ mod tests {
 
     #[test]
     fn test_artifacts_with_opt_are_created_for_aggregates() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
@@ -1219,7 +1219,7 @@ mod tests {
 
     #[test]
     fn test_shares_are_not_relayed() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
@@ -1290,7 +1290,7 @@ mod tests {
 
     #[test]
     fn test_insert_remove() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
@@ -1322,7 +1322,7 @@ mod tests {
 
     #[test]
     fn test_get_all_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let node = node_test_id(3);
             let mut pool = new_from_cup_without_bytes(
@@ -1481,7 +1481,7 @@ mod tests {
 
     #[test]
     fn test_metrics() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
@@ -1602,7 +1602,7 @@ mod tests {
     // We create multiple artifacts for multiple heights, check that all of them are
     // written to the disk and can be restored.
     fn test_backup() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
@@ -1961,7 +1961,7 @@ mod tests {
             }
         }
 
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
@@ -2160,7 +2160,7 @@ mod tests {
 
     #[test]
     fn test_block_chain_iterator() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let subnet_id = subnet_test_id(1);
             let committee = vec![node_test_id(0)];
@@ -2228,7 +2228,7 @@ mod tests {
 
     #[test]
     fn test_recording_instants() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),

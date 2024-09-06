@@ -755,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_get_chain_key_config_if_enabled_no_keys() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let chain_key_config_with_no_keys = ChainKeyConfig::default();
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_no_keys, pool_config);
@@ -769,7 +769,7 @@ mod tests {
 
     #[test]
     fn test_get_chain_key_config_if_enabled_one_key() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let chain_key_config_with_one_key = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: MasterPublicKeyId::Ecdsa(
@@ -793,7 +793,7 @@ mod tests {
 
     #[test]
     fn test_get_chain_key_config_if_enabled_multiple_keys() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let key_config = KeyConfig {
                 key_id: MasterPublicKeyId::Ecdsa(
                     EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
@@ -832,7 +832,7 @@ mod tests {
 
     #[test]
     fn test_get_chain_key_config_if_enabled_malformed() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let malformed_chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: MasterPublicKeyId::Ecdsa(

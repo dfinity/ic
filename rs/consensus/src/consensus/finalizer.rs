@@ -265,7 +265,7 @@ mod tests {
     /// Given a single block, just finalize it
     #[test]
     fn test_finalizer_behavior() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 mut pool,
                 replica_config,
@@ -340,7 +340,7 @@ mod tests {
     // making only empty blocks.
     #[test]
     fn test_batch_not_delivered_in_protocol_upgrade() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let committee = vec![node_test_id(0)];
             let dkg_interval_length = 3;
             let Dependencies {

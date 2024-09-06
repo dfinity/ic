@@ -240,62 +240,65 @@ fn run_test(
 ) {
     let rng = &mut ChaChaRng::seed_from_u64(config.random_seed);
     let nodes = config.num_nodes;
-    ic_test_utilities::artifact_pool_config::with_test_pool_configs(nodes, move |pool_configs| {
-        let time_source = FastForwardTimeSource::new();
-        let subnet_id = subnet_test_id(0);
-        let replica_configs: Vec<_> = vec![(); nodes]
-            .iter()
-            .enumerate()
-            .map(|(index, _)| ReplicaConfig {
-                node_id: node_test_id(index as u64),
-                subnet_id,
-            })
-            .collect();
-        let node_ids: Vec<_> = replica_configs
-            .iter()
-            .map(|config| config.node_id)
-            .collect();
-        let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids, rng);
-        let inst_deps: Vec<_> = replica_configs
-            .iter()
-            .zip(pool_configs.iter())
-            .map(|(replica_config, pool_config)| {
-                ConsensusDependencies::new(
-                    replica_config.clone(),
-                    pool_config.clone(),
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_configs(
+        nodes,
+        move |pool_configs| {
+            let time_source = FastForwardTimeSource::new();
+            let subnet_id = subnet_test_id(0);
+            let replica_configs: Vec<_> = vec![(); nodes]
+                .iter()
+                .enumerate()
+                .map(|(index, _)| ReplicaConfig {
+                    node_id: node_test_id(index as u64),
+                    subnet_id,
+                })
+                .collect();
+            let node_ids: Vec<_> = replica_configs
+                .iter()
+                .map(|config| config.node_id)
+                .collect();
+            let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids, rng);
+            let inst_deps: Vec<_> = replica_configs
+                .iter()
+                .zip(pool_configs.iter())
+                .map(|(replica_config, pool_config)| {
+                    ConsensusDependencies::new(
+                        replica_config.clone(),
+                        pool_config.clone(),
+                        Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
+                        cup.clone(),
+                        time_source.clone(),
+                    )
+                })
+                .collect();
+
+            let mut runner = ConsensusRunner::new_with_config(config, time_source);
+
+            for ((pool_config, deps), crypto) in pool_configs
+                .iter()
+                .zip(inst_deps.iter())
+                .zip(cryptos.iter())
+            {
+                let membership = Membership::new(
+                    deps.consensus_pool.read().unwrap().get_cache(),
                     Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                    cup.clone(),
-                    time_source.clone(),
-                )
-            })
-            .collect();
-
-        let mut runner = ConsensusRunner::new_with_config(config, time_source);
-
-        for ((pool_config, deps), crypto) in pool_configs
-            .iter()
-            .zip(inst_deps.iter())
-            .zip(cryptos.iter())
-        {
-            let membership = Membership::new(
-                deps.consensus_pool.read().unwrap().get_cache(),
-                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                subnet_id,
-            );
-            let membership = Arc::new(membership);
-            let modifier = modifiers.pop();
-            runner.add_instance(
-                membership.clone(),
-                crypto.clone(),
-                crypto.clone(),
-                modifier,
-                deps,
-                pool_config.clone(),
-                &PoolReader::new(&*deps.consensus_pool.read().unwrap()),
-            );
-        }
-        assert_eq!(runner.run_until(stop_predicate), finish);
-    })
+                    subnet_id,
+                );
+                let membership = Arc::new(membership);
+                let modifier = modifiers.pop();
+                runner.add_instance(
+                    membership.clone(),
+                    crypto.clone(),
+                    crypto.clone(),
+                    modifier,
+                    deps,
+                    pool_config.clone(),
+                    &PoolReader::new(&*deps.consensus_pool.read().unwrap()),
+                );
+            }
+            assert_eq!(runner.run_until(stop_predicate), finish);
+        },
+    )
 }
 
 fn run_n_rounds_and_collect_hashes(

@@ -166,7 +166,7 @@ mod tests {
         expected_status: Option<Status>,
     ) {
         with_test_replica_logger(|logger| {
-            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let (pool, registry_client, subnet_id) = set_up(
                     pool_config,
                     certified_height,

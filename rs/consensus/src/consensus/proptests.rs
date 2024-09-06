@@ -50,7 +50,7 @@ fn proptest_round(
     ingress: Vec<SignedIngress>,
     xnet: BTreeMap<SubnetId, CertifiedStreamSlice>,
 ) {
-    ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+    ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
         let mut subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
 
         subnet_record.max_block_payload_size = MAX_BLOCK_SIZE as u64;

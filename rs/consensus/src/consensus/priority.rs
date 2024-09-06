@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_bouncer_for_validation_cup_gap() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_bouncer_function() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+        ic_test_artifact_pool::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             pool.advance_round_normal_operation_n(2);
 
