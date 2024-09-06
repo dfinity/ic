@@ -1,0 +1,16 @@
+{
+    "projects": [
+        {
+            "name": "source_ic_implicits",
+            "description": "Implicit dependencies required by Bazel in the Source repo",
+            "mandatory": true,
+            "targets": [
+                "directory:bazel",
+                "directory:pre-commit",
+                "directory:publish",
+                "directory:rs/tests",
+                "directory:third_party"
+            ]
+        }
+    ]
+}

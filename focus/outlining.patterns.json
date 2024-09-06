@@ -1,0 +1,61 @@
+{
+    "patterns": [
+        {
+            "kind": "Directory",
+            "pattern": {
+                "precedence": 0,
+                "path": "",
+                "recursive": true
+            }
+        },
+        {
+            "kind": "Directory",
+            "pattern": {
+                "path": "focus",
+                "recursive": true
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "WORKSPACE"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "WORKSPACE.*"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "BUILD"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "BUILD.*"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "*.bzl"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": ".bazelrc*"
+            }
+        },
+        {
+            "kind": "Verbatim",
+            "pattern": {
+                "fragment": "cargo.config"
+            }
+        }
+    ]
+}
