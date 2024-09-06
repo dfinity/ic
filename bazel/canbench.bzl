@@ -63,3 +63,12 @@ def rust_canbench(name, results_file, **kwargs):
         env = env,
         args = ["--update"],
     )
+
+    native.sh_test(
+        name = name + "_test",
+        srcs = [
+            "//bazel:canbench.sh",
+        ],
+        data = data,
+        env = env,
+    )
