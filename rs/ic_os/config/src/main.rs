@@ -30,7 +30,7 @@ pub enum Commands {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
     },
-    /// Creates HostOSConfig object from an existing setupos config.json file
+    /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
         #[arg(long, default_value_t = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "config.json")]
         setupos_config_json_path: String,
