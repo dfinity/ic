@@ -208,7 +208,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
         // Queue must be non-empty and message at the front of queue non-stale.
         let msg = pop_and_advance(queue, self.pool).expect("Empty queue in output iterator.");
-        debug_assert_eq!(Ok(()), canister_queue_ok(queue, self.pool, receiver));
+        debug_assert_eq!(Ok(()), queue_front_not_stale(queue, self.pool, receiver));
 
         if queue.len() > 0 {
             self.size += queue.len();
@@ -375,7 +375,7 @@ impl CanisterQueues {
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let sender = msg.sender();
-        let input_queue = match &msg {
+        let input_queue = match msg {
             RequestOrResponse::Request(_) => {
                 let (input_queue, output_queue) =
                     get_or_insert_queues(&mut self.canister_queues, &sender);
@@ -389,7 +389,7 @@ impl CanisterQueues {
                 }
                 input_queue
             }
-            RequestOrResponse::Response(response) => {
+            RequestOrResponse::Response(ref response) => {
                 match self.canister_queues.get_mut(&sender) {
                     Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => queue,
 
@@ -433,10 +433,11 @@ impl CanisterQueues {
     /// Note: We pop senders from the front of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
+    ///
+    /// It is possible for the input schedule to contain an empty or GC-ed input
+    /// queue if all messages in said queue have expired / were shed since it was
+    /// scheduled. Meaning that iteration may be required.
     fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
-        // It is possible for an input schedule to contain an empty or garbage collected
-        // input queue if all messages in said queue have expired / were shed since it
-        // was scheduled. Meaning that iteration may be required.
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
@@ -447,11 +448,12 @@ impl CanisterQueues {
             };
             let msg = pop_and_advance(input_queue, &mut self.pool);
 
-            // If the input queue is non-empty, re-enqueue the sender at the back of the
-            // input schedule queue.
+            // Update the input schedule.
             if input_queue.len() != 0 {
+                // Input queue contains other messages, re-enqueue the sender.
                 self.input_schedule.reschedule(*sender, input_queue_type);
             } else {
+                // Input queue was consumed, remove the sender from the input schedule.
                 self.input_schedule
                     .pop(input_queue_type)
                     .expect("pop() should return the sender peeked above");
@@ -471,10 +473,10 @@ impl CanisterQueues {
 
     /// Peeks the next canister input queue message.
     ///
-    /// It is possible for an input schedule to contain an empty input queue if e.g.
-    /// all messages in said queue have expired / were shed since it was scheduled.
-    /// Requires a `&mut self` reference to be able advance to the first non-empty
-    /// queue in the input schedule, to achieve amortized `O(1)` time complexity.
+    /// It is possible for the input schedule to contain an empty or GC-ed input
+    /// queue if all messages in said queue have expired / were shed since it was
+    /// scheduled. Requires a `&mut self` reference to be able advance to the first
+    /// non-empty queue in the input schedule in amortized `O(1)` time complexity.
     fn peek_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             if let Some(item) = self
@@ -504,9 +506,10 @@ impl CanisterQueues {
 
     /// Skips the next sender canister from the given schedule (local or remote).
     fn skip_canister_input(&mut self, input_queue_type: InputQueueType) {
+        // Skip over any empty or GC-ed input queues.
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             // If the input queue is non-empty, re-enqueue the sender at the back of the
-            // input schedule queue.
+            // input schedule queue and exit. Else, pop the sender and try the next.
             if self
                 .canister_queues
                 .get(sender)
@@ -527,13 +530,13 @@ impl CanisterQueues {
     }
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
-    /// queues contains non-stale messages; `false` otherwise.
+    /// queues is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
         !self.ingress_queue.is_empty() || self.pool.message_stats().inbound_message_count > 0
     }
 
-    /// Returns `true` if at least one output queue contains non-stale messages;
-    /// false otherwise.
+    /// Returns `true` if at least one output queue is not empty; false
+    /// otherwise.
     pub fn has_output(&self) -> bool {
         self.pool.message_stats().outbound_message_count > 0
     }
@@ -542,7 +545,7 @@ impl CanisterQueues {
     /// `pop_input()`.
     ///
     /// Requires a `&mut self` reference in order to be able to drop empty queues
-    /// from the input schedule, in order to achieve amortized `O(1)` time complexity.
+    /// from the input schedule, to achieve amortized `O(1)` time complexity.
     pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 input sources: ingress, local and remote subnets.
         for _ in 0..InputSource::COUNT {
@@ -998,7 +1001,7 @@ impl CanisterQueues {
         // Release the response slot, generate reject responses or remember shed inbound
         // responses, as necessary.
         match (context, msg) {
-            // Inbound request: release the outbound response slot and return.
+            // Inbound request: release the outbound response slot.
             (Inbound, RequestOrResponse::Request(request)) => {
                 reverse_queue.release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(request);
@@ -1081,8 +1084,8 @@ impl CanisterQueues {
         // Invariant: all canister queues (input or output) are either empty or start
         // with a non-stale reference.
         for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            canister_queue_ok(input_queue, &self.pool, canister_id)?;
-            canister_queue_ok(output_queue, &self.pool, canister_id)?;
+            queue_front_not_stale(input_queue, &self.pool, canister_id)?;
+            queue_front_not_stale(output_queue, &self.pool, canister_id)?;
         }
 
         // Reserved slot stats match the actual number of reserved slots.
@@ -1157,11 +1160,11 @@ fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<
 }
 
 /// Helper function for concisely validating the hard invariant that a canister
-/// queuee is either empty of starts with a non-stale reference, by writing
-/// `debug_assert_eq!(Ok(()), canister_queue_ok(...)`.
+/// queue is either empty of has a non-stale reference at the front, by writing
+/// `debug_assert_eq!(Ok(()), queue_front_not_stale(...)`.
 ///
 /// Time complexity: `O(log(n))`.
-fn canister_queue_ok(
+fn queue_front_not_stale(
     queue: &CanisterQueue,
     pool: &MessagePool,
     canister_id: &CanisterId,
