@@ -30,12 +30,13 @@ fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let ck_btc_burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
-        minter: ck_btc_minter,
-        burn_indexes: vec![
-            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
-        ],
-    };
+    let ck_btc_burns_without_spender =
+        ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
+            minter: ck_btc_minter,
+            burn_indexes: vec![
+                100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+            ],
+        };
 
     let canister_ids_names_and_burns_without_spender = vec![
         // (CK_TEST_BTC_LEDGER, None), // TODO: FI-1471: Needs workaround similar to the CK_BTC_LEDGER
@@ -51,11 +52,7 @@ fn should_upgrade_icrc_ck_btc_canisters_with_golden_state() {
         );
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-        verify_ledger_state(
-            &state_machine,
-            canister_id,
-            burns_without_spender.clone(),
-        );
+        verify_ledger_state(&state_machine, canister_id, burns_without_spender.clone());
         upgrade_canister(
             &state_machine,
             (canister_id_str, canister_name),
@@ -179,7 +176,8 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
     const BOOMDAO: (&str, &str) = ("vtrom-gqaaa-aaaaq-aabia-cai", "BoomDAO");
     const CATALYZE: (&str, &str) = ("uf2wh-taaaa-aaaaq-aabna-cai", "Catalyze");
-    const CYCLES_TRANSFER_STATION: (&str, &str) = ("itgqj-7qaaa-aaaaq-aadoa-cai", "CyclesTransferStation");
+    const CYCLES_TRANSFER_STATION: (&str, &str) =
+        ("itgqj-7qaaa-aaaaq-aadoa-cai", "CyclesTransferStation");
     const DECIDEAI: (&str, &str) = ("xsi2v-cyaaa-aaaaq-aabfq-cai", "DecideAI");
     const DOGMI: (&str, &str) = ("np5km-uyaaa-aaaaq-aadrq-cai", "DOGMI");
     const DRAGGINZ: (&str, &str) = ("zfcdd-tqaaa-aaaaq-aaaga-cai", "DRAGGINZ");
