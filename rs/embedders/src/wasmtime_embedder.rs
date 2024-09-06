@@ -516,6 +516,7 @@ impl WasmtimeEmbedder {
             store,
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
@@ -763,6 +764,8 @@ pub struct WasmtimeInstance {
     store: wasmtime::Store<StoreData>,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]

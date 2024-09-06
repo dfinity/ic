@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_prep_lib::subnet_configuration::constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::ImageSizeGiB;
 use ic_system_test_driver::systest;

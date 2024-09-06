@@ -296,7 +296,7 @@ container_pull(
 #
 # The reason we can't directly depend on //rs/tests:ubuntu_test_runtime_image is that
 # the target //rs/tests/httpbin-rs:httpbin_image_base
-# fails to build in our container (gitlab-ci/container/container-run.sh).
+# fails to build in our container (ci/container/container-run.sh).
 container_pull(
     name = "ubuntu_test_runtime",
     digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",
@@ -454,6 +454,24 @@ http_jar(
     name = "tlaplus_community_modules_deps",
     sha256 = "762c4bdc25a0cb67043411c7f4f062cc2c038631c9c569539df880e0e78d5cf4",
     url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-deps-202302091937.jar",
+)
+
+# Apalache model checker for TLA+
+http_archive(
+    name = "tla_apalache",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+  name = "contents",
+  srcs = [
+    "bin/apalache-mc",
+    "lib/apalache.jar",
+  ],
+)
+    """,
+    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
+    strip_prefix = "apalache-0.44.11",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
 )
 
 # Official WebAssembly test suite.
