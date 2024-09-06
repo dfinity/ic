@@ -23,9 +23,7 @@ use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
     UpdateImageType,
 };
-use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test,
-};
+use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
