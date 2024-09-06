@@ -27,18 +27,18 @@ use ic_consensus_system_test_utils::{
     ssh_access::execute_bash_command,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::*,
 };
+use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use ssh2::Session;
 use std::convert::TryFrom;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;

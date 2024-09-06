@@ -20,10 +20,8 @@ Success::
 
 end::catalog[] */
 
-use anyhow::Result;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use anyhow::bail;
+use anyhow::Result;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::upgrade::{
     fetch_unassigned_node_version, get_blessed_replica_versions,
@@ -39,6 +37,8 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     nns::{

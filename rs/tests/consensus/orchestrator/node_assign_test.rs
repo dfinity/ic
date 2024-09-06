@@ -25,8 +25,6 @@ Success:: nodes can be added/killed to/within the existing subnet.
 end::catalog[] */
 
 use anyhow::Result;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use canister_test;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
@@ -36,6 +34,8 @@ use ic_consensus_system_test_utils::{
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
