@@ -288,13 +288,10 @@ impl StrippedBlockProposal {
     /// Fails if there are still some ingress messages missing,
     /// or the assembled proposal can't be deserialized.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        let Self {
-            block_proposal_without_ingresses_proto: mut reconstructed_block_proposal_proto,
-            stripped_ingress_payload,
-            ..
-        } = self;
+        let mut reconstructed_block_proposal_proto = self.block_proposal_without_ingresses_proto;
 
-        let ingresses = stripped_ingress_payload
+        let ingresses = self
+            .stripped_ingress_payload
             .ingress_messages
             .into_iter()
             .map(|msg| match msg {
