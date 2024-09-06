@@ -54,6 +54,9 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_transport::pb::v1::{
+    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+};
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
@@ -98,6 +101,33 @@ pub fn reduce_state_machine_logging_unless_env_set() {
         Ok(_) => {}
         Err(_) => env::set_var("RUST_LOG", "ERROR"),
     }
+}
+
+pub fn registry_get_changes_since(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    version: u64,
+) -> RegistryGetChangesSinceResponse {
+    let mut request = vec![];
+    RegistryGetChangesSinceRequest { version }
+        .encode(&mut request)
+        .unwrap();
+
+    let result = state_machine
+        .execute_ingress_as(sender, REGISTRY_CANISTER_ID, "get_changes_since", request)
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
@@ -2053,11 +2083,11 @@ pub fn cmc_set_default_authorized_subnetworks(
 }
 
 pub fn setup_cycles_ledger(state_machine: &StateMachine) {
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     enum LedgerArgs {
         Init(Config),
     }
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
         pub max_transactions_per_request: u64,
         pub index_id: Option<candid::Principal>,

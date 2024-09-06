@@ -21,7 +21,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -37,14 +37,14 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
 pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
 
 /// Input queue type: local or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum InputQueueType {
     /// Local subnet input messages.
     LocalSubnet,
@@ -52,9 +52,10 @@ pub enum InputQueueType {
     RemoteSubnet,
 }
 
-/// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
-pub enum NextInputQueue {
+/// Next input source: round-robin across local subnet canister messages;
+/// ingress messages; and remote subnet canister messages.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumCount, EnumIter)]
+pub enum InputSource {
     /// Local subnet input messages.
     #[default]
     LocalSubnet = 0,
@@ -64,31 +65,29 @@ pub enum NextInputQueue {
     RemoteSubnet = 2,
 }
 
-impl From<&NextInputQueue> for ProtoNextInputQueue {
-    fn from(next: &NextInputQueue) -> Self {
+impl From<&InputSource> for NextInputQueue {
+    fn from(next: &InputSource) -> Self {
         match next {
             // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
             // serializes to zero bytes).
-            NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
-            NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
-            NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
+            InputSource::LocalSubnet => NextInputQueue::Unspecified,
+            InputSource::Ingress => NextInputQueue::Ingress,
+            InputSource::RemoteSubnet => NextInputQueue::RemoteSubnet,
         }
     }
 }
 
-impl From<ProtoNextInputQueue> for NextInputQueue {
-    fn from(next: ProtoNextInputQueue) -> Self {
+impl From<NextInputQueue> for InputSource {
+    fn from(next: NextInputQueue) -> Self {
         match next {
-            ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
-                NextInputQueue::LocalSubnet
-            }
-            ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
-            ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
+            NextInputQueue::Unspecified | NextInputQueue::LocalSubnet => InputSource::LocalSubnet,
+            NextInputQueue::Ingress => InputSource::Ingress,
+            NextInputQueue::RemoteSubnet => InputSource::RemoteSubnet,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
@@ -167,10 +166,10 @@ impl<'a> OutputIterator<'a> {
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
-        let subnet_queues_iter = subnet_queues.output_into_iter();
-        if !subnet_queues_iter.is_empty() {
-            canister_iterators.push_front(subnet_queues_iter)
+        if subnet_queues.has_output() {
+            canister_iterators.push_front(subnet_queues.output_into_iter());
         }
+
         let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
@@ -195,14 +194,15 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some(msg) = canister_iterator.next() {
+            let next = canister_iterator.next();
+            if next.is_some() {
                 self.size -= 1;
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
-                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
-                return Some(msg);
+                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+                return next;
             }
         }
 
@@ -217,8 +217,8 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
-    /// Peeks into the iterator and returns a reference to the item that `next()`
-    /// would return.
+    /// Peeks into the iterator and returns a reference to the message that
+    /// `next()` would return.
     fn peek(&self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
@@ -232,7 +232,7 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
 
 impl PeekableOutputIterator for OutputIterator<'_> {
     fn peek(&self) -> Option<&RequestOrResponse> {
-        self.canister_iterators.front().and_then(|it| it.peek())
+        self.canister_iterators.front()?.peek()
     }
 
     fn exclude_queue(&mut self) {
@@ -366,7 +366,7 @@ impl MemoryTaken {
 //
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
-#[derive(Clone, Debug, PartialEq, ValidateEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     #[validate_eq(CompareWithValidateEq)]
@@ -426,7 +426,7 @@ impl ReplicatedState {
             epoch_query_stats,
             canister_snapshots,
         };
-        res.update_stream_responses_size_bytes();
+        res.update_stream_guaranteed_responses_size_bytes();
         res
     }
 
@@ -715,6 +715,7 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if msg.receiver().get_ref() == subnet_id {
+                    // TODO(MR-523) Assert that this is a request; else check for a matching `Callback`.
                     push_input(
                         &mut self.subnet_queues,
                         msg,
@@ -824,14 +825,14 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of responses in streams for each canister.
-    fn update_stream_responses_size_bytes(&mut self) {
-        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+    /// Updates the byte size of guaranteed responses in streams for each canister.
+    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
+        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
             if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
             }
         }
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.
@@ -1031,7 +1032,7 @@ impl ReplicatedState {
             subnet_queues,
         );
 
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1062,7 +1063,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.streams().is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 

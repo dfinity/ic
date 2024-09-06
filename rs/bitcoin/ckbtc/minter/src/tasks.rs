@@ -8,14 +8,14 @@ thread_local! {
     static LAST_GLOBAL_TIMER: Cell<u64> = Cell::default();
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum TaskType {
     ProcessLogic,
     RefreshFeePercentiles,
     DistributeKytFee,
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Task {
     pub execute_at: u64,
     pub task_type: TaskType,

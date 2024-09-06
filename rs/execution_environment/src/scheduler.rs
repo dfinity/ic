@@ -81,7 +81,7 @@ pub(crate) mod tests;
 
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SchedulerRoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     instructions: RoundInstructions,
@@ -1872,6 +1872,13 @@ impl Scheduler for SchedulerImpl {
                         registry_settings.subnet_size,
                     );
                 }
+
+                self.metrics
+                    .canister_snapshots_memory_usage
+                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
+                self.metrics
+                    .num_canister_snapshots
+                    .set(final_state.canister_snapshots.count() as i64);
             }
             self.finish_round(&mut final_state, current_round_type);
             final_state
@@ -2226,10 +2233,10 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    let streams_response_bytes = state
+    let streams_guaranteed_response_bytes = state
         .metadata
         .streams()
-        .responses_size_bytes()
+        .guaranteed_responses_size_bytes()
         .values()
         .sum();
 
@@ -2303,7 +2310,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
-    metrics.observe_streams_response_bytes(streams_response_bytes);
+    metrics.observe_streams_response_bytes(streams_guaranteed_response_bytes);
 
     metrics
         .ingress_history_length

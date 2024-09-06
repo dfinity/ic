@@ -189,7 +189,6 @@ mod tests {
             });
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
-                session_nonce: None,
                 wasm_binary,
                 wasm_memory,
                 stable_memory: Memory::new_for_testing(),

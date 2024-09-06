@@ -563,18 +563,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 
 [[package]]
-name = "async-broadcast"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20cd0e2e25ea8e5f7e9df04578dc6cf5c83577fd09b1a46aaf5c85e1c33f2a7e"
-dependencies = [
- "event-listener 5.2.0",
- "event-listener-strategy 0.5.2",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
 name = "async-channel"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,7 +605,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d034b430882f8381900d3fe6f0aaa3ad94f2cb4ac519b429692a1bc2dda4ae7b"
 dependencies = [
  "event-listener 4.0.3",
- "event-listener-strategy 0.4.0",
+ "event-listener-strategy",
  "pin-project-lite",
 ]
 
@@ -2901,17 +2889,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "derive_arbitrary"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3088,16 +3065,16 @@ dependencies = [
  "ic-btc-validation",
  "ic-canister-log",
  "ic-canister-sig-creation",
- "ic-cbor 2.6.0",
+ "ic-cbor",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
- "ic-certification 2.6.0",
+ "ic-certification",
  "ic-certified-map",
- "ic-http-certification 2.6.0",
+ "ic-http-certification",
  "ic-http-gateway",
  "ic-metrics-encoder",
- "ic-response-verification 2.6.0",
+ "ic-response-verification",
  "ic-stable-structures",
  "ic-test-state-machine-client",
  "ic-utils",
@@ -3120,7 +3097,7 @@ dependencies = [
  "ipnet",
  "isocountry",
  "itertools 0.12.0",
- "json-patch 0.2.7",
+ "json-patch",
  "json5",
  "k256",
  "k8s-openapi",
@@ -3770,33 +3747,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "event-listener"
-version = "5.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
-dependencies = [
- "concurrent-queue",
- "parking",
- "pin-project-lite",
-]
-
-[[package]]
 name = "event-listener-strategy"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "958e4d70b6d5e81971bebec42271ec641e7ff4e170a6fa605f2b8a8b65cb97d3"
 dependencies = [
  "event-listener 4.0.3",
- "pin-project-lite",
-]
-
-[[package]]
-name = "event-listener-strategy"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
-dependencies = [
- "event-listener 5.2.0",
  "pin-project-lite",
 ]
 
@@ -3950,15 +3906,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "fluent-uri"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17c704e9dbe1ddd863da1e6ff3567795087b1eb201ce80d8fa81162e1516500d"
-dependencies = [
- "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -4909,7 +4856,7 @@ dependencies = [
  "hyper 1.4.1",
  "hyper-rustls 0.27.2",
  "hyper-util",
- "ic-certification 2.6.0",
+ "ic-certification",
  "ic-transport-types",
  "ic-verify-bls-signature 0.5.0",
  "k256",
@@ -4983,8 +4930,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.14.1",
- "ic-certification 2.6.0",
- "ic-representation-independent-hash 2.6.0",
+ "ic-certification",
+ "ic-representation-independent-hash",
  "lazy_static",
  "serde",
  "serde_bytes",
@@ -5000,19 +4947,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b0e48b4166c891e79d624f3a184b4a7c145d307576872d9a46dedb8c73ea8f"
 dependencies = [
  "candid",
- "ic-certification 2.6.0",
- "leb128",
- "nom",
- "thiserror",
-]
-
-[[package]]
-name = "ic-cbor"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "candid",
- "ic-certification 2.6.0",
+ "ic-certification",
  "leb128",
  "nom",
  "thiserror",
@@ -5135,26 +5070,8 @@ checksum = "586e09b06a93d930f6a33f5f909bb11d2e4a06be3635dd5da1eb0e6554b7dae4"
 dependencies = [
  "cached 0.47.0",
  "candid",
- "ic-cbor 2.6.0",
- "ic-certification 2.6.0",
- "lazy_static",
- "leb128",
- "miracl_core_bls12381",
- "nom",
- "parking_lot 0.12.1",
- "sha2 0.10.8",
- "thiserror",
-]
-
-[[package]]
-name = "ic-certificate-verification"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "cached 0.47.0",
- "candid",
- "ic-cbor 2.6.0",
- "ic-certification 2.6.0",
+ "ic-cbor",
+ "ic-certification",
  "lazy_static",
  "leb128",
  "miracl_core_bls12381",
@@ -5177,15 +5094,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-certification"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "hex",
- "sha2 0.10.8",
-]
-
-[[package]]
 name = "ic-certified-map"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5204,22 +5112,8 @@ checksum = "ff0b97e949845039149dc5e7ea6a7c12ee4333bb402e37bc507904643c7b3e41"
 dependencies = [
  "candid",
  "http 0.2.12",
- "ic-certification 2.6.0",
- "ic-representation-independent-hash 2.6.0",
- "serde",
- "thiserror",
- "urlencoding",
-]
-
-[[package]]
-name = "ic-http-certification"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "candid",
- "http 0.2.12",
- "ic-certification 2.6.0",
- "ic-representation-independent-hash 2.6.0",
+ "ic-certification",
+ "ic-representation-independent-hash",
  "serde",
  "thiserror",
  "urlencoding",
@@ -5228,7 +5122,7 @@ dependencies = [
 [[package]]
 name = "ic-http-gateway"
 version = "0.0.0"
-source = "git+https://github.com/dfinity/http-gateway?rev=a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3#a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
+source = "git+https://github.com/dfinity/http-gateway?tag=0.1.0-b0#3be26b5a2c71bf56e05b910951c1935a1ac550c4"
 dependencies = [
  "bytes",
  "candid",
@@ -5237,8 +5131,8 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "ic-agent",
- "ic-http-certification 2.6.0",
- "ic-response-verification 2.6.0",
+ "ic-http-certification",
+ "ic-response-verification",
  "ic-utils",
  "thiserror",
 ]
@@ -5260,15 +5154,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-representation-independent-hash"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "leb128",
- "sha2 0.10.8",
-]
-
-[[package]]
 name = "ic-response-verification"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5279,34 +5164,11 @@ dependencies = [
  "flate2",
  "hex",
  "http 0.2.12",
- "ic-cbor 2.6.0",
- "ic-certificate-verification 2.6.0",
- "ic-certification 2.6.0",
- "ic-http-certification 2.6.0",
- "ic-representation-independent-hash 2.6.0",
- "leb128",
- "log",
- "nom",
- "sha2 0.10.8",
- "thiserror",
- "urlencoding",
-]
-
-[[package]]
-name = "ic-response-verification"
-version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
-dependencies = [
- "base64 0.21.6",
- "candid",
- "flate2",
- "hex",
- "http 0.2.12",
- "ic-cbor 2.6.0",
- "ic-certificate-verification 2.6.0",
- "ic-certification 2.6.0",
- "ic-http-certification 2.6.0",
- "ic-representation-independent-hash 2.6.0",
+ "ic-cbor",
+ "ic-certificate-verification",
+ "ic-certification",
+ "ic-http-certification",
+ "ic-representation-independent-hash",
  "leb128",
  "log",
  "nom",
@@ -5344,7 +5206,7 @@ checksum = "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
 dependencies = [
  "candid",
  "hex",
- "ic-certification 2.6.0",
+ "ic-certification",
  "leb128",
  "serde",
  "serde_bytes",
@@ -5976,18 +5838,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "json-patch"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b1fb8864823fad91877e6caea0baca82e49e8db50f8e5c9f9a453e27d3330fc"
-dependencies = [
- "jsonptr",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "json5"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6011,17 +5861,6 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "jsonptr"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c6e529149475ca0b2820835d3dce8fcc41c6b943ca608d32f35b449255e4627"
-dependencies = [
- "fluent-uri",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -6090,8 +5929,6 @@ dependencies = [
  "k8s-openapi",
  "kube-client",
  "kube-core",
- "kube-derive",
- "kube-runtime",
 ]
 
 [[package]]
@@ -6118,7 +5955,6 @@ dependencies = [
  "k8s-openapi",
  "kube-core",
  "pem 3.0.3",
- "rand 0.8.5",
  "rustls 0.23.12",
  "rustls-pemfile 2.1.2",
  "secrecy",
@@ -6127,7 +5963,6 @@ dependencies = [
  "serde_yaml 0.9.34+deprecated",
  "thiserror",
  "tokio",
- "tokio-tungstenite 0.23.1",
  "tokio-util",
  "tower",
  "tower-http 0.5.2",
@@ -6143,53 +5978,10 @@ dependencies = [
  "chrono",
  "form_urlencoded",
  "http 1.1.0",
- "json-patch 2.0.0",
  "k8s-openapi",
- "schemars",
  "serde",
  "serde_json",
  "thiserror",
-]
-
-[[package]]
-name = "kube-derive"
-version = "0.93.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04a26c9844791e127329be5dce9298b03f9e2ff5939076d5438c92dea5eb78f2"
-dependencies = [
- "darling 0.20.3",
- "proc-macro2",
- "quote",
- "serde_json",
- "syn 2.0.66",
-]
-
-[[package]]
-name = "kube-runtime"
-version = "0.93.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b84733c0fed6085c9210b43ffb96248676c1e800d0ba38d15043275a792ffa4"
-dependencies = [
- "ahash 0.8.11",
- "async-broadcast",
- "async-stream",
- "async-trait",
- "backoff",
- "derivative",
- "futures",
- "hashbrown 0.14.5",
- "json-patch 2.0.0",
- "jsonptr",
- "k8s-openapi",
- "kube-client",
- "parking_lot 0.12.1",
- "pin-project",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -8581,9 +8373,9 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.11.3"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
+checksum = "a2d2fb862b7ba45e615c1429def928f2e15f815bdf933b27a2d3824e224c1f46"
 dependencies = [
  "bytes",
  "pin-project-lite",
@@ -8599,9 +8391,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba92fb39ec7ad06ca2582c0ca834dfeadcaf06ddfc8e635c80aa7e1c05315fdd"
+checksum = "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
 dependencies = [
  "bytes",
  "rand 0.8.5",
@@ -11292,19 +11084,7 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite 0.21.0",
-]
-
-[[package]]
-name = "tokio-tungstenite"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6989540ced10490aaf14e6bad2e3d33728a2813310a0c71d1574304c49631cd"
-dependencies = [
- "futures-util",
- "log",
- "tokio",
- "tungstenite 0.23.0",
+ "tungstenite",
 ]
 
 [[package]]
@@ -11743,24 +11523,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tungstenite"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e2e2ce1e47ed2994fd43b04c8f618008d4cabdd5ee34027cf14f9d918edd9c8"
-dependencies = [
- "byteorder",
- "bytes",
- "data-encoding",
- "http 1.1.0",
- "httparse",
- "log",
- "rand 0.8.5",
- "sha1",
- "thiserror",
- "utf-8",
-]
-
-[[package]]
 name = "turmoil"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12090,7 +11852,7 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-rustls 0.25.0",
- "tokio-tungstenite 0.21.0",
+ "tokio-tungstenite",
  "tokio-util",
  "tower-service",
  "tracing",

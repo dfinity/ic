@@ -49,7 +49,7 @@ ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
 ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -127,7 +127,7 @@ itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
 k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
-kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
+kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
 libflate = { workspace = true }

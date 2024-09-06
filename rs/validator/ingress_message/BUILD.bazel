@@ -19,11 +19,11 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
-    "//rs/constants",
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/registry/helpers",
     "//rs/validator/http_request_test_utils",
     "@crate_index//:assert_matches",

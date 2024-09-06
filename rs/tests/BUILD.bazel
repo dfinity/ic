@@ -13,6 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 exports_files([
     "src/memory_safety.wasm",
     "src/message.wasm",
+    "src/counter.wat",
 ])
 
 ALIASES = {

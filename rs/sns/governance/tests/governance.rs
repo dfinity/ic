@@ -1717,7 +1717,6 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
         neuron_recipes: Some(NeuronRecipes {
             neuron_recipes: Vec::new(),
         }),
-        ..Default::default()
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1769,7 +1768,6 @@ fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
         }])),
-        ..Default::default()
     };
 
     // Call the method
@@ -1818,7 +1816,6 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
             dissolve_delay_seconds: Some(0),
             followees: Some(NeuronIds::from(vec![])),
         }])),
-        ..Default::default()
     };
 
     let authorized_sale_principal = canister_fixture.get_sale_canister_id();
@@ -1877,7 +1874,6 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
                 followees: Some(NeuronIds::from(vec![])),
             },
         ])),
-        ..Default::default()
     };
 
     // Call the method
@@ -1940,7 +1936,6 @@ fn test_claim_swap_neurons_succeeds() {
             direct_participant_neuron_recipe.clone(),
             nf_participant_neuron_recipe.clone(),
         ])),
-        ..Default::default()
     };
 
     // Call the method

@@ -2,6 +2,7 @@ use common::system_test_environment::RosettaTestingEnvironment;
 use tokio::runtime::Runtime;
 
 mod common;
+mod test_cases;
 
 #[test]
 fn smoke_test() {

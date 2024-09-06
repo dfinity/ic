@@ -209,36 +209,38 @@ impl IcpLedger for IcpLedgerCanister {
 /// Computes the bytes of the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the Nervous System UI equivalent.
 pub fn compute_neuron_staking_subaccount_bytes(controller: PrincipalId, nonce: u64) -> [u8; 32] {
-    // The equivalent function in the NNS UI is
-    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
-    const DOMAIN: &[u8] = b"neuron-stake";
-    const DOMAIN_LENGTH: [u8; 1] = [0x0c];
-
-    let mut hasher = Sha256::new();
-    hasher.write(&DOMAIN_LENGTH);
-    hasher.write(DOMAIN);
-    hasher.write(controller.as_slice());
-    hasher.write(&nonce.to_be_bytes());
-    hasher.finish()
+    compute_neuron_domain_subaccount_bytes(controller, b"neuron-stake", nonce)
 }
 
 /// Computes the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the Nervous System UI equivalent.
 pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> IcpSubaccount {
-    // The equivalent function in the NNS UI is
-    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
     IcpSubaccount(compute_neuron_staking_subaccount_bytes(controller, nonce))
 }
 
 /// Computes the subaccount to which locked token distributions are initialized to.
 pub fn compute_distribution_subaccount_bytes(principal_id: PrincipalId, nonce: u64) -> [u8; 32] {
-    const DOMAIN: &[u8] = b"token-distribution";
-    const DOMAIN_LENGTH: [u8; 1] = [0x12];
+    compute_neuron_domain_subaccount_bytes(principal_id, b"token-distribution", nonce)
+}
 
+// Computes the subaccount to which neuron disburse transfers are made.
+pub fn compute_neuron_disburse_subaccount_bytes(controller: PrincipalId, nonce: u64) -> [u8; 32] {
+    // The "domain" for neuron disburse was unfortunately chosen to be "neuron-split". It might be
+    // possible to change to a more meaningful name, but there is no strong reason to do so, and
+    // there is some risk that this behavior is depended on.
+    compute_neuron_domain_subaccount_bytes(controller, b"neuron-split", nonce)
+}
+
+fn compute_neuron_domain_subaccount_bytes(
+    controller: PrincipalId,
+    domain: &[u8],
+    nonce: u64,
+) -> [u8; 32] {
+    let domain_length: [u8; 1] = [domain.len() as u8];
     let mut hasher = Sha256::new();
-    hasher.write(&DOMAIN_LENGTH);
-    hasher.write(DOMAIN);
-    hasher.write(principal_id.as_slice());
+    hasher.write(&domain_length);
+    hasher.write(domain);
+    hasher.write(controller.as_slice());
     hasher.write(&nonce.to_be_bytes());
     hasher.finish()
 }

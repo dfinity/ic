@@ -26,7 +26,7 @@ fn get_duration(
     )
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SystemGroupSummary {
     pub test_name: String,
     pub success: Vec<TaskReport>,
@@ -130,7 +130,7 @@ impl TaskReport {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct TaskReport {
     pub name: String,
     pub runtime: f64,

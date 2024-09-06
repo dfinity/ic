@@ -118,7 +118,7 @@ fn verify_ecdsa_signature_using_third_party(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ProtocolSetup {
     alg: AlgorithmId,
     cfg: TestConfig,
@@ -213,7 +213,7 @@ impl ProtocolSetup {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ProtocolRound {
     pub commitment: PolynomialCommitment,
     pub transcript: IDkgTranscriptInternal,

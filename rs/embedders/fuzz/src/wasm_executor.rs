@@ -50,6 +50,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let embedder_config = Config {
         feature_flags: FeatureFlags {
             write_barrier: FlagStatus::Enabled,
+            wasm64: FlagStatus::Enabled,
             ..Default::default()
         },
         ..Default::default()
