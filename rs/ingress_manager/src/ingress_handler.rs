@@ -58,7 +58,16 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
             .map(|artifact| {
                 let ingress_object = &artifact.message;
 
-                // If the ingress pool is full, discard the message
+                // If the ingress pool is full, discard the message.
+                // Note: since here we don't remove ingress messages from the ingress pool directly,
+                // if `exceeds_limit` returns `true` for a peer `p`, we will remove *all*
+                // unvalidated ingress messages originating from that peer. This should be okay, as
+                // we don't expect to have many unvalidated ingress messages in the pool at any
+                // time, because we call `on_state_change` at most every 200ms and every time we
+                // receive an ingress message from a peer. Historically, we have had at most 2
+                // unvalidated ingress messages in the pool.
+                // Since we plan(IC-1718) to have only one section in the Ingress Pool and to
+                // validate ingress messages on-the-fly, this problem will eventually go away.
                 if pool.exceeds_limit(&ingress_object.originator_id) {
                     return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
                 }
