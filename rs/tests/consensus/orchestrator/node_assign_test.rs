@@ -25,7 +25,6 @@ Success:: nodes can be added/killed to/within the existing subnet.
 end::catalog[] */
 
 use anyhow::Result;
-use canister_test;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     node::{await_node_certified_height, get_node_certified_height},
