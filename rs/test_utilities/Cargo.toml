@@ -37,7 +37,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 lazy_static = { workspace = true }
 nix = { workspace = true }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

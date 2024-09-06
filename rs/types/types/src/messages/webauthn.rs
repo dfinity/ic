@@ -4,7 +4,7 @@ use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize)]
 struct ClientData {
     r#type: String,
     challenge: String,
@@ -16,7 +16,7 @@ struct ClientData {
 /// ClientDataJSON objects returned by the call to the authenticator. A
 /// WebAuthnSignature contains both the actual cryptographic signature
 /// and this auxiliary information.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct WebAuthnSignature {
     authenticator_data: Blob,
     client_data_json: Blob,
@@ -65,7 +65,7 @@ impl TryFrom<&[u8]> for WebAuthnSignature {
 /// WebAuthnEnvelope parses a WebAuthenticationSignature, provides access to the
 /// challenge contained in it, and also produces the byte string that is
 /// required in the signature verification.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize)]
 pub struct WebAuthnEnvelope {
     authenticator_data: Vec<u8>,
     client_data_json: Vec<u8>,

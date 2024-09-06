@@ -3,7 +3,7 @@ use crate::KeyId;
 use ic_crypto_internal_threshold_sig_bls12381::api::threshold_sign_error::ClibThresholdSignError;
 
 /// Errors occurring while performing threshold signature generation
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSignError {
     SecretKeyNotFound {
         algorithm: AlgorithmId,

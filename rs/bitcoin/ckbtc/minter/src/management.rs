@@ -20,7 +20,7 @@ use std::fmt;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa` or `bitcoin_send_transaction`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallError {
     method: String,
     reason: Reason,
@@ -48,7 +48,7 @@ impl fmt::Display for CallError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// The reason for the management call failure.
 pub enum Reason {
     /// Failed to send a signature request because the local output queue is
@@ -125,7 +125,7 @@ where
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum CallSource {
     /// The client initiated the call.
     Client,

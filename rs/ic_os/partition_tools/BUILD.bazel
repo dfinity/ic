@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:itertools",
     "@crate_index//:pcre2",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

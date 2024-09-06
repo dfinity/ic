@@ -138,7 +138,7 @@ use std::convert::TryFrom;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum WasmMemoryType {
     Wasm32,
     Wasm64,
@@ -1381,7 +1381,7 @@ fn export_additional_symbols<'a>(
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
@@ -1390,7 +1390,7 @@ enum Scope {
 
 // Represents the type of the cost operand on the stack.
 // Needed to determine the correct instruction to decrement the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CostOperandOnStack {
     X32Bit,
     X64Bit,
@@ -1399,7 +1399,7 @@ enum CostOperandOnStack {
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
         scope: Scope,

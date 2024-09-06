@@ -13,7 +13,7 @@ candid = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
 ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
@@ -53,5 +53,5 @@ rand_chacha = { workspace = true }
 rusty-fork = "0.3.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }

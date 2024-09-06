@@ -45,7 +45,7 @@ const LOOP_10K_WAT: &str = r#"
 // Helpers
 
 /// Function to generate WAT for
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Function {
     PreUpgrade,
     Start,
@@ -53,7 +53,7 @@ enum Function {
 }
 
 /// WAT successful or failed execution
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 enum Execution {
     /// Short successful execution
     Short,

@@ -117,10 +117,14 @@ rust_test(
         crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
@@ -174,6 +178,7 @@ rust_test(
         data = [
             "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
             "@" + mainnet_ledger + "//file",
             "@" + mainnet_index + "//file",
         ],
@@ -183,6 +188,7 @@ rust_test(
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
         },
         deps = [
             # Keep sorted.
