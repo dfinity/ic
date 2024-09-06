@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::fs::{create_dir_all, File};
-use std::io::Read;
 use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
@@ -176,16 +174,8 @@ fn ensure_directory_exists(path: &Path) -> Result<()> {
 }
 
 pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
-    let mut file =
-        File::open(file_path).with_context(|| format!("Failed to open file: {}", file_path))?;
-    let mut content = String::new();
-    file.read_to_string(&mut content)
-        .with_context(|| format!("Failed to read file: {}", file_path))?;
-
-    let json_value: Value = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse JSON from file: {}", file_path))?;
-    let deserialized: T = serde_json::from_value(json_value)
-        .with_context(|| "Failed to deserialize JSON to the specified type".to_string())?;
-
-    Ok(deserialized)
+    let file = File::open(file_path)
+        .context(format!("Failed to open file: {}", file_path))?;
+    serde_json::from_reader(file)
+        .context(format!("Failed to deserialize JSON from file: {}", file_path))
 }
