@@ -4,7 +4,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SetupOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -13,7 +13,7 @@ pub struct SetupOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HostOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -21,23 +21,23 @@ pub struct HostOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SetupOSSettings;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
     pub verbose: bool,
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NetworkSettings {
     pub ipv6_prefix: Option<Ipv6Addr>,
     pub ipv6_address: Option<Ipv6Addr>,
@@ -48,7 +48,7 @@ pub struct NetworkSettings {
     pub domain: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ICOSSettings {
     pub nns_public_key_path: PathBuf,
     pub nns_urls: Vec<Url>,
@@ -60,7 +60,7 @@ pub struct ICOSSettings {
     pub ssh_authorized_keys_path: Option<PathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GuestOSSettings {
     pub ic_crypto_path: Option<PathBuf>,
     pub ic_state_path: Option<PathBuf>,
@@ -68,7 +68,7 @@ pub struct GuestOSSettings {
     pub guestos_dev: GuestosDevConfig,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GuestosDevConfig {
     pub backup_retention_time_seconds: Option<String>,
     pub backup_purging_interval_seconds: Option<String>,
