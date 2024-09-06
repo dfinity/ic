@@ -25,7 +25,6 @@ Success::
 
 end::catalog[] */
 
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_base_types::SubnetId;
 use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_consensus_system_test_utils::{
@@ -39,6 +38,7 @@ use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
