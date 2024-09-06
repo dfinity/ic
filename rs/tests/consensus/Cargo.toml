@@ -89,7 +89,5 @@ path = "catch_up_loop_prevention_test.rs"
 name = "ic-systest-subnet-splitting"
 path = "subnet_splitting_test.rs"
 
-
-
 [features]
 upload_perf_systest_results = []

@@ -38,7 +38,7 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -359,7 +359,7 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:ssh2",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -486,12 +486,12 @@ system_test_nns(
         "//rs/registry/keys",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
         "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-    ]
+    ],
 )
