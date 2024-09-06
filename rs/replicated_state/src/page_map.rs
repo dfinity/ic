@@ -473,9 +473,6 @@ pub struct PageMap {
     /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
-
-    #[validate_eq(Ignore)]
-    storage_num_host_pages: Arc<Mutex<Option<usize>>>,
 }
 
 impl PageMap {
@@ -493,7 +490,6 @@ impl PageMap {
             unflushed_delta: Default::default(),
             has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
-            storage_num_host_pages: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -506,7 +502,6 @@ impl PageMap {
             unflushed_delta: Default::default(),
             has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new_for_testing(),
-            storage_num_host_pages: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -525,7 +520,6 @@ impl PageMap {
             unflushed_delta: Default::default(),
             has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
-            storage_num_host_pages: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -542,10 +536,6 @@ impl PageMap {
                 .serialize_page_delta(self.unflushed_delta.iter()),
             has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: self.page_allocator.serialize(),
-            storage_num_host_pages: *self
-                .storage_num_host_pages
-                .lock()
-                .expect("Failed to get storage_num_host_pages"),
         }
     }
 
@@ -571,7 +561,6 @@ impl PageMap {
             unflushed_delta,
             has_stripped_unflushed_deltas: page_map.has_stripped_unflushed_deltas,
             page_allocator,
-            storage_num_host_pages: Arc::new(Mutex::new(page_map.storage_num_host_pages)),
         })
     }
 
@@ -631,8 +620,6 @@ impl PageMap {
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        let num_pages = self.num_host_pages();
-        *self.storage_num_host_pages.lock().unwrap() = Some(num_pages);
         match lsmt_config.lsmt_status {
             FlagStatus::Disabled => {
                 self.persist_to_file(&self.unflushed_delta, &storage_layout.base())
@@ -895,19 +882,7 @@ impl PageMap {
     /// ∀ n . n ≥ self.num_host_pages() ⇒ self.get_page(n) = ZERO_PAGE
     /// ```
     pub fn num_host_pages(&self) -> usize {
-        let mut storage_pages_lock = self.storage_num_host_pages.lock().unwrap();
-        let pages_in_checkpoint = match *storage_pages_lock {
-            None => {
-                let read_num_pages = self.storage.num_logical_pages();
-                *storage_pages_lock = Some(read_num_pages);
-                read_num_pages
-            }
-            Some(pages_in_checkpoint) => {
-                debug_assert_eq!(pages_in_checkpoint, self.storage.num_logical_pages());
-                pages_in_checkpoint
-            }
-        };
-
+        let pages_in_checkpoint = self.storage.num_logical_pages();
         pages_in_checkpoint.max(
             self.page_delta
                 .max_page_index()
@@ -927,11 +902,6 @@ impl PageMap {
         assert!(checkpointed_page_map.page_delta.is_empty());
         assert!(checkpointed_page_map.unflushed_delta.is_empty());
         assert!(!checkpointed_page_map.is_loaded());
-        debug_assert_eq!(
-            self.num_host_pages(),
-            checkpointed_page_map.num_host_pages()
-        );
-        self.storage_num_host_pages = Arc::new(Mutex::new(Some(self.num_host_pages())));
         // Keep the page allocators of the states disjoint.
     }
 
@@ -1171,7 +1141,6 @@ pub struct PageMapSerialization {
     pub unflushed_delta: PageDeltaSerialization,
     pub has_stripped_unflushed_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
-    pub storage_num_host_pages: Option<usize>,
 }
 
 /// Interface for generating unique file descriptors
