@@ -54,7 +54,7 @@ plain-text http2. You can then pass `--ic-url http://127.0.0.1:2053` to
 Enter the dev container
 
 ```
-./gitlab-ci/container/container-run.sh
+./ci/container/container-run.sh
 ```
 
 Use Bazel to build the image locally:

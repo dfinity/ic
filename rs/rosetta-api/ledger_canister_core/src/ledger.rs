@@ -240,7 +240,7 @@ where
             });
         }
 
-        if created_at_time > now + ic_constants::PERMITTED_DRIFT {
+        if created_at_time > now + ic_limits::PERMITTED_DRIFT {
             return Err(TransferError::TxCreatedInFuture { ledger_time: now });
         }
 
@@ -445,8 +445,7 @@ pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> 
     let mut num_tx_purged = 0usize;
 
     while let Some(tx_info) = ledger.transactions_by_height().front() {
-        if tx_info.block_timestamp + ledger.transaction_window() + ic_constants::PERMITTED_DRIFT
-            >= now
+        if tx_info.block_timestamp + ledger.transaction_window() + ic_limits::PERMITTED_DRIFT >= now
         {
             // Stop at a sufficiently recent block.
             break;

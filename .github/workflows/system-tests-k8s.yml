@@ -51,7 +51,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host

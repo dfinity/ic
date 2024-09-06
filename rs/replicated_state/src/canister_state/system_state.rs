@@ -1238,10 +1238,11 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues.set_stream_responses_size_bytes(size_bytes);
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.queues
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {

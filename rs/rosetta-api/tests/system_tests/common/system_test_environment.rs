@@ -40,6 +40,7 @@ impl RosettaTestingEnvironment {
 pub struct RosettaTestingEnviornmentBuilder {
     pub transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     pub minting_account: Option<Account>,
+    pub initial_balances: Option<HashMap<AccountIdentifier, icp_ledger::Tokens>>,
 }
 
 impl RosettaTestingEnviornmentBuilder {
@@ -47,6 +48,7 @@ impl RosettaTestingEnviornmentBuilder {
         Self {
             transfer_args_for_block_generating: None,
             minting_account: None,
+            initial_balances: None,
         }
     }
 
@@ -60,6 +62,14 @@ impl RosettaTestingEnviornmentBuilder {
 
     pub fn with_minting_account(mut self, minter_account: Account) -> Self {
         self.minting_account = Some(minter_account);
+        self
+    }
+
+    pub fn with_initial_balances(
+        mut self,
+        initial_balances: HashMap<AccountIdentifier, icp_ledger::Tokens>,
+    ) -> Self {
+        self.initial_balances = Some(initial_balances);
         self
     }
 
@@ -80,10 +90,12 @@ impl RosettaTestingEnviornmentBuilder {
                     .unwrap_or_else(|| minter_identity().sender().unwrap().into())
                     .into(),
             )
-            .initial_values(HashMap::from([(
-                AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
-                icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
-            )]))
+            .initial_values(self.initial_balances.unwrap_or_else(|| {
+                HashMap::from([(
+                    AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
+                    icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
+                )])
+            }))
             .build()
             .unwrap();
         pocket_ic

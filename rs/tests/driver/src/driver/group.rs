@@ -90,6 +90,12 @@ pub struct CliArgs {
     pub no_delete_farm_group: bool,
 
     #[clap(
+        long = "no-group-ttl",
+        help = "If set, The group won't have a Time-To-Live set and thus won't be garbage collected"
+    )]
+    pub no_group_ttl: bool,
+
+    #[clap(
         long = "no-summary-report",
         help = "If set, no summary/report events are produced by the test-driver."
     )]
@@ -801,7 +807,7 @@ impl SystemTestGroup {
             args.subproc_id(),
             args.filter_tests,
             args.debug_keepalive,
-            args.no_farm_keepalive,
+            args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
         )?;
@@ -820,7 +826,7 @@ impl SystemTestGroup {
                 InfraProvider::Farm.write_attribute(&root_env);
             }
             if with_farm || args.k8s {
-                root_env.create_group_setup(group_ctx.group_base_name.clone());
+                root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
