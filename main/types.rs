@@ -16,6 +16,9 @@ pub enum LogVisibility {
     #[serde(rename = "public")]
     /// Everyone is allowed to access the canister's logs.
     Public,
+    #[serde(rename = "allowed_viewers")]
+    /// Canister logs are visible to a set of principals.
+    AllowedViewers(Vec<Principal>),
 }
 
 /// Canister settings.
