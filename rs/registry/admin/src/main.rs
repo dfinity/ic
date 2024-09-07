@@ -964,6 +964,10 @@ struct ProposeToChangeNnsCanisterCmd {
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
 
+    /// Keeping it around so that scripts that alreay pass this flag don't break.
+    #[clap(long, default_value = "true")]
+    use_explicit_action_type: bool,
+
     /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
     #[clap(long)]
     use_legacy_execute_nns_function: bool,
