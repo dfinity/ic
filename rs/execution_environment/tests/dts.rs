@@ -1017,6 +1017,171 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
     env.await_ingress(upgrade, 30).unwrap();
 }
 
+#[test]
+fn dts_aborted_execution_does_not_block_deposit_cycles() {
+    let slice_instruction_limit = 10_000_000;
+    let env = dts_env(
+        NumInstructions::from(slice_instruction_limit * 10),
+        NumInstructions::from(slice_instruction_limit),
+    );
+
+    let user_id = PrincipalId::new_anonymous();
+    let long_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let other_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env.set_checkpoints_enabled(true);
+    let long_execution_id = env.send_ingress(
+        user_id,
+        long_canister_id,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(slice_instruction_limit)
+            .reply_data(&[42])
+            .build(),
+    );
+
+    for _ in 0..5 {
+        // With checkpoints enabled, the update message will be repeatedly
+        // aborted, so there will be no progress.
+        env.tick();
+    }
+
+    let args = Encode!(&CanisterIdRecord::from(long_canister_id)).unwrap();
+    let deposit_cycles = wasm()
+        .call_with_cycles(
+            IC_00,
+            Method::DepositCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().reply_data(&[43])),
+            1_u128.into(),
+        )
+        .build();
+
+    let deposit_message_id = env.send_ingress(user_id, other_canister_id, "update", deposit_cycles);
+
+    for _ in 0..5 {
+        env.tick();
+    }
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Processing)
+    );
+
+    // Make sure the `ic0.deposit_cycles` is completed,
+    // despite the effective canister is aborted.
+    assert_eq!(
+        ingress_state(env.ingress_status(&deposit_message_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![43])))
+    );
+
+    env.set_checkpoints_enabled(false);
+    for _ in 0..5 {
+        env.tick();
+    }
+
+    // Make sure the aborted message is completed.
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+    );
+}
+
+#[test]
+fn dts_paused_execution_blocks_deposit_cycles() {
+    let slice_instruction_limit = 10_000_000;
+    let env = dts_env(
+        NumInstructions::from(slice_instruction_limit * 10),
+        NumInstructions::from(slice_instruction_limit),
+    );
+
+    let user_id = PrincipalId::new_anonymous();
+    let long_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let other_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let long_execution_id = env.send_ingress(
+        user_id,
+        long_canister_id,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(slice_instruction_limit * 5)
+            .reply_data(&[42])
+            .build(),
+    );
+
+    let args = Encode!(&CanisterIdRecord::from(long_canister_id)).unwrap();
+    let deposit_cycles = wasm()
+        .call_with_cycles(
+            IC_00,
+            Method::DepositCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().reply_data(&[43])),
+            1_u128.into(),
+        )
+        .build();
+
+    let deposit_message_id = env.send_ingress(user_id, other_canister_id, "update", deposit_cycles);
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Processing)
+    );
+
+    // Make sure the `ic0.deposit_cycles` is not completed,
+    // as the effective canister is paused.
+    assert_eq!(
+        ingress_state(env.ingress_status(&deposit_message_id)),
+        Some(IngressState::Processing)
+    );
+
+    for _ in 0..5 {
+        env.tick();
+    }
+
+    // Make sure the paused message is completed.
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+    );
+    // Make sure the `ic0.deposit_cycles` is completed.
+    assert_eq!(
+        ingress_state(env.ingress_status(&deposit_message_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![43])))
+    );
+}
+
 /// This test starts execution of a long-running install code message
 /// and sends an update message to the same canister.
 /// The expectation is that the update message is blocked.
