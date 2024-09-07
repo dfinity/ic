@@ -2,10 +2,39 @@ use ic_principal::Principal;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 thread_local! {
     pub static LOCAL_BALANCES: RefCell<BTreeMap<Principal, u64>> = RefCell::default();
     pub static LEDGER_PRINCIPAL: Cell<Principal> = Cell::new(Principal::anonymous());
+    pub static GUARDS: RefCell<BTreeSet<Principal>> = RefCell::default();
+}
+
+pub struct CallerGuard {
+    principal: Principal,
+}
+
+impl CallerGuard {
+    pub fn new(principal: Principal) -> Result<Self, String> {
+        GUARDS.with_borrow_mut(|guard| {
+            if guard.contains(&principal) {
+                return Err(format!(
+                    "Already processing a request for principal {:?}",
+                    &principal
+                ));
+            }
+            guard.insert(principal);
+            Ok(Self { principal })
+        })
+    }
+}
+
+impl Drop for CallerGuard {
+    fn drop(&mut self) {
+        GUARDS.with_borrow_mut(|guard| {
+            guard.remove(&self.principal);
+        })
+    }
 }
 
 fn reset_balance() {
@@ -41,20 +70,22 @@ fn get_total_balance() -> u64 {
 async fn refund_balance(trap: u64) {
     let caller = ic_cdk::caller();
 
-    let balance = LOCAL_BALANCES.with_borrow(|local_balance| local_balance.get(&caller).cloned());
+    if let Ok(_principal) = CallerGuard::new(caller) {
+        let balance =
+            LOCAL_BALANCES.with_borrow(|local_balance| local_balance.get(&caller).cloned());
+        if let Some(balance) = balance {
+            if balance > trap {
+                let callee = LEDGER_PRINCIPAL.get();
+                let _result: () = ic_cdk::call(callee, "update_balance", (trap,))
+                    .await
+                    .unwrap();
 
-    if let Some(balance) = balance {
-        if balance > trap {
-            let callee = LEDGER_PRINCIPAL.get();
-            let _result: () = ic_cdk::call(callee, "update_balance", (trap,))
-                .await
-                .unwrap();
+                LOCAL_BALANCES
+                    .with_borrow_mut(|local_balance| local_balance.insert(caller, balance - trap));
 
-            LOCAL_BALANCES
-                .with_borrow_mut(|local_balance| local_balance.insert(caller, balance - trap));
-
-            if trap == 3278_u64 {
-                panic!("Triggering a trap");
+                if trap == 3278_u64 {
+                    panic!("Triggering a trap");
+                }
             }
         }
     }

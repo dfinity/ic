@@ -94,6 +94,10 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
         # Keep sorted.
+        "//rs/config",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
         "//rs/state_machine_tests",
         "//rs/types/types",
         "@crate_index//:candid",

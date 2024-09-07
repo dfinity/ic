@@ -39,7 +39,7 @@ use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 const EXECUTION_DIR: &str = "/ic/rs/canister_fuzzing/decode_candid_by_instructions";
 static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
-static mut COVERAGE_MAP: &'static mut [u8] = &mut [0; 65536];
+static mut COVERAGE_MAP: &mut [u8] = &mut [0; 65536];
 
 // TODO: The right way to do this would be iclude_bytes! but would require a build.rs
 // since the env var is not set at compile time.
@@ -94,11 +94,8 @@ pub fn main() {
         test.tick();
 
         let result = test.query(canister_id, "export_coverage", vec![]);
-        match result {
-            Ok(WasmResult::Reply(result)) => {
-                unsafe { COVERAGE_MAP.copy_from_slice(&result) };
-            }
-            _ => (),
+        if let Ok(WasmResult::Reply(result)) = result {
+            unsafe { COVERAGE_MAP.copy_from_slice(&result) };
         }
 
         let ratio = instructions / input.len() as u64;
