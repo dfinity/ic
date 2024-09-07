@@ -1,3 +1,5 @@
+// prepase-publish-sns-wasm-proposal-text.sh
+
 #!/usr/bin/env bash
 set -Eeuo pipefail
 

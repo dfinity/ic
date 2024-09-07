@@ -5137,6 +5137,7 @@ impl Governance {
             return;
         }
 
+        // why not move this call to when we try to upgrade the canister?
         let running_version: Result<Version, String> =
             get_running_version(&*self.env, self.proto.root_canister_id_or_panic()).await;
 

@@ -1,3 +1,5 @@
+// prepare-nns-upgrade-proposal-text.sh
+
 #!/usr/bin/env bash
 set -Eeuo pipefail
 

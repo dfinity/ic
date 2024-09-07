@@ -1,3 +1,5 @@
+// proposals.sh
+
 #!/bin/bash
 
 #### Proposal generators
