@@ -1,8 +1,9 @@
 use super::input_schedule::testing::InputScheduleTesting;
+use super::message_pool::{MessageStats, REQUEST_LIFETIME};
+use super::queue::{InputQueue, OutputQueue};
 use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
-use super::InputQueueType::*;
 use super::*;
-use crate::{CanisterState, SchedulerState, SystemState};
+use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_test_utilities_state::arb_num_receivers;
@@ -15,9 +16,7 @@ use ic_types::messages::{
 use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
 use ic_types::{Cycles, UserId};
 use maplit::btreemap;
-use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
-use queue::{InputQueue, OutputQueue};
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::time::Duration;
@@ -354,7 +353,7 @@ fn test_backpressure_with_timed_out_requests() {
 /// Checks that `available_output_request_slots` counts timed out output
 /// requests.
 #[test]
-fn test_has_output() {
+fn test_available_output_request_slots() {
     let mut fixture = CanisterQueuesFixture::new();
 
     // Fill the output queue with requests.
@@ -511,14 +510,7 @@ impl CanisterQueuesMultiFixture {
         other: CanisterId,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        self.queues.push_input(
-            RequestBuilder::default()
-                .sender(other)
-                .receiver(self.this)
-                .build()
-                .into(),
-            input_queue_type,
-        )
+        self.push_input_request_with_deadline(other, NO_DEADLINE, input_queue_type)
     }
 
     fn push_input_request_with_deadline(
@@ -768,6 +760,8 @@ fn test_input_scheduling() {
     assert!(fixture.remote_schedule().is_empty());
 
     assert!(!fixture.has_input());
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.pool_is_empty());
 }
 
 #[test]
@@ -1042,6 +1036,34 @@ fn test_pop_input_with_stale_references() {
     assert!(queues.pool.len() == 0);
 }
 
+#[test]
+fn test_skip_input_with_stale_references() {
+    let (mut queues, requests) = new_queues_with_stale_references();
+    let request_2 = CanisterMessage::Request(Arc::new(requests.get(2).unwrap().clone()));
+    let request_3 = CanisterMessage::Request(Arc::new(requests.get(3).unwrap().clone()));
+    let mut loop_detector = CanisterQueuesLoopDetector::default();
+
+    // Skip the request @2. Expect request @3.
+    //
+    // Don't peek before skipping, we want to test `skip_input()` dealing with stale
+    // references.
+    queues.skip_input(&mut loop_detector);
+    assert!(!loop_detector.detected_loop(&queues));
+    assert_eq!(request_3, queues.peek_input().unwrap());
+
+    // Skip the request @3. Expect request @2.
+    queues.skip_input(&mut loop_detector);
+    assert!(loop_detector.detected_loop(&queues));
+    assert_eq!(request_2, queues.peek_input().unwrap());
+
+    // Pop the two messages.
+    assert_eq!(request_2, queues.pop_input().unwrap());
+    assert_eq!(request_3, queues.pop_input().unwrap());
+
+    assert!(!queues.has_input());
+    assert!(queues.pool.len() == 0);
+}
+
 /// Produces a `CanisterQueues` with 3 local input queues and 3 remote input
 /// queues, all enqueued in their resepective input schedules, but only the
 /// middle one still containing any messages.
@@ -1080,6 +1102,14 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
     assert_eq!(Ok(()), fixture.schedules_ok());
 
     let queues = fixture.queues;
+    assert_eq!(
+        Ok(()),
+        queues.schedules_ok(&input_queue_type_from_local_canisters(vec![
+            canister_test_id(1),
+            canister_test_id(2),
+            canister_test_id(3)
+        ]))
+    );
 
     // Ensure that we only have the messages from `other_2` and `other_5` left.
     assert_eq!(2, queues.input_queues_message_count());
@@ -1099,7 +1129,7 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
 }
 
 #[test]
-fn test_empty_queue_in_input_schedule() {
+fn test_pop_input_with_empty_queue_in_input_schedule() {
     let mut queues = canister_queues_with_empty_queues_in_input_schedules();
 
     assert!(queues.has_input());
@@ -1123,7 +1153,7 @@ fn test_empty_queue_in_input_schedule() {
 }
 
 #[test]
-fn test_gced_queue_in_input_schedule() {
+fn test_pop_input_with_gced_queue_in_input_schedule() {
     let mut queues = canister_queues_with_empty_queues_in_input_schedules();
 
     // Garbage collect the empty queue pairs.
@@ -1290,8 +1320,10 @@ fn test_push_into_empty_queue_in_input_schedule() {
 
     assert!(fixture.pop_input().is_some());
     assert!(fixture.pop_input().is_some());
-    assert!(fixture.pop_input().is_none());
+
     assert!(!fixture.has_input());
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.pool_is_empty());
 }
 
 /// Enqueues 6 output requests across 3 canisters and consumes them.
@@ -1718,13 +1750,10 @@ fn test_stats_best_effort() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 
-    // Enqueue one best-effort response request and one best-effort response each
-    // into an input and an output queue.
+    // One best-effort request and one best-effort response, to be enqueued into
+    // both an input and an output queue.
     let request = request(coarse_time(10));
     let request_size_bytes = request.count_bytes();
     let response = response_with_payload(1000, coarse_time(20));
@@ -1739,6 +1768,7 @@ fn test_stats_best_effort() {
         .push_output_request(request.clone().into(), UNIX_EPOCH)
         .unwrap();
     queues.output_into_iter().next().unwrap();
+
     // Actually enqueue the messages.
     queues
         .push_input(request.clone().into(), LocalSubnet)
@@ -1761,7 +1791,7 @@ fn test_stats_best_effort() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two best-effort response requests, two best-effort responses.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: 2 * (request_size_bytes + response_size_bytes),
             best_effort_message_bytes: 2 * (request_size_bytes + response_size_bytes),
             guaranteed_responses_size_bytes: 0,
@@ -1790,7 +1820,7 @@ fn test_stats_best_effort() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // One best-effort response request, one best-effort response.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: request_size_bytes + response_size_bytes,
             best_effort_message_bytes: request_size_bytes + response_size_bytes,
             guaranteed_responses_size_bytes: 0,
@@ -1823,10 +1853,7 @@ fn test_stats_best_effort() {
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 }
 
 #[test]
@@ -1835,13 +1862,10 @@ fn test_stats_guaranteed_response() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 
-    // Enqueue one guaranteed response request and one guaranteed response each into
-    // an input and an output queue.
+    // One guaranteed response request and one guaranteed response, to be enqueued
+    // into both an input and an output queue.
     let request = request(NO_DEADLINE);
     let request_size_bytes = request.count_bytes();
     let response = response(NO_DEADLINE);
@@ -1856,6 +1880,7 @@ fn test_stats_guaranteed_response() {
         .push_output_request(request.clone().into(), UNIX_EPOCH)
         .unwrap();
     queues.output_into_iter().next().unwrap();
+
     // Actually enqueue the messages.
     queues
         .push_input(request.clone().into(), LocalSubnet)
@@ -1878,7 +1903,7 @@ fn test_stats_guaranteed_response() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two guaranteed response requests, two guaranteed responses.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: 2 * (request_size_bytes + response_size_bytes),
             best_effort_message_bytes: 0,
             guaranteed_responses_size_bytes: 2 * response_size_bytes,
@@ -1907,7 +1932,7 @@ fn test_stats_guaranteed_response() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // One guaranteed response request, one guaranteed response.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: request_size_bytes + response_size_bytes,
             best_effort_message_bytes: 0,
             guaranteed_responses_size_bytes: response_size_bytes,
@@ -1947,10 +1972,7 @@ fn test_stats_guaranteed_response() {
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 
     // Consume the output queue slot reservation.
     queues.push_output_response(response.clone().into());
@@ -1958,10 +1980,7 @@ fn test_stats_guaranteed_response() {
 
     // Default stats throughout.
     assert_eq!(QueueStats::default(), queues.queue_stats);
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 }
 
 #[test]
@@ -1970,13 +1989,10 @@ fn test_stats_oversized_requests() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 
-    // Enqueue one best-effort and one guaranteed oversized request each into an
-    // input and an output queue.
+    // One oversized best-effort request and one oversized guaranteed response
+    // request, to be enqueued into both an input and an output queue.
     let best_effort = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         coarse_time(10),
@@ -2015,7 +2031,7 @@ fn test_stats_oversized_requests() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two best-effort requests, two oversized guaranteed requests, 4 requests in all.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
             best_effort_message_bytes: 2 * best_effort_size_bytes,
             guaranteed_responses_size_bytes: 0,
@@ -2044,7 +2060,7 @@ fn test_stats_oversized_requests() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // One best-effort request, one oversized guaranteed request, 2 requests in all.
     assert_eq!(
-        &message_pool::MessageStats {
+        &MessageStats {
             size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
             best_effort_message_bytes: best_effort_size_bytes,
             guaranteed_responses_size_bytes: 0,
@@ -2086,10 +2102,7 @@ fn test_stats_oversized_requests() {
     // No change in slot and memory reservations.
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // But back to all-zero message stats.
-    assert_eq!(
-        &message_pool::MessageStats::default(),
-        queues.pool.message_stats()
-    );
+    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
 }
 
 /// Simulates sending an outgoing request and receiving an incoming response,
