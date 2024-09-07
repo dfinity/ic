@@ -523,7 +523,7 @@ impl LedgerClient {
                 let ingress_expiry =
                     ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
                 let ingress_start = ingress_expiry.saturating_sub(
-                    ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT),
+                    ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT),
                 );
                 ingress_start <= now && ingress_expiry > now
             })

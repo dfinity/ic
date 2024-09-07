@@ -4,13 +4,13 @@ use std::io::{Read, Write};
 use std::process::{ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, SystemTime};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 enum Request {
     Time,
     AdvanceTime(Duration),
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize)]
 enum Response {
     Ok,
     Time(SystemTime),

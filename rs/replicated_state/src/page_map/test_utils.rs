@@ -1,4 +1,4 @@
-use crate::page_map::storage::{Shard, StorageLayout};
+use crate::page_map::storage::{Shard, StorageLayout, StorageResult};
 use ic_types::Height;
 use std::path::{Path, PathBuf};
 
@@ -16,13 +16,13 @@ impl StorageLayout for TestStorageLayout {
         assert_eq!(shard.get(), 0);
         self.overlay_dst.clone()
     }
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
         Ok(self.existing_overlays.clone())
     }
-    fn overlay_height(&self, _path: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+    fn overlay_height(&self, _path: &Path) -> StorageResult<Height> {
         unimplemented!()
     }
-    fn overlay_shard(&self, _path: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+    fn overlay_shard(&self, _path: &Path) -> StorageResult<Shard> {
         unimplemented!()
     }
 }
@@ -53,7 +53,7 @@ impl StorageLayout for ShardedTestStorageLayout {
             self.overlay_suffix
         ))
     }
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
         let mut result: Vec<_> = std::fs::read_dir(&self.dir_path)
             .unwrap()
             .filter(|entry| {
@@ -72,13 +72,13 @@ impl StorageLayout for ShardedTestStorageLayout {
         result.sort_unstable();
         Ok(result)
     }
-    fn overlay_height(&self, path: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+    fn overlay_height(&self, path: &Path) -> StorageResult<Height> {
         let file = path.file_name().unwrap();
         Ok(Height::from(
             file.to_str().unwrap()[0..6].parse::<u64>().unwrap(),
         ))
     }
-    fn overlay_shard(&self, path: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+    fn overlay_shard(&self, path: &Path) -> StorageResult<Shard> {
         let file = path.file_name().unwrap();
         Ok(Shard::from(
             file.to_str().unwrap()[7..10].parse::<u64>().unwrap(),

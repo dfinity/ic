@@ -414,29 +414,29 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct Wallets {
     subnet: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct NodeRoute {
     node_id: String,
     socket_addr: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct SubnetRoute {
     subnet_id: String,
     nodes: Vec<NodeRoute>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct Routes {
     subnets: Vec<SubnetRoute>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct TestContext {
     wallet_id: String,
     subnet_id: String,

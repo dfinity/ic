@@ -54,7 +54,6 @@ members = [
     "rs/consensus",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
@@ -152,6 +151,7 @@ members = [
     "rs/interfaces/registry/mocks",
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
+    "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -368,6 +368,9 @@ members = [
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",
     "rs/tests/testing_verification/testnets",
+    "rs/tla_instrumentation/local_key",
+    "rs/tla_instrumentation/tla_instrumentation",
+    "rs/tla_instrumentation/tla_instrumentation_proc_macros",
     "rs/tree_deserializer",
     "rs/types/types",
     "rs/types/types_test_utils",
@@ -552,8 +555,10 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "schnorr",
     "std",
 ] }
+# kube is used by our test driver
+kube = { version = "0.93.1" }
 lazy_static = "1.4.0"
-libc = "0.2.155"
+libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
@@ -591,13 +596,13 @@ proptest-derive = "0.5.0"
 prost = "^0.12"
 prost-build = "^0.12"
 protobuf = "2.28.0"
-quinn = { version = "0.11.3", default-features = false, features = [
+quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
     "rustls",
 ] }
-quinn-udp = "0.5.4"
+quinn-udp = "0.5.5"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
 rayon = "1.10.0"
@@ -631,13 +636,13 @@ simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
     "nested-values",
-    "release_max_level_debug",
     "release_max_level_trace",
 ] }
 slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+static_assertions = "1.1.0"
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
@@ -647,12 +652,12 @@ tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.39.3", features = ["full"] }
+tokio = { version = "1.40.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
-tokio-util = { version = "0.7.11", features = ["full"] }
+tokio-util = { version = "0.7.12", features = ["full"] }
 tonic = "0.11.0"
 tonic-build = "0.11.0"
 tower = { version = "0.4.13", features = ["full"] }
@@ -677,7 +682,7 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
-wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
+wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
 wasmparser = "0.212.0"
 wasmprinter = "0.212.0"
 wast = "212.0.0"

@@ -35,7 +35,7 @@ use crate::{
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -86,13 +86,13 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
@@ -131,7 +131,7 @@ pub trait Snapshot: Send + Sync {
     fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySnapshot {
     pub version: u64,
     pub timestamp: u64,

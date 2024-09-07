@@ -1,4 +1,6 @@
-use crate::registry::invariant_compliant_mutation;
+use crate::{
+    gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+};
 use canister_test::{Project, Wasm};
 use core::{
     option::Option::{None, Some},
@@ -13,7 +15,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
-use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
+use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;

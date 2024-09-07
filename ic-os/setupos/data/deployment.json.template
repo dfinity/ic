@@ -9,6 +9,7 @@
     "url": "NNS_URL"
   },
   "resources": {
-    "memory": "490"
+    "memory": "490",
+    "cpu": "kvm"
   }
 }

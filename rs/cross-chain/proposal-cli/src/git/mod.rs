@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::{fs, iter};
 use tempfile::TempDir;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Hash<const N: usize>([u8; N]);
 
 impl<const N: usize> FromStr for Hash<N> {
@@ -134,7 +134,7 @@ impl GitRepository {
     }
 
     pub fn build_canister_artifact(&mut self, canister: &TargetCanister) -> CompressedWasmHash {
-        let build = Command::new("./gitlab-ci/container/build-ic.sh")
+        let build = Command::new("./ci/container/build-ic.sh")
             .arg("--canisters")
             .current_dir(self.dir.path())
             .status()
@@ -170,7 +170,7 @@ impl GitRepository {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ReleaseNotes {
     pub command: String,
     pub output: String,

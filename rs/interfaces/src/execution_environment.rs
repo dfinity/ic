@@ -28,7 +28,7 @@ use tower::util::BoxCloneService;
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
 /// created up until the moment they are requested.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct InstanceStats {
     /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
@@ -123,7 +123,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, EnumIter)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -131,8 +131,6 @@ pub enum SystemApiCallId {
     CallCyclesAdd,
     /// Tracker for `ic0.call_cycles_add128()`
     CallCyclesAdd128,
-    /// Tracker for `ic0.call_cycles_add128_up_to()`
-    CallCyclesAdd128UpTo,
     /// Tracker for `ic0.call_data_append()`
     CallDataAppend,
     /// Tracker for `ic0.call_new()`
@@ -243,7 +241,7 @@ pub enum SystemApiCallId {
 
 /// System API call counters, i.e. how many times each tracked System API call
 /// was invoked.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
@@ -279,7 +277,7 @@ impl SystemApiCallCounters {
 /// Note that there are situations where execution available memory is smaller than
 /// the wasm custom sections memory, i.e. when the memory is consumed by something
 /// other than wasm custom sections.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.
@@ -448,7 +446,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ExecutionMode {
     Replicated,
     NonReplicated,
@@ -481,7 +479,7 @@ pub type QueryExecutionService =
     BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum IngressHistoryError {
     StateRemoved(Height),
     StateNotAvailableYet(Height),
@@ -802,28 +800,6 @@ pub trait SystemApi {
     /// This traps if trying to transfer more cycles than are in the current
     /// balance of the canister.
     fn ic0_call_cycles_add128(&mut self, amount: Cycles) -> HypervisorResult<()>;
-
-    /// Adds cycles to a call by moving them from the canister's balance onto
-    /// the call under construction. The cycles are deducted immediately
-    /// from the canister's balance and moved back if the call cannot be
-    /// performed (e.g. if `ic0.call_perform` signals an error or if the
-    /// canister invokes `ic0.call_new` or returns without invoking
-    /// `ic0.call_perform`).
-    ///
-    /// The number of cycles added to the call will be `<= amount` and such that a
-    /// subsequent `ic0.call_perform` will not fail because of insufficient cycles
-    /// balance (assuming no `ic0.call_data_append` is called between
-    /// `ic0.call_cycles_add128_up_to` and `ic0.call_perform`).
-    ///
-    /// This system call also copies the actual amount of cycles that were moved
-    /// onto the call represented by a 128-bit value starting at the location
-    /// `dst` in the canister memory.
-    fn ic0_call_cycles_add128_up_to(
-        &mut self,
-        amount: Cycles,
-        dst: usize,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
 
     /// This call concludes assembling the call. It queues the call message to
     /// the given destination, but does not actually act on it until the current
@@ -1177,7 +1153,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 
 /// Indicate whether a checkpoint will be taken after the current round or not.
 pub enum ExecutionRoundType {
@@ -1186,7 +1162,7 @@ pub enum ExecutionRoundType {
 }
 
 /// Execution round properties collected form the last DKG summary block.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecutionRoundSummary {
     /// The next checkpoint round height.
     ///
@@ -1202,7 +1178,7 @@ pub struct ExecutionRoundSummary {
 }
 
 /// Configuration of execution that comes from the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
@@ -1211,7 +1187,7 @@ pub struct RegistryExecutionSettings {
 }
 
 /// Chain key configuration of execution that comes from the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
     pub pre_signatures_to_create_in_advance: u32,
@@ -1280,7 +1256,7 @@ pub trait Scheduler: Send {
     ) -> Self::State;
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,

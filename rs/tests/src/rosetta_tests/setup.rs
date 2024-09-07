@@ -294,11 +294,11 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = get_dependency_path("rs/rosetta-api/")
+    let path = get_dependency_path("rs/rosetta-api")
         .into_os_string()
         .into_string()
         .unwrap();
-    let path = format!("{}/rosetta_image.tar", path);
+    let path = format!("{path}/rosetta_image.tar");
     let rosetta_image_path = Path::new(path.as_str());
     if !rosetta_image_path.exists() {
         error!(&logger, "Rosetta image not found: {:?}", rosetta_image_path);

@@ -35,7 +35,7 @@ const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Index {
     // The id of the Ledger canister to index
     pub ledger_id: CanisterId,
@@ -88,7 +88,7 @@ pub fn ledger_id() -> CanisterId {
     with_index(|idx| idx.ledger_id)
 }
 
-#[derive(CandidType, Clone, Debug, candid::Deserialize)]
+#[derive(Clone, Debug, CandidType, candid::Deserialize)]
 pub struct InitArgs {
     // The Ledger canister id of the Ledger to index.
     pub ledger_id: CanisterId,
@@ -98,7 +98,7 @@ pub fn init(init_args: InitArgs) {
     INDEX.with(|idx| *idx.borrow_mut() = Some(Index::from(init_args)));
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct GetAccountTransactionsArgs {
     pub account: Account,
     // The txid of the last transaction seen by the client.
@@ -109,27 +109,27 @@ pub struct GetAccountTransactionsArgs {
     pub max_results: Nat,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct TransactionWithId {
     pub id: BlockIndex,
     pub transaction: Transaction,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct GetTransactions {
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
     pub oldest_tx_id: Option<BlockIndex>,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]
 pub struct GetTransactionsErr {
     pub message: String,
 }
 
 pub type GetTransactionsResult = Result<GetTransactions, GetTransactionsErr>;
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ListSubaccountsArgs {
     pub owner: PrincipalId,
     // The last subaccount seen by the client for the given principal.
