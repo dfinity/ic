@@ -1,5 +1,5 @@
 {
-  "checksum": "92e8347a4fa9fef3608ee48e57aa823883f7135dcde3c4793931cc0d1ab2e977",
+  "checksum": "2e69a29d923d1605db571f93cd67fba37773a0fb601763a9628603d67b95c6bb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18629,6 +18629,14 @@
               "target": "leb128"
             },
             {
+              "id": "libafl 0.13.1",
+              "target": "libafl"
+            },
+            {
+              "id": "libafl_bolts 0.13.1",
+              "target": "libafl_bolts"
+            },
+            {
               "id": "libc 0.2.158",
               "target": "libc"
             },
@@ -26565,7 +26573,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"redox\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -35704,6 +35712,519 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "libafl 0.13.1": {
+      "name": "libafl",
+      "version": "0.13.1",
+      "package_url": "https://github.com/AFLplusplus/LibAFL/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libafl/0.13.1/download",
+          "sha256": "9ef11306fe131871480b650648aaf81db0c0c30068f886f2de5cb9b407b2ffac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libafl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libafl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "backtrace",
+            "bincode",
+            "crossterm",
+            "default",
+            "derive",
+            "fork",
+            "gzip",
+            "libafl_derive",
+            "llmp_broker_timeouts",
+            "llmp_compression",
+            "llmp_small_maps",
+            "nix",
+            "prelude",
+            "rand_trait",
+            "ratatui",
+            "regex",
+            "serde_json",
+            "serdeany_autoreg",
+            "serial_test",
+            "std",
+            "tui_monitor",
+            "typed-builder",
+            "uuid",
+            "wait-timeout"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "backtrace 0.3.69",
+              "target": "backtrace"
+            },
+            {
+              "id": "bincode 1.3.3",
+              "target": "bincode"
+            },
+            {
+              "id": "c2rust-bitfields 0.18.0",
+              "target": "c2rust_bitfields"
+            },
+            {
+              "id": "const_format 0.2.32",
+              "target": "const_format"
+            },
+            {
+              "id": "const_panic 0.2.8",
+              "target": "const_panic"
+            },
+            {
+              "id": "crossterm 0.27.0",
+              "target": "crossterm"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "libafl 0.13.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libafl_bolts 0.13.1",
+              "target": "libafl_bolts"
+            },
+            {
+              "id": "libm 0.2.8",
+              "target": "libm"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "meminterval 0.4.1",
+              "target": "meminterval"
+            },
+            {
+              "id": "nix 0.29.0",
+              "target": "nix"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "postcard 1.0.8",
+              "target": "postcard"
+            },
+            {
+              "id": "ratatui 0.26.3",
+              "target": "ratatui"
+            },
+            {
+              "id": "regex 1.10.6",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            },
+            {
+              "id": "serial_test 3.1.1",
+              "target": "serial_test"
+            },
+            {
+              "id": "tuple_list 0.1.3",
+              "target": "tuple_list"
+            },
+            {
+              "id": "typed-builder 0.18.2",
+              "target": "typed_builder"
+            },
+            {
+              "id": "uuid 1.10.0",
+              "target": "uuid"
+            },
+            {
+              "id": "wait-timeout 0.2.0",
+              "target": "wait_timeout"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows 0.51.1",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "libafl_derive 0.13.1",
+              "target": "libafl_derive"
+            },
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.13.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows 0.51.1",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "libafl_bolts 0.13.1": {
+      "name": "libafl_bolts",
+      "version": "0.13.1",
+      "package_url": "https://github.com/AFLplusplus/LibAFL/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libafl_bolts/0.13.1/download",
+          "sha256": "ccd2aed6c2f83d6be5f243e7c4ed5f5b87538b9868d70a483e0eaaa05fea782d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "libafl_bolts",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libafl_bolts",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ahash",
+            "alloc",
+            "backtrace",
+            "ctor",
+            "default",
+            "derive",
+            "erased-serde",
+            "gzip",
+            "hashbrown",
+            "hostname",
+            "libafl_derive",
+            "llmp_compression",
+            "llmp_small_maps",
+            "miniz_oxide",
+            "nix",
+            "postcard",
+            "prelude",
+            "rand_core",
+            "rand_trait",
+            "serde_json",
+            "serdeany_autoreg",
+            "serial_test",
+            "std",
+            "uds",
+            "uuid",
+            "xxh3",
+            "xxhash-rust"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "backtrace 0.3.69",
+              "target": "backtrace"
+            },
+            {
+              "id": "erased-serde 0.4.5",
+              "target": "erased_serde"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "hostname 0.4.0",
+              "target": "hostname"
+            },
+            {
+              "id": "libafl_bolts 0.13.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "miniz_oxide 0.7.1",
+              "target": "miniz_oxide"
+            },
+            {
+              "id": "nix 0.29.0",
+              "target": "nix"
+            },
+            {
+              "id": "num_enum 0.7.0",
+              "target": "num_enum"
+            },
+            {
+              "id": "postcard 1.0.8",
+              "target": "postcard"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            },
+            {
+              "id": "serial_test 3.1.1",
+              "target": "serial_test"
+            },
+            {
+              "id": "static_assertions 1.1.0",
+              "target": "static_assertions"
+            },
+            {
+              "id": "tuple_list 0.1.3",
+              "target": "tuple_list"
+            },
+            {
+              "id": "uuid 1.10.0",
+              "target": "uuid"
+            },
+            {
+              "id": "xxhash-rust 0.8.11",
+              "target": "xxhash_rust"
+            }
+          ],
+          "selects": {
+            "cfg(target_vendor = \"apple\")": [
+              {
+                "id": "mach 0.3.2",
+                "target": "mach"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              },
+              {
+                "id": "uds 0.4.2",
+                "target": "uds"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows 0.51.1",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ctor 0.2.8",
+              "target": "ctor"
+            },
+            {
+              "id": "libafl_derive 0.13.1",
+              "target": "libafl_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.13.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows 0.51.1",
+                "target": "windows"
+              }
+            ]
+          }
+        },
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "libafl_derive 0.13.1": {
+      "name": "libafl_derive",
+      "version": "0.13.1",
+      "package_url": "https://github.com/AFLplusplus/LibAFL/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/libafl_derive/0.13.1/download",
+          "sha256": "9c566e831be2d55db7938ee506f8a9cfac7d9b65a8ca58c3c1ac2795b0a0bfbf"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "libafl_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "libafl_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "libc 0.2.158": {
       "name": "libc",
       "version": "0.2.158",
@@ -37840,7 +38361,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -40786,7 +41307,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -69396,6 +69917,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "tuple_list 0.1.3": {
+      "name": "tuple_list",
+      "version": "0.1.3",
+      "package_url": "https://github.com/VFLashM/tuple_list/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tuple_list/0.1.3/download",
+          "sha256": "141fb9f71ee586d956d7d6e4d5a9ef8e946061188520140f7591b668841d502e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tuple_list",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tuple_list",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "turmoil 0.6.3": {
       "name": "turmoil",
       "version": "0.6.3",
@@ -69918,7 +70477,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -79885,6 +80444,8 @@
     "kube 0.93.1",
     "lazy_static 1.4.0",
     "leb128 0.2.5",
+    "libafl 0.13.1",
+    "libafl_bolts 0.13.1",
     "libc 0.2.158",
     "libflate 2.1.0",
     "libfuzzer-sys 0.4.7",

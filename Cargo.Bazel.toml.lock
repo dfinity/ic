@@ -11858,6 +11858,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tuple_list"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "141fb9f71ee586d956d7d6e4d5a9ef8e946061188520140f7591b668841d502e"
+
+[[package]]
 name = "turmoil"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
