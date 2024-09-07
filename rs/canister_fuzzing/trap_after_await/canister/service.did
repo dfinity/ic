@@ -1,0 +1,5 @@
+service : {
+    get_total_balance : () -> (nat64) query;
+    refund_balance: (nat64) -> ();
+    update_balance: () -> ();
+}

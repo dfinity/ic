@@ -57,3 +57,50 @@ rust_binary(
         "@crate_index//:slog",
     ],
 )
+
+rust_canister(
+    name = "main_canister",
+    srcs = ["trap_after_await/canister/main.rs"],
+    service_file = "trap_after_await/canister/service.did",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_principal",
+    ],
+)
+
+rust_canister(
+    name = "ledger",
+    srcs = ["trap_after_await/ledger/main.rs"],
+    service_file = "trap_after_await/ledger/service.did",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_principal",
+    ],
+)
+
+rust_binary(
+    name = "trap_after_await",
+    testonly = True,
+    srcs = [
+        "trap_after_await/src/trap_after_await.rs",
+    ],
+    data = [":main_canister"] + [":ledger"] + glob(["trap_after_await/corpus/**"]),
+    env = {
+        "FUZZ_CANISTER_WASM_PATH": "$(rootpath :main_canister)",
+        "LEDGER_WASM_PATH": "$(rootpath :ledger)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:libafl",
+        "@crate_index//:libafl_bolts",
+        "@crate_index//:once_cell",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
+)
