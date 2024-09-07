@@ -128,73 +128,73 @@ async fn test_limit_outstanding_calls() {
 
         // Servicing requests where the caller is a VIP. These are suppoed to not occupy call slots.
         canister_status(
-            true,                      // is_caller_vip
-            Duration::from_millis(0),  // pre_flight_pause_duration
-            Duration::from_millis(50), // inner_duration
+            true,                       // is_caller_vip
+            Duration::from_millis(0),   // pre_flight_pause_duration
+            Duration::from_millis(500), // inner_duration
             Some(Ok(base_canister_status_result.clone())),
         ),
         canister_status(
             true,
             Duration::from_millis(0),
-            Duration::from_millis(50),
+            Duration::from_millis(500),
             Some(Ok(base_canister_status_result.clone())),
         ),
         canister_status(
             true,
             Duration::from_millis(0),
-            Duration::from_millis(50),
+            Duration::from_millis(500),
             Some(Ok(base_canister_status_result.clone())),
         ),
         canister_status(
             true,
             Duration::from_millis(0),
-            Duration::from_millis(50),
+            Duration::from_millis(500),
             Some(Ok(base_canister_status_result.clone())),
         ),
         // Servicing requests where the caller is a "pleb", i.e. a non-VIP.
         // pleb call 1:
-        // Starts at 5; ends at 35.
+        // Starts at 50; ends at 350.
         canister_status(
             false,
-            Duration::from_millis(5),
-            Duration::from_millis(30),
+            Duration::from_millis(50),
+            Duration::from_millis(300),
             Some(Ok(base_canister_status_result.clone())),
         ),
         // pleb call 2:
-        // Starts at 5; ends at 15.
+        // Starts at 50; ends at 150.
         canister_status(
             false,
-            Duration::from_millis(5),
-            Duration::from_millis(10),
+            Duration::from_millis(50),
+            Duration::from_millis(100),
             Some(Ok(base_canister_status_result.clone())),
         ),
         // pleb call 3:
         // This one fails, because it comes in while pleb calls 1 and 2 are outstanding.
-        // Starts at 10; gets cut off right away.
+        // Starts at 100; gets cut off right away.
         canister_status(
             false,
-            Duration::from_millis(10),
-            Duration::from_millis(1), // Not used.
+            Duration::from_millis(100),
+            Duration::from_millis(10), // Not used.
             None,
         ),
         // pleb call 4:
         // Unlike the previous call (pleb call 3), this one succeeds,
         // because by the time this starts, the second call has finished.
-        // Starts at 20; ends at 35.
+        // Starts at 200; ends at 350.
         canister_status(
             false,
-            Duration::from_millis(20),
-            Duration::from_millis(15),
+            Duration::from_millis(200),
+            Duration::from_millis(150),
             Some(Ok(base_canister_status_result.clone())),
         ),
         // pleb call 5:
         // Similar to pleb call 3, this fails due to lack of slots.
         // However, in this case, the slots are occupied by requests 1 and 4, not 1 and 2.
-        // Starts at 25; gets cut off right away.
+        // Starts at 250; gets cut off right away.
         canister_status(
             false,
-            Duration::from_millis(25),
-            Duration::from_millis(10),
+            Duration::from_millis(250),
+            Duration::from_millis(100), // Not used.
             None,
         ),
     ])
