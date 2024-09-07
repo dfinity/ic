@@ -27,7 +27,9 @@ fn main() {
         )
         .unwrap();
 
-    let bytes = include_bytes!("/ic/rs/execution_environment/fuzz/crashes/adcd18db92297366");
+    let bytes = include_bytes!(
+        "/ic/rs/canister_fuzzing/decode_candid_by_instructions/crashes/adcd18db92297366"
+    );
 
     let result = test.execute_ingress(canister_id, "decode", bytes.to_vec());
 

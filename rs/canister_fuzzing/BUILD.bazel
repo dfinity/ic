@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:private"])
+
+MACRO_DEPENDENCIES = []
+
+rust_canister(
+    name = "fuzz_canister",
+    srcs = ["decode_candid_by_instructions/canister/main.rs"],
+    service_file = "decode_candid_by_instructions/canister/service.did",
+    deps = [
+        "@crate_index//:candid_parser",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_binary(
+    name = "decode_candid_by_instructions",
+    testonly = True,
+    srcs = [
+        "decode_candid_by_instructions/src/decode_candid_by_instructions.rs",
+        "decode_candid_by_instructions/src/decode_map.rs",
+    ],
+    data = [":fuzz_canister"] + glob(["decode_candid_by_instructions/corpus/**"]),
+    env = {
+        "FUZZ_CANISTER_WASM_PATH": "$(rootpath :fuzz_canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:libafl",
+        "@crate_index//:libafl_bolts",
+        "@crate_index//:once_cell",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_binary(
+    name = "decode_candid_by_instructions_test_input",
+    testonly = True,
+    srcs = [
+        "decode_candid_by_instructions/src/decode_candid_by_instructions_test_input.rs",
+    ],
+    data = [":fuzz_canister"],
+    env = {
+        "FUZZ_CANISTER_WASM_PATH": "$(rootpath :fuzz_canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:slog",
+    ],
+)

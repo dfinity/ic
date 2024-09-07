@@ -36,7 +36,7 @@ mod decode_map;
 use decode_map::{DecodingMapFeedback, DECODING_MAP_OBSERVER_NAME, MAP};
 
 // TODO: This should be obtained from env
-const EXECUTION_DIR: &str = "/ic/rs/execution_environment/fuzz";
+const EXECUTION_DIR: &str = "/ic/rs/canister_fuzzing/decode_candid_by_instructions";
 static mut TEST: Lazy<RefCell<(StateMachine, CanisterId)>> =
     Lazy::new(|| RefCell::new(create_execution_test()));
 static mut COVERAGE_MAP: &'static mut [u8] = &mut [0; 65536];
