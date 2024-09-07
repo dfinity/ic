@@ -481,6 +481,7 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
+        ongoing_long_install_code: bool,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
@@ -488,7 +489,7 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_subnet_msg(&msg, &state.canister_states) {
+                if can_execute_subnet_msg(&msg, ongoing_long_install_code, &state.canister_states) {
                     available_subnet_messages = true;
                     break;
                 }
@@ -677,6 +678,17 @@ impl SchedulerImpl {
                 );
 
                 // TODO(EXC-1517): Improve inner loop preparation.
+                let ongoing_long_install_code =
+                    state
+                        .canister_states
+                        .iter()
+                        .any(|(_canister_id, canister)| match canister.next_execution() {
+                            NextExecution::None
+                            | NextExecution::StartNew
+                            | NextExecution::ContinueLong => false,
+                            NextExecution::ContinueInstallCode => true,
+                        });
+
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
                 if !subnet_round_limits.reached() {
                     state = self.drain_subnet_queues(
@@ -684,6 +696,7 @@ impl SchedulerImpl {
                         csprng,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
+                        ongoing_long_install_code,
                         registry_settings,
                         idkg_subnet_public_keys,
                     );
@@ -2326,6 +2339,7 @@ fn join_consumed_cycles_by_use_case(
 ///     2. Install code messages can only be executed sequentially.
 fn can_execute_subnet_msg(
     msg: &CanisterMessage,
+    ongoing_long_install_code: bool,
     canister_states: &BTreeMap<CanisterId, CanisterState>,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {
@@ -2355,15 +2369,6 @@ fn can_execute_subnet_msg(
         return true;
     };
 
-    let ongoing_long_install_code =
-        canister_states
-            .iter()
-            .any(|(_canister_id, canister)| match canister.next_execution() {
-                NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
-                    false
-                }
-                NextExecution::ContinueInstallCode => true,
-            });
     let effective_canister_paused_or_aborted = match effective_canister_state.next_execution() {
         NextExecution::None | NextExecution::StartNew => false,
         NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,

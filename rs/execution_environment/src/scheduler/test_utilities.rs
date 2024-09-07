@@ -558,6 +558,7 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
+            false,
             self.registry_settings(),
             &BTreeMap::new(),
         )
