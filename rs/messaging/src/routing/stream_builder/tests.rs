@@ -1077,11 +1077,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     NO_DEADLINE,
                 );
                 push_input(canister_state, req.into());
-                canister_state
-                    .system_state
-                    .queues_mut()
-                    .pop_input()
-                    .unwrap();
+                canister_state.system_state.pop_input().unwrap();
 
                 canister_state.push_output_response(rep);
             }

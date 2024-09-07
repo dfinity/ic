@@ -1,7 +1,7 @@
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
@@ -123,7 +123,7 @@ impl From<&Id> for pb_queues::canister_queue::QueueItem {
     fn from(item: &Id) -> Self {
         use pb_queues::canister_queue::queue_item::R;
 
-        pb_queues::canister_queue::QueueItem {
+        Self {
             r: Some(R::Reference(item.0)),
         }
     }
@@ -133,12 +133,40 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
         match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Id(id)),
             None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
         }
     }
 }
 
+/// Helper for encoding / decoding `pb_queues::canister_queues::ShedResponse`.
+pub(super) struct ShedResponse(pub(super) Id, pub(super) CallbackId);
+
+impl From<ShedResponse> for pb_queues::canister_queues::ShedResponse {
+    fn from(item: ShedResponse) -> Self {
+        Self {
+            id: item.0 .0,
+            callback_id: item.1.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queues::ShedResponse> for ShedResponse {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queues::ShedResponse) -> Result<Self, Self::Error> {
+        let id = Id(item.id);
+        if id.context() == Context::Inbound
+            && id.class() == Class::BestEffort
+            && id.kind() == Kind::Response
+        {
+            Ok(ShedResponse(id, CallbackId::from(item.callback_id)))
+        } else {
+            Err(ProxyDecodeError::Other(
+                "Not an inbound best-effort response".to_string(),
+            ))
+        }
+    }
+}
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
 ///

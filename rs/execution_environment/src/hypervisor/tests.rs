@@ -5413,7 +5413,6 @@ fn call_with_best_effort_response_test_helper(
     match test
         .canister_state_mut(canister_receiver)
         .system_state
-        .queues_mut()
         .pop_input()
         .unwrap()
     {
