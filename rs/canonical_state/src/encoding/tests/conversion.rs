@@ -273,7 +273,7 @@ fn try_from_reject_context_code_zero() {
 #[test]
 fn try_from_reject_context_code_out_of_range() {
     let context = types::RejectContext {
-        code: RejectCode::CanisterError as u8 + 1,
+        code: RejectCode::SysUnknown as u8,
         message: "Oops".into(),
     };
 
