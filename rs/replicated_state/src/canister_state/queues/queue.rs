@@ -468,7 +468,7 @@ impl TryFrom<(&CanisterQueue, &MessagePool)> for OutputQueue {
                 RequestOrResponse::Request(req) => {
                     let deadline = pool
                         .outbound_guaranteed_request_deadlines()
-                        .get(&reference)
+                        .get(reference)
                         .cloned()
                         .unwrap_or(req.deadline);
                     // Safe to unwrap because we cannot exceed the queue capacity.
