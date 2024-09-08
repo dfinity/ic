@@ -286,7 +286,7 @@ impl ExhaustiveSet for RejectCode {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         RejectCode::iter()
             // TODO(MR-610): Drop this after `SysUnknown` is supported on mainnet.
-            .filter(|code| code != RejectCode::SysUnknown)
+            .filter(|code| *code != RejectCode::SysUnknown)
             .collect()
     }
 }
