@@ -1026,18 +1026,14 @@ pub(super) fn instrument(
 
     if new_num_funcs > num_functions {
         special_indices.decr_instruction_counter_fn = new_num_funcs + 1;
-        match wasm_native_stable_memory {
-            FlagStatus::Enabled => {
-                special_indices.count_clean_pages_fn = Some(new_num_funcs + 2);
-            }
-            _ => (),
+        if wasm_native_stable_memory == FlagStatus::Enabled {
+            special_indices.count_clean_pages_fn = Some(new_num_funcs + 2);
         };
     }
 
     // inject instructions counter decrementation
     let mut rng = rand::thread_rng();
-    let mut i: usize = 0;
-    for func_body in &mut module.code_sections {
+    for (i, func_body) in module.code_sections.iter_mut().enumerate() {
         if let CompositeType::Func(func_type) =
             &module.types[module.functions[i] as usize].composite_type
         {
@@ -1055,7 +1051,6 @@ pub(super) fn instrument(
                 &mut rng,
             );
         }
-        i += 1;
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -1241,7 +1236,7 @@ fn inject_afl_coverage(module: &mut Module<'_>, special_indices: &SpecialIndices
                 global_index: special_indices.afl_instrument_mem_ptr, // 0 for now
             },
             I32Const {
-                value: 65536 as i32, // 1 page
+                value: 65536_i32, // 1 page
             },
             Call {
                 function_index: ic0_msg_reply_data_append_index as u32,

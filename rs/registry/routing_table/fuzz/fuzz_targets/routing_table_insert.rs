@@ -27,28 +27,24 @@ fuzz_target!(|table_data: RoutingTableInsertData| {
         table_data.migration,
     );
 
-    let canister_range: CanisterIdRange;
-    if start > end {
-        canister_range = CanisterIdRange {
+    let canister_range = if start > end {
+        CanisterIdRange {
             start: end,
             end: start,
-        };
+        }
     } else {
-        canister_range = CanisterIdRange {
-            start: start,
-            end: end,
-        };
-    }
+        CanisterIdRange { start, end }
+    };
 
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(subnet_id));
-    let _ = ROUTING_TABLE.with_borrow_mut(|table| {
+    ROUTING_TABLE.with_borrow_mut(|table| {
         let known_subnet = KNOWN_SUBNET.with_borrow(|subnets| subnets.contains(&subnet));
 
         if known_subnet && migration {
             let canister_ranges = CanisterIdRanges::try_from(vec![canister_range]).unwrap();
-            table.assign_ranges(canister_ranges, subnet);
+            let _ = table.assign_ranges(canister_ranges, subnet);
         } else {
-            table.insert(canister_range, subnet);
+            let _ = table.insert(canister_range, subnet);
             KNOWN_SUBNET.with_borrow_mut(|subnets| subnets.insert(subnet));
         }
     });
