@@ -83,8 +83,22 @@ async fn refund_balance(trap: u64) {
                 LOCAL_BALANCES
                     .with_borrow_mut(|local_balance| local_balance.insert(caller, balance - trap));
 
-                if trap == 3278_u64 {
-                    panic!("Triggering a trap");
+                // assume trap == 3278 creates a panic
+
+                // no branching panic
+                // if trap == 3278_u64 {
+                //     panic!("Triggering a trap");
+                // }
+
+                // branched panic
+                // coverage guided
+                let trap_slice = trap.to_le_bytes();
+                if trap_slice[0] == 206 {
+                    if trap_slice[1] == 12 {
+                        if trap_slice[2..8].iter().all(|x| *x == 0) {
+                            panic!("Triggering a trap");
+                        }
+                    }
                 }
             }
         }

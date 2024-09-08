@@ -177,7 +177,7 @@ pub fn main() {
 
         // should never fail
         assert_eq!(b1, b2);
-        let trap = bytes_to_u64(input.bytes()) % 50_000;
+        let trap = bytes_to_u64(input.bytes()) % 500_000;
         // let trap = 3278_u64;
 
         // Synchronous setup ABAB

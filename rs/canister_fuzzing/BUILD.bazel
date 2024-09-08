@@ -108,3 +108,28 @@ rust_binary(
         "@crate_index//:slog",
     ],
 )
+
+rust_binary(
+    name = "trap_after_await_test_input",
+    testonly = True,
+    srcs = [
+        "trap_after_await/src/trap_after_await_test_input.rs",
+    ],
+    data = [":main_canister"] + [":ledger"],
+    env = {
+        "FUZZ_CANISTER_WASM_PATH": "$(rootpath :main_canister)",
+        "LEDGER_WASM_PATH": "$(rootpath :ledger)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)
