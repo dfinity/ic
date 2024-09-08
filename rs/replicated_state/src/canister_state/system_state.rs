@@ -22,8 +22,8 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, Payload,
-    RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
+    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
@@ -1075,34 +1075,44 @@ impl SystemState {
 
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
-        match self.queues.pop_input() {
-            Some(CanisterInput::Ingress(msg)) => Some(CanisterMessage::Ingress(msg)),
-            Some(CanisterInput::Request(msg)) => Some(CanisterMessage::Request(msg)),
-            Some(CanisterInput::Response(msg)) => Some(CanisterMessage::Response(msg)),
-            Some(CanisterInput::UnknownResponse(callback_id)) => {
-                let call_context_manager = self.call_context_manager().unwrap();
-                let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
-
-                Some(CanisterMessage::Response(
-                    Response {
-                        originator: callback.originator,
-                        respondent: callback.respondent,
-                        originator_reply_callback: callback_id,
-                        refund: Cycles::zero(),
-                        response_payload: Payload::Reject(
-                            RejectContext::new_with_message_length_limit(
-                                RejectCode::SysTransient,
-                                "Request timed out.",
-                                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-                            ),
-                        ),
-                        deadline: callback.deadline,
-                    }
-                    .into(),
-                ))
+        Some(match self.queues.pop_input()? {
+            CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
+            CanisterInput::Request(msg) => CanisterMessage::Request(msg),
+            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::DeadlineExpired(callback_id) => {
+                self.to_reject_response(callback_id, "Call deadline has expired.")
             }
-            None => None,
-        }
+            CanisterInput::ResponseDropped(callback_id) => {
+                self.to_reject_response(callback_id, "Response was dropped.")
+            }
+        })
+    }
+
+    /// Generates a reject response for the given callback ID with the given
+    /// message.
+    ///
+    /// Panics if the `CallContextManager` does not hold a callback with the given
+    /// `CallbackId`.
+    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        let call_context_manager = self.call_context_manager().unwrap();
+        let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+
+        CanisterMessage::Response(
+            Response {
+                originator: callback.originator,
+                respondent: callback.respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    // TODO(MR-552): Use SysUnknown instead.
+                    RejectCode::SysTransient,
+                    message,
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline: callback.deadline,
+            }
+            .into(),
+        )
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.

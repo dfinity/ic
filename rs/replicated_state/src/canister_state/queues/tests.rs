@@ -2176,7 +2176,7 @@ fn test_stats_best_effort() {
 
     // Pop the dropped response and the generated reject response.
     assert_eq!(
-        Some(CanisterInput::UnknownResponse(
+        Some(CanisterInput::ResponseDropped(
             response2.originator_reply_callback
         )),
         queues.pop_input()

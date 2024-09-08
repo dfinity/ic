@@ -299,15 +299,17 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 /// Kinds of canister inputs returned by `CanisterQueues::pop_input()` /
 /// `CanisterQueues::peek_input()`: in addition to the regular ingress messages
 /// and canister requests / responses, `pop_input()` / `peek_input()` may also
-/// return concise "reject responses for callback ID" messages.
+/// return concise "reject response for callback ID" messages.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum CanisterInput {
     Ingress(Arc<Ingress>),
     Request(Arc<Request>),
     Response(Arc<Response>),
-    /// A concise reject response meaning "callback ID has expired or its response
-    /// was shed".
-    UnknownResponse(CallbackId),
+    /// A concise reject response meaning "call deadine has expired".
+    #[allow(dead_code)]
+    DeadlineExpired(CallbackId),
+    /// A concise reject response meaning "call response was dropped".
+    ResponseDropped(CallbackId),
 }
 
 impl CanisterInput {
@@ -316,7 +318,10 @@ impl CanisterInput {
     fn response_callback_id(&self) -> Option<CallbackId> {
         match self {
             CanisterInput::Response(response) => Some(response.originator_reply_callback),
-            CanisterInput::UnknownResponse(callback_id) => Some(*callback_id),
+
+            CanisterInput::DeadlineExpired(callback_id)
+            | CanisterInput::ResponseDropped(callback_id) => Some(*callback_id),
+
             _ => None,
         }
     }
@@ -532,7 +537,7 @@ impl CanisterQueues {
                 let id = item.id();
                 // Message must be either pooled; or a previously shed inbound response.
                 let msg = self.pool.take(id).map(|msg| msg.into()).unwrap_or_else(|| {
-                    CanisterInput::UnknownResponse(
+                    CanisterInput::ResponseDropped(
                         self.shed_responses
                             .remove(&id)
                             .expect("stale reference at the front of input queue"),
@@ -612,7 +617,7 @@ impl CanisterQueues {
         } else if id.kind() == Kind::Response {
             self.shed_responses
                 .get(&id)
-                .map(|callback_id| CanisterInput::UnknownResponse(*callback_id))
+                .map(|callback_id| CanisterInput::ResponseDropped(*callback_id))
         } else {
             debug_assert!(!self.shed_responses.contains_key(&id));
             None

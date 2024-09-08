@@ -167,6 +167,7 @@ impl TryFrom<pb_queues::canister_queues::ShedResponse> for ShedResponse {
         }
     }
 }
+
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
 ///

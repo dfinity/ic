@@ -1051,14 +1051,16 @@ impl ReplicatedState {
 /// Converts a `CanisterInput` popped from a subnet input queue into a
 /// `CanisterMessage`.
 ///
-/// As opposed to actual canister queues, subnet input queues should not hold
+/// As opposed to actual canister queues, subnet input queues should never hold
 /// responses.
 fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
     match input {
         CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
         CanisterInput::Request(request) => CanisterMessage::Request(request),
-        CanisterInput::Response(_) | CanisterInput::UnknownResponse(_) => {
-            unreachable!("Subnet input queue should never produce `UnknownResponse`")
+        CanisterInput::Response(_)
+        | CanisterInput::DeadlineExpired(_)
+        | CanisterInput::ResponseDropped(_) => {
+            unreachable!("Subnet input queues should never hold responses")
         }
     }
 }
