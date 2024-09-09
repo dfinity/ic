@@ -31,7 +31,7 @@ env:
   JOBS: |
     ${{ github.event_name == 'schedule' && '7' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
-    '9' }}
+    '15' }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
