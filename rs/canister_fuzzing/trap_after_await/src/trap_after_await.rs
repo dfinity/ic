@@ -56,6 +56,7 @@ struct State {
 
 // TODO: This should be obtained from env
 const EXECUTION_DIR: &str = "/ic/rs/canister_fuzzing/trap_after_await";
+const SYNCHRONOUS_EXECUTION: bool = false;
 static mut TEST: Lazy<RefCell<State>> = Lazy::new(|| RefCell::new(create_execution_test()));
 static mut COVERAGE_MAP: &mut [u8] = &mut [0; 65536];
 
@@ -116,7 +117,7 @@ fn create_execution_test() -> State {
             read_ledger_canister_bytes(),
             vec![],
             None,
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(u128::MAX / 2),
         )
         .unwrap();
 
@@ -126,7 +127,7 @@ fn create_execution_test() -> State {
             read_main_canister_bytes(),
             Encode!(&ledger_canister_id).unwrap(),
             None,
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(u128::MAX / 2),
         )
         .unwrap();
 
@@ -177,31 +178,44 @@ pub fn main() {
 
         // should never fail
         assert_eq!(b1, b2);
-        let trap = bytes_to_u64(input.bytes()) % 500_000;
+
+        // Initialize payload from bytes
+        // let trap = Encode!(&(bytes_to_u64(input.bytes()) % 500_000)).unwrap();
+        let trap = (*input).bytes().to_vec();
         // let trap = 3278_u64;
 
-        // Synchronous setup ABAB
-        for _ in 0..2 {
-            let _result = test.execute_ingress_as(
-                PrincipalId::new_anonymous(),
-                main_canister_id,
-                "refund_balance",
-                Encode!(&trap).unwrap(),
-            );
+        if SYNCHRONOUS_EXECUTION {
+            // Synchronous message execution - ABABAB
+            // Each execute_ingress_as is executed in place
+            // as a single round
+            for _ in 0..3 {
+                // Execution result doesn't matter here
+                let _result = test.execute_ingress_as(
+                    PrincipalId::new_anonymous(),
+                    main_canister_id,
+                    "refund_balance",
+                    trap.clone(),
+                );
+            }
+        } else {
+            // Asynchronous setup AABBAB
+            // We use submit_ingress and execute_round to trigger
+            // asynchronous message execution.
+            for i in 0..3 {
+                let _messaage_id = test
+                    .submit_ingress_as(
+                        PrincipalId::new_anonymous(),
+                        main_canister_id,
+                        "refund_balance",
+                        trap.clone(),
+                    )
+                    .unwrap();
+                if i == 1 {
+                    test.execute_round();
+                }
+            }
+            test.execute_round();
         }
-
-        // Asynchronous setup AABB
-        // for _ in 0..2 {
-        //     let _messaage_id = test
-        //         .submit_ingress_as(
-        //             PrincipalId::new_anonymous(),
-        //             main_canister_id,
-        //             "refund_balance",
-        //             Encode!(&trap).unwrap(),
-        //         )
-        //         .unwrap();
-        // }
-        // test.execute_round();
 
         // Assert both balances match
         let b1 = match test
@@ -275,6 +289,7 @@ pub fn main() {
     )
     .expect("Failed to create the Executor");
 
+    // bazel run @candid//:didc random -- -t '(nat64)' | bazel run @candid//:didc encode | xxd -r -p
     let paths = fs::read_dir(PathBuf::from(format!("{}/corpus", EXECUTION_DIR))).unwrap();
     for path in paths {
         let mut f = File::open(path.unwrap().path()).unwrap();

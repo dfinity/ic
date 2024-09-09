@@ -84,14 +84,15 @@ async fn refund_balance(trap: u64) {
                     .with_borrow_mut(|local_balance| local_balance.insert(caller, balance - trap));
 
                 // assume trap == 3278 creates a panic
+                // Single branch; directly equality check
+                // Not good for coverage
 
-                // no branching panic
                 // if trap == 3278_u64 {
                 //     panic!("Triggering a trap");
                 // }
 
-                // branched panic
-                // coverage guided
+                // Multiple branch; byte equality check
+                // Good for coverage guided fuzzers
                 let trap_slice = trap.to_le_bytes();
                 if trap_slice[0] == 206 {
                     if trap_slice[1] == 12 {

@@ -14,6 +14,8 @@ use std::io::Read;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+const SYNCHRONOUS_EXECUTION: bool = false;
+
 fn bytes_to_u64(bytes: &[u8]) -> u64 {
     let mut result = 0u64;
     for &byte in bytes.iter().take(8).rev() {
@@ -79,7 +81,7 @@ fn main() {
             read_ledger_canister_bytes(),
             vec![],
             None,
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(u128::MAX / 2),
         )
         .unwrap();
 
@@ -89,7 +91,7 @@ fn main() {
             read_main_canister_bytes(),
             Encode!(&ledger_canister_id).unwrap(),
             None,
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(u128::MAX / 2),
         )
         .unwrap();
 
@@ -129,32 +131,42 @@ fn main() {
     assert_eq!(b1, b2);
 
     let bytes = include_bytes!("/ic/rs/canister_fuzzing/trap_after_await/crashes/b9a09e1886048420");
-    let trap = bytes_to_u64(bytes) % 500_000;
-    println!("Trap {}", trap);
+    let trap = Encode!(&(bytes_to_u64(bytes) % 500_000)).unwrap();
+    println!("Trap {:?}", trap);
     // let trap = 3278_u64;
 
-    // Synchronous setup ABAB
-    for _ in 0..2 {
-        let _result = test.execute_ingress_as(
-            PrincipalId::new_anonymous(),
-            main_canister_id,
-            "refund_balance",
-            Encode!(&trap).unwrap(),
-        );
+    if SYNCHRONOUS_EXECUTION {
+        // Synchronous message execution - ABABAB
+        // Each execute_ingress_as is executed in place
+        // as a single round
+        for _ in 0..3 {
+            // Execution result doesn't matter here
+            let _result = test.execute_ingress_as(
+                PrincipalId::new_anonymous(),
+                main_canister_id,
+                "refund_balance",
+                trap.clone(),
+            );
+        }
+    } else {
+        // Asynchronous setup AABBAB
+        // We use submit_ingress and execute_round to trigger
+        // asynchronous message execution.
+        for i in 0..3 {
+            let _messaage_id = test
+                .submit_ingress_as(
+                    PrincipalId::new_anonymous(),
+                    main_canister_id,
+                    "refund_balance",
+                    trap.clone(),
+                )
+                .unwrap();
+            if i == 1 {
+                test.execute_round();
+            }
+        }
+        test.execute_round();
     }
-
-    // Asynchronous setup AABB
-    // for _ in 0..2 {
-    //     let _messaage_id = test
-    //         .submit_ingress_as(
-    //             PrincipalId::new_anonymous(),
-    //             main_canister_id,
-    //             "refund_balance",
-    //             Encode!(&trap).unwrap(),
-    //         )
-    //         .unwrap();
-    // }
-    // test.execute_round();
 
     // Assert both balances match
     let b1 = match test
