@@ -446,37 +446,40 @@ pub fn cycles_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
 }
 
-/// Returns buckets appropriate for Wasm and Stable memories
-fn memory_buckets() -> Vec<f64> {
-    const K: u64 = 1024;
-    const M: u64 = K * 1024;
-    const G: u64 = M * 1024;
-    let mut buckets: Vec<_> = [
-        0,
-        4 * K,
-        64 * K,
-        M,
-        10 * M,
-        50 * M,
-        100 * M,
-        500 * M,
-        G,
-        2 * G,
-        3 * G,
-        4 * G,
-        5 * G,
-        6 * G,
-        7 * G,
-        8 * G,
-    ]
-    .iter()
-    .chain([MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES].iter())
-    .cloned()
-    .collect();
+/// Returns unique and sorted buckets.
+pub fn unique_sorted_buckets(buckets: &[u64]) -> Vec<f64> {
     // Ensure that all buckets are unique
+    let mut buckets = buckets.to_vec();
     buckets.sort_unstable();
     buckets.dedup();
     buckets.into_iter().map(|x| x as f64).collect()
+}
+
+/// Returns buckets appropriate for Wasm and Stable memories
+fn memory_buckets() -> Vec<f64> {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    unique_sorted_buckets(&[
+        0,
+        4 * KIB,
+        64 * KIB,
+        MIB,
+        10 * MIB,
+        50 * MIB,
+        100 * MIB,
+        500 * MIB,
+        GIB,
+        2 * GIB,
+        3 * GIB,
+        4 * GIB,
+        5 * GIB,
+        6 * GIB,
+        7 * GIB,
+        8 * GIB,
+        MAX_STABLE_MEMORY_IN_BYTES,
+        MAX_WASM_MEMORY_IN_BYTES,
+    ])
 }
 
 /// Returns a histogram with buckets appropriate for Canister memory.

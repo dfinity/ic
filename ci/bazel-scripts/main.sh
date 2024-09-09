@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# This script should only be executed from the gitlab-ci job context.
+# This script should only be executed from the ci job context.
 # To reproduce a build, invoke the Bazel command directly.
 # e.g. follow the buildfarm link -> details -> explicit command line.
 
@@ -24,17 +24,17 @@ if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
     elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
         # get bazel targets that changed within the MR
         BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-
-        # if bazel targets is empty we don't need to run any tests
-        if [ -z "${BAZEL_TARGETS:-}" ]; then
-            echo "No bazel targets to build"
-            exit 0
-        fi
     fi
 fi
 
 # pass info about bazel targets to bazel-targets file
 echo "$BAZEL_TARGETS" >bazel-targets
+
+# if bazel targets is empty we don't need to run any tests
+if [ -z "${BAZEL_TARGETS:-}" ]; then
+    echo "No bazel targets to build"
+    exit 0
+fi
 
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"

@@ -144,7 +144,7 @@ struct OutputIterator<'a> {
     /// popped / peeked from the first iterator.
     canister_iterators: VecDeque<CanisterOutputQueuesIterator<'a>>,
 
-    /// Number of messages left in the iterator.
+    /// Number of (potentially stale) message references left in the iterator.
     size: usize,
 }
 
@@ -178,7 +178,8 @@ impl<'a> OutputIterator<'a> {
         }
     }
 
-    /// Computes the number of messages left in `queue_handles`.
+    /// Computes the number of (potentially stale) message references left in
+    /// `queue_handles`.
     ///
     /// Time complexity: O(N).
     fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
@@ -193,10 +194,13 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+            // `next()` may consume an arbitrary number of stale references.
+            self.size -= canister_iterator.size();
             let next = canister_iterator.next();
+            self.size += canister_iterator.size();
+
             if next.is_some() {
-                self.size -= 1;
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
@@ -211,8 +215,12 @@ impl std::iter::Iterator for OutputIterator<'_> {
     }
 
     /// Returns the bounds on the number of messages remaining in the iterator.
+    ///
+    /// Since any message reference may or may not be stale (due to expiration /
+    /// load shedding), there may be anywhere between 0 and `size` messages left in
+    /// the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        (0, Some(self.size))
     }
 }
 
@@ -226,7 +234,8 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
     /// in the output queue.
     fn exclude_queue(&mut self);
 
-    /// Returns the exact number of messages left in the iterator.
+    /// Returns the number of (potentially stale) message references left in the
+    /// iterator.
     fn size(&self) -> usize;
 }
 
@@ -856,15 +865,14 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out all requests with expired deadlines (given the state time) in
-    /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
-    /// out requests.
+    /// Times out all messages with expired deadlines (given the state time) in all
+    /// canister (but not subnet) queues. Returns the number of timed out messages.
     ///
-    /// See `CanisterQueues::time_out_requests` for further details.
-    pub fn time_out_requests(&mut self) -> u64 {
+    /// See `CanisterQueues::time_out_messages` for further details.
+    pub fn time_out_messages(&mut self) -> usize {
         let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
-        // calling `time_out_requests()` on it and replace it afterwards; and removing
+        // calling `time_out_messages()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
         // filter for the (usually much fewer) canisters with timed requests and only
         // apply the costly remove-call-replace to those.
@@ -879,10 +887,10 @@ impl ReplicatedState {
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
 
-        let mut timed_out_requests_count = 0;
+        let mut timed_out_messages_count = 0;
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            timed_out_requests_count += canister.system_state.time_out_requests(
+            timed_out_messages_count += canister.system_state.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,
@@ -890,7 +898,7 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
-        timed_out_requests_count
+        timed_out_messages_count
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
