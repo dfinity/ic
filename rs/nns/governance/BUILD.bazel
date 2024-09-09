@@ -4,7 +4,7 @@ load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//rs/nervous_system/common:feature_flags.bzl", "test_with_tla")
+load("//rs/nervous_system/tla:feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -76,6 +76,7 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/tla",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
@@ -87,6 +88,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/tla:tla--test_feature",
     "//rs/nns/constants:constants--test_feature",
     "//rs/nns/handlers/root/interface:interface--test_feature",
     "//rs/nns/governance/api:api--test_feature",
@@ -178,7 +180,6 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
-        "//rs/nervous_system/canisters:canisters--test_feature",
         "//rs/tla_instrumentation",
     ],
 )

@@ -1,18 +1,6 @@
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use icp_ledger::{AccountIdentifier, Subaccount};
-pub use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla, UpdateTrace};
-
-#[cfg(feature = "tla")]
-use local_key::task_local;
-
-use std::sync::RwLock;
-
-#[cfg(feature = "tla")]
-task_local! {
-    pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-}
-
-pub static TLA_TRACES: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+pub use tla_instrumentation::{Destination, TlaValue, ToTla};
 
 pub fn subaccount_to_tla(subaccount: &Subaccount) -> TlaValue {
     opt_subaccount_to_tla(&Some(*subaccount))

@@ -1,0 +1,18 @@
+[package]
+name = "ic-nervous-system-tla"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_nervous_system_tla"
+path = "src/lib.rs"
+
+[dependencies]
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
+local_key = { path = "../../tla_instrumentation/local_key", optional = true }
+
+[features]
+tla = ["tla_instrumentation", "local_key"]

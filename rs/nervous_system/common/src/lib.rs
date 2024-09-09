@@ -30,8 +30,6 @@ pub mod ledger;
 pub mod ledger_validation;
 pub mod memory_manager_upgrade_storage;
 
-pub mod tla_macros;
-
 lazy_static! {
     // 10^-4. There is one ten-thousandth of a unit in one permyriad.
     pub static ref UNITS_PER_PERMYRIAD: Decimal = Decimal::from(10_000_u64).inv();

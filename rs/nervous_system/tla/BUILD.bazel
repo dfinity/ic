@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load(":feature_flags.bzl", "test_with_tla")
+
+package(default_visibility = ["//visibility:public"])
+
+BASE_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/rosetta-api/icp_ledger",
+    "//rs/tla_instrumentation",
+    "//rs/types/base_types",
+]
+
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/constants:constants--test_feature",
+]
+
+rust_library(
+    name = "tla",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nervous_system_tla",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "tla--test_feature",
+    srcs = glob(["src/**"]),
+    crate_features = test_with_tla(),
+    crate_name = "ic_nervous_system_tla",
+    version = "0.1.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
+        "//rs/tla_instrumentation:local_key",
+    ],
+)

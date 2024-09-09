@@ -18,6 +18,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-runtime = { path = "../runtime" }
+ic-nervous-system-tla = { path = "../tla" }
 ic-nns-constants = { path = "../../nns/constants" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }

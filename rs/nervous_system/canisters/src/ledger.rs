@@ -11,13 +11,14 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
 #[cfg(feature = "tla")]
-use crate::tla::{
-    self, account_to_tla, opt_subaccount_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+use ic_nervous_system_tla::{
+    self as tla, account_to_tla, opt_subaccount_to_tla, store::TLA_INSTRUMENTATION_STATE,
+    Destination, ToTla,
 };
 #[cfg(feature = "tla")]
 use std::collections::BTreeMap;
 
-use ic_nervous_system_common::{tla_log_request, tla_log_response};
+use ic_nervous_system_tla::{tla_log_request, tla_log_response};
 
 pub struct IcpLedgerCanister {
     id: CanisterId,

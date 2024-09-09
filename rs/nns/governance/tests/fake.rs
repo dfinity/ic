@@ -40,7 +40,7 @@ use std::{
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
-use ic_nervous_system_common::{tla_log_request, tla_log_response};
+use ic_nervous_system_tla::{tla_log_request, tla_log_response};
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
     self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,

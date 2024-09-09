@@ -133,7 +133,7 @@ use tla::{
     TLA_TRACES,
 };
 
-use ic_nervous_system_common::tla_log_locals;
+use ic_nervous_system_tla::tla_log_locals;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
