@@ -1,5 +1,5 @@
 {
-  "checksum": "acb21312469917406d1682cea118293a6ca91b32b8bddd476a9d130541782554",
+  "checksum": "1d810f301a113b65da5f888b5937804d38666ad0278789b1e6fd77e6fdd0e323",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4528,10 +4528,6 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            },
-            {
               "id": "tower 0.4.13",
               "target": "tower"
             },
@@ -5278,109 +5274,6 @@
       ],
       "license_file": null
     },
-    "axum-server 0.5.1": {
-      "name": "axum-server",
-      "version": "0.5.1",
-      "package_url": "https://github.com/programatik29/axum-server",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/axum-server/0.5.1/download",
-          "sha256": "447f28c85900215cc1bea282f32d4a2f22d55c5a300afdfbc661c8d6a632e063"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "axum_server",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "axum_server",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "arc-swap",
-            "default",
-            "pin-project-lite",
-            "rustls",
-            "rustls-pemfile",
-            "tls-rustls",
-            "tokio-rustls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "arc-swap 1.6.0",
-              "target": "arc_swap"
-            },
-            {
-              "id": "bytes 1.7.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "http-body 0.4.6",
-              "target": "http_body"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "pin-project-lite 0.2.13",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls"
-            },
-            {
-              "id": "rustls-pemfile 1.0.3",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-rustls 0.24.1",
-              "target": "tokio_rustls"
-            },
-            {
-              "id": "tower-service 0.3.2",
-              "target": "tower_service"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "axum-server 0.6.0": {
       "name": "axum-server",
       "version": "0.6.0",
@@ -5558,7 +5451,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio",
               "alias": "tokio_1"
             }
@@ -16926,123 +16819,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "deadpool 0.9.5": {
-      "name": "deadpool",
-      "version": "0.9.5",
-      "package_url": "https://github.com/bikeshedder/deadpool",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/deadpool/0.9.5/download",
-          "sha256": "421fe0f90f2ab22016f32a9881be5134fdd71c65298917084b0c7477cbc3856e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "deadpool",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "deadpool",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-trait",
-            "default",
-            "managed",
-            "unmanaged"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "deadpool-runtime 0.1.2",
-              "target": "deadpool_runtime"
-            },
-            {
-              "id": "num_cpus 1.16.0",
-              "target": "num_cpus"
-            },
-            {
-              "id": "retain_mut 0.1.9",
-              "target": "retain_mut"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.81",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.9.5"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "deadpool-runtime 0.1.2": {
-      "name": "deadpool-runtime",
-      "version": "0.1.2",
-      "package_url": "https://github.com/bikeshedder/deadpool",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/deadpool-runtime/0.1.2/download",
-          "sha256": "eaa37046cc0f6c3cc6090fbdbf73ef0b8ef4cfcc37f6befc0020f63e8cf121e1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "deadpool_runtime",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "deadpool_runtime",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.2"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "debugid 0.8.0": {
       "name": "debugid",
       "version": "0.8.0",
@@ -24628,94 +24404,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "getrandom 0.1.16": {
-      "name": "getrandom",
-      "version": "0.1.16",
-      "package_url": "https://github.com/rust-random/getrandom",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/getrandom/0.1.16/download",
-          "sha256": "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "getrandom",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "getrandom",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "getrandom 0.1.16",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"wasi\")": [
-              {
-                "id": "wasi 0.9.0+wasi-snapshot-preview1",
-                "target": "wasi"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.1.16"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "getrandom 0.2.10": {
       "name": "getrandom",
       "version": "0.2.10",
@@ -26483,7 +26171,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -26624,7 +26312,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -29079,7 +28767,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "678f9e8f881bb39feca56f6ce9d240018ee4fab1"
+            "Rev": "9abf1e385e4a32279de005d0019c17774e164828"
           }
         }
       },
@@ -29135,10 +28823,6 @@
             {
               "id": "chacha20poly1305 0.10.1",
               "target": "chacha20poly1305"
-            },
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
             },
             {
               "id": "cloudflare 0.12.0",
@@ -29209,10 +28893,6 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.10.6",
-              "target": "regex"
-            },
-            {
               "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
@@ -29249,7 +28929,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -29257,11 +28937,11 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.0",
               "target": "tower"
             },
             {
@@ -51079,89 +50759,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rand 0.7.3": {
-      "name": "rand",
-      "version": "0.7.3",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand/0.7.3/download",
-          "sha256": "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "getrandom",
-            "getrandom_package",
-            "libc",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "getrandom 0.1.16",
-              "target": "getrandom",
-              "alias": "getrandom_package"
-            },
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {
-            "cfg(not(target_os = \"emscripten\"))": [
-              {
-                "id": "rand_chacha 0.2.2",
-                "target": "rand_chacha"
-              }
-            ],
-            "cfg(target_os = \"emscripten\")": [
-              {
-                "id": "rand_hc 0.2.0",
-                "target": "rand_hc"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.7.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "rand 0.8.5": {
       "name": "rand",
       "version": "0.8.5",
@@ -53469,14 +53066,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-socks 0.5.1",
-                "target": "tokio_socks"
-              },
-              {
-                "id": "tokio-util 0.7.12",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -67909,20 +67498,20 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.4.4": {
-      "name": "tower-http",
-      "version": "0.4.4",
-      "package_url": "https://github.com/tower-rs/tower-http",
+    "tower 0.5.0": {
+      "name": "tower",
+      "version": "0.5.0",
+      "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.4.4/download",
-          "sha256": "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
+          "url": "https://static.crates.io/crates/tower/0.5.0/download",
+          "sha256": "36b837f86b25d7c0d7988f00a54e74739be6477f2aac6201b8f429a7569991b7"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "tower_http",
+            "crate_name": "tower",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": false,
@@ -67933,45 +67522,24 @@
           }
         }
       ],
-      "library_target_name": "tower_http",
+      "library_target_name": "tower",
       "common_attrs": {
         "compile_data_glob": [
           "**"
         ],
         "crate_features": {
           "common": [
-            "async-compression",
-            "compression-br",
-            "compression-deflate",
-            "compression-full",
-            "compression-gzip",
-            "compression-zstd",
-            "default",
-            "request-id",
-            "tokio",
-            "tokio-util",
-            "tower",
-            "trace",
-            "tracing",
-            "util",
-            "uuid"
+            "__common",
+            "futures-core",
+            "futures-util",
+            "pin-project-lite",
+            "sync_wrapper",
+            "util"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "async-compression 0.4.3",
-              "target": "async_compression"
-            },
-            {
-              "id": "bitflags 2.4.1",
-              "target": "bitflags"
-            },
-            {
-              "id": "bytes 1.7.1",
-              "target": "bytes"
-            },
             {
               "id": "futures-core 0.3.30",
               "target": "futures_core"
@@ -67981,32 +67549,12 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "http-body 0.4.6",
-              "target": "http_body"
-            },
-            {
-              "id": "http-range-header 0.3.0",
-              "target": "http_range_header"
-            },
-            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-util 0.7.12",
-              "target": "tokio_util"
-            },
-            {
-              "id": "tower 0.4.13",
-              "target": "tower"
+              "id": "sync_wrapper 0.1.2",
+              "target": "sync_wrapper"
             },
             {
               "id": "tower-layer 0.3.2",
@@ -68015,20 +67563,12 @@
             {
               "id": "tower-service 0.3.2",
               "target": "tower_service"
-            },
-            {
-              "id": "tracing 0.1.40",
-              "target": "tracing"
-            },
-            {
-              "id": "uuid 1.10.0",
-              "target": "uuid"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.4"
+        "version": "0.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -68439,10 +67979,6 @@
             {
               "id": "thiserror 1.0.62",
               "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
             },
             {
               "id": "tower 0.4.13",
@@ -74918,10 +74454,14 @@
             "Win32_Foundation",
             "Win32_Networking",
             "Win32_Networking_WinSock",
+            "Win32_Security",
             "Win32_Storage",
             "Win32_Storage_FileSystem",
             "Win32_System",
             "Win32_System_IO",
+            "Win32_System_LibraryLoader",
+            "Win32_System_Threading",
+            "Win32_System_WindowsProgramming",
             "default"
           ],
           "selects": {}
@@ -76765,162 +76305,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "winreg 0.52.0": {
-      "name": "winreg",
-      "version": "0.52.0",
-      "package_url": "https://github.com/gentoo90/winreg-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/winreg/0.52.0/download",
-          "sha256": "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "winreg",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "winreg",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "windows-sys 0.48.0",
-              "target": "windows_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.52.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "wiremock 0.5.19": {
-      "name": "wiremock",
-      "version": "0.5.19",
-      "package_url": "https://github.com/LukeMathWalker/wiremock-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wiremock/0.5.19/download",
-          "sha256": "c6f71803d3a1c80377a06221e0530be02035d5b3e854af56c6ece7ac20ac441d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wiremock",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wiremock",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "assert-json-diff 2.0.2",
-              "target": "assert_json_diff"
-            },
-            {
-              "id": "base64 0.21.6",
-              "target": "base64"
-            },
-            {
-              "id": "deadpool 0.9.5",
-              "target": "deadpool"
-            },
-            {
-              "id": "futures 0.3.30",
-              "target": "futures"
-            },
-            {
-              "id": "futures-timer 3.0.2",
-              "target": "futures_timer"
-            },
-            {
-              "id": "http-types 2.12.0",
-              "target": "http_types"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "regex 1.10.6",
-              "target": "regex"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.108",
-              "target": "serde_json"
-            },
-            {
-              "id": "tokio 1.40.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.81",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.19"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "wit-parser 0.212.0": {
       "name": "wit-parser",

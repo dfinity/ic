@@ -809,7 +809,7 @@ dependencies = [
  "rustversion",
  "serde",
  "sync_wrapper 0.1.2",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
 ]
@@ -843,7 +843,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 1.0.1",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -904,7 +904,7 @@ dependencies = [
  "mime",
  "pin-project-lite",
  "serde",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
 ]
@@ -936,7 +936,7 @@ dependencies = [
  "opentelemetry_sdk 0.21.2",
  "pin-project-lite",
  "prometheus",
- "tower",
+ "tower 0.4.13",
 ]
 
 [[package]]
@@ -958,7 +958,7 @@ dependencies = [
  "rustls-pemfile 2.1.2",
  "tokio",
  "tokio-rustls 0.24.1",
- "tower",
+ "tower 0.4.13",
  "tower-service",
 ]
 
@@ -3311,7 +3311,7 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
- "tower",
+ "tower 0.4.13",
  "tower-http",
  "tower-request-id",
  "tower-test",
@@ -4912,7 +4912,7 @@ dependencies = [
  "pin-project-lite",
  "socket2 0.5.7",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-service",
  "tracing",
 ]
@@ -4998,14 +4998,14 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "url",
 ]
 
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=678f9e8f881bb39feca56f6ce9d240018ee4fab1#678f9e8f881bb39feca56f6ce9d240018ee4fab1"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=9abf1e385e4a32279de005d0019c17774e164828#9abf1e385e4a32279de005d0019c17774e164828"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5016,7 +5016,6 @@ dependencies = [
  "base64 0.22.0",
  "bytes",
  "chacha20poly1305",
- "chrono",
  "cloudflare",
  "derive-new",
  "fqdn",
@@ -5035,7 +5034,6 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rcgen",
- "regex",
  "reqwest 0.12.7",
  "rustls 0.23.12",
  "rustls-acme",
@@ -5049,7 +5047,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tokio-util",
- "tower",
+ "tower 0.5.0",
  "tower-service",
  "tracing",
  "url",
@@ -6143,7 +6141,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
- "tower",
+ "tower 0.4.13",
  "tower-http",
  "tracing",
 ]
@@ -6449,7 +6447,7 @@ checksum = "856dc94aeafb8a00035e563f6835585f7aa8d0d4e78aae7967a252f61675c535"
 dependencies = [
  "thiserror",
  "tokio",
- "tower",
+ "tower 0.4.13",
 ]
 
 [[package]]
@@ -6757,7 +6755,7 @@ dependencies = [
  "simple_logger",
  "tokio",
  "tokio-rustls 0.24.1",
- "tower",
+ "tower 0.4.13",
  "tower-http",
  "url",
 ]
@@ -11353,7 +11351,7 @@ dependencies = [
  "prost",
  "tokio",
  "tokio-stream",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -11394,6 +11392,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36b837f86b25d7c0d7988f00a54e74739be6477f2aac6201b8f429a7569991b7"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "pin-project-lite",
+ "sync_wrapper 0.1.2",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "tower-http"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11411,7 +11423,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -11468,7 +11480,7 @@ dependencies = [
  "http 1.1.0",
  "pin-project",
  "thiserror",
- "tower",
+ "tower 0.4.13",
  "tracing",
 ]
 

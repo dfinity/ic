@@ -118,6 +118,14 @@ pub struct ListenConfig {
     #[clap(long, default_value = "1000")]
     pub http_max_requests_per_conn: u64,
 
+    /// For how long to keep the idle connections in the HTTP client pool in seconds.
+    #[clap(long, default_value = "45")]
+    pub http_pool_timeout_idle: u64,
+
+    /// How many idle connections to keep in the HTTP client pool per host.
+    #[clap(long)]
+    pub http_pool_max_idle: Option<usize>,
+
     /// Time to wait for the client to close connection in seconds.
     /// After that it's closed forcefully.
     /// Applies to requests closed after `--http-max-requests-per-conn`

@@ -150,9 +150,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
         timeout_read: Duration::from_millis(cli.listen.http_timeout_read_client),
         timeout: Duration::from_millis(cli.listen.http_timeout),
+        pool_idle_timeout: Some(Duration::from_secs(cli.listen.http_pool_timeout_idle)),
+        pool_idle_max: cli.listen.http_pool_max_idle,
         tcp_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
-        http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive_timeout)),
-        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive),
+        http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
+        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
+        http2_keepalive_idle: false,
         user_agent: SERVICE_NAME.into(),
         tls_config: Some(tls_config_client),
         dns_resolver: Some(dns_resolver),
@@ -164,7 +167,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
-    let http_client = http::client::ReqwestClientRoundRobin::new(
+    let http_client = http::client::ReqwestClientLeastLoaded::new(
         http_client_opts,
         cli.listen.http_client_count as usize,
     )
