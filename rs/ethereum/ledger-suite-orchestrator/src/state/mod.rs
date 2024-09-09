@@ -287,13 +287,13 @@ impl TokenId {
     pub fn into_erc20_unchecked(self) -> Erc20Token {
         match self {
             TokenId::Erc20(token) => token,
-            TokenId::Other(_) => panic!("BUG: token id is not an ERC-20 token"),
+            TokenId::Other(symbol) => panic!("BUG: token id {:?} is not an ERC-20 token", symbol),
         }
     }
 
     pub fn into_other_unchecked(self) -> TokenSymbol {
         match self {
-            TokenId::Erc20(_) => panic!("BUG: token id is an ERC-20 token"),
+            TokenId::Erc20(token) => panic!("BUG: token id {:?} is an ERC-20 token", token),
             TokenId::Other(symbol) => symbol,
         }
     }
