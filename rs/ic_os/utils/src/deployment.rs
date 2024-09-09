@@ -88,7 +88,7 @@ mod test {
         "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
       },
       "nns": {
-        "url": "https://dfinity.org/"
+        "url": "https://wiki.internetcomputer.org/"
       },
       "resources": {
         "memory": "490",
@@ -110,7 +110,7 @@ mod test {
             },
             logging: Logging { hosts },
             nns: Nns {
-                url: vec![Url::parse("https://dfinity.org").unwrap()],
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
             },
             resources: Resources {
                 memory: 490,
@@ -128,7 +128,7 @@ mod test {
                 "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
               },
               "nns": {
-                "url": "https://dfinity.org/"
+                "url": "https://wiki.internetcomputer.org/"
               },
               "resources": {
                 "memory": "490",
@@ -146,7 +146,7 @@ mod test {
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
-    "url": "https://dfinity.org/"
+    "url": "https://wiki.internetcomputer.org/"
   },
   "resources": {
     "memory": "490"
@@ -167,7 +167,7 @@ mod test {
             },
             logging: Logging { hosts },
             nns: Nns {
-                url: vec![Url::parse("https://dfinity.org").unwrap()],
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
             },
             resources: Resources {
                 memory: 490,
@@ -184,7 +184,7 @@ mod test {
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
-    "url": "https://dfinity.org/"
+    "url": "https://wiki.internetcomputer.org/"
   },
   "resources": {
     "memory": "490",
@@ -206,7 +206,7 @@ mod test {
             },
             logging: Logging { hosts },
             nns: Nns {
-                url: vec![Url::parse("https://dfinity.org").unwrap()],
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
             },
             resources: Resources {
                 memory: 490,
