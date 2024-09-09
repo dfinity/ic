@@ -121,7 +121,7 @@ members = [
     "rs/http_endpoints/public",
     "rs/http_endpoints/metrics",
     "rs/http_utils",
-    "rs/ic_os/deterministic_ips",
+    "rs/ic_os/dev_tools/deterministic_ips",
     "rs/ic_os/dflate",
     "rs/ic_os/diroid",
     "rs/ic_os/system_tools/config",

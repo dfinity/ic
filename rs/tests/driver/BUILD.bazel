@@ -47,7 +47,7 @@ rust_library(
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
-        "//rs/ic_os/deterministic_ips",
+        "//rs/ic_os/dev_tools/deterministic_ips",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/limits",
