@@ -241,8 +241,8 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
-        let ingress_pool_obj = IngressPoolObject::new(artifact.peer_id, artifact.message);
         let peer_id = artifact.peer_id;
+        let ingress_pool_obj = IngressPoolObject::new(peer_id, artifact.message);
         let timestamp = artifact.timestamp;
         let size = ingress_pool_obj.count_bytes();
 
