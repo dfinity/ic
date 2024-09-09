@@ -3,15 +3,15 @@ load("//publish:defs.bzl", "release_strip_binary")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 OBJECTS = {
-    "fstrim_tool": "//rs/ic_os//fstrim_tool:fstrim_tool_bin",
+    "fstrim_tool": "//rs/ic_os/system_tools/fstrim_tool:fstrim_tool_bin",
     "guestos_tool": "//rs/ic_os/os_tools/guestos_tool:guestos_tool",
     "hostos_tool": "//rs/ic_os/os_tools/hostos_tool:hostos_tool",
-    "nft-exporter": "//rs/ic_os//nft_exporter:nft-exporter",
+    "nft-exporter": "//rs/ic_os/system_tools/nft_exporter:nft-exporter",
     "setupos_tool": "//rs/ic_os/os_tools/setupos_tool:setupos_tool",
-    "vsock_guest": "//rs/ic_os//vsock/guest:vsock_guest",
-    "vsock_host": "//rs/ic_os//vsock/host:vsock_host",
+    "vsock_guest": "//rs/ic_os/system_tools/vsock/guest:vsock_guest",
+    "vsock_host": "//rs/ic_os/system_tools/vsock/host:vsock_host",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
-    "nss_icos": "//rs/ic_os//nss_icos",
+    "nss_icos": "//rs/ic_os/system_tools/nss_icos",
 }
 
 [release_strip_binary(

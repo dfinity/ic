@@ -4,7 +4,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os//vsock/vsock_lib:vsock_lib",
+    "//rs/ic_os/system_tools/vsock/vsock_lib:vsock_lib",
     "@crate_index//:clap_3_2_25",
 ]
 

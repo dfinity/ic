@@ -73,7 +73,7 @@ COPY prep /prep
 RUN cd /prep && ./prep.sh && cd / && rm -rf /prep
 
 # Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os//nss_icos/README.md for context.
+# See ../../../rs/ic_os/system_tools/nss_icos/README.md for context.
 RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys

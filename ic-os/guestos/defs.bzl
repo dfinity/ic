@@ -43,16 +43,16 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
-            "//rs/ic_os//release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
-            "//rs/ic_os//release:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
-            "//rs/ic_os//release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
-            "//rs/ic_os//release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
+            "//rs/ic_os/system_tools/release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
+            "//rs/ic_os/system_tools/release:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
+            "//rs/ic_os/system_tools/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
+            "//rs/ic_os/system_tools/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",  # Parallel restorecon replacement for filesystem relabeling.
-            "//rs/ic_os//release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
+            "//rs/ic_os/system_tools/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
 
             # additional libraries to install
-            "//rs/ic_os//release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
+            "//rs/ic_os/system_tools/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
         },
 
         # Set various configuration values
