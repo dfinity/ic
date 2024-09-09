@@ -29,13 +29,3 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
-
-rust_library(
-    name = "canisters--test_feature",
-    srcs = glob(["src/**"]),
-    crate_features = ["test"],
-    crate_name = "ic_nervous_system_canisters",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES,
-)
