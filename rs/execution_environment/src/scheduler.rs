@@ -2350,11 +2350,6 @@ fn can_execute_subnet_msg(
         // If there is no effective canister state, we can execute the subnet message.
         return true;
     };
-    if effective_canister_state.has_paused_execution() {
-        // If there is a paused execution, we can't execute the subnet message.
-        // Note, it does NOT include aborted executions.
-        return false;
-    }
     let maybe_method = match msg {
         CanisterMessage::Ingress(ingress) => {
             Ic00Method::from_str(ingress.method_name.as_str()).ok()
@@ -2369,22 +2364,36 @@ fn can_execute_subnet_msg(
         return true;
     };
 
-    let effective_canister_paused_or_aborted = match effective_canister_state.next_execution() {
-        NextExecution::None | NextExecution::StartNew => false,
-        NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
-    };
+    // Adding a full match here to catch any further task queue changes.
+    let (effective_canister_is_paused, effective_canister_is_aborted) =
+        match effective_canister_state.system_state.task_queue.front() {
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
+            Some(ExecutionTask::PausedExecution { .. })
+            | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
+            Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true),
+        };
+
+    if effective_canister_is_paused {
+        // If there is a DTS execution in progress, we can't execute the subnet message.
+        // Note, it does NOT include aborted executions.
+        return false;
+    }
+
     match method {
-        // It's safe to allow other subnet on aborted canisters messages,
-        // but for the sake of minimizing the change, allow just this for now...
-        Ic00Method::DepositCycles => true,
         // Only one install code message allowed at a time.
         Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => {
-            !ongoing_long_install_code && !effective_canister_paused_or_aborted
+            !ongoing_long_install_code && !effective_canister_is_aborted
         }
+        // It's safe to allow other subnet messages on aborted canisters.
         Ic00Method::CanisterStatus
         | Ic00Method::CanisterInfo
         | Ic00Method::CreateCanister
         | Ic00Method::DeleteCanister
+        | Ic00Method::DepositCycles
         | Ic00Method::HttpRequest
         | Ic00Method::ECDSAPublicKey
         | Ic00Method::RawRand
@@ -2414,7 +2423,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::TakeCanisterSnapshot
         | Ic00Method::LoadCanisterSnapshot
         | Ic00Method::ListCanisterSnapshots
-        | Ic00Method::DeleteCanisterSnapshot => !effective_canister_paused_or_aborted,
+        | Ic00Method::DeleteCanisterSnapshot => true,
     }
 }
 
