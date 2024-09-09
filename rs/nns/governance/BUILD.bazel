@@ -231,6 +231,7 @@ rust_canister(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -264,6 +265,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -277,6 +279,7 @@ rust_test(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
