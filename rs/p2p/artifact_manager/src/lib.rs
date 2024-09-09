@@ -3,7 +3,7 @@ use ic_interfaces::{
         artifact_manager::JoinGuard,
         consensus::{
             ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool,
-            UnvalidatedArtifact, ValidatedPoolReader,
+            Retransmittable, UnvalidatedArtifact, ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
@@ -272,7 +272,12 @@ pub fn create_ingress_handlers<
 /// Starts the event loop that pools consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
-    Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
+    Pool: MutablePool<Artifact>
+        + Send
+        + Sync
+        + ValidatedPoolReader<Artifact>
+        + Retransmittable<Artifact>
+        + 'static,
     C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
 >(
     send_advert: Sender<ArtifactMutation<Artifact>>,

@@ -13,8 +13,8 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
-    ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Retransmittable,
+    UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_interfaces::{
     idkg::{
@@ -485,7 +485,9 @@ impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
     fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
+}
 
+impl Retransmittable<IDkgMessage> for IDkgPoolImpl {
     fn get_retransmissions(&self) -> Box<dyn Iterator<Item = IDkgMessage>> {
         Box::new(std::iter::empty())
     }

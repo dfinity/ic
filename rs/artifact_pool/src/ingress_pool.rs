@@ -12,8 +12,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Retransmittable,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -338,7 +338,9 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
     fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
+}
 
+impl Retransmittable<SignedIngress> for IngressPoolImpl {
     fn get_retransmissions(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
         Box::new(std::iter::empty())
     }

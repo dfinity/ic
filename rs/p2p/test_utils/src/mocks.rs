@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, ValidatedPoolReader},
+    consensus::{
+        Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, Retransmittable,
+        ValidatedPoolReader,
+    },
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
@@ -60,6 +63,9 @@ mock! {
 
     impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
         fn get(&self, id: &A::Id) -> Option<A>;
+    }
+
+    impl<A: IdentifiableArtifact> Retransmittable<A> for ValidatedPoolReader<A> {
         fn get_retransmissions(
             &self,
         ) -> Box<dyn Iterator<Item = A>>;

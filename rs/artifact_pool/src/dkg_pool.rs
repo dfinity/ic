@@ -5,8 +5,8 @@ use crate::{
 use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Retransmittable,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -150,7 +150,9 @@ impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
     fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
+}
 
+impl Retransmittable<dkg::Message> for DkgPoolImpl {
     fn get_retransmissions(&self) -> Box<dyn Iterator<Item = dkg::Message>> {
         Box::new(std::iter::empty())
     }
