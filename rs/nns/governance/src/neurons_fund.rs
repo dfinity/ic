@@ -1074,9 +1074,9 @@ where
         // `u64`, so we keep the sum as precise as possible. This gives us more precision than
         // `neurons_fund_reserves.total_amount_icp_e8s()`, the sum of (pre-rounded) `u64` values.
         let (neurons_fund_reserves, allocated_neurons_fund_participation_icp_e8s) =
-            if total_maturity_equivalent_icp_e8s == 0 {
-                (NeuronsFundSnapshot::empty(), Decimal::ZERO)
-            } else if intended_neurons_fund_participation_icp_e8s == 0 {
+            if total_maturity_equivalent_icp_e8s == 0
+                || intended_neurons_fund_participation_icp_e8s == 0
+            {
                 (NeuronsFundSnapshot::empty(), Decimal::ZERO)
             } else {
                 // Unlike in most other places, here we keep the ICP values in e8s (even after converting
