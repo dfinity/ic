@@ -25,7 +25,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/root",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -46,6 +45,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/test_utils",
     "//rs/sns/governance",
     "//rs/sns/init",
+    "//rs/sns/root",
     "//rs/sns/swap",
 ]
 
@@ -53,6 +53,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/test_utils:test_utils--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
+    "//rs/sns/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]
 

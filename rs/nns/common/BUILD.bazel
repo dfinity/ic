@@ -8,9 +8,11 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
+    "//rs/nervous_system/common",
+    "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/transport",
@@ -29,16 +31,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:sha2",
 ]
 
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/common",
-    "//rs/nns/constants",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/common:common--test_feature",
-    "//rs/nns/constants:constants--test_feature",
-]
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/common/protobuf_generator:lib",
@@ -54,17 +46,6 @@ rust_library(
     crate_name = "ic_nns_common",
     version = "0.9.0",
     deps = DEPENDENCIES,
-)
-
-rust_library(
-    name = "common--test_feature",
-    srcs = glob([
-        "src/**/*.rs",
-    ]),
-    crate_features = ["test"],
-    crate_name = "ic_nns_common",
-    version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 generated_files_check(

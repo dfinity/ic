@@ -6,7 +6,9 @@ package(default_visibility = ["//visibility:public"])
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/proto",
+    "//rs/nns/common",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/types/base_types",
@@ -25,15 +27,11 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients",
-    "//rs/nns/common",
     "//rs/sns/root",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients:clients--test_feature",
-    "//rs/nns/common:common--test_feature",
     "//rs/sns/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]

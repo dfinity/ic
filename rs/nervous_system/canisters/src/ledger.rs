@@ -11,7 +11,7 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
 #[cfg(feature = "tla")]
-use ic_nervous_system_common::tla::{
+use crate::tla::{
     self, account_to_tla, opt_subaccount_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
 #[cfg(feature = "tla")]

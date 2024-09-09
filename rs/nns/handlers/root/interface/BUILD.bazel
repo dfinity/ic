@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/clients",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
@@ -12,12 +13,10 @@ BASE_DEPENDENCIES = [
 ]
 
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients",
     "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients:clients--test_feature",
     "//rs/nns/constants:constants--test_feature",
 ]
 

@@ -21,7 +21,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/sns/root",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
@@ -42,12 +41,14 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
+    "//rs/sns/root",
     "//rs/sns/test_utils",
     "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
+    "//rs/sns/root:root--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
     "//rs/nns/constants:constants--test_feature",
 ]

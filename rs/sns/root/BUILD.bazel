@@ -13,6 +13,9 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
@@ -29,16 +32,10 @@ BASE_DEPENDENCIES = [
 ]
 
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/root",
     "//rs/sns/swap",  # TODO[NNS1-2282]
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients:clients--test_feature",
-    "//rs/nervous_system/common:common--test_feature",
-    "//rs/nervous_system/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",  # TODO[NNS1-2282]
 ]
 

@@ -15,11 +15,14 @@ BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -40,22 +43,16 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
     "//rs/nns/handlers/root/interface",
     "//rs/sns/governance",
     "//rs/sns/init",
-    "//rs/sns/root",
     "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/clients:clients--test_feature",
-    "//rs/nervous_system/common:common--test_feature",
     "//rs/nns/handlers/root/interface:interface--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/root:root--test_feature",
     "//rs/nns/constants:constants--test_feature",
 ]
 

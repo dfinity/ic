@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/nervous_system/common:feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,4 +29,17 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "canisters--test_feature",
+    srcs = glob(["src/**"]),
+    crate_features = test_with_tla(),
+    crate_name = "ic_nervous_system_canisters",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        "//rs/tla_instrumentation",
+        "//rs/tla_instrumentation:local_key",
+    ],
 )

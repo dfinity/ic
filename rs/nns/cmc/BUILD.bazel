@@ -4,11 +4,12 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -36,14 +37,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
     "@crate_index//:yansi",
-]
-
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/common",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/common:common--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -76,16 +69,6 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
-)
-
-rust_library(
-    name = "cmc--test_feature",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
-    crate_name = "cycles_minting_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_canister(
