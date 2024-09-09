@@ -156,12 +156,12 @@ mod manage_canister {
     }
 }
 
-mod manage_installed_canisters {
-    use crate::candid::ManageOtherCanisters as CandidManageInstalledCanisters;
+mod installed_ledger_suite {
+    use crate::candid::InstalledLedgerSuite as CandidInstalledLedgerSuite;
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
     use crate::state::test_fixtures::new_state;
     use crate::state::{
-        Index, InvalidManageInstalledCanistersError, Ledger, ManageOtherCanisters, State,
+        Index, InstalledLedgerSuite, InvalidManageInstalledCanistersError, Ledger, State,
         TokenSymbol,
     };
     use assert_matches::assert_matches;
@@ -174,7 +174,7 @@ mod manage_installed_canisters {
         let mut cketh = cketh_installed_canisters();
         cketh.index.installed_wasm_hash = cketh.ledger.installed_wasm_hash.clone();
 
-        let result = ManageOtherCanisters::validate(&state, cketh);
+        let result = InstalledLedgerSuite::validate(&state, cketh);
 
         assert_matches!(
             result,
@@ -189,7 +189,7 @@ mod manage_installed_canisters {
         state.record_manage_other_canisters(registered_canisters.clone());
         let cketh = cketh_installed_canisters();
 
-        let result = ManageOtherCanisters::validate(&state, cketh);
+        let result = InstalledLedgerSuite::validate(&state, cketh);
 
         assert_eq!(
             result,
@@ -213,7 +213,7 @@ mod manage_installed_canisters {
         ] {
             let mut cketh = cketh_installed_canisters();
             cketh.ledger.canister_id = id;
-            let result = ManageOtherCanisters::validate(&state, cketh);
+            let result = InstalledLedgerSuite::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -221,7 +221,7 @@ mod manage_installed_canisters {
 
             let mut cketh = cketh_installed_canisters();
             cketh.index.canister_id = id;
-            let result = ManageOtherCanisters::validate(&state, cketh);
+            let result = InstalledLedgerSuite::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -231,7 +231,7 @@ mod manage_installed_canisters {
             if let Some(archives) = &mut cketh.archives {
                 archives.push(id);
             }
-            let result = ManageOtherCanisters::validate(&state, cketh);
+            let result = InstalledLedgerSuite::validate(&state, cketh);
             assert_eq!(
                 result,
                 Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
@@ -246,27 +246,27 @@ mod manage_installed_canisters {
         let expected_cketh = validated_cketh_canisters();
 
         assert_eq!(
-            ManageOtherCanisters::validate(&state, cketh.clone()),
+            InstalledLedgerSuite::validate(&state, cketh.clone()),
             Ok(expected_cketh.clone())
         );
 
         add_usdc_ledger_suite(&mut state);
         assert_eq!(
-            ManageOtherCanisters::validate(&state, cketh.clone()),
+            InstalledLedgerSuite::validate(&state, cketh.clone()),
             Ok(expected_cketh.clone())
         );
 
         add_usdt_ledger_suite(&mut state);
         assert_eq!(
-            ManageOtherCanisters::validate(&state, cketh),
+            InstalledLedgerSuite::validate(&state, cketh),
             Ok(expected_cketh)
         );
     }
 
-    fn cketh_installed_canisters() -> CandidManageInstalledCanisters {
+    fn cketh_installed_canisters() -> CandidInstalledLedgerSuite {
         use crate::candid::InstalledCanister;
 
-        CandidManageInstalledCanisters {
+        CandidInstalledLedgerSuite {
             token_symbol: "ckETH".to_string(),
             ledger: InstalledCanister {
                 canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
@@ -282,9 +282,9 @@ mod manage_installed_canisters {
         }
     }
 
-    fn validated_cketh_canisters() -> ManageOtherCanisters {
+    fn validated_cketh_canisters() -> InstalledLedgerSuite {
         let cketh = cketh_installed_canisters();
-        ManageOtherCanisters {
+        InstalledLedgerSuite {
             token_symbol: TokenSymbol::from(cketh.token_symbol),
             ledger: cketh.ledger.canister_id,
             ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),

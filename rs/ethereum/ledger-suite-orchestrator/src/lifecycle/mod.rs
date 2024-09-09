@@ -4,7 +4,7 @@ use crate::scheduler::{
     schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs, IC_CANISTER_RUNTIME,
 };
 use crate::state::{
-    init_state, mutate_state, read_state, GitCommitHash, ManageOtherCanisters, State,
+    init_state, mutate_state, read_state, GitCommitHash, InstalledLedgerSuite, State,
 };
 use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
 use ic_canister_log::log;
@@ -33,10 +33,10 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
             mutate_state(|s| s.init_ledger_suite_version(ledger_suite_version));
         }
-        if let Some(manage_installed_canisters) = arg.manage_other_canisters.clone() {
+        if let Some(manage_installed_canisters) = arg.manage_ledger_suites.clone() {
             for managed_canisters in manage_installed_canisters {
                 let canisters =
-                    read_state(|s| ManageOtherCanisters::validate(s, managed_canisters))
+                    read_state(|s| InstalledLedgerSuite::validate(s, managed_canisters))
                         .expect("ERROR: invalid manage installed canisters");
                 mutate_state(|s| s.record_manage_other_canisters(canisters.clone()));
                 log!(

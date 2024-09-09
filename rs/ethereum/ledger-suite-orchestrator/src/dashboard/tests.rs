@@ -496,11 +496,11 @@ mod assertions {
 
 mod fixtures {
     use ic_ledger_suite_orchestrator::candid::{
-        InstalledCanister, ManageOtherCanisters as CandidManageOtherCanisters,
+        InstalledCanister, InstalledLedgerSuite as CandidInstalledLedgerSuite,
     };
     use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
     use ic_ledger_suite_orchestrator::state::{
-        CanistersMetadata, ManageOtherCanisters, State, TokenId,
+        CanistersMetadata, InstalledLedgerSuite, State, TokenId,
     };
 
     pub const USDC_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -538,10 +538,10 @@ mod fixtures {
         TokenId::from(usdt())
     }
 
-    pub fn cketh_ledger_suite(state: &State) -> ManageOtherCanisters {
-        ManageOtherCanisters::validate(
+    pub fn cketh_ledger_suite(state: &State) -> InstalledLedgerSuite {
+        InstalledLedgerSuite::validate(
             state,
-            CandidManageOtherCanisters {
+            CandidInstalledLedgerSuite {
                 token_symbol: "ckETH".to_string(),
                 ledger: InstalledCanister {
                     canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),

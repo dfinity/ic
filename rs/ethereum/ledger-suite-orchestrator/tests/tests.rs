@@ -130,7 +130,7 @@ fn should_change_cycles_for_canister_creation() {
                     cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
                     ..Default::default()
                 }),
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         ))
         .unwrap();
@@ -276,7 +276,7 @@ fn should_reject_upgrade_with_invalid_args() {
         index_compressed_wasm_hash: None,
         archive_compressed_wasm_hash: None,
         cycles_management: None,
-        manage_other_canisters: None,
+        manage_ledger_suites: None,
     };
 
     test_upgrade_with_invalid_args(
@@ -309,7 +309,7 @@ fn should_reject_upgrade_with_invalid_args() {
     test_upgrade_with_invalid_args(
         &orchestrator,
         &OrchestratorArg::UpgradeArg(UpgradeArg {
-            manage_other_canisters: Some(vec![
+            manage_ledger_suites: Some(vec![
                 cketh_installed_canisters(),
                 cketh_installed_canisters(), //erroneous duplicate entry
             ]),
@@ -547,7 +547,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
             index_compressed_wasm_hash: None,
             archive_compressed_wasm_hash: None,
             cycles_management: None,
-            manage_other_canisters: None,
+            manage_ledger_suites: None,
         },
     );
 
@@ -560,7 +560,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
 mod upgrade {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ledger_suite_orchestrator::candid::{InstalledCanister, ManageOtherCanisters};
+    use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
     use ic_ledger_suite_orchestrator::state::WasmHash;
     use ic_ledger_suite_orchestrator_test_utils::universal_canister::{
         CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode, UniversalCanister,
@@ -660,7 +660,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -740,7 +740,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         );
         orchestrator.advance_time_for_upgrade();
@@ -835,7 +835,7 @@ mod upgrade {
                 index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -906,7 +906,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -968,7 +968,7 @@ mod upgrade {
                     index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                     archive_compressed_wasm_hash: None,
                     cycles_management: None,
-                    manage_other_canisters: None,
+                    manage_ledger_suites: None,
                 },
             );
 
@@ -1040,7 +1040,7 @@ mod upgrade {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         );
 
@@ -1115,7 +1115,7 @@ mod upgrade {
         }
 
         let orchestrator = orchestrator
-            .manage_installed_canisters(vec![ManageOtherCanisters {
+            .manage_installed_canisters(vec![InstalledLedgerSuite {
                 token_symbol: "ckETH".to_string(),
                 ledger: ledger.clone(),
                 index: index.clone(),
@@ -1129,7 +1129,7 @@ mod upgrade {
                     index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
                     archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
                     cycles_management: None,
-                    manage_other_canisters: None,
+                    manage_ledger_suites: None,
                 },
             );
 

@@ -5,8 +5,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, LedgerInitArg,
-    ManageOtherCanisters, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
+    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, InstalledLedgerSuite,
+    LedgerInitArg, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
@@ -123,7 +123,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_other_canisters: None,
+                manage_ledger_suites: None,
             },
         ))
     }
@@ -189,7 +189,7 @@ impl LedgerSuiteOrchestrator {
 
     pub fn manage_installed_canisters(
         self,
-        manage_installed_canister: Vec<ManageOtherCanisters>,
+        manage_installed_canister: Vec<InstalledLedgerSuite>,
     ) -> Self {
         self.upgrade_ledger_suite_orchestrator_expecting_ok(&OrchestratorArg::UpgradeArg(
             UpgradeArg {
@@ -198,7 +198,7 @@ impl LedgerSuiteOrchestrator {
                 index_compressed_wasm_hash: None,
                 archive_compressed_wasm_hash: None,
                 cycles_management: None,
-                manage_other_canisters: Some(manage_installed_canister),
+                manage_ledger_suites: Some(manage_installed_canister),
             },
         ))
     }
@@ -433,8 +433,8 @@ pub fn usdt_erc20_contract() -> Erc20Contract {
     }
 }
 
-pub fn cketh_installed_canisters() -> ManageOtherCanisters {
-    ManageOtherCanisters {
+pub fn cketh_installed_canisters() -> InstalledLedgerSuite {
+    InstalledLedgerSuite {
         token_symbol: "ckETH".to_string(),
         ledger: InstalledCanister {
             canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),

@@ -584,7 +584,7 @@ impl State {
     }
 
     /// Record other canisters managed by the orchestrator.
-    pub fn record_manage_other_canisters(&mut self, other_canisters: ManageOtherCanisters) {
+    pub fn record_manage_other_canisters(&mut self, other_canisters: InstalledLedgerSuite) {
         let token_id = TokenId::from(other_canisters.token_symbol.clone());
         self.managed_canisters
             .insert_once(token_id, Canisters::from(other_canisters));
@@ -795,7 +795,7 @@ pub fn init_state(state: State) {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct ManageOtherCanisters {
+pub struct InstalledLedgerSuite {
     token_symbol: TokenSymbol,
     ledger: Principal,
     ledger_wasm_hash: WasmHash,
@@ -804,8 +804,8 @@ pub struct ManageOtherCanisters {
     archives: Vec<Principal>,
 }
 
-impl From<ManageOtherCanisters> for Canisters {
-    fn from(value: ManageOtherCanisters) -> Self {
+impl From<InstalledLedgerSuite> for Canisters {
+    fn from(value: InstalledLedgerSuite) -> Self {
         Self {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
                 canister_id: value.ledger,
@@ -823,11 +823,11 @@ impl From<ManageOtherCanisters> for Canisters {
     }
 }
 
-impl ManageOtherCanisters {
+impl InstalledLedgerSuite {
     pub fn validate(
         state: &State,
-        args: crate::candid::ManageOtherCanisters,
-    ) -> Result<ManageOtherCanisters, InvalidManageInstalledCanistersError> {
+        args: crate::candid::InstalledLedgerSuite,
+    ) -> Result<InstalledLedgerSuite, InvalidManageInstalledCanistersError> {
         let token_symbol = TokenSymbol(args.token_symbol);
         let token_id = TokenId::Other(token_symbol.clone());
         if state.managed_canisters(&token_id).is_some() {
@@ -869,7 +869,7 @@ impl ManageOtherCanisters {
                 ),
             );
         }
-        Ok(ManageOtherCanisters {
+        Ok(InstalledLedgerSuite {
             token_symbol,
             ledger,
             ledger_wasm_hash,
