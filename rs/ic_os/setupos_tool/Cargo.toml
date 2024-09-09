@@ -12,4 +12,4 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../config" }
 network = { path = "../network" }
-utils = { path = "../utils" }
+utils = { path = "../system_tools/utils" }

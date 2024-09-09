@@ -15,5 +15,5 @@ indoc = "1.0.9"
 itertools = { workspace = true }
 network = { path = "../network" }
 regex = { workspace = true }
-utils = { path = "../utils" }
+utils = { path = "../system_tools/utils" }
 

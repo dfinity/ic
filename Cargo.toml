@@ -137,7 +137,7 @@ members = [
     "rs/ic_os/partition_tools",
     "rs/ic_os/dev_tools/setupos-disable-checks",
     "rs/ic_os/setupos_tool",
-    "rs/ic_os/utils",
+    "rs/ic_os/system_tools/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
     "rs/ic_os/vsock/vsock_lib",
