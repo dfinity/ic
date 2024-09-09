@@ -437,8 +437,6 @@ enum ErrorCause {
     ConnectionFailure(String),
     UnableToReadBody(String),
     RequestTooLarge,
-    NoAuthority,
-    UnknownDomain,
     CanisterIdNotFound,
 }
 
@@ -448,8 +446,6 @@ impl ErrorCause {
             Self::ConnectionFailure(_) => StatusCode::BAD_GATEWAY,
             Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
             Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::NoAuthority => StatusCode::BAD_REQUEST,
-            Self::UnknownDomain => StatusCode::BAD_REQUEST,
             Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
         }
     }
@@ -469,8 +465,6 @@ impl fmt::Display for ErrorCause {
             Self::ConnectionFailure(_) => write!(f, "connection_failure"),
             Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
             Self::RequestTooLarge => write!(f, "request_too_large"),
-            Self::NoAuthority => write!(f, "no_authority"),
-            Self::UnknownDomain => write!(f, "unknown_domain"),
             Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
         }
     }
@@ -514,18 +508,18 @@ async fn handler(
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
-    // Extract the authority
-    let Some(authority) = extract_authority(&request) else {
-        return Err(ErrorCause::NoAuthority);
+    // Resolve the domain
+    let lookup = if let Some(authority) = extract_authority(&request) {
+        state.resolver.resolve(&authority)
+    } else {
+        None
     };
 
-    // Resolve the domain
-    let lookup = state
-        .resolver
-        .resolve(&authority)
-        .ok_or(ErrorCause::UnknownDomain)?;
-
-    let canister_id = lookup.canister_id;
+    let canister_id = if let Some(ref lookup) = lookup {
+        lookup.canister_id
+    } else {
+        None
+    };
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
     let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
@@ -561,8 +555,8 @@ async fn handler(
     let resp = {
         // Execute the request
         let mut req = state.client.request(args);
-        // Skip verification if it's disabled globally or if it is a "raw" request.
-        req.unsafe_set_skip_verification(!lookup.verify);
+        // Skip verification if it is a "raw" request.
+        req.unsafe_set_skip_verification(lookup.map(|v| !v.verify).unwrap_or_default());
         req.send().await
     };
 
