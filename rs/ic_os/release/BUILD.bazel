@@ -3,7 +3,7 @@ load("//publish:defs.bzl", "release_strip_binary")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 OBJECTS = {
-    "fstrim_tool": "//rs/ic_os/fstrim_tool:fstrim_tool_bin",
+    "fstrim_tool": "//rs/ic_os/system_tools/fstrim_tool:fstrim_tool_bin",
     "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
     "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
     "nft-exporter": "//rs/ic_os/nft_exporter:nft-exporter",

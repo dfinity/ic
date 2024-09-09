@@ -29,7 +29,7 @@ DEPENDENCIES = [
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
     "//rs/ic_os/deterministic_ips",
-    "//rs/ic_os/fstrim_tool",
+    "//rs/ic_os/system_tools/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",

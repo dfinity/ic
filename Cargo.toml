@@ -125,7 +125,7 @@ members = [
     "rs/ic_os/dflate",
     "rs/ic_os/diroid",
     "rs/ic_os/config",
-    "rs/ic_os/fstrim_tool",
+    "rs/ic_os/system_tools/fstrim_tool",
     "rs/ic_os/guestos_tool",
     "rs/ic_os/hostos_tool",
     "rs/ic_os/inject_files",

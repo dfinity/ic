@@ -10,7 +10,7 @@ fn new_fstrim_tool_command() -> Command {
         // When in Cargo environment.
         Ok(v) => v,
         // When in Bazel environment
-        Err(_) => Command::new("rs/ic_os/fstrim_tool/fstrim_tool_bin"),
+        Err(_) => Command::new("rs/ic_os/system_tools/fstrim_tool/fstrim_tool_bin"),
     }
 }
 
