@@ -166,7 +166,7 @@ impl<'a> WriteBuffer<'a> {
 /// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 /// operation. This allows us to simplify canister state management: we can
 /// simply have a copy of the whole PageMap in every canister snapshot.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
@@ -434,7 +434,7 @@ impl<'a> MemoryInstructions<'a> {
 ///
 /// `PageMap` is designed to be cheap to copy so that heap can be easily
 /// versioned.
-#[derive(Clone, ValidateEq)]
+#[derive(ValidateEq)]
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
@@ -900,7 +900,7 @@ impl PageMap {
     {
         let delta = PageDelta::from(delta);
         // Delta is a persistent data structure and is cheap to clone.
-        self.page_delta.update(delta.clone());
+        //self.page_delta.update(delta.clone());
         self.unflushed_delta.update(delta)
     }
 
@@ -1074,12 +1074,6 @@ impl Buffer {
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
         self.dirty_pages.iter().map(|(i, p)| (*i, p))
-    }
-
-    pub fn into_page_map(&self) -> PageMap {
-        let mut page_map = self.page_map.clone();
-        page_map.update(&self.dirty_pages().collect::<Vec<_>>());
-        page_map
     }
 }
 

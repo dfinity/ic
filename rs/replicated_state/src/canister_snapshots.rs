@@ -257,7 +257,7 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+#[derive(Eq, PartialEq, Debug, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
     #[validate_eq(Ignore)]

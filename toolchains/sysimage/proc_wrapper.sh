@@ -6,6 +6,13 @@
 
 set -euo pipefail
 
-tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
+
+cleanup() {
+  sudo umount "$tmpdir"
+  sudo rm -rf "$tmpdir"
+}
+
+tmpdir=$(sudo mktemp -d "/mnt/icosbuildtmpXXXX")
+sudo mount -o size=4G -t tmpfs none "$tmpdir"
+trap cleanup INT TERM EXIT
 ICOS_TMPDIR="$tmpdir" "$@"

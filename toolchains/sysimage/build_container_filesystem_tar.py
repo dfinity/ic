@@ -286,14 +286,13 @@ def main():
     args = get_args()
 
     destination_tar_filename = os.path.abspath(args.output)
-    build_args = list(args.build_args or [])
+    # build_args = list(args.build_args or [])
 
     # Use the unique destination filename as the image tag.
-    image_tag = generate_image_tag(destination_tar_filename)
-    context_files = args.context_files
+    # image_tag = generate_image_tag(destination_tar_filename)
     component_files = args.component_files
-    no_cache = args.no_cache
-    temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
+    # no_cache = args.no_cache
+    # temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
     context_dir = os.getenv("ICOS_TMPDIR")
     if not context_dir:
@@ -301,39 +300,34 @@ def main():
 
     container_dir = os.path.join(context_dir, "container")
     os.mkdir(container_dir)
-
+    print("STILL HERE 2", flush=True)
     # urllib.request.urlretrieve(
     #     "https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04-base-amd64.tar.gz",
     #     base_tar_path)
 
-    subprocess.run(["tar", "-xf", "/ic/host_base.tar", "-C", container_dir], check=True)
-
-
-    # Add all context files directly into dir
-    for context_file in context_files:
-        shutil.copy(context_file, container_dir)
+    subprocess.run(["time", "tar", "-xf", "/ic/host_base.tar", "-C", container_dir], check=True)
+    print("STILL HERE 3", flush=True)
 
     # Fill context with remaining component files from map
     arrange_component_files(container_dir, component_files)
 
-
     # Bazel can't read files. (: Resolve them here, instead.
-    if args.file_build_args:
-        resolved_file_args = resolve_file_args(container_dir, args.file_build_args)
-        build_args.extend(resolved_file_args)
-
-    print(container_dir)
+    # if args.file_build_args:
+    #     resolved_file_args = resolve_file_args(container_dir, args.file_build_args)
+        # build_args.extend(resolved_file_args)
 
     shutil.copy("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
     shutil.copymode("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
 
-    subprocess.run(["sudo", "time", "chroot", container_dir, "/etc/setup.sh"], check=True)
+    subprocess.run(["sudo", "chroot", container_dir, "/usr/bin/env", "ROOT_PASSWORD=root", "faketime", "-f", "1970-1-1 0:0:0", "/etc/setup.sh"], check=True)
     subprocess.run(["sudo", "chown", "ubuntu", "-R", container_dir], check=True)
 
     print(destination_tar_filename)
-    subprocess.check_call(f"time tar -cf {destination_tar_filename} *", cwd=container_dir, shell=True)
+    os.remove(os.path.join(container_dir, "etc", "setup.sh"))
+    subprocess.check_call(f"time tar --mtime='UTC 1970-01-01' -cf {destination_tar_filename} *", cwd=container_dir, shell=True)
 
     # os.setxattr(destination_tar_filename, "trusted.md5sum", b"123441")
+
 
     # # Override the base image with a local tar file?
     # def only_one_defined(a,b) -> bool:
