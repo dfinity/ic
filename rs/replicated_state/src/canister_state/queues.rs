@@ -1336,8 +1336,8 @@ fn is_stale(
     shed_responses: &BTreeMap<message_pool::Id, CallbackId>,
 ) -> bool {
     pool.get(reference).is_none()
-        && (reference.context() == Context::Outbound
-            || reference.kind() == Kind::Request
+        && (reference.context() != Context::Inbound
+            || reference.kind() != Kind::Response
             || !shed_responses.contains_key(&reference))
 }
 
@@ -1399,7 +1399,7 @@ fn callbacks_with_enqueued_response(
         .values()
         .flat_map(|(input_queue, _)| input_queue.iter())
         .filter_map(
-            |reference| match (pool.get(*reference), shed_responses.get(&reference)) {
+            |reference| match (pool.get(*reference), shed_responses.get(reference)) {
                 (Some(RequestOrResponse::Response(rep)), None) => {
                     Some(Ok(rep.originator_reply_callback))
                 }
