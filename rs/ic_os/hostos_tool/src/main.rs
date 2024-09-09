@@ -9,7 +9,7 @@ use config::{
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, FormattedMacAddress};
+use network::mac_address::generate_mac_address;
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::deployment::read_deployment_file;
@@ -64,28 +64,16 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file));
+            let deployment = read_deployment_file(Path::new(&opts.deployment_file))
+                .context("Please specify a valid deployment file with '--deployment-file'")?;
 
-            let deployment_name: Option<&str> = match &deployment {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
+            let mac_address = generate_mac_address(
+                &deployment.deployment.name,
+                &NodeType::HostOS,
+                deployment.deployment.mgmt_mac.as_deref(),
+            )?;
 
-            let mgmt_mac: Option<&str> = match &deployment {
-                Ok(deployment) => deployment.deployment.mgmt_mac.as_deref(),
-                Err(_) => None,
-            };
-
-            generate_network_config(
-                &network_info,
-                mgmt_mac,
-                deployment_name,
-                NodeType::HostOS,
-                Path::new(&output_directory),
-            )
+            generate_network_config(&network_info, mac_address, Path::new(&output_directory))
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let deployment = read_deployment_file(Path::new(&opts.deployment_file))
@@ -100,7 +88,7 @@ pub fn main() -> Result<()> {
             eprintln!("Network info config: {:?}", &network_info);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(
+            let mac_address = generate_mac_address(
                 &deployment.deployment.name,
                 &node_type,
                 deployment.deployment.mgmt_mac.as_deref(),
@@ -108,7 +96,7 @@ pub fn main() -> Result<()> {
             let ipv6_prefix = network_info
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac_address)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }
@@ -125,13 +113,13 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(
+            let mac_address = generate_mac_address(
                 &deployment.deployment.name,
                 &node_type,
                 deployment.deployment.mgmt_mac.as_deref(),
             )?;
-            let mac = FormattedMacAddress::from(&mac);
-            println!("{}", mac.get());
+
+            println!("{}", mac_address.get());
             Ok(())
         }
         None => Err(anyhow!(

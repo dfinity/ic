@@ -2,13 +2,13 @@ use std::net::Ipv6Addr;
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::mac_address::UnformattedMacAddress;
+use crate::mac_address::FormattedMacAddress;
 use utils::intersperse;
 
 /// Generate a deterministic ipv6 address
 pub fn generate_ipv6_address(
     ipv6_prefix: &str,
-    generated_mac: &UnformattedMacAddress,
+    generated_mac: &FormattedMacAddress,
 ) -> Result<Ipv6Addr> {
     let mac_first6: String = generated_mac.get().chars().take(6).collect();
     // Succinct as possible... Reverse, take 6, then reverse those to get the original order.
@@ -43,7 +43,7 @@ pub mod tests {
         assert_eq!(
             generate_ipv6_address(
                 "2a00:1111:1111:1111",
-                &UnformattedMacAddress::try_from("4a0ff7e0c684").unwrap()
+                &FormattedMacAddress::try_from("4a:0f:f7:e0:c6:84").unwrap()
             )
             .unwrap(),
             "2a00:1111:1111:1111:480f:f7ff:fee0:c684"
@@ -53,7 +53,7 @@ pub mod tests {
         assert_eq!(
             generate_ipv6_address(
                 "1111:1111:1111:1111",
-                &UnformattedMacAddress::try_from("111111111111").unwrap()
+                &FormattedMacAddress::try_from("11:11:11:11:11:11").unwrap()
             )
             .unwrap(),
             "1111:1111:1111:1111:1311:11ff:fe11:1111"
@@ -63,7 +63,7 @@ pub mod tests {
         assert_eq!(
             generate_ipv6_address(
                 "2a00:fb01:400:100",
-                &UnformattedMacAddress::try_from("a1b2c3d4e5f6").unwrap()
+                &FormattedMacAddress::try_from("a1:b2:c3:d4:e5:f6").unwrap()
             )
             .unwrap(),
             "2a00:fb01:400:100:a3b2:c3ff:fed4:e5f6"
@@ -75,7 +75,7 @@ pub mod tests {
         assert_eq!(
             generate_ipv6_address(
                 "2a00:fb01:400:100",
-                &UnformattedMacAddress::try_from("6a01f7e0c684").unwrap()
+                &FormattedMacAddress::try_from("6a:01:f7:e0:c6:84").unwrap()
             )
             .unwrap(),
             "2a00:fb01:400:100:6801:f7ff:fee0:c684"

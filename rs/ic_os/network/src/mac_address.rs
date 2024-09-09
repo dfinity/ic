@@ -13,16 +13,9 @@ use utils::{get_command_stdout, intersperse};
 /// Use `.get()` to get the underlying string
 /// Transform between the types with `from(the_other)`
 // TODO - Make a canonical type which can convert to either un/formatted on demand
-#[derive(Clone, Debug)]
-pub struct UnformattedMacAddress(String);
+
 #[derive(Clone, Debug)]
 pub struct FormattedMacAddress(String);
-
-impl UnformattedMacAddress {
-    pub fn get(&self) -> String {
-        self.0.clone()
-    }
-}
 
 impl FormattedMacAddress {
     pub fn get(&self) -> String {
@@ -30,21 +23,10 @@ impl FormattedMacAddress {
     }
 }
 
-impl TryFrom<&str> for UnformattedMacAddress {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 12 || s.chars().any(|c| !c.is_ascii_hexdigit()) {
-            bail!("Malformed raw mac address: {}", s);
-        }
-
-        Ok(UnformattedMacAddress(s.to_string().to_lowercase()))
-    }
-}
-
 impl TryFrom<&str> for FormattedMacAddress {
     type Error = anyhow::Error;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 17 || s.chars().filter(|c| *c == ':').count() != 5 {
+        if s.len() != 17 || s.chars().filter(|c| *c == ':').count() != 5 || s.chars().any(|c| !c.is_ascii_hexdigit() && c != ':') {
             bail!(
                 "Invalid BMC MAC. Must be formatted as MAC address with colons: {}",
                 s
@@ -52,23 +34,6 @@ impl TryFrom<&str> for FormattedMacAddress {
         }
 
         Ok(FormattedMacAddress(s.to_string().to_lowercase()))
-    }
-}
-
-impl From<&UnformattedMacAddress> for FormattedMacAddress {
-    /// Return a standard formatted MAC address given a 'raw' unformatted 12 char string
-    /// E.g. "aabbccddeeff" -> "aa:bb:cc:dd:ee:ff"
-    /// Error if not the correct length or hexadecimal
-    fn from(mac: &UnformattedMacAddress) -> Self {
-        let result = intersperse(&mac.get(), ':', 2);
-        FormattedMacAddress(result)
-    }
-}
-
-impl From<&FormattedMacAddress> for UnformattedMacAddress {
-    fn from(mac: &FormattedMacAddress) -> Self {
-        let result: String = mac.0.chars().filter(|c| *c != ':').collect();
-        UnformattedMacAddress(result)
     }
 }
 
@@ -98,7 +63,7 @@ fn generate_mac_address_internal(
     deployment_name: &str,
     node_type: &NodeType,
     version: char,
-) -> Result<UnformattedMacAddress> {
+) -> Result<FormattedMacAddress> {
     if version != '4' && version != '6' {
         bail!("Invalid version used to generate MAC address: {}", version);
     }
@@ -113,8 +78,10 @@ fn generate_mac_address_internal(
         _ => "6a",
     };
     let node_index = node_type.to_char();
-    let mac = format!("{}0{}{}", version_octet, node_index, vendor_part);
-    UnformattedMacAddress::try_from(mac.as_str())
+    let unformatted_mac = format!("{}0{}{}", version_octet, node_index, vendor_part);
+    let formatted_mac = intersperse(&unformatted_mac, ':', 2);
+
+    FormattedMacAddress::try_from(formatted_mac.as_str())
 }
 
 /// Query the BMC MAC address and return deterministically generated MAC
@@ -122,10 +89,13 @@ pub fn generate_mac_address(
     deployment_name: &str,
     node_type: &NodeType,
     mgmt_mac: Option<&str>,
-) -> Result<UnformattedMacAddress> {
+) -> Result<FormattedMacAddress> {
     let mgmt_mac = if let Some(mgmt_mac) = mgmt_mac {
         let mgmt_mac = FormattedMacAddress::try_from(mgmt_mac)?;
-        eprintln!("Using mgmt_mac address found in deployment.json: {}", mgmt_mac.get());
+        eprintln!(
+            "Using mgmt_mac address found in deployment.json: {}",
+            mgmt_mac.get()
+        );
         Ok(mgmt_mac)
     } else {
         let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
@@ -145,24 +115,10 @@ pub mod tests {
                 .get(),
             "de:ad:be:ef:ff:00"
         );
-        assert!(FormattedMacAddress::try_from("123456789ABCDEF").is_err()); // Too many chars
-        assert!(FormattedMacAddress::try_from("ZOOMBAWRONG1").is_err()); // Non-hex chars
+        assert!(FormattedMacAddress::try_from("12:34:56:78:9A:BC:DEF").is_err()); // Too many chars
+        assert!(FormattedMacAddress::try_from("ZO:OM:BA:WR:ON:G1").is_err()); // Non-hex chars
         assert!(FormattedMacAddress::try_from("Fast times").is_err()); // Nonsense
         assert!(FormattedMacAddress::try_from("").is_err()); // Too few chars
-        assert!(UnformattedMacAddress::try_from("").is_err()); // Too few chars
-
-        let raw_mac = UnformattedMacAddress::try_from("ABCDEF123456");
-        assert!(raw_mac.is_ok());
-        assert_eq!(
-            FormattedMacAddress::from(&raw_mac.unwrap()).get(),
-            "ab:cd:ef:12:34:56"
-        );
-        let mac = FormattedMacAddress::try_from("AA:BB:CC:DD:EE:FF");
-        assert!(mac.is_ok());
-        assert_eq!(
-            UnformattedMacAddress::from(&mac.unwrap()).get(),
-            "aabbccddeeff"
-        );
     }
 
     #[test]
@@ -176,7 +132,7 @@ pub mod tests {
             )
             .unwrap()
             .get(),
-            "4a0ff7e0c684"
+            "4a:0f:f7:e0:c6:84"
         );
         assert_eq!(
             generate_mac_address_internal(
@@ -187,7 +143,7 @@ pub mod tests {
             )
             .unwrap()
             .get(),
-            "4a01f7e0c684"
+            "4a:01:f7:e0:c6:84"
         );
         assert_eq!(
             generate_mac_address_internal(
@@ -198,7 +154,7 @@ pub mod tests {
             )
             .unwrap()
             .get(),
-            "6a01f7e0c684"
+            "6a:01:f7:e0:c6:84"
         );
         assert_eq!(
             generate_mac_address_internal(
@@ -209,7 +165,7 @@ pub mod tests {
             )
             .unwrap()
             .get(),
-            "6a01d9ab57f2"
+            "6a:01:d9:ab:57:f2"
         );
     }
 
