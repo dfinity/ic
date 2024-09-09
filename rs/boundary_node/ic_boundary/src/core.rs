@@ -159,10 +159,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // HTTP client for health checks
-    let http_client_check = http::client::ReqwestClient::new(
-        http::client::new(http_client_opts.clone())
-            .context("unable to create HTTP client for checks")?,
-    );
+    let http_client_check = http::client::ReqwestClient::new(http_client_opts.clone())
+        .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
