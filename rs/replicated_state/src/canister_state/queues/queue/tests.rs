@@ -10,7 +10,6 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
-use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
 use std::time::Duration;
 

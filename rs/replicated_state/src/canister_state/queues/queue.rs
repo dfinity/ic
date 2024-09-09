@@ -23,7 +23,7 @@ mod tests;
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub(super) enum CanisterQueueItem {
     /// Weak reference to a `Request` or `Response` held in the message pool.
     ///
@@ -188,6 +188,16 @@ impl CanisterQueue {
         Ok(())
     }
 
+    /// Releases a reserved response slot.
+    ///
+    /// This is used when a request in the reverse queue is dropped before having
+    /// had a chance to be popped.
+    pub(super) fn release_reserved_response_slot(&mut self) {
+        debug_assert!(self.response_slots > 0);
+
+        self.response_slots = self.response_slots.saturating_sub(1);
+    }
+
     /// Returns the number of reserved response slots.
     pub(super) fn reserved_slots(&self) -> usize {
         debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
@@ -250,6 +260,17 @@ impl CanisterQueue {
     /// including reserved slots).
     pub(super) fn len(&self) -> usize {
         self.queue.len()
+    }
+
+    /// Discards all items at the front of the queue for which the predicate holds.
+    /// Stops when it encounters the first item for which the predicate is false.
+    pub(super) fn pop_while(&mut self, predicate: impl Fn(&CanisterQueueItem) -> bool) {
+        while let Some(item) = self.peek() {
+            if !predicate(item) {
+                break;
+            }
+            self.pop();
+        }
     }
 
     /// Queue invariant check that panics if any invariant does not hold. Intended

@@ -17,10 +17,9 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
@@ -220,7 +219,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:748d5cd92d982531a25cd6c4f247bb6c0e484c9ac654164341f59a7d57d1fffc
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -243,7 +242,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:748d5cd92d982531a25cd6c4f247bb6c0e484c9ac654164341f59a7d57d1fffc
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
