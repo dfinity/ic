@@ -153,9 +153,10 @@ system_test_nns(
     name = "api_bn_decentralization_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
+    # TODO: fixme
+    # tags = [
+    #     "k8s",
+    # ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
