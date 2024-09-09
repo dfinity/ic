@@ -39,7 +39,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "rosetta_make_transactions_test",
+    name = "rosetta_transactions_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
