@@ -7,6 +7,6 @@ edition = "2021"
 anyhow = { workspace = true }
 clap = { workspace = true }
 indoc = "1.0.9"
-partition_tools = { path = "../../../partition_tools/" }
+partition_tools = { path = "../../partition_tools/" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
