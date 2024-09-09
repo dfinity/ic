@@ -507,7 +507,7 @@ EOF
     native.genrule(
         name = "launch-remote-vm",
         srcs = [
-            "//rs/ic_os/launch-single-vm",
+            "//rs/ic_os/dev_tools/launch-single-vm",
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
@@ -515,7 +515,7 @@ EOF
         ],
         outs = ["launch_remote_vm_script"],
         cmd = """
-        BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
+        BIN="$(location //rs/ic_os/dev_tools/launch-single-vm:launch-single-vm)"
         VERSION="$$(cat $(location :version.txt))"
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"

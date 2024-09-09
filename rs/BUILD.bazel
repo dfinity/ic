@@ -28,7 +28,7 @@
 #
 # Dependants: none.
 #   Exceptions:
-#       //rs/ic_os/launch-single-vm:__pkg__ depends on
+#       //rs/ic_os/dev_tools/launch-single-vm:__pkg__ depends on
 #           //rs/tests/driver:ic-system-test-driver
 #       //rs/pocket_ic_server:__pkg__ depends on
 #           //rs/tests:ic-hs
@@ -43,7 +43,7 @@ package_group(
 #
 # Can depend on: //rs:release-pkg.
 #   Exceptions:
-#       //rs/ic_os/launch-single-vm:__pkg__ depends on
+#       //rs/ic_os/dev_tools/launch-single-vm:__pkg__ depends on
 #       //rs/tests/driver:ic-system-test-driver
 #
 # Dependants: //rs:system-tests-pkg.

@@ -129,7 +129,7 @@ members = [
     "rs/ic_os/guestos_tool",
     "rs/ic_os/hostos_tool",
     "rs/ic_os/inject_files",
-    "rs/ic_os/launch-single-vm",
+    "rs/ic_os/dev_tools/launch-single-vm",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",

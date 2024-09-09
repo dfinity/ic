@@ -32,7 +32,7 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs/ic_os/launch-single-vm:__pkg__",
+        "//rs/ic_os/dev_tools/launch-single-vm:__pkg__",
     ],
     deps = [
         # Keep sorted.

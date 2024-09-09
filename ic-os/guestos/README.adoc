@@ -40,7 +40,7 @@ Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual mac
 
 The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
 
-For more details about the program, refer to the `rs/ic_os/launch-single-vm` directory.
+For more details about the program, refer to the `rs/ic_os/dev_tools/launch-single-vm` directory.
 
 == Developing the Ubuntu system
 
