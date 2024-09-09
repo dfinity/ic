@@ -578,7 +578,7 @@ fn configure_setupos_image(
     let setupos_inject_configs =
         get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
     let setupos_disable_checks =
-        get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+        get_dependency_path("rs/ic_os/dev_tools/setupos-disable-checks/setupos-disable-checks");
 
     let nested_vm = env.get_nested_vm(name)?;
 
