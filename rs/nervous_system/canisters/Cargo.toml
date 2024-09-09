@@ -11,7 +11,13 @@ name = "ic_nervous_system_canisters"
 path = "src/lib.rs"
 
 [dependencies]
-ic-nervous-system-common = { path = "../common" }
+async-trait = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ic-base-types = { path = "../../types/base_types" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-nervous-system-common = { path = "../common" }
+ic-nervous-system-runtime = { path = "../runtime" }
+ic-nns-constants = { path = "../../nns/constants" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
