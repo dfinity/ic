@@ -61,7 +61,7 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     #[cfg(not(target_pointer_width = "64"))]
-    compile_error!("compilation is only allowed for 64-bit targets");
+    compile_error!("Compilation is only allowed for 64-bit targets");
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
 
@@ -71,7 +71,7 @@ fn main() -> io::Result<()> {
     // for the children of this process). We do not want a new
     // terminal or control group (we still want to be under the same
     // systemd control group in the future). Thus we do not declare
-    // this process as a session leader.
+    // this process as a session leader!
     if let Err(err) = setpgid(Pid::from_raw(0), Pid::from_raw(0)) {
         eprintln!("Failed to setup a new process group for replica.");
         // This is a generic exit error. At this point sandboxing is

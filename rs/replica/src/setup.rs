@@ -28,7 +28,7 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
     })
 }
 
-/// Set the Replica version passed in via command-line!
+/// Set the Replica version passed in via command-line
 pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
     match args {
         Ok(args) => {
@@ -49,7 +49,7 @@ pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &Rep
     }
 }
 
-/// Parse the catch-up package given via command-line args (if one was given)!
+/// Parse the catch-up package given via command-line args (if one was given)
 pub fn get_catch_up_package(
     replica_args: &Result<ReplicaArgs, clap::Error>,
     logger: &ReplicaLogger,
