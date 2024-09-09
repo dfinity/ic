@@ -576,7 +576,7 @@ fn configure_setupos_image(
 ) -> anyhow::Result<PathBuf> {
     let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
     let setupos_inject_configs =
-        get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
+        get_dependency_path("rs/ic_os/dev_tools/setupos-inject-configuration/setupos-inject-configuration");
     let setupos_disable_checks =
         get_dependency_path("rs/ic_os/dev_tools/setupos-disable-checks/setupos-disable-checks");
 
