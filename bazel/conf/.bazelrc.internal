@@ -1,7 +1,7 @@
 # A .bazelrc used internally by DFINITY for metrics, cache, etc
 
 # Build event upload configuration
-build:bes --build_event_binary_file=bazel-bep.pb --profile=profile.json --experimental_generate_json_trace_profile=trace.json
+build:bes --build_event_binary_file=bazel-bep.pb --profile=profile.json --experimental_generate_json_trace_profile=true
 build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build:bes --bes_backend=bes.idx.dfinity.network
 build:bes --bes_upload_mode=wait_for_upload_complete
