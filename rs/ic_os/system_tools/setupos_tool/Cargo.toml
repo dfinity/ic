@@ -1,19 +1,15 @@
 [package]
-name = "guestos_tool"
+name = "setupos_tool"
 version = "1.0.0"
 edition = "2021"
 
 [[bin]]
-name = "guestos_tool"
+name = "setupos_tool"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../config" }
-indoc = "1.0.9"
-itertools = { workspace = true }
 network = { path = "../network" }
-regex = { workspace = true }
-utils = { path = "../system_tools/utils" }
-
+utils = { path = "../utils" }
