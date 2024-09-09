@@ -99,6 +99,7 @@ anchors:
       path: |
         bazel-bep.pb
         profile.json
+        trace.json
 
 jobs:
   bazel-test-all:
