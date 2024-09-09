@@ -151,7 +151,7 @@ impl ValidatedPoolReader<dkg::Message> for DkgPoolImpl {
         self.validated.get(id).cloned()
     }
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = dkg::Message>> {
+    fn get_retransmissions(&self) -> Box<dyn Iterator<Item = dkg::Message>> {
         Box::new(std::iter::empty())
     }
 }
