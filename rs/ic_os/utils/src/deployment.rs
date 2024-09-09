@@ -17,6 +17,7 @@ pub struct DeploymentJson {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mgmt_mac: Option<String>,
 }
 
@@ -368,6 +369,33 @@ mod test {
         let written_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR, written_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, written_deployment);
+
+        let written_no_cpu_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
+                .unwrap();
+
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, written_no_cpu_deployment);
+
+        let written_no_cpu_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_MGMT_MAC).unwrap();
+
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, written_no_cpu_deployment);
+
+        let written_no_cpu_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
+                .unwrap();
+
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, written_no_cpu_deployment);
+
+        let written_cpu_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
+
+        assert_eq!(QEMU_CPU_DEPLOYMENT_STR, written_cpu_deployment);
+
+        let written_multi_url_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&MULTI_URL_STRUCT).unwrap();
+
+        assert_eq!(MULTI_URL_STR, written_multi_url_deployment);
     }
 }
