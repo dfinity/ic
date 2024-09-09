@@ -15,7 +15,7 @@ Reserve the target machine in Dee before deploying.
 
 ### Run it via bazel target 
     
-Must be run inside the devenv container. Use `./gitlab-ci/container/container-run.sh`.
+Must be run inside the devenv container. Use `./ci/container/container-run.sh`.
 
 The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 

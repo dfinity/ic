@@ -97,55 +97,6 @@ fn test_insert_outbound_request_deadline_rounding() {
 }
 
 #[test]
-fn test_replace_inbound_timeout_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-    let id = placeholder.id();
-    assert_eq!(Kind::Response, id.kind());
-    assert_eq!(Context::Inbound, id.context());
-    assert_eq!(Class::BestEffort, id.class());
-    assert_eq!(0, pool.len());
-    assert_eq!(None, pool.get(id));
-
-    // Replace the placeholder with a best-effort response.
-    let msg: RequestOrResponse = response(time(5)).into();
-    pool.replace_inbound_timeout_response(placeholder, msg.clone());
-    assert_eq!(1, pool.len());
-    assert_eq!(Some(&response(time(5)).into()), pool.get(id));
-
-    // Response is in load shedding queue, but not in deadline queue.
-    assert!(pool.expire_messages(time(u32::MAX).into()).is_empty());
-    assert_eq!(Some((id, msg)), pool.shed_largest_message());
-    assert_eq!(0, pool.len());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_request() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a request.
-    pool.replace_inbound_timeout_response(placeholder, request(NO_DEADLINE).into());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_guaranteed_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a guaranteed response.
-    pool.replace_inbound_timeout_response(placeholder, response(NO_DEADLINE).into());
-}
-
-#[test]
 fn test_get() {
     let mut pool = MessagePool::default();
 

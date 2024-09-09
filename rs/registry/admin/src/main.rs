@@ -789,11 +789,6 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
-
-    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
-    #[clap(long)]
-    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -834,11 +829,6 @@ impl ProposalAction for StartCanisterCmd {
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
-
-    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
-    #[clap(long)]
-    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -974,10 +964,9 @@ struct ProposeToChangeNnsCanisterCmd {
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
 
-    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
+    /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
     #[clap(long)]
-    use_explicit_action_type: bool,
+    use_legacy_execute_nns_function: bool,
 }
 
 #[async_trait]
@@ -4011,7 +4000,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
+            if !cmd.use_legacy_execute_nns_function {
                 propose_action_from_command(cmd, canister_client, proposer).await;
             } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
@@ -4088,17 +4077,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else {
-                propose_external_proposal_from_command(
-                    cmd,
-                    NnsFunction::StopOrStartNnsCanister,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4108,17 +4087,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else {
-                propose_external_proposal_from_command(
-                    cmd,
-                    NnsFunction::StopOrStartNnsCanister,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
