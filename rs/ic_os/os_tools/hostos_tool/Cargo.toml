@@ -1,15 +1,15 @@
 [package]
-name = "setupos_tool"
+name = "hostos_tool"
 version = "1.0.0"
 edition = "2021"
 
 [[bin]]
-name = "setupos_tool"
+name = "hostos_tool"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-config = { path = "../config" }
-network = { path = "../network" }
-utils = { path = "../utils" }
+config = { path = "../../config" }
+network = { path = "../../network" }
+utils = { path = "../../utils" }

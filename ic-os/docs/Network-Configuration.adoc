@@ -96,6 +96,6 @@ In order to simplify the physical cabling of the machine, Linux's active-backup 
 
 Details can be found in:
 
-  ic/rs/ic_os/system_tools/setupos_tool generate-network-config
+  ic/rs/ic_os/os_tools/setupos_tool generate-network-config
 
 Note that this mode does not increase the bandwidth/throughput. Only one link will be active at the same time.
