@@ -125,7 +125,10 @@ pub fn generate_mac_address(
 ) -> Result<UnformattedMacAddress> {
     let mgmt_mac = if let Some(mgmt_mac) = mgmt_mac {
         let mgmt_mac = FormattedMacAddress::try_from(mgmt_mac)?;
-        eprintln!("Using mgmt_mac address found in deployment.json: {}", mgmt_mac.get());
+        eprintln!(
+            "Using mgmt_mac address found in deployment.json: {}",
+            mgmt_mac.get()
+        );
         Ok(mgmt_mac)
     } else {
         let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
