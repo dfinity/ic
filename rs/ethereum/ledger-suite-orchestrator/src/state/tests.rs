@@ -169,7 +169,7 @@ mod manage_installed_canisters {
     use maplit::btreeset;
 
     #[test]
-    fn should_error_when_same_wasm_hash() {
+    fn should_fail_when_same_wasm_hash() {
         let state = new_state();
         let mut cketh = cketh_installed_canisters();
         cketh.index.installed_wasm_hash = cketh.ledger.installed_wasm_hash.clone();
@@ -183,7 +183,7 @@ mod manage_installed_canisters {
     }
 
     #[test]
-    fn should_error_when_token_symbol_already_managed() {
+    fn should_fail_when_token_symbol_already_managed() {
         let mut state = new_state();
         let registered_canisters = validated_cketh_canisters();
         state.record_manage_other_canisters(registered_canisters.clone());
@@ -200,7 +200,7 @@ mod manage_installed_canisters {
     }
 
     #[test]
-    fn should_error_when_principal_already_managed() {
+    fn should_fail_when_principal_already_managed() {
         let mut state = new_state();
         let [usdc_index_canister_id, usdc_ledger_canister_id] = add_usdc_ledger_suite(&mut state);
         let [usdt_index_canister_id, usdt_ledger_canister_id] = add_usdt_ledger_suite(&mut state);
