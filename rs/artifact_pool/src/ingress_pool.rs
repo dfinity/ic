@@ -55,7 +55,8 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
 
     /// Adds the `artifact` to the pool.
     /// Note: the function doesn't check if the pool's limits are already exceeded, it's the
-    /// caller's responsibility to check the limits before calling `insert`.
+    /// caller's responsibility to check the limits before calling `insert`. Currently, this check
+    /// happens in `on_state_change` function in `ingress_handler.rs`.
     fn insert(&mut self, message_id: IngressMessageId, artifact: T) {
         let _timer = self
             .metrics
