@@ -217,7 +217,7 @@ pub type GitCommitHash = Hash<GIT_COMMIT_HASH_LENGTH>;
 pub struct ManagedCanisters {
     /// Canisters for an ERC-20 token
     canisters: BTreeMap<Erc20Token, Canisters>,
-    /// Canisters for non ERC-20 token, identified by their token symbol
+    /// Canisters for a non-ERC-20 token, identified by its token symbol
     #[serde(default)]
     other_canisters: BTreeMap<TokenSymbol, Canisters>,
 }
