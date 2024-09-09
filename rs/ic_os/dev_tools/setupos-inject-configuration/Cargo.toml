@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-partition_tools = { path = "../../partition_tools" }
+partition_tools = { path = "../../build_tools/partition_tools" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
