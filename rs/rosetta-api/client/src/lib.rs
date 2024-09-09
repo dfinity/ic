@@ -3,6 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_rosetta_api::convert::to_model_account_identifier;
+use ic_rosetta_api::models::BlockIdentifier;
 use ic_rosetta_api::models::ConstructionMetadataRequestOptions;
 use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
@@ -10,8 +11,6 @@ use ic_rosetta_api::request_types::RequestType;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
-use icrc_ledger_types::icrc1::transfer;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -262,6 +261,23 @@ impl RosettaClient {
             "/block",
             &BlockRequest {
                 network_identifier,
+                block_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn block_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+        block_identifier: BlockIdentifier,
+    ) -> anyhow::Result<BlockTransactionResponse> {
+        self.call_endpoint(
+            "/block/transaction",
+            &BlockTransactionRequest {
+                network_identifier,
+                transaction_identifier,
                 block_identifier,
             },
         )
