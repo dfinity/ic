@@ -100,6 +100,7 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
+            trace.json
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -143,6 +144,7 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
+            trace.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 120
@@ -187,6 +189,7 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
+            trace.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -266,6 +269,7 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
+            trace.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
