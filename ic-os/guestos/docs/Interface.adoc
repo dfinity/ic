@@ -6,7 +6,7 @@ This document covers the GuestOS interface requirements, providing all the infor
 ** Network configuration details
 * link:../../docs/Configuration.adoc[Configuration]
 ** Details on populating the GuestOS config partition
-* link:../../../rs/ic_os/system_tools/vsock/README.md[Vsock]
+* link:../../../rs/ic_os//vsock/README.md[Vsock]
 ** Communication between GuestOS and HostOS
 * link:../../components/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
 ** Details on resource allocations used in production
