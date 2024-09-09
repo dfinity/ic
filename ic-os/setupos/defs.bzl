@@ -30,7 +30,7 @@ def image_deps(mode, _malicious = False):
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
         "rootfs": {
-            "//rs/ic_os/system_tools/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
+            "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
         },
 
         # Set various configuration values

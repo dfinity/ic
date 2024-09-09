@@ -168,4 +168,4 @@ The VSOCK (VM Socket) acts as a controlled environment for GuestOS to communicat
 
 To maintain the highest level of isolation between the two operating systems, the Guestos is restricted to strictly defined commands. All VSOCK commands are initiated from the GuestOS.
 
-For a complete list of VSOCK commands and a detailed description of the vsock program, please link:../../rs/ic_os/system_tools_vsock/README.md[refer to the vsock README].
+For a complete list of VSOCK commands and a detailed description of the vsock program, please link:../../rs/ic_os/vsock/README.md[refer to the vsock README].
