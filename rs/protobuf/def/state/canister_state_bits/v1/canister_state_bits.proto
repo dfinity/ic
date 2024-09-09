@@ -436,5 +436,5 @@ message CanisterStateBits {
   int64 priority_credit = 48;
   LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
-  optional OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 51;
+  optional OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 53;
 }

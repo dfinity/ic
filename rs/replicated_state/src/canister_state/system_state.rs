@@ -366,7 +366,6 @@ pub struct SystemState {
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
 
-
     /// Cumulative memory usage of all snapshots that belong to this canister.
     ///
     /// This amount contributes to the total `memory_usage` of the canister as

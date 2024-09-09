@@ -1,7 +1,3 @@
-use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
-};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
@@ -30,7 +26,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 

@@ -698,7 +698,7 @@ pub struct CanisterStateBits {
     pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
-    #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "51")]
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", optional, tag = "53")]
     pub on_low_wasm_memory_hook_status: ::core::option::Option<i32>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
