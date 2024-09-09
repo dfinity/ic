@@ -1340,6 +1340,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tracing",
                 ],
             ),
+            "tower-layer": crate.spec(
+                version = "^0.3.3",
+            ),
             "tower_governor": crate.spec(
                 version = "^0.4.2",
             ),

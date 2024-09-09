@@ -1,5 +1,5 @@
 {
-  "checksum": "6ba6a0ebf0cfb90dc58f97421c29e75f131d49756030e2cb7d16d58f2287e190",
+  "checksum": "a78c69852a7d66829dd7688824faac56fe37fc76bc0b61b93ce805366ebfea43",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1652,7 +1652,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -4528,7 +4528,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -4718,7 +4718,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -4836,7 +4836,7 @@
               "target": "mime"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -4964,7 +4964,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -5097,7 +5097,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -18969,6 +18969,10 @@
             {
               "id": "tower-http 0.5.2",
               "target": "tower_http"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
             },
             {
               "id": "tower-request-id 0.3.0",
@@ -67114,7 +67118,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -67326,7 +67330,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -67408,7 +67412,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -67540,7 +67544,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -67567,14 +67571,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-layer 0.3.2": {
+    "tower-layer 0.3.3": {
       "name": "tower-layer",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "package_url": "https://github.com/tower-rs/tower",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-layer/0.3.2/download",
-          "sha256": "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
+          "url": "https://static.crates.io/crates/tower-layer/0.3.3/download",
+          "sha256": "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
         }
       },
       "targets": [
@@ -67597,7 +67601,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "0.3.2"
+        "version": "0.3.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -67641,7 +67645,7 @@
               "target": "http"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -67750,7 +67754,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tower-layer 0.3.2",
+              "id": "tower-layer 0.3.3",
               "target": "tower_layer"
             },
             {
@@ -79094,6 +79098,7 @@
     "tonic-build 0.11.0",
     "tower 0.4.13",
     "tower-http 0.5.2",
+    "tower-layer 0.3.3",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.4.2",
