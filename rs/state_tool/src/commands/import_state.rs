@@ -75,7 +75,7 @@ pub fn do_import(state_path: PathBuf, config_path: PathBuf, height: u64) -> Resu
     let state_layout = utils::locate_state_root(config_path)?;
     let height = Height::new(height);
 
-    if let Ok(cp_layout) = state_layout.checkpoint(height) {
+    if let Ok(cp_layout) = state_layout.checkpoint_verified(height) {
         return Err(format!(
             "Checkpoint {} already exists at {}",
             height,

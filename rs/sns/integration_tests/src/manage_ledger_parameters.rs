@@ -214,6 +214,9 @@ fn wait_for_ledger_canister_to_start_after_an_upgrade(
                 call_error
             ),
         }
+        // if the ledger canister is stopped, then the update call fails in the ingress filter
+        // before any round is executed => execute a round on the StateMachine
+        machine.tick();
         if i == 20 {
             panic!("cannot verify the ledger is running.");
         }

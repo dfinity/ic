@@ -43,7 +43,7 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(crate) struct InvalidChainCacheError(String);
 
 impl Display for InvalidChainCacheError {
@@ -506,6 +506,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// - The block contains an IDKG payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
 /// - we can extract the threshold master public key from the transcript.
+///
 /// Otherwise `Ok(None)` is returned.
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case

@@ -24,7 +24,7 @@ use super::{
 };
 
 /// ECDSA Quadruple in creation.
-#[derive(Clone, Hash, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct QuadrupleInCreation {
     pub key_id: EcdsaKeyId,
 
@@ -252,7 +252,7 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
 
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureQuadrupleRef {
     pub key_id: EcdsaKeyId,
@@ -397,7 +397,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 
 /// Counterpart of ThresholdEcdsaSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdEcdsaSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,

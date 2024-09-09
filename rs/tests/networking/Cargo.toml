@@ -7,26 +7,29 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-proxy_canister = { path = "../../rust_canisters/proxy_canister" }
-tests = { path = ".." }
-ic-system-test-driver = { path = "../driver" }
-canister_http = { path = "./canister_http" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
 anyhow = { workspace = true }
 candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+canister_http = { path = "./canister_http" }
+cloner-canister-types = { path = "./canisters" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-slog = { workspace = true }
+ic-limits = { path = "../../limits" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-prep = { path = "../../prep" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-canister-test = { path = "../../rust_canisters/canister_test" }
+ic-system-test-driver = { path = "../driver" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
-ic-base-types = { path = "../../types/base_types" }
-tokio = { workspace = true }
-reqwest = { workspace = true }
 ic-utils = { workspace = true }
+proxy_canister = { path = "../../rust_canisters/proxy_canister" }
+reqwest = { workspace = true }
+slog = { workspace = true }
+tests = { path = ".." }
+tokio = { workspace = true }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
@@ -47,3 +50,35 @@ path = "canister_http_test.rs"
 [[bin]]
 name = "ic-systest-canister-http-time-out"
 path = "canister_http_time_out_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-max-connections-test"
+path = "firewall_max_connections_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-priority-test"
+path = "firewall_priority_test.rs"
+
+[[bin]]
+name = "ic-systest-network-large-test"
+path = "network_large_test.rs"
+
+[[bin]]
+name = "ic-systest-network-reliability-test"
+path = "network_reliability_test.rs"
+
+[[bin]]
+name = "ic-systest-p2p-performance"
+path = "p2p_performance.rs"
+
+[[bin]]
+name = "ic-systest-query-workload-long-test"
+path = "query_workload_long_test.rs"
+
+[[bin]]
+name = "ic-systest-update-workload-large-payload-test"
+path = "update_workload_large_payload.rs"
+
+[[bin]]
+name = "ic-systest-cloner-canister-workload"
+path = "cloner_canister_workload.rs"

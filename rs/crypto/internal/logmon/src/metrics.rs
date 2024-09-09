@@ -340,7 +340,7 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyType {
@@ -350,7 +350,7 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
@@ -367,7 +367,7 @@ pub enum MetricsDomain {
     KeyManagement,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsScope {
@@ -375,7 +375,7 @@ pub enum MetricsScope {
     Local,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsResult {
@@ -392,7 +392,7 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyRotationResult {
@@ -407,7 +407,7 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
@@ -415,7 +415,7 @@ pub enum ServiceType {
     Server,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, strum_macros::Display, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
@@ -431,7 +431,7 @@ pub enum MessageType {
 ///    in the local public key store. For keys that may have multiple revisions, e.g., the iDKG
 ///    dealing encryption public keys, at most one is included in the `pk_local` count
 ///  - `sk_local`: The number of node secret keys stored in the local secret key store
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct KeyCounts {
     pk_registry: u32,
     pk_local: u32,
@@ -541,11 +541,13 @@ struct Metrics {
     ///  - NI-DKG keys
     ///  - iDKG keys
     ///  - TLS certificates and secret keys
+    ///
     /// The above keys are not kept track of separately, merely a total number of stored keys.
     /// The counters keep track of which locations these keys are stored in:
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
+    ///
     /// Additionally, the number of iDKG dealing encryption public keys that are stored locally are
     /// also kept track of in the gauge vector.
     pub crypto_key_counts: IntGaugeVec,

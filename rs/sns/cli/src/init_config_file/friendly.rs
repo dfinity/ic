@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance::{
@@ -34,7 +35,7 @@ mod friendly_tests;
 // the format that we are trying to implement here.
 //
 // (Thanks to the magic of serde, all the code here is declarative.)
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct SnsConfigurationFile {
     name: String,
@@ -70,7 +71,7 @@ pub(crate) struct SnsConfigurationFile {
     nns_proposal: NnsProposal,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PrincipalAlias {
     id: String, // PrincipalId
@@ -78,7 +79,7 @@ pub(crate) struct PrincipalAlias {
     email: Option<String>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Token {
     name: String,
@@ -88,7 +89,7 @@ pub(crate) struct Token {
     logo: PathBuf,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Proposals {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
@@ -101,14 +102,14 @@ pub(crate) struct Proposals {
     maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Neurons {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     minimum_creation_stake: nervous_system_pb::Tokens,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Voting {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
@@ -121,7 +122,7 @@ pub(crate) struct Voting {
     reward_rate: RewardRate,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct MaximumVotingPowerBonuses {
     #[serde(rename = "DissolveDelay")]
@@ -131,7 +132,7 @@ pub(crate) struct MaximumVotingPowerBonuses {
     age: Bonus,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Bonus {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
@@ -141,7 +142,7 @@ pub(crate) struct Bonus {
     bonus: nervous_system_pb::Percentage,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RewardRate {
     #[serde(with = "ic_nervous_system_humanize::serde::percentage")]
@@ -154,7 +155,7 @@ pub(crate) struct RewardRate {
     transition_duration: nervous_system_pb::Duration,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Swap {
     minimum_participants: u64,
@@ -198,7 +199,7 @@ pub(crate) struct Swap {
     neurons_fund_participation: Option<bool>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct VestingSchedule {
     events: u64,
@@ -207,7 +208,7 @@ pub(crate) struct VestingSchedule {
     interval: nervous_system_pb::Duration,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Distribution {
     #[serde(rename = "Neurons")]
@@ -220,7 +221,7 @@ pub(crate) struct Distribution {
     total: nervous_system_pb::Tokens,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Neuron {
     principal: String, // Principal (alias)
@@ -238,7 +239,7 @@ pub(crate) struct Neuron {
     vesting_period: nervous_system_pb::Duration,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct InitialBalances {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
@@ -248,7 +249,7 @@ pub(crate) struct InitialBalances {
     swap: nervous_system_pb::Tokens,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub(crate) struct NnsProposal {
     title: String,
     summary: String,
@@ -259,7 +260,7 @@ struct AliasToPrincipalId<'a> {
     #[allow(unused)]
     source: &'a Vec<PrincipalAlias>,
     /* TODO
-    #[derive(Debug, PartialEq, Eq, Hash)]
+    #[derive(Eq, PartialEq, Hash, Debug)]
     enum Key { // TODO: This name is just a placeholder.
         Name(String),
         Email(String),
@@ -330,7 +331,7 @@ fn parse_image_path(
 }
 
 impl SnsConfigurationFile {
-    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal, String> {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal> {
         // Extract the proposal action from the config file
         let create_service_nervous_system =
             self.try_convert_to_create_service_nervous_system(base_path)?;
@@ -367,7 +368,7 @@ impl SnsConfigurationFile {
             )),
         };
 
-        validate_user_submitted_proposal_fields(&proposal)?;
+        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
@@ -375,7 +376,7 @@ impl SnsConfigurationFile {
     pub fn try_convert_to_create_service_nervous_system(
         &self,
         base_path: &Path,
-    ) -> Result<CreateServiceNervousSystem, String> {
+    ) -> Result<CreateServiceNervousSystem> {
         // Step 1: Unpack.
         let SnsConfigurationFile {
             name,
@@ -470,14 +471,14 @@ impl SnsConfigurationFile {
 
         // Step 4: Validate.
         if !defects.is_empty() {
-            return Err(format!(
+            return Err(anyhow!(
                 "Unable to convert configuration file to proposal for the following \
                  reason(s):\n  -{}",
                 defects.join("\n  -"),
             ));
         }
         if let Err(err) = SnsInitPayload::try_from(result.clone()) {
-            return Err(format!(
+            return Err(anyhow!(
                 "Unable to convert configuration file to proposal: {}",
                 err,
             ));

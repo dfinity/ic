@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_proto::pb::v1::Countries;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct SwapBuilder {
     lifecycle: Lifecycle,
     buyers: BTreeMap<String, BuyerState>,
@@ -41,7 +41,6 @@ pub struct SwapBuilder {
     // The following fields are deprecated and thus don't need to be represented here.
     // min_icp_e8s,
     // max_icp_e8s,
-    // neurons_fund_participants,
 }
 
 fn i2canister_id(i: u64) -> CanisterId {
@@ -247,7 +246,6 @@ impl SwapBuilder {
             // The following fields are deprecated.
             min_icp_e8s: None,
             max_icp_e8s: None,
-            neurons_fund_participants: None,
         };
         let swap = Swap::new(init);
         Swap {

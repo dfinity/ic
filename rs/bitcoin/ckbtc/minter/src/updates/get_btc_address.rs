@@ -9,7 +9,7 @@ use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBtcAddressArgs {
     pub owner: Option<Principal>,
     pub subaccount: Option<Subaccount>,

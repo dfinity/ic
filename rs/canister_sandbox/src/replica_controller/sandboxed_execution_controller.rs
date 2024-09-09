@@ -614,13 +614,13 @@ pub struct SandboxedExecutionController {
     /// one of two states:
     ///
     /// - `active`: the entry in the registry keeps a strong reference to the
-    /// sandbox process, so that it is guaranteed to stay alive.
+    ///   sandbox process, so that it is guaranteed to stay alive.
     ///
     /// - `evicted`: the entry in the registry keeps a weak reference to the
-    /// sandbox process, so that the sandbox process is terminated as soon as
-    /// the last strong reference to it is dropped. In other words, the sandbox
-    /// process is terminated as soon as all pending executions finish and no
-    /// new execution starts.
+    ///   sandbox process, so that the sandbox process is terminated as soon as
+    ///   the last strong reference to it is dropped. In other words, the sandbox
+    ///   process is terminated as soon as all pending executions finish and no
+    ///   new execution starts.
     ///
     /// The sandbox process can move from `evicted` back to `active` if a new
     /// message execution starts.
@@ -628,11 +628,11 @@ pub struct SandboxedExecutionController {
     /// Invariants:
     ///
     /// - If a sandbox process has a strong reference from somewhere else in the
-    /// replica process, then the registry has an entry for that sandbox process.
-    /// The entry may be either the `active` or `evicted` state.
+    ///   replica process, then the registry has an entry for that sandbox process.
+    ///   The entry may be either the `active` or `evicted` state.
     ///
     /// - An entry is removed from the registry only if it is in the `evicted`
-    /// state and the strong reference count reaches zero.
+    ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
     min_sandbox_count: usize,
     max_sandbox_count: usize,

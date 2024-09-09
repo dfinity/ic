@@ -25,6 +25,7 @@ use ic_types::{
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
+use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
 use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
 use serde::{Deserialize, Serialize};
@@ -103,7 +104,7 @@ fn summarize(heap: &[u8], start: usize, size: usize) -> u64 {
 /// Supports operations to reduce the message limit while keeping the maximum
 /// slice limit the same, which is useful for messages that have multiple
 /// execution steps such as install, upgrade, and response.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InstructionLimits {
     /// The total instruction limit for message execution. With deterministic
     /// time slicing this limit may exceed the per-round instruction limit.  The
@@ -169,7 +170,7 @@ impl InstructionLimits {
 }
 
 // Canister and subnet configuration parameters required for execution.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
@@ -182,7 +183,7 @@ pub struct ExecutionParameters {
     pub subnet_memory_saturation: ResourceSaturation,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[doc(hidden)]
 pub enum ResponseStatus {
     // Indicates that the current call context was never replied.
@@ -198,7 +199,7 @@ pub enum ResponseStatus {
 /// should keep track of the state or not. The distinction is necessary
 /// because some non-replicated queries can call other queries. In such
 /// a case the caller has too keep the state until the callee returns.
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum NonReplicatedQueryKind {
     Stateful {
@@ -212,7 +213,7 @@ pub enum NonReplicatedQueryKind {
 
 /// This enum indicates whether state modifications are important for
 /// an API type or not.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ModificationTracking {
     Ignore,
     Track,
@@ -225,7 +226,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {
@@ -1032,6 +1033,11 @@ pub struct SystemApiImpl {
     /// still be read through the hidden read API for speed on the first access.
     wasm_native_stable_memory: FlagStatus,
 
+    /// Canister backtraces are enabled. This means we should attempt to collect
+    /// a backtrace if the canister calls the trap API.
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
+
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1074,6 +1080,7 @@ impl SystemApiImpl {
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         wasm_native_stable_memory: FlagStatus,
+        canister_backtrace: FlagStatus,
         max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
         wasm_memory_size: NumWasmPages,
@@ -1113,6 +1120,7 @@ impl SystemApiImpl {
             memory_usage,
             execution_parameters,
             wasm_native_stable_memory,
+            canister_backtrace,
             max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
@@ -1222,8 +1230,10 @@ impl SystemApiImpl {
                 "\"{}\" cannot be executed in {} mode",
                 method_name, self.api_type
             ),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
+            suggestion: "Check the ICP documentation to make sure APIs are \
+            being called in the correct message types."
+                .to_string(),
+            doc_link: doc_ref("calling-a-system-api-from-the-wrong-mode"),
         }
     }
 
@@ -1961,8 +1971,11 @@ impl SystemApi for SystemApiImpl {
                         );
                         return Err(UserContractViolation {
                             error: string,
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
+                            suggestion:
+                                "Consider checking the response size and returning an error if \
+                                it is too long."
+                                    .to_string(),
+                            doc_link: doc_ref("msg_reply_data_append-payload-too-large"),
                         });
                     }
                     data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
@@ -1999,8 +2012,9 @@ impl SystemApi for SystemApiImpl {
                         );
                         return Err(UserContractViolation {
                             error: string,
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
+                            suggestion: "Try truncating the error messages that are too long."
+                                .to_string(),
+                            doc_link: doc_ref("msg_reject-payload-too-large"),
                         });
                     }
                     let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
@@ -3090,8 +3104,10 @@ impl SystemApi for SystemApiImpl {
                     no larger than {} bytes. Found {} bytes.",
                             CERTIFIED_DATA_MAX_LENGTH, size
                         ),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
+                        suggestion: "Try certifying just the hash of your data instead of \
+                        the full contents."
+                            .to_string(),
+                        doc_link: doc_ref("certified_data_set-payload-too-large"),
                     });
                 }
 

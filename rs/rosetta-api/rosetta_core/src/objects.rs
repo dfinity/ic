@@ -22,7 +22,7 @@ pub type ObjectMap = serde_json::map::Map<String, Object>;
 
 /// Currency is composed of a canonical Symbol and Decimals. This Decimals value is used to convert an Amount.
 /// Value from atomic units (Satoshis) to standard units (Bitcoins).
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Currency {
     /// Canonical symbol associated with a currency.
     pub symbol: String,
@@ -53,8 +53,7 @@ impl Currency {
 /// requested and received a block identified by a specific BlockIdentifier,
 /// all future calls for that same BlockIdentifier must return the same block
 /// contents.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Block {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub block_identifier: BlockIdentifier,
@@ -91,8 +90,7 @@ impl Block {
 /// Operations contain all balance-changing information within a transaction.
 /// They are always one-sided (only affect 1 AccountIdentifier) and can succeed
 /// or fail independently from a Transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Operation {
     /// The operation_identifier uniquely identifies an operation within a transaction.
     pub operation_identifier: OperationIdentifier,
@@ -163,8 +161,7 @@ impl Operation {
 /// UTXOs allows for supporting both account-based transfers and UTXO-based
 /// transfers on the same blockchain (when a transfer is account-based, don't
 /// populate this model).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CoinChange {
     /// CoinIdentifier uniquely identifies a Coin.
     pub coin_identifier: CoinIdentifier,
@@ -190,8 +187,7 @@ impl CoinChange {
 /// as `#[repr(C)]` which helps with FFI.
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum CoinAction {
     /// CoinAction indicating a Coin was created.
     #[serde(rename = "coin_created")]
@@ -222,8 +218,7 @@ impl ::std::str::FromStr for CoinAction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RelatedTransaction {
     /// The network_identifier specifies which network a particular object is associated with..
     pub network_identifier: NetworkIdentifier,
@@ -236,8 +231,7 @@ pub struct RelatedTransaction {
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum Direction {
     /// CoinAction indicating a Coin was created.
     #[serde(rename = "forward")]
@@ -270,8 +264,7 @@ impl ::std::str::FromStr for Direction {
 
 /// Transactions contain an array of Operations that are attributable to the
 /// same TransactionIdentifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Transaction {
     /// The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
     pub transaction_identifier: TransactionIdentifier,
@@ -298,8 +291,7 @@ impl Transaction {
 
 // Amount is some Value of a Currency. It is considered invalid to specify a
 /// Value without a Currency.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Amount {
     /// Value of the transaction in atomic units represented as an
     /// arbitrary-sized signed integer.  For example, 1 BTC would be represented
@@ -338,7 +330,7 @@ impl TryFrom<Amount> for Nat {
 /// This Allow object is used by clients to validate the correctness of a Rosetta Server implementation.
 /// It is expected that these clients will error if they receive some response that contains any of
 /// the above information that is not specified here.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Allow {
     /// All Operation.Status this implementation supports. Any status that is returned during parsing
     /// that is not listed here will cause client validation to error.
@@ -426,7 +418,7 @@ impl Allow {
 /// be exempt, respectively. BalanceExemptions should be used sparingly as they may introduce significant complexity for
 /// integrators that attempt to reconcile all account balance changes. If your implementation relies on any BalanceExemptions,
 /// you MUST implement historical balance lookup (the ability to query an account balance at any BlockIdentifier).
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BalanceExemption {
     /// SubAccountAddress is the SubAccountIdentifier.Address that the BalanceExemption applies
     /// to (regardless of the value of SubAccountIdentifier.Metadata).
@@ -451,7 +443,7 @@ pub struct BalanceExemption {
 
 /// ExemptionType is used to indicate if the live balance for an account subject to a BalanceExemption could increase above,
 /// decrease below, or equal the computed balance.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum ExemptionType {
     /// The live balance may increase above or equal the computed balance. This typically occurs with staking rewards that accrue on each block.
     GreaterOrEqual,
@@ -468,7 +460,7 @@ impl Default for ExemptionType {
 }
 
 /// Case specifies the expected case for strings and hashes.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum Case {
     /// Lower Case hash
     UpperCase,
@@ -483,8 +475,7 @@ pub enum Case {
 /// PublicKey contains a public key byte array for a particular CurveType
 /// encoded in hex.  Note that there is no PrivateKey struct as this is NEVER
 /// the concern of an implementation.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct PublicKey {
     /// Hex-encoded public key bytes in the format specified by the CurveType.
     pub hex_bytes: String,
@@ -540,8 +531,7 @@ where
 /// as `#[repr(C)]` which helps with FFI.
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum CurveType {
     /// https://secg.org/sec1-v2.pdf#subsubsection.2.3.3
     #[serde(rename = "secp256k1")]
@@ -594,8 +584,7 @@ impl ::std::str::FromStr for CurveType {
 /// AccountIdentifier using the specified SignatureType.  SignatureType can be
 /// optionally populated if there is a restriction on the signature scheme that
 /// can be used to sign the payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SigningPayload {
     /// [DEPRECATED by `account_identifier` in `v1.4.4`] The network-specific
     /// address of the account that should sign the payload.
@@ -632,8 +621,7 @@ impl SigningPayload {
 /// as `#[repr(C)]` which helps with FFI.
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum SignatureType {
     #[serde(rename = "ecdsa")]
     Ecdsa,
@@ -689,8 +677,7 @@ impl ::std::str::FromStr for SignatureType {
 /// keypairs used to produce the signature, the signature (encoded in hex), and
 /// the SignatureType.  PublicKey is often times not known during construction
 /// of the signing payloads but may be needed to combine signatures properly.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Signature {
     /// SigningPayload is signed by the client with the keypair associated with an AccountIdentifier using the specified SignatureType. SignatureType can be optionally populated if there is a restriction on the signature scheme that can be used to sign the payload.
     pub signing_payload: SigningPayload,
@@ -705,8 +692,7 @@ pub struct Signature {
 }
 
 /// BlockTransaction contains a populated Transaction and the BlockIdentifier that contains it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BlockTransaction {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub block_identifier: BlockIdentifier,
@@ -719,8 +705,7 @@ pub struct BlockTransaction {
 /// conditions. If this field is not populated, the default and value will be
 /// used.
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum Operator {
     /// If any condition is satisfied, it is considered a match.
     #[serde(rename = "or")]

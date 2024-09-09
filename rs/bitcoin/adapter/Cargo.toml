@@ -20,7 +20,7 @@ ic-btc-validation = { workspace = true }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -35,15 +35,15 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoind = "0.32.0"
 bitcoincore-rpc = "0.15.0"
+bitcoind = "0.32.0"
 criterion = { workspace = true }
-ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-adapter-client = { path = "../client" }
+ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 tempfile = { workspace = true }
 
 [[bench]]

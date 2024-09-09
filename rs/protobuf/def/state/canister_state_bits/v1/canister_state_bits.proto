@@ -312,10 +312,16 @@ message WasmChunkStoreMetadata {
   uint64 size = 2;
 }
 
-enum LogVisibility {
-  LOG_VISIBILITY_UNSPECIFIED = 0;
-  LOG_VISIBILITY_CONTROLLERS = 1;
-  LOG_VISIBILITY_PUBLIC = 2;
+message LogVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message LogVisibilityV2 {
+  oneof log_visibility_v2 {
+    int32 controllers = 1;
+    int32 public = 2;
+    LogVisibilityAllowedViewers allowed_viewers = 3;
+  }
 }
 
 message CanisterLogRecord {
@@ -409,8 +415,10 @@ message CanisterStateBits {
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
+  reserved 42;
+  reserved "log_visibility";
   // Log visibility for the canister.
-  LogVisibility log_visibility = 42;
+  LogVisibilityV2 log_visibility_v2 = 51;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
@@ -422,6 +430,8 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
+  // Captures the memory usage of all snapshots associated with a canister.
+  uint64 snapshots_memory_usage = 52;
   reserved 47;
   int64 priority_credit = 48;
   LongExecutionMode long_execution_mode = 49;

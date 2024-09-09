@@ -205,6 +205,7 @@ pub fn get_system_api(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Memory::new_for_testing().size,

@@ -1,5 +1,5 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -12,8 +12,8 @@ TEST_CANISTERS_RUNTIME_DEPS = [
     "@asset_canister//file",
 ]
 
-system_test(
-    name = "boundary_node_integration_test",
+system_test_nns(
+    name = "bn_integration_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
@@ -24,12 +24,12 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "boundary_node_integration_on_playnet_test",
+system_test_nns(
+    name = "bn_integration_on_playnet_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
@@ -41,12 +41,12 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "boundary_node_update_workload_test",
+system_test_nns(
+    name = "bn_update_workload_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -54,11 +54,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "certificate_orchestrator_test",
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
@@ -70,14 +70,13 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
                    GUESTOS_RUNTIME_DEPS +
-                   NNS_CANISTER_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "boundary_node_performance_test",
+system_test_nns(
+    name = "bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -88,12 +87,12 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "mainnet_boundary_node_performance_test",
+system_test_nns(
+    name = "mainnet_bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -108,12 +107,12 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "mainnet_boundary_node_icx_proxy_performance_test",
+system_test_nns(
+    name = "mainnet_bn_icx_proxy_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -128,11 +127,11 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "custom_domains_integration_test",
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
@@ -144,21 +143,20 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
                    GUESTOS_RUNTIME_DEPS +
-                   NNS_CANISTER_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS +
                    CUSTOM_DOMAINS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
-    name = "api_boundary_node_decentralization_test",
+system_test_nns(
+    name = "api_bn_decentralization_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

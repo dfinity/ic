@@ -68,7 +68,7 @@ pub(crate) mod memory {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StoredWasm {
     /// The canister time at which the orchestrator stored this wasm
     /// in nanoseconds since the epoch (1970-01-01).
@@ -167,7 +167,7 @@ impl Storable for Task {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum WasmStoreError {
     WasmMismatch {
         wasm_hash: WasmHash,
@@ -278,7 +278,7 @@ fn record_wasm<T: StorableWasm>(
     wasm_store_try_insert(wasm_store, timestamp, git_commit, wasm).map(|()| hash)
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum WasmHashError {
     Invalid(String),
     NotFound(WasmHash),

@@ -67,7 +67,7 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
 }
 
 #[repr(u8)]
-#[derive(Serialize, Deserialize, Clone, Copy, CandidType, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum UpdateExchangeRateState {
     Disabled = 0,
     GetRateAt(u64) = 1,
@@ -111,26 +111,19 @@ impl UpdateExchangeRateState {
     }
 }
 
+/// Get the "next multiple" of a value, that is, the smallest number which (1) can be divided by
+/// `multiple`, and (2) is greater than `value`. Returns None if `multiple` zero or if the result
+/// would overflow u64.
 fn get_next_multiple_of(value: u64, multiple: u64) -> Option<u64> {
-    let cast_value = i128::from(value);
-    let cast_multiple = i128::from(multiple);
-    let base = cast_multiple.checked_sub(cast_value)?;
-    if multiple == 0 {
-        return None;
-    }
+    // If `multiple` is 0, None will be returned here as expected.
+    let quotient = value.checked_div(multiple)?;
 
-    let diff = base.rem_euclid(cast_multiple);
+    // This should not overflow since `quotient` * `multiple` should be no more than `value`,
+    // although the compiler doesn't know that.
+    let previous_multiple = quotient.checked_mul(multiple)?;
 
-    if diff > i128::from(u64::MAX) {
-        return None;
-    }
-
-    let diff_seconds = diff as u64;
-    if diff_seconds == 0 {
-        value.checked_add(multiple)
-    } else {
-        value.checked_add(diff_seconds)
-    }
+    // This could overflow (e.g. if `value` is u64::MAX and `multiple` is 2), but that's fine.
+    previous_multiple.checked_add(multiple)
 }
 
 /// Only one UpdateExchangeRateGuard can be created at a time.
@@ -499,19 +492,20 @@ fn validate_exchange_rate(exchange_rate: &ExchangeRate) -> Result<(), ValidateEx
 #[cfg(test)]
 mod test {
 
+    use super::*;
+    use crate::environment::Environment;
+    use crate::{
+        DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+        DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+    };
+    use futures::FutureExt;
+    use ic_xrc_types::ExchangeRateMetadata;
     use std::{
         cell::RefCell,
         collections::VecDeque,
         sync::{Arc, Mutex},
         time::UNIX_EPOCH,
     };
-
-    use super::*;
-
-    use crate::environment::Environment;
-
-    use futures::FutureExt;
-    use ic_xrc_types::ExchangeRateMetadata;
 
     #[derive(Default)]
     pub struct TestExchangeRateCanisterEnvironment {
@@ -952,7 +946,15 @@ mod test {
             state.average_icp_xdr_conversion_rate.clone()
         });
 
-        assert!(average_icp_xdr_conversion_rate.is_none());
+        // Require starting with the expected initial ICP/XDR conversion rate.
+        let initial_average_icp_xdr_conversion_rate = Some(IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
+        });
+        assert_eq!(
+            average_icp_xdr_conversion_rate,
+            initial_average_icp_xdr_conversion_rate
+        );
 
         let now_timestamp_seconds = (dfn_core::api::now()
             .duration_since(UNIX_EPOCH)
@@ -995,6 +997,13 @@ mod test {
         let average_icp_xdr_conversion_rate = read_state(&STATE, |state| {
             state.average_icp_xdr_conversion_rate.clone()
         });
+
+        // Ensure the observed ICP/XDR conversion rate is different from the initial one.
+        assert_ne!(
+            average_icp_xdr_conversion_rate,
+            initial_average_icp_xdr_conversion_rate
+        );
+
         assert!(
             matches!(average_icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000),
             "rate: {:#?}",

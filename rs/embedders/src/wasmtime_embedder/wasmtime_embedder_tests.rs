@@ -91,6 +91,7 @@ fn test_wasmtime_system_api() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Memory::new_for_testing().size,
@@ -215,7 +216,7 @@ fn test_initial_wasmtime_config() {
             "function_references",
             "https://github.com/WebAssembly/function-references/",
             "(module (type $t (func (param i32))) (func $fn (param $f (ref $t))))",
-            "heap types not supported without the gc feature",
+            "function references required for index reference types",
         ),
         // Memory control
         // GC

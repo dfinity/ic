@@ -21,7 +21,7 @@ use ic_types::{
 };
 use std::{convert::TryFrom, time::Duration};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NotarizationDelaySettings {
     pub unit_delay: Duration,
     pub initial_notary_delay: Duration,
@@ -83,7 +83,7 @@ pub trait SubnetRegistry {
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
     /// - the initial delay for notary, to give time to rank-0 block
-    /// propagation.
+    ///   propagation.
     fn get_notarization_delay_settings(
         &self,
         subnet_id: SubnetId,

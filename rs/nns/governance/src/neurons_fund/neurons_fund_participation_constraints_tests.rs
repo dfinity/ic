@@ -8,9 +8,10 @@ use maplit::{btreemap, btreeset};
 
 fn new_neurons_fund_neuron(id: u64, maturity_equivalent_icp_e8s: u64) -> NeuronsFundNeuron {
     let id = NeuronId { id };
-    let controller = PrincipalId::default();
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
-    let hotkeys = Vec::new();
+    let controller = PrincipalId::new_user_test_id(55);
+    let hotkey1 = PrincipalId::new_user_test_id(56);
+    let hotkey2 = PrincipalId::new_user_test_id(57);
+    let hotkeys = vec![hotkey1, hotkey2];
     NeuronsFundNeuron {
         id,
         maturity_equivalent_icp_e8s,
@@ -98,7 +99,6 @@ fn test_diff_with_empty_snapshot() {
     );
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let snapshot = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -172,7 +172,6 @@ fn test_diff_with_empty_snapshot() {
 fn test_diff_ok_once_then_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -257,7 +256,6 @@ fn test_diff_ok_once_then_err() {
 fn test_diff_extra_neuron_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -305,7 +303,6 @@ fn test_diff_extra_neuron_err() {
 fn test_diff_negative_amount_in_diff_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -345,7 +342,6 @@ fn test_diff_negative_amount_in_diff_err() {
 #[test]
 fn test_diff_controller_err() {
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -389,7 +385,6 @@ fn test_diff_controller_err() {
 fn test_diff_maturity_err() {
     let controller = PrincipalId::default();
     let nid = |id: u64| NeuronId { id };
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let left = NeuronsFundSnapshot {
         neurons: btreemap! {
@@ -430,7 +425,6 @@ fn test_diff_maturity_err() {
 fn test_diff_is_capped() {
     let nid = |id: u64| NeuronId { id };
     let controller = PrincipalId::default();
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let test_with = |is_capped_left: bool, is_capped_right: bool| {
         let left = NeuronsFundSnapshot {

@@ -1,5 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
+    enable_new_canister_management_topics,
     pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
     proposals::call_canister::CallCanister,
 };
@@ -19,7 +20,7 @@ const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
 
 impl StopOrStartCanister {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !cfg!(feature = "test") {
+        if !enable_new_canister_management_topics() {
             return Err(invalid_proposal_error(
                 "StopOrStartCanister proposal is not yet supported",
             ));
@@ -45,7 +46,7 @@ impl StopOrStartCanister {
 
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
-        topic_to_manage_canister(&canister_id)
+        Ok(topic_to_manage_canister(&canister_id))
     }
 
     fn valid_canister_id(&self) -> Result<CanisterId, GovernanceError> {
@@ -99,30 +100,10 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::governance_error::ErrorType;
+
+    use candid::Decode;
     use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 
-    #[cfg(feature = "test")]
-    use candid::Decode;
-
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn stop_or_start_canister_disabled() {
-        let stop_or_start_canister = StopOrStartCanister {
-            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
-            action: Some(CanisterAction::Stop as i32),
-        };
-
-        assert_eq!(
-            stop_or_start_canister.validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal invalid because of StopOrStartCanister proposal is not yet supported"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_invalid_stop_or_start_canister() {
         let valid_stop_or_start_canister = StopOrStartCanister {
@@ -132,7 +113,9 @@ mod tests {
 
         let is_invalid_proposal_with_keywords =
             |stop_or_start_canister: StopOrStartCanister, keywords: Vec<&str>| {
-                let error = stop_or_start_canister.validate().unwrap_err();
+                let error = stop_or_start_canister.validate().expect_err(&format!(
+                    "Expecting validation error for {stop_or_start_canister:?} but got Ok(())"
+                ));
                 assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
                 for keyword in keywords {
                     let error_message = error.error_message.to_lowercase();
@@ -179,14 +162,6 @@ mod tests {
 
         is_invalid_proposal_with_keywords(
             StopOrStartCanister {
-                canister_id: Some(ic_nns_constants::SNS_WASM_CANISTER_ID.get()),
-                ..valid_stop_or_start_canister.clone()
-            },
-            vec!["canister id", "not a protocol canister"],
-        );
-
-        is_invalid_proposal_with_keywords(
-            StopOrStartCanister {
                 canister_id: Some(ROOT_CANISTER_ID.get()),
                 action: Some(CanisterAction::Stop as i32),
             },
@@ -210,7 +185,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_stop_or_start_cycles_minting_canister() {
         for (canister_action, payload_canister_action) in &[
@@ -246,7 +220,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_start_lifeline_canister() {
         let stop_or_start_canister = StopOrStartCanister {
@@ -275,5 +248,33 @@ mod tests {
                 action: RootCanisterAction::Start,
             }
         );
+    }
+
+    #[test]
+    fn test_start_canister_topic_mapping() {
+        use ic_base_types::CanisterId;
+        use ic_nns_constants::SNS_WASM_CANISTER_ID;
+
+        let test_cases = vec![
+            (
+                CYCLES_MINTING_CANISTER_ID,
+                Topic::ProtocolCanisterManagement,
+            ),
+            (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
+            (
+                CanisterId::from_u64(123_456_789),
+                Topic::NetworkCanisterManagement,
+            ),
+        ];
+
+        for (canister_id, expected_topic) in test_cases {
+            let stop_or_start_canister = StopOrStartCanister {
+                canister_id: Some(canister_id.get()),
+                action: Some(CanisterAction::Start as i32),
+            };
+
+            assert_eq!(stop_or_start_canister.validate(), Ok(()));
+            assert_eq!(stop_or_start_canister.valid_topic(), Ok(expected_topic));
+        }
     }
 }

@@ -32,6 +32,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
+    "//rs/rosetta-api/test_utils",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "@crate_index//:candid_parser",

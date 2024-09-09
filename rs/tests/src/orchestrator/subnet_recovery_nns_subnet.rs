@@ -104,7 +104,7 @@ pub fn test(env: TestEnv) {
         msg
     ));
 
-    let recovery_dir = env.get_dependency_path("rs/tests");
+    let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
@@ -122,8 +122,8 @@ pub fn test(env: TestEnv) {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         replay_until_height: None,
-        upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
+        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
+        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
         next_step: None,

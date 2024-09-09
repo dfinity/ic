@@ -12,7 +12,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -27,7 +27,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            NnsCanisterWasmStrategy, NnsCustomizations, TEST_USER1_STARTING_TOKENS,
+            NnsCustomizations, TEST_USER1_STARTING_TOKENS,
         },
     },
     generic_workload_engine::{
@@ -280,7 +280,6 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 pub fn setup_with_oc_parameters(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
     setup(
@@ -288,7 +287,6 @@ pub fn setup_with_oc_parameters(
         sale_participants,
         vec![], // no neurons
         openchat_create_service_nervous_system_proposal(),
-        canister_wasm_strategy,
         fast_test_setup,
     );
 }
@@ -299,17 +297,11 @@ pub fn setup(
     sale_participants: Vec<SaleParticipant>,
     nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
     setup_ic(env, fast_test_setup);
 
-    install_nns(
-        env,
-        canister_wasm_strategy,
-        sale_participants,
-        nf_neurons.clone(),
-    );
+    install_nns(env, sale_participants, nf_neurons.clone());
 
     // get the first application node from the second subnet, which should be the dapp subnet
     let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
@@ -328,11 +320,7 @@ pub fn setup(
     };
 
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
-    install_sns(
-        env,
-        canister_wasm_strategy,
-        create_service_nervous_system_proposal.clone(),
-    );
+    install_sns(env, create_service_nervous_system_proposal.clone());
 
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(env));
 }
@@ -385,20 +373,10 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
 
 /// Sets up an SNS using "openchat-ish" parameters.
 pub fn sns_setup(env: TestEnv) {
-    setup_with_oc_parameters(
-        env,
-        vec![],
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        false,
-    );
+    setup_with_oc_parameters(env, vec![], false);
 }
 pub fn sns_setup_fast(env: TestEnv) {
-    setup_with_oc_parameters(
-        env,
-        vec![],
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        true,
-    );
+    setup_with_oc_parameters(env, vec![], true);
 }
 
 /// Setup an IC instance with SNS, pre-generating the participants' identities at random.
@@ -435,12 +413,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     .write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(
-        env,
-        participants,
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        fast_test_setup,
-    );
+    setup_with_oc_parameters(env, participants, fast_test_setup);
 }
 
 /// Setup an IC instance with SNS, pre-generating the participants' identities at random.
@@ -471,12 +444,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     .write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(
-        env,
-        participants,
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        false,
-    );
+    setup_with_oc_parameters(env, participants, false);
 }
 
 /// Call the `refresh_buyer_tokens` function of the SNS swap canister for all pre-generated participants (this actually initiates participation).
@@ -567,7 +535,6 @@ pub fn check_all_participants(env: TestEnv) {
 
 pub fn install_nns(
     env: &TestEnv,
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     sale_participants: Vec<SaleParticipant>,
     neurons: Vec<NnsNfNeuron>,
 ) {
@@ -599,11 +566,7 @@ pub fn install_nns(
         install_at_ids: false,
     };
 
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        canister_wasm_strategy,
-        nns_customizations,
-    );
+    install_nns_with_customizations_and_check_progress(env.topology_snapshot(), nns_customizations);
     info!(
         log,
         "=========== The NNS has been successfully installed in {:?} ==========",
@@ -614,16 +577,12 @@ pub fn install_nns(
 /// Installs the SNS using the one-proposal flow.
 pub fn install_sns(
     env: &TestEnv,
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
-    let sns_client = SnsClient::install_sns_and_check_healthy(
-        env,
-        canister_wasm_strategy,
-        create_service_nervous_system_proposal,
-    );
+    let sns_client =
+        SnsClient::install_sns_and_check_healthy(env, create_service_nervous_system_proposal);
     {
         let observed = sns_client.sns_canisters.swap().get();
         let expected = PrincipalId::from_str(SNS_SWAP_CANISTER_ID)
@@ -741,7 +700,7 @@ pub fn generate_sns_workload_with_many_users<T, R>(
     env.emit_report(format!("{metrics}"));
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SnsUsers {
     participants: Vec<SaleParticipant>,
 }
@@ -754,7 +713,7 @@ impl TestEnvAttribute for SnsUsers {
 
 /// An SNS sale participant.
 /// Warning: This type should be used for testing purposes only.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SaleParticipant {
     name: String,
     secret_key: [u8; 32],
@@ -764,7 +723,7 @@ pub struct SaleParticipant {
     starting_sns_balance: Tokens,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnsSaleParticipants {
     pub participants: Vec<SaleParticipant>,
 }

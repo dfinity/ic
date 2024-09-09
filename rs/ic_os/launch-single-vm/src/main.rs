@@ -106,7 +106,7 @@ fn main() {
     // Adjust VM configuration for nested setup
     let (image_location, vm_type, vm_size) = if args.nested {
         // Create an empty image, this will be used as the "main" drive
-        let empty_image_name = "empty.img.tar.gz";
+        let empty_image_name = "empty.img.tar.zst";
         let tmp_dir = tempfile::tempdir().unwrap();
         let empty_image = build_empty_image(tmp_dir.path(), empty_image_name).unwrap();
         let empty_image_id = farm

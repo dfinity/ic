@@ -1,12 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
 
-system_test(
+system_test_nns(
     name = "backup_manager_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -17,7 +17,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS,
     deps = [
@@ -101,18 +100,6 @@ system_test(
         "//rs/types/types",
         "@crate_index//:anyhow",
     ],
-)
-
-system_test(
-    name = "cow_safety_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
@@ -224,7 +211,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "node_graceful_leaving_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -232,7 +219,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -246,7 +233,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "subnet_splitting_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -258,11 +245,22 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/recovery",
+        "//rs/recovery/subnet_splitting",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
@@ -342,14 +340,22 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "consensus_performance",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
+    extra_head_nns_tags = [],
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -358,7 +364,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -366,13 +372,14 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:futures",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
 
-system_test(
+system_test_nns(
     name = "adding_nodes_to_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -380,11 +387,11 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/recovery",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",

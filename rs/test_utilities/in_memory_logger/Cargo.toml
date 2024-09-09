@@ -10,7 +10,7 @@ documentation.workspace = true
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
+parking_lot = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
-parking_lot = "0.12.1"

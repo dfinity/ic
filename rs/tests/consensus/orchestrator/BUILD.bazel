@@ -1,5 +1,5 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -15,7 +15,7 @@ STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
     "//rs/tests:static-file-server_image",
 ]
 
-system_test(
+system_test_nns(
     name = "node_assign_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -23,11 +23,25 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
-system_test(
+system_test_nns(
     name = "node_reassignment_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -35,7 +49,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -48,7 +62,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "node_registration_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -56,11 +70,11 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -92,7 +106,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_same_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -103,11 +117,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_same_nodes_enable_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -120,11 +134,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_same_nodes_with_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -137,11 +151,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_failover_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -152,11 +166,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_failover_nodes_enable_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -170,11 +184,11 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_failover_nodes_with_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -188,11 +202,11 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_no_upgrade_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -203,11 +217,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_no_upgrade_enable_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -221,11 +235,11 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_no_upgrade_with_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -239,11 +253,11 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_app_large_with_tecdsa_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -257,11 +271,11 @@ system_test(
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_nns_same_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -272,11 +286,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sr_nns_failover_nodes_test",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -289,7 +303,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -306,7 +319,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "ssh_access_to_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -314,7 +327,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/common",
@@ -326,7 +339,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "unstuck_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -337,11 +350,19 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
 )
 
-system_test(
+system_test_nns(
     name = "upgrade_downgrade_app_subnet_test",
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
@@ -358,12 +379,11 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -377,12 +397,11 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "upgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -391,12 +410,11 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "downgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -405,12 +423,11 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "upgrade_with_alternative_urls",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -422,11 +439,11 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "unassigned_node_upgrade_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -438,11 +455,23 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
-system_test(
+system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -450,6 +479,19 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = [
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )

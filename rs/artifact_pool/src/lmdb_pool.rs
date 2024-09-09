@@ -59,7 +59,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// There are 3 kind of LMDB databases used:
 ///
 /// 1. An "artifacts" database maps IdKey to bincode encoded bytes for fast
-/// serialization and deserialization:
+///    serialization and deserialization:
 ///
 /// ```text
 /// artifacts
@@ -69,7 +69,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// ```
 ///
 /// 2. A set of index databases, one for each message type. Each one of them
-/// maps a HeightKey to a set of IdKeys:
+///    maps a HeightKey to a set of IdKeys:
 ///
 /// ```text
 /// --------------------------
@@ -105,10 +105,10 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
 /// We differentiate between 3 types:
 ///
 /// 1. Object that is serialized and stored in the pool. This can include
-/// additional data such as timestamp.
+///    additional data such as timestamp.
 ///
 /// 2. Artifact::Message is the message type (usually an enum) of each
-/// ArtifactKind. It can be casted into individual messages using TryFrom.
+///    ArtifactKind. It can be casted into individual messages using TryFrom.
 ///
 /// 3. Individual message type.
 pub(crate) trait PoolArtifact: Sized {
@@ -144,7 +144,7 @@ pub(crate) trait PoolArtifact: Sized {
 }
 
 /// A unique representation for each type of supported message.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, AsRefStr, FromRepr)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, AsRefStr, FromRepr)]
 #[repr(u8)]
 pub(crate) enum TypeKey {
     // Consensus messages
@@ -307,7 +307,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub(crate) struct HeightKey([u8; 8]);
 
 impl AsRef<[u8]> for HeightKey {
@@ -339,7 +339,7 @@ impl From<HeightKey> for Height {
 
 /// DB Meta info about each message type is their min and max height
 /// (inclusive).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct Meta {
     min: HeightKey,
     max: HeightKey,
@@ -1189,6 +1189,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let type_key = match artifact_type {
                         PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
                         PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
+                        PurgeableArtifactType::EquivocationProof => TypeKey::EquivocationProof,
                     };
 
                     purged.extend(
@@ -1579,13 +1580,13 @@ impl crate::certification_pool::MutablePoolSection
 ///
 /// Two kinds of look up are possible with this:
 /// 1. Look up by full key of <16 bytes prefix + id data>, which would return the matching
-/// artifact if present.
+///    artifact if present.
 /// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
-/// the same prefix. The caller is expected to filter the returned entries as needed. The look up
-/// by prefix makes some frequent queries more efficient (e.g) to know if a node has already
-/// issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
-/// in the support pool looking for a matching artifact. Instead, this implementation allows
-/// us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
+///    the same prefix. The caller is expected to filter the returned entries as needed. The look up
+///    by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+///    issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
+///    in the support pool looking for a matching artifact. Instead, this implementation allows
+///    us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
 #[derive(Debug)]
 pub(crate) struct IDkgIdKey(Vec<u8>);
 

@@ -23,7 +23,7 @@ ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = { workspace = true }
-libflate = "1.1.2"
+libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 prometheus = { workspace = true }
@@ -32,15 +32,15 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
-wasm-encoder = { version = "0.201.0", features = ["wasmparser"] }
-wasmparser = "0.201.0"
-wasmtime = { version = "22.0.0", default-features = false, features = [
+wasm-encoder = { workspace = true }
+wasmparser = { workspace = true }
+wasmtime = { version = "23.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "22.0.0"
+wasmtime-environ = "23.0.1"
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -69,11 +69,11 @@ insta = "1.8.0"
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 slog = { workspace = true }
-wasmprinter = "0.2.45"
-wast = "53.0.0"
-wat = "1.0.57"
+wasmprinter = { workspace = true }
+wast = { workspace = true }
+wat = { workspace = true }
 
 
 [[bin]]

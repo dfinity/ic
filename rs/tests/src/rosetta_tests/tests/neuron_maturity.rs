@@ -8,7 +8,7 @@ use crate::rosetta_tests::{
     test_neurons::TestNeurons,
 };
 use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::Neuron;
+use ic_nns_governance_api::pb::v1::Neuron;
 use ic_rosetta_api::{
     models::EdKeypair,
     request::{request_result::RequestResult, Request},

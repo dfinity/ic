@@ -21,7 +21,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
+        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -29,7 +30,7 @@ use crate::driver::{
 use crate::driver::{
     farm::{DnsRecord, DnsRecordType},
     test_env::TestEnvAttribute,
-    test_env_api::{CreateDnsRecords, HasDependencies},
+    test_env_api::CreateDnsRecords,
 };
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
@@ -43,7 +44,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "419f884458cb8158c12b294e8d79d355c836188d416f9b6dd7b63abd08cb9f94";
+    "1462da1e3584fa36f6d956e9f741b530bcc4ba20cddc2ce95d40fabda5881101";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -166,7 +167,7 @@ fi
                 ),
             )
             .unwrap();
-        let grafana_dashboards_src = env.get_dependency_path("rs/tests/dashboards");
+        let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
         debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
         TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();

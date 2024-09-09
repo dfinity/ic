@@ -133,7 +133,7 @@ pub fn generate_tls_keys(vault: &dyn CspVault, node: NodeId) -> TlsPublicKeyCert
 ///
 /// # Errors
 /// * [`NodeKeyGenerationError::TransientInternalError`] if a transient internal error occurs, e.g.,
-/// an RPC error communicating with the remote vault.
+///   an RPC error communicating with the remote vault.
 pub fn generate_node_keys_once(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
@@ -178,7 +178,7 @@ fn generate_all_node_keys(vault: &dyn CspVault) {
         .unwrap_or_else(|e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e));
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum NodeKeyGenerationError {
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),

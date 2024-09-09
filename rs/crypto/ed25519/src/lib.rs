@@ -14,7 +14,7 @@ use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
 /// An error if a private key cannot be decoded
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum PrivateKeyDecodingError {
     /// The outer PEM encoding is invalid
     #[error("The outer PEM encoding is invalid: {0}")]
@@ -28,7 +28,7 @@ pub enum PrivateKeyDecodingError {
 }
 
 /// An Ed25519 secret key
-#[derive(Clone, ZeroizeOnDrop, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, ZeroizeOnDrop)]
 pub struct PrivateKey {
     sk: SigningKey,
 }
@@ -71,7 +71,7 @@ const BUGGY_RING_V2_LEN: usize = BUGGY_RING_V2_DER_PREFIX.len()
     + PublicKey::BYTES;
 
 /// Specifies a private key encoding format
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PrivateKeyFormat {
     /// PKCS #8 v1: most common version, implemented by for example OpenSSL
     Pkcs8v1,
@@ -106,6 +106,27 @@ impl PrivateKey {
     pub fn generate_using_rng<R: CryptoRng + Rng>(rng: &mut R) -> Self {
         let sk = SigningKey::generate(rng);
         Self { sk }
+    }
+
+    /// Generate a key using an input seed
+    ///
+    /// # Warning
+    ///
+    /// For security the seed should be at least 256 bits and
+    /// randomly generated
+    pub fn generate_from_seed(seed: &[u8]) -> Self {
+        let digest: [u8; 32] = {
+            let mut sha2 = Sha512::new();
+            sha2.update(seed);
+            let digest: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&digest[..32]);
+            truncated
+        };
+
+        Self {
+            sk: SigningKey::from_bytes(&digest),
+        }
     }
 
     /// Sign a message and return a signature
@@ -342,10 +363,64 @@ impl DerivedPrivateKey {
     pub fn public_key(&self) -> PublicKey {
         PublicKey::new(self.vk)
     }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (DerivedPrivateKey, [u8; 32]) {
+        let sk_scalar = self.esk.scalar;
+        let pt = EdwardsPoint::mul_base(&sk_scalar);
+
+        let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
+
+        let derived_scalar = sk_scalar + sum;
+
+        let derived_hash_prefix = {
+            // Hash the new derived key and chain code with SHA-512 to derive
+            // the new hash prefix
+            let mut sha2 = Sha512::new();
+            sha2.update(derived_scalar.to_bytes());
+            sha2.update(chain_code);
+            let hash: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&hash[..32]);
+            truncated
+        };
+
+        let dpk = DerivedPrivateKey::new(derived_scalar, derived_hash_prefix, pt);
+        (dpk, chain_code)
+    }
 }
 
 /// An invalid key was encountered
-#[derive(Clone, Error, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum PublicKeyDecodingError {
     /// The outer PEM encoding is invalid
     #[error("The outer PEM encoding is invalid: {0}")]
@@ -405,7 +480,7 @@ impl Signature {
 }
 
 /// An Ed25519 public key
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
     pk: VerifyingKey,
     // TODO(CRP-2412) This struct member can be removed once
@@ -416,7 +491,7 @@ pub struct PublicKey {
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Error, Debug)]
+#[derive(Copy, Clone, Debug, Error)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
     #[error("The signature had an invalid length, and cannot possibly be valid")]
@@ -717,13 +792,13 @@ impl PublicKey {
 }
 
 /// A component of a derivation path
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationIndex(pub Vec<u8>);
 
 /// Derivation Path
 ///
 /// A derivation path is simply a sequence of DerivationIndex
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
 }
@@ -741,6 +816,17 @@ impl DerivationPath {
     /// Create a free-form derivation path
     pub fn new(path: Vec<DerivationIndex>) -> Self {
         Self { path }
+    }
+
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
     }
 
     /// Return the length of this path

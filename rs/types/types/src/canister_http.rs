@@ -3,35 +3,35 @@
 //! The lifecycle of a request looks as follows:
 //!
 //! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
-//! The canister http pool manager (which is a thread that continuously checks for requests)
-//! will take the request and pass it to the network layer to make the actual request.
+//!     The canister http pool manager (which is a thread that continuously checks for requests)
+//!     will take the request and pass it to the network layer to make the actual request.
 //!
 //! 1b. The response may be passed to a transform function, which can make arbitrary changes to the response.
-//! The purpose of the transform function is to give the canister developer the ability to shrink the response to
-//! only contain the data that they are interested in. Furthermore, it allows the canister developer to remove
-//! non-determistic parts of the response (such as timestamps) from the response, to help reaching consensus on
-//! the response.
-//! Afterwards it is returned to the consensus layer as a [`CanisterHttpResponseContent`].
+//!     The purpose of the transform function is to give the canister developer the ability to shrink the response to
+//!     only contain the data that they are interested in. Furthermore, it allows the canister developer to remove
+//!     non-determistic parts of the response (such as timestamps) from the response, to help reaching consensus on
+//!     the response.
+//!     Afterwards it is returned to the consensus layer as a [`CanisterHttpResponseContent`].
 //!
 //! 2. Now we need to get consensus of the content. Since the actual [`CanisterHttpResponseContent`] could be large and we
-//! require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
-//! that contains all the the important information (such as the response hash) required to achieve consensus.
+//!    require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
+//!    that contains all the the important information (such as the response hash) required to achieve consensus.
 //!
 //! 3a. We sign the metadata to get the [`CanisterHttpResponseShare`] and store it in the pool.
 //!
 //! 3b. We gossip [`CanisterHttpResponseShare`]s, until we have enough shares to aggregate them into a
-//! [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
-//! which is the artifact we can include into the block to prove consensus on the response.
+//!     [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
+//!     which is the artifact we can include into the block to prove consensus on the response.
 //!
 //! 4a. Once the [`CanisterHttpResponseWithConsensus`] has made it into a finalized block, the response is delivered
-//! to execution to resume the initial call.
+//!     to execution to resume the initial call.
 //!
 //! 4b. Since there is no guarantee that all nodes will get the same [`CanisterHttpResponseContent`] back from the server,
-//! there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
-//! This can often be detected by the block maker, allowing to return an error as soon as possible
-//! to the canister, such that execution to resume faster.
-//! The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
-//! Once the proof has made it into a finalized block, the request is answered with an error message.
+//!     there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
+//!     This can often be detected by the block maker, allowing to return an error as soon as possible
+//!     to the canister, such that execution to resume faster.
+//!     The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
+//!     Once the proof has made it into a finalized block, the request is answered with an error message.
 //!
 //! Early detection of non-deterministic server responses is not guaranteed to work if malicious nodes are present,
 //! which sign multiple different responses for the same request.
@@ -60,10 +60,10 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, time::Duration};
 use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 
@@ -98,7 +98,7 @@ pub const MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE: usize = 48 * 1024;
 /// is used to uniquely identify the request and it's associated artifacts.
 pub type CanisterHttpRequestId = CallbackId;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct Transform {
     pub method_name: String,
     #[serde(with = "serde_bytes")]
@@ -114,7 +114,7 @@ impl From<TransformContext> for Transform {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
@@ -449,7 +449,7 @@ impl From<CanisterHttpRequestContextError> for UserError {
 
 /// Contains the information that the pool manager hands to the canister http
 /// client to make a request
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequest {
     /// Timestamp indicating when this request will be considered timed out.
     pub timeout: Time,
@@ -460,7 +460,7 @@ pub struct CanisterHttpRequest {
 }
 
 /// The content of a response after the transformation
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
@@ -476,7 +476,7 @@ impl CountBytes for CanisterHttpResponse {
 }
 
 /// Content of a [`CanisterHttpResponse`]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CanisterHttpResponseContent {
     /// In the case of a success, this will be the data returned by the server.
@@ -497,7 +497,7 @@ impl CountBytes for CanisterHttpResponseContent {
 
 /// If a [`CanisterHttpRequest`] is rejected, the [`CanisterHttpReject`] provides additional
 /// information about the rejection.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpReject {
     /// The [`RejectCode`] of the request
@@ -519,14 +519,14 @@ impl CountBytes for CanisterHttpReject {
 }
 
 /// A header to be included in a [`CanisterHttpRequest`].
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Debug, Eq, EnumIter, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, EnumIter, Serialize)]
 pub enum CanisterHttpMethod {
     GET = 1,
     POST = 2,
@@ -560,7 +560,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 }
 
 /// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
@@ -577,7 +577,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 ///
 /// This can be used as a proof that consensus can not be reached for this call
 /// as sufficiently many nodes have seen divergent content.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
@@ -590,7 +590,7 @@ impl CountBytes for CanisterHttpResponseDivergence {
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
@@ -620,11 +620,9 @@ pub type CanisterHttpResponseShare =
 impl IdentifiableArtifact for CanisterHttpResponseShare {
     const NAME: &'static str = "canisterhttp";
     type Id = CanisterHttpResponseId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.clone()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for CanisterHttpResponseShare {
@@ -632,8 +630,6 @@ impl PbArtifact for CanisterHttpResponseShare {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 /// A signature of of [`CanisterHttpResponseMetadata`].

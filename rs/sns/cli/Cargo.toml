@@ -18,9 +18,12 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
@@ -32,14 +35,15 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-pretty_assertions = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true }
-serde_yaml = { workspace = true }
+itertools = { workspace = true }
 json-patch = "0.2.6"
+pretty_assertions = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-itertools = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
