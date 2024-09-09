@@ -11,7 +11,7 @@ ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
 
 # if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
-if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
 fi
@@ -19,7 +19,7 @@ fi
 # check if the workflow was triggered by a pull request and if the job requested running only on diff
 if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
     # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
-    if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+    if [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
         s3_upload="True"
     elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
         # get bazel targets that changed within the MR
