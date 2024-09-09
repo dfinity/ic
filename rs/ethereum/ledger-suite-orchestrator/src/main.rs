@@ -42,7 +42,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
             more_controller_ids: s.more_controller_ids().to_vec(),
             minter_id: s.minter_id().cloned(),
             ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
-            managed_other_canisters: {
+            managed_pre_existing_ledger_suites: {
                 let canisters: Vec<_> = other_canisters
                     .into_iter()
                     .map(|(_token_id, canisters)| canisters.clone().into())

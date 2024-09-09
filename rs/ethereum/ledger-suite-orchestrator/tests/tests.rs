@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
-    ManagedCanisters, ManagedOtherCanisters, OrchestratorArg, OrchestratorInfo,
+    ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
     UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
@@ -413,7 +413,7 @@ fn should_retrieve_orchestrator_info() {
                 index_compressed_wasm_hash: embedded_index_wasm_hash.to_string(),
                 archive_compressed_wasm_hash: embedded_archive_wasm_hash.to_string(),
             }),
-            managed_other_canisters: None,
+            managed_pre_existing_ledger_suites: None,
         }
     );
 
@@ -423,7 +423,7 @@ fn should_retrieve_orchestrator_info() {
 
     assert_eq!(
         OrchestratorInfo {
-            managed_other_canisters: Some(vec![ManagedOtherCanisters {
+            managed_pre_existing_ledger_suites: Some(vec![ManagedLedgerSuite {
                 token_symbol: cketh_canisters.token_symbol,
                 ledger: Some(ManagedCanisterStatus::Installed {
                     canister_id: cketh_canisters.ledger.canister_id,
