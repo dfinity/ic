@@ -70,12 +70,15 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
       testonly: testonly attribute for Wasm target
-      **kwargs: additional arguments to pass a rust_binary rule.
+      **kwargs: additional arguments to pass a rust_binary.
     """
 
     # Tags for the wasm build (popped because not relevant to bin base build)
     tags = kwargs.pop("tags", [])
     tags.append("canister")
+
+    # The option to keep the name section is only required for wasm finalization.
+    keep_name_section = kwargs.pop("keep_name_section", False)
 
     # Sanity checking (no '.' in name)
     if name.count(".") > 0:
@@ -117,6 +120,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         version_file = "//bazel:rc_only_version.txt",
         visibility = visibility,
         testonly = testonly,
+        keep_name_section = keep_name_section,
     )
 
     native.alias(
@@ -171,7 +175,7 @@ def motoko_canister(name, entry, deps):
         actual = name + ".wasm",
     )
 
-def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"]):
+def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
     """Generates an output file name `name + '.wasm.gz'`.
 
     The input file is shrunk, annotated with metadata, and gzipped. The canister
@@ -188,10 +192,10 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
         message = "Finalizing canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
         cmd_bash = " && ".join([
-            "{ic_wasm} {input_wasm} -o $@.shrunk shrink --keep-name-section",
-            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service --keep-name-section --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
-            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id --keep-name-section --visibility public --file {version_file}",
+            "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
+            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
+            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
             "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
         ])
-            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)"),
+            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
     )
