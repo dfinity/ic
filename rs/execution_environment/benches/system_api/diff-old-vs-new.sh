@@ -26,7 +26,7 @@ fi
 echo "Global script configuration:"
 echo
 printf "%20s %s\n" \
-    "OLD_REPO :=" "${OLD_REPO:=git@gitlab.com:dfinity-lab/public/ic.git}" \
+    "OLD_REPO :=" "${OLD_REPO:=git@github.com:dfinity/ic.git}" \
     "OLD_BRANCH :=" "${OLD_BRANCH:=master}" \
     "OLD_COMMIT :=" "${OLD_COMMIT:=}" \
     "" "" \
@@ -103,7 +103,7 @@ init_old() {
 ## This function is called to run remote (old) benchmarks
 run_old() {
     (
-        cd "${OLD_BENCHMARK_DIR}"
+        cd "${OLD_REPO_DIR}"
         bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
             && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
             && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${OLD_BENCH_ARGS}
