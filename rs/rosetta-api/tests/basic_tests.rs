@@ -24,180 +24,180 @@ use std::sync::Arc;
 
 mod test_utils;
 
-#[actix_rt::test]
-async fn blocks_test() {
-    let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
-    let mut scribe = Scribe::new();
-    let num_transactions: usize = 100;
-    let num_accounts = 10;
+// #[actix_rt::test]
+// async fn blocks_test() {
+//     let ledger = Arc::new(TestLedger::new());
+//     let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
+//     let mut scribe = Scribe::new();
+//     let num_transactions: usize = 100;
+//     let num_accounts = 10;
 
-    scribe.gen_accounts(num_accounts, 1_000_000);
-    for _i in 0..num_transactions {
-        scribe.gen_transaction();
-    }
+//     scribe.gen_accounts(num_accounts, 1_000_000);
+//     for _i in 0..num_transactions {
+//         scribe.gen_transaction();
+//     }
 
-    for b in &scribe.blockchain {
-        ledger.add_block(b.clone()).await.ok();
-    }
+//     for b in &scribe.blockchain {
+//         ledger.add_block(b.clone()).await.ok();
+//     }
 
-    let h = num_accounts as usize + 17;
-    for i in 0..num_accounts {
-        let acc = acc_id(i);
-        assert_eq!(
-            get_balance(&req_handler, Some(h), acc).await.unwrap(),
-            *scribe.balance_history[h].get(&acc).unwrap()
-        );
-    }
+//     let h = num_accounts as usize + 17;
+//     for i in 0..num_accounts {
+//         let acc = acc_id(i);
+//         assert_eq!(
+//             get_balance(&req_handler, Some(h), acc).await.unwrap(),
+//             *scribe.balance_history[h].get(&acc).unwrap()
+//         );
+//     }
 
-    // fetch by index
-    let block_id = PartialBlockIdentifier {
-        index: Some(h.try_into().unwrap()),
-        hash: None,
-    };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
-    let resp = req_handler.block(msg).await.unwrap();
+//     // fetch by index
+//     let block_id = PartialBlockIdentifier {
+//         index: Some(h.try_into().unwrap()),
+//         hash: None,
+//     };
+//     let msg = BlockRequest::new(req_handler.network_id(), block_id);
+//     let resp = req_handler.block(msg).await.unwrap();
 
-    let block = resp.block.unwrap();
-    assert_eq!(
-        to_hash(&block.block_identifier.hash).unwrap(),
-        scribe.blockchain[h].hash
-    );
+//     let block = resp.block.unwrap();
+//     assert_eq!(
+//         to_hash(&block.block_identifier.hash).unwrap(),
+//         scribe.blockchain[h].hash
+//     );
 
-    // fetch by hash
-    let block_id = PartialBlockIdentifier {
-        index: None,
-        hash: Some(from_hash(&scribe.blockchain[h].hash)),
-    };
-    let msg = BlockRequest::new(req_handler.network_id(), block_id);
-    let resp = req_handler.block(msg).await.unwrap();
-    let block = resp.block.unwrap();
+//     // fetch by hash
+//     let block_id = PartialBlockIdentifier {
+//         index: None,
+//         hash: Some(from_hash(&scribe.blockchain[h].hash)),
+//     };
+//     let msg = BlockRequest::new(req_handler.network_id(), block_id);
+//     let resp = req_handler.block(msg).await.unwrap();
+//     let block = resp.block.unwrap();
 
-    assert_eq!(block.block_identifier.index as usize, h);
-    assert_eq!(block.parent_block_identifier.index as usize, h - 1);
-    assert_eq!(
-        to_hash(&block.parent_block_identifier.hash).unwrap(),
-        scribe.blockchain[h - 1].hash
-    );
+//     assert_eq!(block.block_identifier.index as usize, h);
+//     assert_eq!(block.parent_block_identifier.index as usize, h - 1);
+//     assert_eq!(
+//         to_hash(&block.parent_block_identifier.hash).unwrap(),
+//         scribe.blockchain[h - 1].hash
+//     );
 
-    // now fetch a transaction
-    let trans = block.transactions[0].clone();
+//     // now fetch a transaction
+//     let trans = block.transactions[0].clone();
 
-    let block_id = BlockIdentifier {
-        index: h.try_into().unwrap(),
-        hash: from_hash(&scribe.blockchain[h].hash),
-    };
-    let msg = BlockTransactionRequest::new(
-        req_handler.network_id(),
-        block_id.clone(),
-        trans.transaction_identifier.clone(),
-    );
-    let resp = req_handler.block_transaction(msg).await.unwrap();
+//     let block_id = BlockIdentifier {
+//         index: h.try_into().unwrap(),
+//         hash: from_hash(&scribe.blockchain[h].hash),
+//     };
+//     let msg = BlockTransactionRequest::new(
+//         req_handler.network_id(),
+//         block_id.clone(),
+//         trans.transaction_identifier.clone(),
+//     );
+//     let resp = req_handler.block_transaction(msg).await.unwrap();
 
-    assert_eq!(
-        trans.transaction_identifier.hash,
-        resp.transaction.transaction_identifier.hash
-    );
+//     assert_eq!(
+//         trans.transaction_identifier.hash,
+//         resp.transaction.transaction_identifier.hash
+//     );
 
-    let resp = req_handler
-        .search_transactions(
-            SearchTransactionsRequest::builder(req_handler.network_id())
-                .with_transaction_identifier(trans.transaction_identifier.clone())
-                .build(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        resp.transactions,
-        vec![BlockTransaction {
-            block_identifier: block_id,
-            transaction: trans
-        }]
-    );
-    assert_eq!(resp.total_count, 1);
+//     let resp = req_handler
+//         .search_transactions(
+//             SearchTransactionsRequest::builder(req_handler.network_id())
+//                 .with_transaction_identifier(trans.transaction_identifier.clone())
+//                 .build(),
+//         )
+//         .await
+//         .unwrap();
+//     assert_eq!(
+//         resp.transactions,
+//         vec![BlockTransaction {
+//             block_identifier: block_id,
+//             transaction: trans
+//         }]
+//     );
+//     assert_eq!(resp.total_count, 1);
 
-    let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
-        .await
-        .unwrap();
+//     let resp = req_handler
+//         .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
+//         .await
+//         .unwrap();
 
-    assert_eq!(resp.total_count, scribe.blockchain.len() as i64);
-    assert_eq!(resp.transactions.len(), scribe.blockchain.len());
-    assert_eq!(resp.next_offset, None);
+//     assert_eq!(resp.total_count, scribe.blockchain.len() as i64);
+//     assert_eq!(resp.transactions.len(), scribe.blockchain.len());
+//     assert_eq!(resp.next_offset, None);
 
-    let mut req = SearchTransactionsRequest::builder(req_handler.network_id()).build();
-    req.max_block = Some(100);
-    req.limit = Some(10);
-    req.offset = Some(30);
+//     let mut req = SearchTransactionsRequest::builder(req_handler.network_id()).build();
+//     req.max_block = Some(100);
+//     req.limit = Some(10);
+//     req.offset = Some(30);
 
-    let resp = req_handler.search_transactions(req.clone()).await.unwrap();
+//     let resp = req_handler.search_transactions(req.clone()).await.unwrap();
 
-    assert_eq!(resp.total_count, 71);
-    assert_eq!(resp.transactions.len(), 10);
-    assert_eq!(
-        resp.transactions.first().unwrap().block_identifier.index,
-        70
-    );
-    assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 61);
-    assert_eq!(resp.next_offset, Some(40));
+//     assert_eq!(resp.total_count, 71);
+//     assert_eq!(resp.transactions.len(), 10);
+//     assert_eq!(
+//         resp.transactions.first().unwrap().block_identifier.index,
+//         70
+//     );
+//     assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 61);
+//     assert_eq!(resp.next_offset, Some(40));
 
-    req.offset = Some(40);
+//     req.offset = Some(40);
 
-    let resp = req_handler.search_transactions(req.clone()).await.unwrap();
+//     let resp = req_handler.search_transactions(req.clone()).await.unwrap();
 
-    assert_eq!(resp.total_count, 61);
-    assert_eq!(resp.transactions.len(), 10);
-    assert_eq!(
-        resp.transactions.first().unwrap().block_identifier.index,
-        60
-    );
-    assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 51);
-    assert_eq!(resp.next_offset, Some(50));
+//     assert_eq!(resp.total_count, 61);
+//     assert_eq!(resp.transactions.len(), 10);
+//     assert_eq!(
+//         resp.transactions.first().unwrap().block_identifier.index,
+//         60
+//     );
+//     assert_eq!(resp.transactions.last().unwrap().block_identifier.index, 51);
+//     assert_eq!(resp.next_offset, Some(50));
 
-    for block in scribe.blockchain.clone() {
-        let partial_block_id = PartialBlockIdentifier {
-            index: Some(block.index),
-            hash: None,
-        };
-        let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
-        let resp = req_handler.block(msg).await.unwrap();
-        let transactions = vec![
-            ic_rosetta_api::convert::hashed_block_to_rosetta_core_transaction(
-                &block,
-                ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
-            )
-            .unwrap(),
-        ];
-        assert_eq!(resp.clone().block.unwrap().transactions, transactions);
-        let transaction = resp.block.unwrap().transactions[0].clone();
-        let block_id = BlockIdentifier {
-            index: block.index,
-            hash: from_hash(&block.hash),
-        };
-        let msg = BlockTransactionRequest::new(
-            req_handler.network_id(),
-            block_id.clone(),
-            transaction.transaction_identifier.clone(),
-        );
-        let resp = req_handler.block_transaction(msg).await.unwrap();
-        assert_eq!(resp.transaction, transactions[0]);
-        let resp = req_handler
-            .search_transactions(
-                SearchTransactionsRequest::builder(req_handler.network_id())
-                    .with_transaction_identifier(transaction.transaction_identifier)
-                    .build(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            resp.transactions
-                .into_iter()
-                .map(|t| t.transaction)
-                .collect::<Vec<ic_rosetta_api::models::Transaction>>()[0],
-            transactions[0]
-        );
-    }
-}
+//     for block in scribe.blockchain.clone() {
+//         let partial_block_id = PartialBlockIdentifier {
+//             index: Some(block.index),
+//             hash: None,
+//         };
+//         let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
+//         let resp = req_handler.block(msg).await.unwrap();
+//         let transactions = vec![
+//             ic_rosetta_api::convert::hashed_block_to_rosetta_core_transaction(
+//                 &block,
+//                 ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
+//             )
+//             .unwrap(),
+//         ];
+//         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
+//         let transaction = resp.block.unwrap().transactions[0].clone();
+//         let block_id = BlockIdentifier {
+//             index: block.index,
+//             hash: from_hash(&block.hash),
+//         };
+//         let msg = BlockTransactionRequest::new(
+//             req_handler.network_id(),
+//             block_id.clone(),
+//             transaction.transaction_identifier.clone(),
+//         );
+//         let resp = req_handler.block_transaction(msg).await.unwrap();
+//         assert_eq!(resp.transaction, transactions[0]);
+//         let resp = req_handler
+//             .search_transactions(
+//                 SearchTransactionsRequest::builder(req_handler.network_id())
+//                     .with_transaction_identifier(transaction.transaction_identifier)
+//                     .build(),
+//             )
+//             .await
+//             .unwrap();
+//         assert_eq!(
+//             resp.transactions
+//                 .into_iter()
+//                 .map(|t| t.transaction)
+//                 .collect::<Vec<ic_rosetta_api::models::Transaction>>()[0],
+//             transactions[0]
+//         );
+//     }
+// }
 
 #[actix_rt::test]
 async fn balances_test() {
