@@ -62,7 +62,9 @@ pub fn main() -> Result<()> {
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+
+            let network_settings = network_info.to_network_settings();
+            eprintln!("Network settings config: {:?}", &network_settings);
 
             let deployment = read_deployment_file(Path::new(&opts.deployment_file));
 
@@ -80,7 +82,7 @@ pub fn main() -> Result<()> {
             };
 
             generate_network_config(
-                &network_info,
+                &network_settings,
                 mgmt_mac,
                 deployment_name,
                 NodeType::HostOS,

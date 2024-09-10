@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::mac_address::generate_mac_address;
 use crate::node_type::NodeType;
 use crate::systemd::generate_systemd_config_files;
-use info::NetworkInfo;
+use config::types::NetworkSettings;
 use ipv6::generate_ipv6_address;
 use mac_address::FormattedMacAddress;
 
@@ -19,7 +19,7 @@ pub mod systemd;
 /// Write SetupOS or HostOS systemd network configuration.
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
 pub fn generate_network_config(
-    network_info: &NetworkInfo,
+    network_info: &NetworkSettings,
     mgmt_mac: Option<&str>,
     deployment_name: Option<&str>,
     node_type: NodeType,

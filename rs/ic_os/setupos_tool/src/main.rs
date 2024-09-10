@@ -61,12 +61,7 @@ pub fn main() -> Result<()> {
             let setup_config: SetupOSConfig =
                 deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
-
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            eprintln!("Network settings config: {:?}", &setup_config.network_settings);
 
             let deployment = read_deployment_file(Path::new(&opts.deployment_file));
             let deployment_name: Option<&str> = match &deployment {
@@ -83,7 +78,7 @@ pub fn main() -> Result<()> {
             };
 
             generate_network_config(
-                &network_info,
+                &setup_config.network_settings,
                 mgmt_mac,
                 deployment_name,
                 NodeType::SetupOS,

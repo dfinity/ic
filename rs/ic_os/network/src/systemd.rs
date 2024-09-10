@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::info::NetworkInfo;
+use config::types::NetworkSettings;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
 use crate::mac_address::FormattedMacAddress;
 
@@ -149,7 +149,7 @@ fn generate_and_write_systemd_files(
 
 pub fn generate_systemd_config_files(
     output_directory: &Path,
-    network_info: &NetworkInfo,
+    network_info: &NetworkSettings,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
