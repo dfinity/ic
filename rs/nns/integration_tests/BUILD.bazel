@@ -127,8 +127,8 @@ DEV_DEPENDENCIES = [
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
     "@crate_index//:ic-cbor",
-    "@crate_index//:ic-certification",
     "@crate_index//:ic-certificate-verification",
+    "@crate_index//:ic-certification",
     "@crate_index//:serde_cbor",
 ]
 
