@@ -8,12 +8,10 @@ edition = "2021"
 byte-unit = "4.0.14"
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
-http = { workspace = true }
-http-body-util = { workspace = true }
-hyper = { workspace = true }
-hyper-util = { workspace = true }
-hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
+http = "0.2.12"
+hyper = { version = "0.14.18", features = ["full"] }
+hyper-rustls = { version = "0.24.2", features = ["http2"] }
+hyper-socks2 = "^0.8.0"
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }

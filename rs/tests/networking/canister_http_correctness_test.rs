@@ -464,7 +464,7 @@ pub fn test(env: TestEnv) {
                 |response| {
                     let err_response = response.clone().unwrap_err();
                     matches!(err_response.0, RejectionCode::SysTransient)
-                        && err_response.1.contains("client error (Connect)")
+                        && err_response.1.contains("Connection refused")
                 },
             )
             .await,
