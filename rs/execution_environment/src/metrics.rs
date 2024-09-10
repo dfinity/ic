@@ -282,8 +282,11 @@ impl QueryHandlerMetrics {
 
     pub fn observe_subnet_query_message(&self, method_name: &str, duration: f64) {
         let label = match QueryMethod::from_str(method_name) {
-            Ok(_) => format!("query_ic00_{}", method_name),
-            Err(_) => "query_ic00_unknown".to_string(),
+            // `query_ic00` prefix is only for cases when query receiver is management canister.
+            Ok(QueryMethod::FetchCanisterLogs) => format!("query_ic00_{}", method_name),
+            // Add other query methods here when extending.
+            Ok(_) => format!("query_{}", method_name),
+            Err(_) => "unknown_query".to_string(),
         };
         self.subnet_query_messages
             .with_label_values(&[&label])

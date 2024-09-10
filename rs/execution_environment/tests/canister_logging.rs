@@ -184,7 +184,7 @@ fn test_fetch_canister_logs_via_query_call() {
 fn test_metrics_for_fetch_canister_logs_via_query_call() {
     fn fetch_canister_logs_count(env: &StateMachine) -> u64 {
         fetch_histogram_vec_stats(
-            &env.metrics_registry(),
+            env.metrics_registry(),
             "execution_subnet_query_message_duration_seconds",
         )
         .get(&labels(&[(
