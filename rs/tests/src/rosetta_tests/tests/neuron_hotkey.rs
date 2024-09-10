@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-neuron-hotkey";
+const VM_NAME: &str = "neuron-hotkey";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();

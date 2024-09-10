@@ -19,7 +19,7 @@ use ic_replicated_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
-    page_map::{Shard, StorageLayout},
+    page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
@@ -1734,67 +1734,66 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     }
 
     /// List of overlay files on disk.
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(self.existing_overlays()?)
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
     }
 
     /// Get overlay height as encoded in the file name.
-    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .next()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16)
             .map(Height::new)
             .map_err(|err| {
-                LayoutError::CorruptedLayout {
+                Box::new(LayoutError::CorruptedLayout {
                     path: overlay.to_path_buf(),
                     message: format!("failed to get height for overlay {}: {}", hex, err),
-                }
-                .into()
+                }) as Box<dyn std::error::Error + Send>
             })
     }
 
     /// Get overlay shard as encoded in the file name.
-    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .nth(1)
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
-            LayoutError::CorruptedLayout {
+            Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: format!("failed to get shard for overlay {}: {}", hex, err),
-            }
-            .into()
+            }) as Box<dyn std::error::Error + Send>
         })
     }
 }
