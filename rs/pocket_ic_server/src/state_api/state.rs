@@ -509,17 +509,10 @@ async fn handler(
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
     // Resolve the domain
-    let lookup = if let Some(authority) = extract_authority(&request) {
-        state.resolver.resolve(&authority)
-    } else {
-        None
-    };
+    let lookup =
+        extract_authority(&request).and_then(|authority| state.resolver.resolve(&authority));
 
-    let canister_id = if let Some(ref lookup) = lookup {
-        lookup.canister_id
-    } else {
-        None
-    };
+    let canister_id = lookup.as_ref().and_then(|lookup| lookup.canister_id);
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
     let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
