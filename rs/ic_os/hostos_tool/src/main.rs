@@ -63,19 +63,19 @@ pub fn main() -> Result<()> {
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
 
-            let network_settings = network_info.to_network_settings();
+            let mut network_settings = network_info.to_network_settings();
             eprintln!("Network settings config: {:?}", &network_settings);
 
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file));
+            let deployment = read_deployment_file(Path::new(&opts.deployment_file))?;
 
-            let deployment_name = match &deployment {
-                Ok(deployment) => Ok(deployment.deployment.name.as_str()),
-                Err(e) => Err(anyhow::format_err!("Error retrieving deployment file: {e}")),
-            }?;
+            // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
+            // Once HostOS is using the config struct, all config will be contained there
+            // and we won't need to read mgmt_mac from depolyment directly.
+            network_settings.mgmt_mac = deployment.deployment.mgmt_mac;
 
             generate_network_config(
                 &network_settings,
-                deployment_name,
+                deployment.deployment.name.as_str(),
                 NodeType::HostOS,
                 Path::new(&output_directory),
             )
