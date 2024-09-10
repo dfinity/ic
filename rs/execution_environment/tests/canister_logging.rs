@@ -193,16 +193,10 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
         )]))
         .map_or(0, |stats| stats.count)
     }
-
-    let (env, canister_id) = setup_and_install_wasm(
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
+    let (env, canister_id, controller) = setup_with_controller(wat_canister().build_wasm());
 
     assert_eq!(fetch_canister_logs_count(&env), 0);
-    let _ = fetch_canister_logs(&env, PrincipalId::new_anonymous(), canister_id);
+    let _ = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(fetch_canister_logs_count(&env), 1);
 }
 
