@@ -106,7 +106,6 @@ ic-sns-init = { path = "../sns/init" }
 ic-sns-root = { path = "../sns/root" }
 ic-sns-swap = { path = "../sns/swap" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
-ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-sys = { path = "../sys" }
 ic-system-test-driver = { path = "./driver" }
 ic-test-identity = { path = "../test_utilities/identity" }
@@ -135,6 +134,7 @@ lifeline = { path = "../nns/handlers/lifeline/impl" }
 maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
+num-traits = { workspace = true }
 on_wire = { path = "../rust_canisters/on_wire" }
 once_cell = "1.18.0"
 openssh-keys = "0.5.0"
@@ -194,10 +194,6 @@ path = "testing_verification/colocate_test.rs"
 [[bin]]
 name = "ic-ii-delegation-test"
 path = "testing_verification/ii_delegation_test.rs"
-
-[[bin]]
-name = "ic-systest-rotate-ecdsa-idkg-key"
-path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
 name = "ic-systest-btc-get-balance"
@@ -276,10 +272,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-node-assign-test"
-path = "consensus/orchestrator/node_assign_test.rs"
-
-[[bin]]
 name = "ic-systest-rejoin-test"
 path = "message_routing/rejoin_test.rs"
 
@@ -322,22 +314,6 @@ path = "boundary_nodes/custom_domains_integration_test.rs"
 [[bin]]
 name = "ic-systest-general-execution"
 path = "execution/general_execution_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-downgrade-app-subnet"
-path = "consensus/orchestrator/upgrade_downgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-downgrade-nns-subnet"
-path = "consensus/orchestrator/upgrade_downgrade_nns_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-app-subnet"
-path = "consensus/orchestrator/upgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-downgrade-app-subnet"
-path = "consensus/orchestrator/downgrade_app_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-backup-manager"
@@ -400,28 +376,12 @@ name = "ic-systest-subnet-recovery-nns-same-nodes"
 path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-splitting"
-path = "consensus/subnet_splitting_test.rs"
-
-[[bin]]
 name = "ic-systest-network-reliability"
 path = "networking/network_reliability_test.rs"
 
 [[bin]]
 name = "ic-systest-network-large"
 path = "networking/network_large_test.rs"
-
-[[bin]]
-name = "ic-systest-unstuck-subnet"
-path = "consensus/orchestrator/unstuck_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-unassigned-node-upgrade"
-path = "consensus/orchestrator/unassigned_node_upgrade_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-with-alternative-urls"
-path = "consensus/orchestrator/upgrade_with_alternative_urls.rs"
 
 [[bin]]
 name = "ic-systest-query-workload-long-test"

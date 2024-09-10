@@ -243,6 +243,100 @@ fn streams_stats() {
 }
 
 #[test]
+fn streams_stats_best_effort_messages() {
+    let local = canister_test_id(1);
+    let remote = canister_test_id(2);
+
+    let request = |sender: CanisterId, receiver: CanisterId| -> RequestOrResponse {
+        RequestBuilder::default()
+            .sender(sender)
+            .receiver(receiver)
+            .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+            .build()
+            .into()
+    };
+    let response =
+        |respondent: CanisterId, originator: CanisterId, payload: &str| -> RequestOrResponse {
+            ResponseBuilder::default()
+                .respondent(respondent)
+                .originator(originator)
+                .response_payload(Payload::Data(payload.as_bytes().to_vec()))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                .build()
+                .into()
+        };
+
+    // A bunch of best-effort requests and responses from the local canister to the remote one.
+    let req = request(local, remote);
+    let rep_1 = response(local, remote, "a");
+    let rep_2 = response(local, remote, "bb");
+    let rep_3 = response(local, remote, "ccc");
+
+    let mut streams = Streams::new();
+
+    // Expecting no guaranteed responses throughout.
+    let expected_responses_size = BTreeMap::default();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.push(SUBNET_1, req);
+    // Pushed a request, response size stats are unchanged.
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `Streams::push()`.
+    streams.push(SUBNET_1, rep_1);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()`.
+    streams.get_mut(&SUBNET_1).unwrap().push(rep_2);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
+    streams.get_mut_or_insert(SUBNET_2).push(rep_3);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard everything from the stream for `SUBNET_1`.
+    streams
+        .get_mut(&SUBNET_1)
+        .unwrap()
+        .discard_messages_before(3.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.prune_zero_guaranteed_responses_size_bytes();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard `rep_b2` from the stream for `SUBNET_2`.
+    streams
+        .get_mut(&SUBNET_2)
+        .unwrap()
+        .discard_messages_before(1.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+}
+
+#[test]
 fn streams_stats_after_deserialization() {
     let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
     let streams = Arc::make_mut(&mut system_metadata.streams);

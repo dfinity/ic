@@ -18,7 +18,7 @@ inputs:
     default: ''
   BAZEL_STARTUP_ARGS:
     required: false
-    default: ''
+    default: '--output_base=/var/tmp/bazel-output/'
   HONEYCOMB_API_TOKEN:
     required: false
   SSH_PRIVATE_KEY:

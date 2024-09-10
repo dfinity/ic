@@ -1,6 +1,3 @@
-// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
-#![allow(dead_code)]
-
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
