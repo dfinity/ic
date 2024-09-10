@@ -164,6 +164,9 @@ const fn coarse_time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
+/// A non-zero deadline, for use when a single deadline is needed.
+const SOME_DEADLINE: CoarseTime = coarse_time(1);
+
 /// Generates an `input_queue_type_fn` that returns `LocalSubnet` for
 /// `local_canisters` and `RemoteSubnet` otherwise.
 pub fn input_queue_type_from_local_canisters(
@@ -204,7 +207,7 @@ fn cannot_push_output_response_best_effort_without_input_request() {
         ResponseBuilder::default()
             .originator(canister_test_id(11))
             .respondent(canister_test_id(13))
-            .deadline(coarse_time(1000))
+            .deadline(SOME_DEADLINE)
             .build(),
     ));
 }
@@ -291,8 +294,6 @@ fn push_input_response_duplicate_guaranteed_response() {
 
 #[test]
 fn push_input_response_duplicate_best_effort_response() {
-    const SOME_DEADLINE: CoarseTime = coarse_time(1);
-
     let mut queues = CanisterQueues::default();
 
     // Enqueue two output requests (callback IDs 1 and 2), reserving 2 input queue
@@ -1155,18 +1156,18 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
     // (from `other_4` through `other_6`). Queues from `other_2` and `other_5` hold
     // guaranteed response requests; the other queues contain best-effort requests.
     fixture
-        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
         .unwrap();
     fixture.push_input_request(other_2, LocalSubnet).unwrap();
     fixture
-        .push_input_request_with_deadline(other_3, coarse_time(1), LocalSubnet)
+        .push_input_request_with_deadline(other_3, SOME_DEADLINE, LocalSubnet)
         .unwrap();
     fixture
-        .push_input_request_with_deadline(other_4, coarse_time(1), RemoteSubnet)
+        .push_input_request_with_deadline(other_4, SOME_DEADLINE, RemoteSubnet)
         .unwrap();
     fixture.push_input_request(other_5, RemoteSubnet).unwrap();
     fixture
-        .push_input_request_with_deadline(other_6, coarse_time(1), RemoteSubnet)
+        .push_input_request_with_deadline(other_6, SOME_DEADLINE, RemoteSubnet)
         .unwrap();
     assert_eq!(Ok(()), fixture.schedules_ok());
 
@@ -1362,10 +1363,10 @@ fn test_push_into_empty_queue_in_input_schedule() {
 
     // 1 local and 1 remote input queue holding best-effort requests.
     fixture
-        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
         .unwrap();
     fixture
-        .push_input_request_with_deadline(other_2, coarse_time(1), RemoteSubnet)
+        .push_input_request_with_deadline(other_2, SOME_DEADLINE, RemoteSubnet)
         .unwrap();
 
     // Time out all messages.
@@ -1383,10 +1384,10 @@ fn test_push_into_empty_queue_in_input_schedule() {
 
     // Push another round of messages into the 2 queues.
     fixture
-        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
         .unwrap();
     fixture
-        .push_input_request_with_deadline(other_2, coarse_time(1), RemoteSubnet)
+        .push_input_request_with_deadline(other_2, SOME_DEADLINE, RemoteSubnet)
         .unwrap();
 
     assert_eq!(Ok(()), fixture.schedules_ok());
@@ -1592,9 +1593,14 @@ fn encode_roundtrip() {
         .unwrap();
     queues.pop_canister_input(RemoteSubnet).unwrap();
 
+    let response_callback = CallbackId::from(42);
     queues
         .push_output_request(
-            RequestBuilder::default().receiver(other).build().into(),
+            RequestBuilder::default()
+                .receiver(other)
+                .sender_reply_callback(response_callback)
+                .build()
+                .into(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -1603,7 +1609,7 @@ fn encode_roundtrip() {
         .push_input(
             ResponseBuilder::default()
                 .respondent(other)
-                .originator_reply_callback(CallbackId::from(42))
+                .originator_reply_callback(response_callback)
                 .build()
                 .into(),
             RemoteSubnet,
@@ -1712,14 +1718,16 @@ fn decode_backward_compatibility() {
     let mut queues_proto = pb_queues::CanisterQueues::default();
     let mut expected_queues = CanisterQueues::default();
 
+    let response_callback = CallbackId::from(42);
     let req = RequestBuilder::default()
         .sender(local_canister)
         .receiver(local_canister)
+        .sender_reply_callback(response_callback)
         .build();
     let rep = ResponseBuilder::default()
         .originator(local_canister)
         .respondent(local_canister)
-        .originator_reply_callback(CallbackId::from(42))
+        .originator_reply_callback(response_callback)
         .build();
     let t1 = Time::from_secs_since_unix_epoch(12345).unwrap();
     let t2 = t1 + Duration::from_secs(1);
@@ -1999,7 +2007,7 @@ fn decode_with_duplicate_inbound_response() {
         .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
         .unwrap();
     queues
-        .push_output_request(request(2, coarse_time(1)).into(), UNIX_EPOCH)
+        .push_output_request(request(2, SOME_DEADLINE).into(), UNIX_EPOCH)
         .unwrap();
     assert_eq!(2, queues.output_into_iter().count());
 
@@ -2008,7 +2016,7 @@ fn decode_with_duplicate_inbound_response() {
         .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
         .unwrap();
     queues
-        .push_input(response(2, coarse_time(1)).into(), LocalSubnet)
+        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
         .unwrap();
 
     // Sanity check: roundtrip encode succeeds.
@@ -2340,7 +2348,7 @@ fn test_stats_oversized_requests() {
     let best_effort = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         1,
-        coarse_time(10),
+        SOME_DEADLINE,
     );
     let best_effort_size_bytes = best_effort.count_bytes();
     let guaranteed = request_with_payload(

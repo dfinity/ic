@@ -1390,6 +1390,8 @@ fn output_queue_front_not_stale(
 ///
 /// Returns an error if there are duplicate `CallbackIds` among the responses;
 /// or if not all inbound responses or shed responses are enqueued.
+///
+/// Time complexity: `O(n * log(n))`.
 fn callbacks_with_enqueued_response(
     canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
     pool: &MessagePool,
