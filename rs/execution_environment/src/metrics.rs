@@ -1,3 +1,4 @@
+use ic_management_canister_types::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
@@ -7,8 +8,8 @@ use ic_types::{
     NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec};
-use std::{cell::RefCell, rc::Rc, time::Instant};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
+use std::{cell::RefCell, rc::Rc, time::Instant, str::FromStr};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";
@@ -147,6 +148,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub evaluated_canisters: Histogram,
     /// The number of transient errors.
     pub transient_errors: IntCounter,
+    // A copy of `execution_subnet_message_duration_seconds` but for query.
+    pub subnet_queries: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -268,7 +271,24 @@ impl QueryHandlerMetrics {
                 "The total number of transient errors accumulated \
                         during the query execution",
             ),
+            // A copy of `execution_subnet_message_duration_seconds` but for query.
+            subnet_queries: metrics_registry.histogram_vec(
+                "execution_subnet_query_duration_seconds",
+                "Duration of a subnet query execution, in seconds.",
+                decimal_buckets(-3, 2),
+                &["method_name"],
+            ),
         }
+    }
+
+    pub fn observe_subnet_query(&self, method_name: &str, duration: f64) {
+        let label = match QueryMethod::from_str(method_name) {
+            Ok(_) => format!("query_ic00_{}", method_name),
+            Err(_) => "query_ic00_unknown".to_string(),
+        };
+        self.subnet_queries
+            .with_label_values(&[&label])
+            .observe(duration);
     }
 }
 
