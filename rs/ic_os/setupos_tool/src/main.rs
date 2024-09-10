@@ -71,29 +71,21 @@ pub fn main() -> Result<()> {
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
-            eprintln!("Deployment config: {:?}", deployment);
-
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
-
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            let setup_config: SetupOSConfig =
+                deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
             let node_type = node_type.parse::<NodeType>()?;
 
             let mac = generate_mac_address(
-                &deployment.deployment.name,
+                &setup_config.icos_settings.hostname,
                 &node_type,
-                deployment.deployment.mgmt_mac.as_deref(),
+                setup_config.network_settings.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = network_info
-                .ipv6_prefix
-                .context("ipv6_prefix required in config to generate ipv6 address")?;
+            let ipv6_prefix = setup_config.network_settings.ipv6_prefix
+                .ok_or_else(|| anyhow!("ipv6_prefix required in config to generate ipv6 address"))?;
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
-            println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
+            println!("{}", to_cidr(ipv6_address, setup_config.network_settings.ipv6_subnet));
+
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
