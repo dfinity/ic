@@ -1723,11 +1723,9 @@ impl Swap {
                 batch_count,
             );
 
-            #[allow(deprecated)] // TODO(NNS1-3198): Remove once `neuron_parameters` is removed
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
                     neuron_recipes: Some(NeuronRecipes::from(batch)),
-                    neuron_parameters: vec![],
                 })
                 .await;
 

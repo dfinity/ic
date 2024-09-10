@@ -3541,7 +3541,6 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 },
             ],
         }),
-        ..Default::default()
     });
     assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }

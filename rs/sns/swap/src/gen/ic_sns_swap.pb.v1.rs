@@ -501,7 +501,7 @@ pub struct CfParticipant {
     #[prost(message, repeated, tag = "2")]
     pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
     /// The principal that can vote on behalf of these Neurons' Fund neurons.
-    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+    /// Deprecated. Please use `controller` instead
     /// TODO(NNS1-3198): Remove
     #[deprecated]
     #[prost(string, tag = "1")]
@@ -694,7 +694,7 @@ pub struct CfInvestment {
     pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]
     pub nns_neuron_id: u64,
-    /// Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
     /// TODO(NNS1-3198): Remove
     #[deprecated]
     #[prost(string, tag = "1")]
