@@ -111,7 +111,7 @@ fn test_fetch_guard() {
             Some(FetchTxStatus::PendingOutcall)
         ));
     }
-    assert!(matches!(get_fetch_status(txid), None));
+    assert!(get_fetch_status(txid).is_none());
     assert_eq!(OUTCALL_CAPACITY.with(|c| *c.borrow()), max);
 
     {
@@ -130,7 +130,7 @@ fn test_fetch_guard() {
 #[test]
 fn test_fetch_status() {
     let txid_0 = Txid::from([0u8; 32]);
-    assert!(matches!(get_fetch_status(txid_0), None));
+    assert!(get_fetch_status(txid_0).is_none());
     set_fetch_status(txid_0, FetchTxStatus::PendingOutcall);
     assert!(matches!(
         get_fetch_status(txid_0),

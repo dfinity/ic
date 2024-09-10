@@ -232,7 +232,6 @@ async fn test_fetch_tx() {
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
-    let guard = state.new_fetch_guard(txid_0).unwrap();
 
     // case Fetched
     let tx_0 = Transaction {
@@ -250,9 +249,7 @@ async fn test_fetch_tx() {
     };
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
-    let result = env
-        .fetch_tx(&state, guard, txid_0, INITIAL_BUFFER_SIZE)
-        .await;
+    let result = env.fetch_tx(&state, (), txid_0, INITIAL_BUFFER_SIZE).await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
         state.get_fetch_status(txid_0),
@@ -267,9 +264,7 @@ async fn test_fetch_tx() {
 
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
-    let result = env
-        .fetch_tx(&state, guard, txid_1, INITIAL_BUFFER_SIZE)
-        .await;
+    let result = env.fetch_tx(&state, (), txid_1, INITIAL_BUFFER_SIZE).await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
                 state.get_fetch_status(txid_1),
@@ -277,9 +272,7 @@ async fn test_fetch_tx() {
 
     // case Err
     env.expect_get_tx_with_reply(Err(GetTxError::Encoding("failed to decode tx".to_string())));
-    let result = env
-        .fetch_tx(&state, guard, txid_2, INITIAL_BUFFER_SIZE)
-        .await;
+    let result = env.fetch_tx(&state, (), txid_2, INITIAL_BUFFER_SIZE).await;
     assert!(matches!(
         result,
         Ok(FetchResult::Error(GetTxError::Encoding(_)))
