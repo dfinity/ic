@@ -72,14 +72,8 @@ pub fn main() -> Result<()> {
                 }
             };
 
-            let mgmt_mac: Option<&str> = match &deployment {
-                Ok(deployment) => deployment.deployment.mgmt_mac.as_deref(),
-                Err(_) => None,
-            };
-
             generate_network_config(
                 &setup_config.network_settings,
-                mgmt_mac,
                 deployment_name,
                 NodeType::SetupOS,
                 Path::new(&output_directory),
