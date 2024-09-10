@@ -18,8 +18,8 @@ use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -99,11 +99,11 @@ impl CanisterHttp {
 }
 
 #[tonic::async_trait]
-impl CanisterHttpService for CanisterHttp {
-    async fn canister_http_send(
+impl HttpsOutcallsService for CanisterHttp {
+    async fn https_outcall(
         &self,
-        request: Request<CanisterHttpSendRequest>,
-    ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+        request: Request<HttpsOutcallRequest>,
+    ) -> Result<Response<HttpsOutcallResponse>, Status> {
         self.metrics.requests.inc();
 
         let req = request.into_inner();
@@ -289,7 +289,7 @@ impl CanisterHttpService for CanisterHttp {
             .network_traffic
             .with_label_values(&[LABEL_DOWNLOAD])
             .inc_by(body_bytes.len() as u64 + headers_size_bytes as u64);
-        Ok(Response::new(CanisterHttpSendResponse {
+        Ok(Response::new(HttpsOutcallResponse {
             status,
             headers,
             content: body_bytes.to_vec(),

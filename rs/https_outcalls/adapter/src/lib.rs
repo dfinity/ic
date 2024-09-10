@@ -16,7 +16,7 @@ pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
-use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
+use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::time::Duration;
@@ -36,7 +36,7 @@ impl AdapterServer {
         Self(
             Server::builder()
                 .timeout(Duration::from_secs(config.http_request_timeout_secs))
-                .add_service(CanisterHttpServiceServer::new(canister_http)),
+                .add_service(HttpsOutcallsServiceServer::new(canister_http)),
         )
     }
 

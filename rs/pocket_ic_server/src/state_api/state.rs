@@ -29,8 +29,8 @@ use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs
 use ic_https_outcalls_adapter::CanisterHttp;
 use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
 use ic_https_outcalls_service::{
-    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_state_machine_tests::RejectCode;
 use ic_types::{
@@ -1015,7 +1015,7 @@ impl ApiState {
         canister_http_request: CanisterHttpRequest,
         canister_http_adapter: &CanisterHttp,
     ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = CanisterHttpSendRequest {
+        let canister_http_request = HttpsOutcallRequest {
             url: canister_http_request.url,
             method: match canister_http_request.http_method {
                 CanisterHttpMethod::GET => HttpMethod::Get.into(),
@@ -1041,7 +1041,7 @@ impl ApiState {
             .canister_http_send(request)
             .await
             .map(|adapter_response| {
-                let CanisterHttpSendResponse {
+                let HttpsOutcallResponse {
                     status,
                     headers,
                     content: body,
