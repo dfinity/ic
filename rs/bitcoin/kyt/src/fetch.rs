@@ -14,10 +14,10 @@ pub fn get_tx_cycle_cost(buffer_size: u32) -> u128 {
     49_140_000 + 1024 * 5_200 + 10_400 * (buffer_size as u128)
 }
 
-/// Caller of check_output must attach this amount of cycles with the call.
+/// Caller of check_transaction must attach this amount of cycles with the call.
 pub const CHECK_TRANSACTION_CYCLES_REQUIRED: u128 = 40_000_000_000;
 
-/// One time charge for every check_output call.
+/// One time charge for every check_transaction call.
 pub const CHECK_TRANSACTION_CYCLES_SERVICE_FEE: u128 = 100_000_000;
 
 /// Initial buffer size is 4kB
