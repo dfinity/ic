@@ -19,7 +19,7 @@ use std::{
 };
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-neuron-dissolve";
+const VM_NAME: &str = "neuron-dissolve";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

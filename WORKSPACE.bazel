@@ -296,7 +296,7 @@ container_pull(
 #
 # The reason we can't directly depend on //rs/tests:ubuntu_test_runtime_image is that
 # the target //rs/tests/httpbin-rs:httpbin_image_base
-# fails to build in our container (gitlab-ci/container/container-run.sh).
+# fails to build in our container (ci/container/container-run.sh).
 container_pull(
     name = "ubuntu_test_runtime",
     digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",

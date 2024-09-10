@@ -27,8 +27,8 @@ rust_library(
         # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/constants",
         "//rs/crypto/sha2",
+        "//rs/limits",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",

@@ -3,7 +3,6 @@ use crate::{
     state_machine::{StateMachine, StateMachineImpl},
 };
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -13,6 +12,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
@@ -82,7 +82,7 @@ const PHASE_COMMIT: &str = "commit";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
-const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
+const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
@@ -270,8 +270,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
     pub(crate) process_batch_phase_duration: HistogramVec,
-    /// Number of timed out requests.
-    pub(crate) timed_out_requests_total: IntCounter,
+    /// Number of timed out messages.
+    pub(crate) timed_out_messages_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -359,9 +359,9 @@ impl MessageRoutingMetrics {
                 "Most recently observed remote subnet certified heights.",
                 &[LABEL_REMOTE],
             ),
-            timed_out_requests_total: metrics_registry.int_counter(
-                METRIC_TIMED_OUT_REQUESTS_TOTAL,
-                "Count of timed out requests.",
+            timed_out_messages_total: metrics_registry.int_counter(
+                METRIC_TIMED_OUT_MESSAGES_TOTAL,
+                "Count of timed out messages.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,

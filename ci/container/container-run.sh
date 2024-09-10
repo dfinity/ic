@@ -60,14 +60,14 @@ while test $# -gt $CTR; do
 done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-IMAGE_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
+IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
 if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
         docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }
         export -f docker
-        "$REPO_ROOT"/gitlab-ci/container/build-image.sh "${BUILD_ARGS[@]}"
+        "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
         unset -f docker
     fi
 fi

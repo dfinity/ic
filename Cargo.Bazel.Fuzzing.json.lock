@@ -1,5 +1,5 @@
 {
-  "checksum": "d363f2ee7bfb824995ac6ae7b8ee5339fb984e8ff87b80643dbeaf0876e53a95",
+  "checksum": "aa4097d03ce5a5203bd543850710c445c012f21437c9b1b82eeeacb771de9930",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -217,11 +217,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -389,11 +389,11 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -601,7 +601,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -692,7 +692,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -1886,7 +1886,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -3151,7 +3151,7 @@
           "selects": {
             "cfg(any())": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -3332,7 +3332,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -3571,7 +3571,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -3623,7 +3623,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -3850,7 +3850,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -4157,7 +4157,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -4347,7 +4347,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -4987,7 +4987,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -5097,7 +5097,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -5230,7 +5230,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -5315,7 +5315,7 @@
                 "target": "addr2line"
               },
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -6386,7 +6386,7 @@
               "target": "clang_sys"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.10.5",
               "target": "itertools"
             },
             {
@@ -8027,7 +8027,7 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.13.2",
+              "id": "hashbrown 0.12.3",
               "target": "hashbrown"
             }
           ],
@@ -9608,7 +9608,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -10817,7 +10817,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -11706,7 +11706,7 @@
               "target": "glob"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -12240,7 +12240,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -12891,7 +12891,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -12982,7 +12982,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -13388,7 +13388,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -13658,19 +13658,19 @@
           "selects": {
             "aarch64-linux-android": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(all(target_arch = \"aarch64\", target_os = \"linux\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(all(target_arch = \"aarch64\", target_vendor = \"apple\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -13686,14 +13686,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cranelift-bforest 0.110.1": {
+    "cranelift-bforest 0.111.0": {
       "name": "cranelift-bforest",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bforest/0.110.1/download",
-          "sha256": "effa84ab2023f7138045ece6b326588c17447ca22e66db71ec15cb0a6c0c4ad2"
+          "url": "https://static.crates.io/crates/cranelift-bforest/0.111.0/download",
+          "sha256": "b80c3a50b9c4c7e5b5f73c0ed746687774fc9e36ef652b110da8daebf0c6e0e6"
         }
       },
       "targets": [
@@ -13718,14 +13718,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13733,14 +13733,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-bitset 0.110.1": {
+    "cranelift-bitset 0.111.0": {
       "name": "cranelift-bitset",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bitset/0.110.1/download",
-          "sha256": "38a1dfc50dca188a15d938867c4400589530bcb0138f7022aae6d059d1d8c309"
+          "url": "https://static.crates.io/crates/cranelift-bitset/0.111.0/download",
+          "sha256": "38778758c2ca918b05acb2199134e0c561fb577c50574259b26190b6c2d95ded"
         }
       },
       "targets": [
@@ -13787,7 +13787,7 @@
           ],
           "selects": {}
         },
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13795,14 +13795,14 @@
       ],
       "license_file": null
     },
-    "cranelift-codegen 0.110.1": {
+    "cranelift-codegen 0.111.0": {
       "name": "cranelift-codegen",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen/0.110.1/download",
-          "sha256": "821c20c639350158ecca928dc2a244d0d1c9cef2377a378fc62a445a286eb1ca"
+          "url": "https://static.crates.io/crates/cranelift-codegen/0.111.0/download",
+          "sha256": "58258667ad10e468bfc13a8d620f50dfcd4bb35d668123e97defa2549b9ad397"
         }
       },
       "targets": [
@@ -13853,31 +13853,31 @@
               "target": "bumpalo"
             },
             {
-              "id": "cranelift-bforest 0.110.1",
+              "id": "cranelift-bforest 0.111.0",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-bitset 0.110.1",
+              "id": "cranelift-bitset 0.111.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-codegen 0.110.1",
+              "id": "cranelift-codegen 0.111.0",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.110.1",
+              "id": "cranelift-codegen-shared 0.111.0",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-control 0.110.1",
+              "id": "cranelift-control 0.111.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "gimli 0.28.0",
+              "id": "gimli 0.29.0",
               "target": "gimli"
             },
             {
@@ -13901,14 +13901,14 @@
               "target": "smallvec"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13917,11 +13917,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.110.1",
+              "id": "cranelift-codegen-meta 0.111.0",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.110.1",
+              "id": "cranelift-isle 0.111.0",
               "target": "cranelift_isle"
             }
           ],
@@ -13934,14 +13934,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-meta 0.110.1": {
+    "cranelift-codegen-meta 0.111.0": {
       "name": "cranelift-codegen-meta",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.110.1/download",
-          "sha256": "064473f2fd59b44fa2c9aaa60de1f9c44db5e13521e28bc85d2b92ee535ef625"
+          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.111.0/download",
+          "sha256": "043f0b702e529dcb07ff92bd7d40e7d5317b5493595172c5eb0983343751ee06"
         }
       },
       "targets": [
@@ -13966,14 +13966,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-shared 0.110.1",
+              "id": "cranelift-codegen-shared 0.111.0",
               "target": "cranelift_codegen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13981,14 +13981,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-shared 0.110.1": {
+    "cranelift-codegen-shared 0.111.0": {
       "name": "cranelift-codegen-shared",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.110.1/download",
-          "sha256": "d0f39b9ebfd2febdc2acfb9a0fca110665bcd5a6839502576307735ed07b2177"
+          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.111.0/download",
+          "sha256": "7763578888ab53eca5ce7da141953f828e82c2bfadcffc106d10d1866094ffbb"
         }
       },
       "targets": [
@@ -14011,7 +14011,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14019,14 +14019,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-control 0.110.1": {
+    "cranelift-control 0.111.0": {
       "name": "cranelift-control",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-control/0.110.1/download",
-          "sha256": "94e125c189c3a1ca8dfe209fc6f46edba058a6d24e0b92aff69459a15f4711e7"
+          "url": "https://static.crates.io/crates/cranelift-control/0.111.0/download",
+          "sha256": "32db15f08c05df570f11e8ab33cb1ec449a64b37c8a3498377b77650bef33d8b"
         }
       },
       "targets": [
@@ -14048,6 +14048,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "fuzz"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -14058,7 +14065,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14066,14 +14073,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-entity 0.110.1": {
+    "cranelift-entity 0.111.0": {
       "name": "cranelift-entity",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-entity/0.110.1/download",
-          "sha256": "ea62eb109baec2247e1a6fa7b74c0f584b1e76e289cfd7017385b4b031fc8450"
+          "url": "https://static.crates.io/crates/cranelift-entity/0.111.0/download",
+          "sha256": "5289cdb399381a27e7bbfa1b42185916007c3d49aeef70b1d01cb4caa8010130"
         }
       },
       "targets": [
@@ -14106,7 +14113,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-bitset 0.110.1",
+              "id": "cranelift-bitset 0.111.0",
               "target": "cranelift_bitset"
             },
             {
@@ -14126,7 +14133,7 @@
           ],
           "selects": {}
         },
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14134,14 +14141,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-frontend 0.110.1": {
+    "cranelift-frontend 0.111.0": {
       "name": "cranelift-frontend",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-frontend/0.110.1/download",
-          "sha256": "722b089357aacb6c7528b2e59a5fe00917d61ce63448b25a3e477a5b7819fac8"
+          "url": "https://static.crates.io/crates/cranelift-frontend/0.111.0/download",
+          "sha256": "31ba8ab24eb9470477e98ddfa3c799a649ac5a0d9a2042868c4c952133c234e8"
         }
       },
       "targets": [
@@ -14173,7 +14180,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.110.1",
+              "id": "cranelift-codegen 0.111.0",
               "target": "cranelift_codegen"
             },
             {
@@ -14185,14 +14192,14 @@
               "target": "smallvec"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14200,14 +14207,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-isle 0.110.1": {
+    "cranelift-isle 0.111.0": {
       "name": "cranelift-isle",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-isle/0.110.1/download",
-          "sha256": "c4b5005a48288e7fc2a2991a377831c534e26929b063c379c018060727785a9b"
+          "url": "https://static.crates.io/crates/cranelift-isle/0.111.0/download",
+          "sha256": "2b72a3c5c166a70426dcb209bdd0bb71a787c1ea76023dc0974fbabca770e8f9"
         }
       },
       "targets": [
@@ -14250,14 +14257,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.110.1",
+              "id": "cranelift-isle 0.111.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -14270,14 +14277,14 @@
       ],
       "license_file": null
     },
-    "cranelift-native 0.110.1": {
+    "cranelift-native 0.111.0": {
       "name": "cranelift-native",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-native/0.110.1/download",
-          "sha256": "3ae2d48f38081a9e679ad795bd36bb29bedeb5552fc1c195185bf9885fa1b16e"
+          "url": "https://static.crates.io/crates/cranelift-native/0.111.0/download",
+          "sha256": "46a42424c956bbc31fc5c2706073df896156c5420ae8fa2a5d48dbc7b295d71b"
         }
       },
       "targets": [
@@ -14309,25 +14316,25 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.110.1",
+              "id": "cranelift-codegen 0.111.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             }
           ],
           "selects": {
             "cfg(any(target_arch = \"s390x\", target_arch = \"riscv64\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14335,14 +14342,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-wasm 0.110.1": {
+    "cranelift-wasm 0.111.0": {
       "name": "cranelift-wasm",
-      "version": "0.110.1",
+      "version": "0.111.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-wasm/0.110.1/download",
-          "sha256": "25abc7b3ec5aab50546ee9a29073223d2602b49b3d73ce312bf481fadba01255"
+          "url": "https://static.crates.io/crates/cranelift-wasm/0.111.0/download",
+          "sha256": "49778df4289933d735b93c30a345513e030cf83101de0036e19b760f8aa09f68"
         }
       },
       "targets": [
@@ -14374,15 +14381,15 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.110.1",
+              "id": "cranelift-codegen 0.111.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.110.1",
+              "id": "cranelift-frontend 0.111.0",
               "target": "cranelift_frontend"
             },
             {
@@ -14398,18 +14405,18 @@
               "target": "smallvec"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 23.0.1",
+              "id": "wasmtime-types 24.0.0",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.110.1"
+        "version": "0.111.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -14607,7 +14614,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -15113,7 +15120,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -16728,7 +16735,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -18105,7 +18112,7 @@
               "target": "leb128"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -18339,11 +18346,11 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.4",
+              "id": "quinn 0.11.5",
               "target": "quinn"
             },
             {
-              "id": "quinn-udp 0.5.4",
+              "id": "quinn-udp 0.5.5",
               "target": "quinn_udp"
             },
             {
@@ -18581,6 +18588,10 @@
               "target": "ssh2"
             },
             {
+              "id": "static_assertions 1.1.0",
+              "target": "static_assertions"
+            },
+            {
               "id": "strum 0.26.2",
               "target": "strum"
             },
@@ -18649,7 +18660,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -18682,7 +18693,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -18799,11 +18810,11 @@
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime 23.0.1",
+              "id": "wasmtime 24.0.0",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 23.0.1",
+              "id": "wasmtime-environ 24.0.0",
               "target": "wasmtime_environ"
             },
             {
@@ -19061,7 +19072,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -19123,7 +19134,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -20703,19 +20714,19 @@
             ],
             "cfg(target_os = \"hermit\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -20777,19 +20788,19 @@
           "selects": {
             "cfg(target_os = \"hermit\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -20859,7 +20870,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -21696,7 +21707,7 @@
               "target": "errno"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -22254,7 +22265,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -22324,7 +22335,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -23922,7 +23933,7 @@
               "target": "c_linked_list"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -23999,7 +24010,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -24145,7 +24156,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -24218,7 +24229,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -24336,6 +24347,52 @@
         "crate_features": {
           "common": [
             "read",
+            "read-core"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.28.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "gimli 0.29.0": {
+      "name": "gimli",
+      "version": "0.29.0",
+      "package_url": "https://github.com/gimli-rs/gimli",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gimli/0.29.0/download",
+          "sha256": "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gimli",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gimli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "read",
             "read-core",
             "std",
             "write"
@@ -24352,7 +24409,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.28.0"
+        "version": "0.29.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24623,11 +24680,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -24710,11 +24767,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -25410,7 +25467,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -25913,7 +25970,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"redox\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -26729,7 +26786,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -26980,7 +27037,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27094,7 +27151,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27181,7 +27238,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27275,7 +27332,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27503,7 +27560,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27584,7 +27641,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27644,7 +27701,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27708,7 +27765,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27808,7 +27865,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -27897,7 +27954,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -28263,7 +28320,7 @@
                 "target": "webpki"
               },
               {
-                "id": "tokio 1.39.3",
+                "id": "tokio 1.40.0",
                 "target": "tokio"
               },
               {
@@ -30036,7 +30093,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -33322,7 +33379,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -34175,11 +34232,11 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -35004,14 +35061,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "libc 0.2.155": {
+    "libc 0.2.158": {
       "name": "libc",
-      "version": "0.2.155",
+      "version": "0.2.158",
       "package_url": "https://github.com/rust-lang/libc",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libc/0.2.155/download",
-          "sha256": "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
+          "url": "https://static.crates.io/crates/libc/0.2.158/download",
+          "sha256": "d8adc4bb1803a324070e64a98ae98f38934d91957a99cfb3a43dcbc01bc56439"
         }
       },
       "targets": [
@@ -35056,14 +35113,14 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.2.155"
+        "version": "0.2.158"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -35453,7 +35510,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -35528,7 +35585,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -35716,7 +35773,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -35833,7 +35890,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -35928,7 +35985,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -36174,7 +36231,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -36242,7 +36299,7 @@
               "target": "byteorder"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -36314,7 +36371,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -36471,7 +36528,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -36967,7 +37024,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -37085,7 +37142,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -37668,7 +37725,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -38103,7 +38160,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -38622,7 +38679,7 @@
           "selects": {
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -38632,7 +38689,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -38702,7 +38759,7 @@
             ],
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -38712,7 +38769,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -39012,7 +39069,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -39420,7 +39477,7 @@
               "target": "byteorder"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -39701,7 +39758,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -39771,7 +39828,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -39835,7 +39892,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -40847,7 +40904,7 @@
           "selects": {
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -41027,7 +41084,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -41718,7 +41775,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -42114,7 +42171,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -42922,7 +42979,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -43041,7 +43098,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -43818,7 +43875,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -43910,7 +43967,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -44131,7 +44188,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -44199,7 +44256,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -46282,7 +46339,7 @@
               "target": "inferno"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -47631,7 +47688,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -47850,7 +47907,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -48877,7 +48934,7 @@
             ],
             "cfg(not(any(target_os = \"macos\", target_os = \"ios\", target_os = \"windows\", target_arch = \"wasm32\")))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -49074,14 +49131,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.4": {
+    "quinn 0.11.5": {
       "name": "quinn",
-      "version": "0.11.4",
+      "version": "0.11.5",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.4/download",
-          "sha256": "a2d2fb862b7ba45e615c1429def928f2e15f815bdf933b27a2d3824e224c1f46"
+          "url": "https://static.crates.io/crates/quinn/0.11.5/download",
+          "sha256": "8c7c5fdde3cdae7203427dc4f0a68fe0ed09833edc525a03456b153b79828684"
         }
       },
       "targets": [
@@ -49128,7 +49185,7 @@
               "alias": "proto"
             },
             {
-              "id": "quinn-udp 0.5.4",
+              "id": "quinn-udp 0.5.5",
               "target": "quinn_udp",
               "alias": "udp"
             },
@@ -49149,7 +49206,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -49160,7 +49217,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.4"
+        "version": "0.11.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -49257,14 +49314,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-udp 0.5.4": {
+    "quinn-udp 0.5.5": {
       "name": "quinn-udp",
-      "version": "0.5.4",
+      "version": "0.5.5",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-udp/0.5.4/download",
-          "sha256": "8bffec3605b73c6f1754535084a85229fa8a30f86014e6c81aeec4abb68b0285"
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.5/download",
+          "sha256": "4fe68c2e9e1a1234e218683dbdf9f9dfcb094113c5ac2b938dfcb9bab4c4140b"
         }
       },
       "targets": [
@@ -49297,7 +49354,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -49316,14 +49373,14 @@
                 "target": "once_cell"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.5.4"
+        "version": "0.5.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -49542,7 +49599,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -49645,7 +49702,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -49717,7 +49774,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -50383,7 +50440,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -50462,7 +50519,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -50750,7 +50807,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -52099,7 +52156,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.39.3",
+                "id": "tokio 1.40.0",
                 "target": "tokio"
               },
               {
@@ -52111,7 +52168,7 @@
                 "target": "tokio_socks"
               },
               {
-                "id": "tokio-util 0.7.11",
+                "id": "tokio-util 0.7.12",
                 "target": "tokio_util"
               },
               {
@@ -52334,7 +52391,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "tokio 1.39.3",
+                "id": "tokio 1.40.0",
                 "target": "tokio"
               },
               {
@@ -52346,7 +52403,7 @@
                 "target": "tokio_socks"
               },
               {
-                "id": "tokio-util 0.7.11",
+                "id": "tokio-util 0.7.12",
                 "target": "tokio_util"
               },
               {
@@ -52674,7 +52731,7 @@
             ],
             "cfg(any(target_os = \"android\", target_os = \"linux\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -52792,7 +52849,7 @@
           "selects": {
             "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(target_arch = \"aarch64\", target_arch = \"arm\")))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -53230,7 +53287,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -53636,7 +53693,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -54352,7 +54409,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -57023,7 +57080,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -57085,7 +57142,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -59024,7 +59081,7 @@
               "target": "sha2"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -59253,7 +59310,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -59321,7 +59378,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -59378,7 +59435,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -60703,7 +60760,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -60765,7 +60822,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -61092,7 +61149,7 @@
               "target": "bitflags"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -61211,7 +61268,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -61917,7 +61974,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -62642,7 +62699,7 @@
               "target": "core_foundation_sys"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -62828,7 +62885,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -62848,14 +62905,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "target-lexicon 0.12.14": {
+    "target-lexicon 0.12.16": {
       "name": "target-lexicon",
-      "version": "0.12.14",
+      "version": "0.12.16",
       "package_url": "https://github.com/bytecodealliance/target-lexicon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/target-lexicon/0.12.14/download",
-          "sha256": "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
+          "url": "https://static.crates.io/crates/target-lexicon/0.12.16/download",
+          "sha256": "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
         }
       },
       "targets": [
@@ -62898,14 +62955,14 @@
         "deps": {
           "common": [
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.12.14"
+        "version": "0.12.16"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -63006,7 +63063,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -63014,7 +63071,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -63449,7 +63506,7 @@
           "selects": {
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -63503,7 +63560,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -63652,7 +63709,7 @@
               "target": "getopts"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -64068,7 +64125,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -64148,7 +64205,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -64222,7 +64279,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -64313,7 +64370,7 @@
           "selects": {
             "cfg(target_family = \"unix\")": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -64839,14 +64896,14 @@
       ],
       "license_file": null
     },
-    "tokio 1.39.3": {
+    "tokio 1.40.0": {
       "name": "tokio",
-      "version": "1.39.3",
+      "version": "1.40.0",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio/1.39.3/download",
-          "sha256": "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
+          "url": "https://static.crates.io/crates/tokio/1.40.0/download",
+          "sha256": "e2b070231665d27ad9ec9b8df639893f46727666c6767db40317fbe920a5d998"
         }
       },
       "targets": [
@@ -64938,7 +64995,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               },
               {
@@ -64964,7 +65021,7 @@
           ],
           "selects": {}
         },
-        "version": "1.39.3"
+        "version": "1.40.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -65008,7 +65065,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65127,7 +65184,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -65191,7 +65248,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65257,7 +65314,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65322,7 +65379,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65475,7 +65532,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65537,7 +65594,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65596,7 +65653,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -65664,7 +65721,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -65683,14 +65740,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-util 0.7.11": {
+    "tokio-util 0.7.12": {
       "name": "tokio-util",
-      "version": "0.7.11",
+      "version": "0.7.12",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-util/0.7.11/download",
-          "sha256": "9cf6b47b3771c49ac75ad09a6162f53ad4b8088b76ac60e8ec1455b31a189fe1"
+          "url": "https://static.crates.io/crates/tokio-util/0.7.12/download",
+          "sha256": "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
         }
       },
       "targets": [
@@ -65752,7 +65809,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -65766,7 +65823,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.7.11"
+        "version": "0.7.12"
       },
       "license": "MIT",
       "license_ids": [
@@ -66019,7 +66076,7 @@
               "target": "prost"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -66235,11 +66292,11 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -66354,11 +66411,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -66494,11 +66551,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -66708,7 +66765,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -66799,7 +66856,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -67773,7 +67830,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -67885,7 +67942,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -68115,7 +68172,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -68127,7 +68184,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -69612,7 +69669,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -69665,7 +69722,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ]
@@ -70076,7 +70133,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             },
             {
@@ -70088,7 +70145,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.11",
+              "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
@@ -70681,6 +70738,54 @@
       ],
       "license_file": "LICENSE"
     },
+    "wasm-encoder 0.215.0": {
+      "name": "wasm-encoder",
+      "version": "0.215.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.215.0/download",
+          "sha256": "4fb56df3e06b8e6b77e37d2969a50ba51281029a9aeb3855e76b7f49b6418847"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.215.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "wasm-smith 0.212.0": {
       "name": "wasm-smith",
       "version": "0.212.0",
@@ -70953,6 +71058,82 @@
       ],
       "license_file": null
     },
+    "wasmparser 0.215.0": {
+      "name": "wasmparser",
+      "version": "0.215.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.215.0/download",
+          "sha256": "53fbde0881f24199b81cf49b6ff8f9c145ac8eb1b7fc439adb5c099734f7d90e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.215.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "wasmprinter 0.212.0": {
       "name": "wasmprinter",
       "version": "0.212.0",
@@ -71008,14 +71189,70 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime 23.0.1": {
+    "wasmprinter 0.215.0": {
+      "name": "wasmprinter",
+      "version": "0.215.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmprinter/0.215.0/download",
+          "sha256": "d8e9a325d85053408209b3d2ce5eaddd0dd6864d1cff7a007147ba073157defc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmprinter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmprinter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.72",
+              "target": "anyhow"
+            },
+            {
+              "id": "termcolor 1.4.1",
+              "target": "termcolor"
+            },
+            {
+              "id": "wasmparser 0.215.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.215.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "wasmtime 24.0.0": {
       "name": "wasmtime",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime/23.0.1/download",
-          "sha256": "8945e69ec96e5d36cbe1aa2e88e28f988562dd3b5133578c44aae20ea2bcdb40"
+          "url": "https://static.crates.io/crates/wasmtime/24.0.0/download",
+          "sha256": "9a5883d64dfc8423c56e3d8df27cffc44db25336aa468e8e0724fddf30a333d7"
         }
       },
       "targets": [
@@ -71086,7 +71323,7 @@
               "target": "indexmap"
             },
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             },
             {
@@ -71126,35 +71363,35 @@
               "target": "sptr"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime 23.0.1",
+              "id": "wasmtime 24.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-asm-macros 23.0.1",
+              "id": "wasmtime-asm-macros 24.0.0",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-cranelift 23.0.1",
+              "id": "wasmtime-cranelift 24.0.0",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 23.0.1",
+              "id": "wasmtime-environ 24.0.0",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-icache-coherence 23.0.1",
+              "id": "wasmtime-jit-icache-coherence 24.0.0",
               "target": "wasmtime_jit_icache_coherence"
             },
             {
-              "id": "wasmtime-slab 23.0.1",
+              "id": "wasmtime-slab 24.0.0",
               "target": "wasmtime_slab"
             }
           ],
@@ -71203,7 +71440,7 @@
               "target": "serde_derive"
             },
             {
-              "id": "wasmtime-versioned-export-macros 23.0.1",
+              "id": "wasmtime-versioned-export-macros 24.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -71231,7 +71468,7 @@
           ],
           "selects": {}
         },
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -71249,7 +71486,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 23.0.1",
+              "id": "wasmtime-versioned-export-macros 24.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -71262,14 +71499,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-asm-macros 23.0.1": {
+    "wasmtime-asm-macros 24.0.0": {
       "name": "wasmtime-asm-macros",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-asm-macros/23.0.1/download",
-          "sha256": "964c3b3342547a51e0d2702eae3a2d2be215d16b55a14e2e786b11c4931b7f08"
+          "url": "https://static.crates.io/crates/wasmtime-asm-macros/24.0.0/download",
+          "sha256": "1c4dc7e2a379c0dd6be5b55857d14c4b277f43a9c429a9e14403eb61776ae3be"
         }
       },
       "targets": [
@@ -71301,7 +71538,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71309,14 +71546,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-component-macro 23.0.1": {
+    "wasmtime-component-macro 24.0.0": {
       "name": "wasmtime-component-macro",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-component-macro/23.0.1/download",
-          "sha256": "0e9a60f3dfc8a825214be6e3e8e4fab280ea9d46ea2f4db11d958e754be021ae"
+          "url": "https://static.crates.io/crates/wasmtime-component-macro/24.0.0/download",
+          "sha256": "4b07773d1c3dab5f014ec61316ee317aa424033e17e70a63abdf7c3a47e58fcf"
         }
       },
       "targets": [
@@ -71369,26 +71606,26 @@
               "target": "syn"
             },
             {
-              "id": "wasmtime-component-macro 23.0.1",
+              "id": "wasmtime-component-macro 24.0.0",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-component-util 23.0.1",
+              "id": "wasmtime-component-util 24.0.0",
               "target": "wasmtime_component_util"
             },
             {
-              "id": "wasmtime-wit-bindgen 23.0.1",
+              "id": "wasmtime-wit-bindgen 24.0.0",
               "target": "wasmtime_wit_bindgen"
             },
             {
-              "id": "wit-parser 0.212.0",
+              "id": "wit-parser 0.215.0",
               "target": "wit_parser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -71401,14 +71638,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-component-util 23.0.1": {
+    "wasmtime-component-util 24.0.0": {
       "name": "wasmtime-component-util",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-component-util/23.0.1/download",
-          "sha256": "2bd9555175ad59d13fd353c2a6d9bc92f47f3496fc2b92e84eaa9e6edf048f3c"
+          "url": "https://static.crates.io/crates/wasmtime-component-util/24.0.0/download",
+          "sha256": "e38d735320f4e83478369ce649ad8fe87c6b893220902e798547a225fc0c5874"
         }
       },
       "targets": [
@@ -71431,7 +71668,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71439,14 +71676,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-cranelift 23.0.1": {
+    "wasmtime-cranelift 24.0.0": {
       "name": "wasmtime-cranelift",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift/23.0.1/download",
-          "sha256": "b7ab12460e903933b1122d0c7ca5eb1a6160574870a5b110891a4cc96ef6ec3a"
+          "url": "https://static.crates.io/crates/wasmtime-cranelift/24.0.0/download",
+          "sha256": "e570d831d0785d93d7d8c722b1eb9a34e0d0c1534317666f65892818358a2da9"
         }
       },
       "targets": [
@@ -71485,31 +71722,31 @@
               "target": "cfg_if"
             },
             {
-              "id": "cranelift-codegen 0.110.1",
+              "id": "cranelift-codegen 0.111.0",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-control 0.110.1",
+              "id": "cranelift-control 0.111.0",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.110.1",
+              "id": "cranelift-frontend 0.111.0",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.110.1",
+              "id": "cranelift-native 0.111.0",
               "target": "cranelift_native"
             },
             {
-              "id": "cranelift-wasm 0.110.1",
+              "id": "cranelift-wasm 0.111.0",
               "target": "cranelift_wasm"
             },
             {
-              "id": "gimli 0.28.0",
+              "id": "gimli 0.29.0",
               "target": "gimli"
             },
             {
@@ -71521,7 +71758,7 @@
               "target": "object"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             },
             {
@@ -71529,11 +71766,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-environ 23.0.1",
+              "id": "wasmtime-environ 24.0.0",
               "target": "wasmtime_environ"
             }
           ],
@@ -71543,13 +71780,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 23.0.1",
+              "id": "wasmtime-versioned-export-macros 24.0.0",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71557,14 +71794,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-environ 23.0.1": {
+    "wasmtime-environ 24.0.0": {
       "name": "wasmtime-environ",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-environ/23.0.1/download",
-          "sha256": "9e52faba13550fed76d5ffe75ec7cada73109b9324c4dabcaf18b3165107010d"
+          "url": "https://static.crates.io/crates/wasmtime-environ/24.0.0/download",
+          "sha256": "c5fe80dfbd81687431a7d4f25929fae1ae96894786d5c96b14ae41164ee97377"
         }
       },
       "targets": [
@@ -71601,15 +71838,15 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-bitset 0.110.1",
+              "id": "cranelift-bitset 0.111.0",
               "target": "cranelift_bitset"
             },
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             },
             {
-              "id": "gimli 0.28.0",
+              "id": "gimli 0.29.0",
               "target": "gimli"
             },
             {
@@ -71633,23 +71870,23 @@
               "target": "serde"
             },
             {
-              "id": "target-lexicon 0.12.14",
+              "id": "target-lexicon 0.12.16",
               "target": "target_lexicon"
             },
             {
-              "id": "wasm-encoder 0.212.0",
+              "id": "wasm-encoder 0.215.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.212.0",
+              "id": "wasmprinter 0.215.0",
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime-types 23.0.1",
+              "id": "wasmtime-types 24.0.0",
               "target": "wasmtime_types"
             }
           ],
@@ -71665,7 +71902,7 @@
           ],
           "selects": {}
         },
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71673,14 +71910,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-jit-icache-coherence 23.0.1": {
+    "wasmtime-jit-icache-coherence 24.0.0": {
       "name": "wasmtime-jit-icache-coherence",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/23.0.1/download",
-          "sha256": "7fddf3e2980fb1d123d1fcac55189e417fdd3dba4f62139b5a0a1f9efe5669d5"
+          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/24.0.0/download",
+          "sha256": "d15de8429db996f0d17a4163a35eccc3f874cbfb50f29c379951ea1bbb39452e"
         }
       },
       "targets": [
@@ -71716,7 +71953,7 @@
           "selects": {
             "cfg(any(target_os = \"linux\", target_os = \"macos\", target_os = \"freebsd\", target_os = \"android\"))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -71729,7 +71966,7 @@
           }
         },
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71737,14 +71974,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-slab 23.0.1": {
+    "wasmtime-slab 24.0.0": {
       "name": "wasmtime-slab",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-slab/23.0.1/download",
-          "sha256": "f3ac25f8f80a3c5cda4ea68472057b23fa309956ae9784c0f1347439e624840e"
+          "url": "https://static.crates.io/crates/wasmtime-slab/24.0.0/download",
+          "sha256": "1f68d38fa6b30c5e1fc7d608263062997306f79e577ebd197ddcd6b0f55d87d1"
         }
       },
       "targets": [
@@ -71767,7 +72004,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71775,14 +72012,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-types 23.0.1": {
+    "wasmtime-types 24.0.0": {
       "name": "wasmtime-types",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-types/23.0.1/download",
-          "sha256": "44a0fba5f60b030c635abafdcaf2e9ad883163676bd02a0f0ebaed9393453f28"
+          "url": "https://static.crates.io/crates/wasmtime-types/24.0.0/download",
+          "sha256": "6634e7079d9c5cfc81af8610ed59b488cc5b7f9777a2f4c1667a2565c2e45249"
         }
       },
       "targets": [
@@ -71817,7 +72054,7 @@
               "target": "anyhow"
             },
             {
-              "id": "cranelift-entity 0.110.1",
+              "id": "cranelift-entity 0.111.0",
               "target": "cranelift_entity"
             },
             {
@@ -71829,7 +72066,7 @@
               "target": "smallvec"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             }
           ],
@@ -71845,7 +72082,7 @@
           ],
           "selects": {}
         },
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71853,14 +72090,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-versioned-export-macros 23.0.1": {
+    "wasmtime-versioned-export-macros 24.0.0": {
       "name": "wasmtime-versioned-export-macros",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/23.0.1/download",
-          "sha256": "85b40c6d9c8f56ea0cbeacb80f40075a91687163b693b7cda39b48efe3c974d2"
+          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/24.0.0/download",
+          "sha256": "3850e3511d6c7f11a72d571890b0ed5f6204681f7f050b9de2690e7f13123fed"
         }
       },
       "targets": [
@@ -71900,7 +72137,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -71908,14 +72145,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-wit-bindgen 23.0.1": {
+    "wasmtime-wit-bindgen 24.0.0": {
       "name": "wasmtime-wit-bindgen",
-      "version": "23.0.1",
+      "version": "24.0.0",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-wit-bindgen/23.0.1/download",
-          "sha256": "8cec1424f842d187b8244284e565f71b77bef8993452e8524f71216172978ac8"
+          "url": "https://static.crates.io/crates/wasmtime-wit-bindgen/24.0.0/download",
+          "sha256": "3cb331ac7ed1d5ba49cddcdb6b11973752a857148858bb308777d2fc5584121f"
         }
       },
       "targets": [
@@ -71952,14 +72189,14 @@
               "target": "indexmap"
             },
             {
-              "id": "wit-parser 0.212.0",
+              "id": "wit-parser 0.215.0",
               "target": "wit_parser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "23.0.1"
+        "version": "24.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -72397,7 +72634,7 @@
           "selects": {
             "cfg(all(unix, not(target_arch = \"wasm32\")))": [
               {
-                "id": "libc 0.2.155",
+                "id": "libc 0.2.158",
                 "target": "libc"
               }
             ],
@@ -73176,8 +73413,12 @@
           "common": [
             "Win32",
             "Win32_Foundation",
+            "Win32_Networking",
+            "Win32_Networking_WinSock",
             "Win32_Storage",
             "Win32_Storage_FileSystem",
+            "Win32_System",
+            "Win32_System_IO",
             "default"
           ],
           "selects": {}
@@ -75153,7 +75394,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.39.3",
+              "id": "tokio 1.40.0",
               "target": "tokio"
             }
           ],
@@ -75178,14 +75419,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wit-parser 0.212.0": {
+    "wit-parser 0.215.0": {
       "name": "wit-parser",
-      "version": "0.212.0",
+      "version": "0.215.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wit-parser",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wit-parser/0.212.0/download",
-          "sha256": "ceeb0424aa8679f3fcf2d6e3cfa381f3d6fa6179976a2c05a6249dd2bb426716"
+          "url": "https://static.crates.io/crates/wit-parser/0.215.0/download",
+          "sha256": "935a97eaffd57c3b413aa510f8f0b550a4a9fe7d59e79cd8b89a83dcb860321f"
         }
       },
       "targets": [
@@ -75242,7 +75483,7 @@
               "target": "unicode_xid"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             }
           ],
@@ -75258,11 +75499,12 @@
           ],
           "selects": {}
         },
-        "version": "0.212.0"
+        "version": "0.215.0"
       },
-      "license": "Apache-2.0 WITH LLVM-exception",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
-        "Apache-2.0"
+        "Apache-2.0",
+        "MIT"
       ],
       "license_file": null
     },
@@ -75698,7 +75940,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.155",
+              "id": "libc 0.2.158",
               "target": "libc"
             }
           ],
@@ -77946,7 +78188,7 @@
     "kube 0.93.1",
     "lazy_static 1.4.0",
     "leb128 0.2.5",
-    "libc 0.2.155",
+    "libc 0.2.158",
     "libflate 2.1.0",
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
@@ -78007,8 +78249,8 @@
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
-    "quinn 0.11.4",
-    "quinn-udp 0.5.4",
+    "quinn 0.11.5",
+    "quinn-udp 0.5.5",
     "quote 1.0.35",
     "rand 0.8.5",
     "rand_chacha 0.3.1",
@@ -78069,6 +78311,7 @@
     "slog-term 2.9.1",
     "socket2 0.5.7",
     "ssh2 0.9.4",
+    "static_assertions 1.1.0",
     "strum 0.26.2",
     "strum_macros 0.26.2",
     "stubborn-io 0.3.2",
@@ -78088,7 +78331,7 @@
     "tikv-jemalloc-ctl 0.5.4",
     "tikv-jemallocator 0.5.4",
     "time 0.3.36",
-    "tokio 1.39.3",
+    "tokio 1.40.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
     "tokio-rustls 0.24.1",
@@ -78096,7 +78339,7 @@
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
     "tokio-test 0.4.3",
-    "tokio-util 0.7.11",
+    "tokio-util 0.7.12",
     "toml 0.5.11",
     "tonic 0.11.0",
     "tonic-build 0.11.0",
@@ -78125,8 +78368,8 @@
     "wasm-smith 0.212.0",
     "wasmparser 0.212.0",
     "wasmprinter 0.212.0",
-    "wasmtime 23.0.1",
-    "wasmtime-environ 23.0.1",
+    "wasmtime 24.0.0",
+    "wasmtime-environ 24.0.0",
     "wast 212.0.0",
     "wat 1.212.0",
     "wee_alloc 0.4.5",

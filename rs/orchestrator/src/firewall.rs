@@ -768,29 +768,37 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_test() {
+    #[test]
+    fn nftables_golden_test() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         golden_test(
+            rt,
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
-        )
-        .await
+        );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_boundary_node_test() {
+    #[test]
+    fn nftables_golden_boundary_node_test() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         golden_test(
+            rt,
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
-        )
-        .await
+        );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    async fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(rt: tokio::runtime::Runtime, role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -809,10 +817,12 @@ mod tests {
             role,
         );
 
-        firewall
-            .check_for_firewall_config(RegistryVersion::new(1))
-            .await
-            .expect("Should successfully produce a firewall config");
+        rt.block_on(async {
+            firewall
+                .check_for_firewall_config(RegistryVersion::new(1))
+                .await
+                .expect("Should successfully produce a firewall config");
+        });
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
@@ -878,12 +888,15 @@ mod tests {
 
         let registry = set_up_registry(role, node);
 
-        let registry_helper = Arc::new(RegistryHelper::new(node, registry, no_op_logger()));
+        let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
+        let (crypto, _) =
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
+            Arc::new(crypto),
             no_op_logger(),
             node,
         );

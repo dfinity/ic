@@ -19,6 +19,6 @@ runcmd:
     # IC-OS Build
     sudo -u ubuntu git clone --depth 1 https://github.com/dfinity/ic.git /home/ubuntu/ic
     [ -n "$REVISION" ] && sudo -u ubuntu bash -e -c "cd /home/ubuntu/ic; git fetch origin $REVISION && git checkout $REVISION"
-    sudo -u ubuntu bash -eo pipefail -c "cd /home/ubuntu/ic; unbuffer ./gitlab-ci/container/build-ic.sh -i -b -c | tee ../build.out"
+    sudo -u ubuntu bash -eo pipefail -c "cd /home/ubuntu/ic; unbuffer ./ci/container/build-ic.sh -i -b -c | tee ../build.out"
     # while building: `tail -f /home/ubuntu/build.out`
     # when completed: `tree /home/ubuntu/ic/artifacts`

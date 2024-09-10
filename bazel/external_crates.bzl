@@ -630,7 +630,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
-                rev = "3be26b5a2c71bf56e05b910951c1935a1ac550c4",
+                tag = "0.1.0-b0",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
@@ -738,7 +738,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.5",
             ),
             "libc": crate.spec(
-                version = "^0.2.155",
+                version = "^0.2.158",
             ),
             "libflate": crate.spec(
                 version = "^2.1.0",
@@ -989,12 +989,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.3",
             ),
             "quinn": crate.spec(
-                version = "^0.11.4",
+                version = "^0.11.5",
                 default_features = False,
                 features = ["ring", "log", "runtime-tokio", "rustls"],
             ),
             "quinn-udp": crate.spec(
-                version = "^0.5.4",
+                version = "^0.5.5",
             ),
             "quote": crate.spec(
                 version = "^1.0",
@@ -1244,6 +1244,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ssh2": crate.spec(
                 version = "0.9.4",
             ),
+            "static_assertions": crate.spec(
+                version = "1.1.0",
+            ),
             "strum": crate.spec(
                 version = "^0.26.2",
                 features = [
@@ -1312,7 +1315,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.39.3",
+                version = "^1.40.0",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
@@ -1349,7 +1352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.2",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.11",
+                version = "^0.7.12",
                 features = [
                     "codec",
                     "time",
@@ -1478,7 +1481,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.212.0",
             ),
             "wasmtime": crate.spec(
-                version = "^23.0.1",
+                version = "^24.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1488,7 +1491,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^23.0.1",
+                version = "^24.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",

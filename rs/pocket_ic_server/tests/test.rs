@@ -345,6 +345,19 @@ async fn test_gateway(server_url: Url, https: bool) {
         .await
         .unwrap();
 
+    // perform frontend asset request for the title page at http://127.0.0.1:<port>/?canisterId=<canister-id>
+    if !https {
+        assert_eq!(proto, "http");
+        let canister_url = format!(
+            "{}://{}:{}/?canisterId={}",
+            "http", "127.0.0.1", port, canister_id
+        );
+        let res = client.get(canister_url).send().await.unwrap();
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        println!("page: {}", page);
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
+
     // perform frontend asset request for the title page at http(s)://localhost:<port>/?canisterId=<canister-id>
     let canister_url = format!(
         "{}://{}:{}/?canisterId={}",

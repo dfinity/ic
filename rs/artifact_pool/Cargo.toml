@@ -35,7 +35,7 @@ rocksdb = { version = "0.22.0", default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
