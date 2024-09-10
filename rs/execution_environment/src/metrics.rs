@@ -148,8 +148,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub evaluated_canisters: Histogram,
     /// The number of transient errors.
     pub transient_errors: IntCounter,
-    // A copy of `execution_subnet_message_duration_seconds` but for query.
-    pub subnet_queries: HistogramVec,
+    /// Duration of a subnet query execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
+    pub subnet_query_messages: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -271,9 +271,8 @@ impl QueryHandlerMetrics {
                 "The total number of transient errors accumulated \
                         during the query execution",
             ),
-            // A copy of `execution_subnet_message_duration_seconds` but for query.
-            subnet_queries: metrics_registry.histogram_vec(
-                "execution_subnet_query_duration_seconds",
+            subnet_query_messages: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_duration_seconds",
                 "Duration of a subnet query execution, in seconds.",
                 decimal_buckets(-3, 2),
                 &["method_name"],
@@ -286,7 +285,7 @@ impl QueryHandlerMetrics {
             Ok(_) => format!("query_ic00_{}", method_name),
             Err(_) => "query_ic00_unknown".to_string(),
         };
-        self.subnet_queries
+        self.subnet_query_messages
             .with_label_values(&[&label])
             .observe(duration);
     }
