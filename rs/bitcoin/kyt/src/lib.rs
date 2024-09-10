@@ -43,7 +43,8 @@ pub fn blocklist_contains(address: &Address) -> bool {
 }
 
 pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal && message.contains("size limit")
+    code == &RejectionCode::SysFatal
+        && (message.contains("size limit") || message.contains("length limit"))
 }
 
 async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
@@ -60,13 +61,6 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
             value: "bitcoin_inputs_collector".to_string(),
         },
     ];
-    // The max_response_bytes is set to 400KiB because:
-    // - The maximum size of a standard non-taproot transaction is 400k vBytes.
-    // - Taproot transactions could be as big as full block size (4MiB).
-    // - Currently a subnet's maximum response size is only 2MiB.
-    // - Transactions bigger than 2MiB are very rare.
-    //
-    // TODO(XC-171): Transactions between 400k and 2MiB are uncommon but may need to be handled.
     let request = CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::GET,

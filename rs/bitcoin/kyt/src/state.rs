@@ -4,13 +4,6 @@ use ic_btc_interface::Txid;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-// The internal KYT state includes:
-// 1. Transaction check status, indexed by transaction id.
-// 2. Outcall capacity, a semaphore limiting max concurrent outcalls.
-// 3.
-
-const MAX_CONCURRENT: u32 = 100;
-
 #[derive(Debug, Clone)]
 pub enum FetchTxStatus<T> {
     PendingOutcall,
@@ -27,6 +20,14 @@ pub struct FetchedTx<T> {
     pub input_addresses: Vec<Option<Address>>,
 }
 
+// Max number of concurrent http outcalls.
+const MAX_CONCURRENT: u32 = 100;
+
+// The internal KYT state includes:
+// 1. Outcall capacity, a semaphore limiting max concurrent outcalls.
+// 2. fetch transaction status, indexed by transaction id.
+//
+// TODO(XC-191): persist canister state
 thread_local! {
     static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
     static FETCH_TX_STATUS: RefCell<BTreeMap<Txid, FetchTxStatus<Transaction>>> = RefCell::new(BTreeMap::default());
@@ -48,7 +49,7 @@ pub fn clear_fetch_status(txid: Txid) {
     })
 }
 
-/// Set the address value at the given `index` in the `Fetched` status of the given `txid`.
+/// Set the address at the given `index` in the `Fetched` status of the given `txid`.
 /// Pre-condition: the status of `txid` is `Fetched`, and `index` is within bounds.
 pub fn set_fetched_address(txid: Txid, index: usize, address: Address) {
     FETCH_TX_STATUS.with(|s| {

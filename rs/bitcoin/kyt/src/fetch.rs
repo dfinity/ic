@@ -20,6 +20,15 @@ pub const CHECK_TRANSACTION_CYCLES_REQUIRED: u128 = 40_000_000_000;
 /// One time charge for every check_transaction call.
 pub const CHECK_TRANSACTION_CYCLES_SERVICE_FEE: u128 = 100_000_000;
 
+// The response buffer size is set initially set to 4kB, and then
+// increased to 400kB if the initial size isn't enough.
+// - The maximum size of a standard non-taproot transaction is 400k vBytes.
+// - Taproot transactions could be as big as full block size (4MiB).
+// - Currently a subnet's maximum response size is only 2MiB.
+// - Transaction size between 400kB and 2MiB are also uncommon, we could
+//   handle them in the future if required.
+// - Transactions bigger than 2MiB are very rare, and we can't handle them.
+
 /// Initial buffer size is 4kB
 pub const INITIAL_BUFFER_SIZE: u32 = 4 * 1024;
 
@@ -73,11 +82,11 @@ where
     fn cycles_accept(&self, cycles: u128) -> u128;
     fn cycles_available(&self) -> u128;
 
-    /// Try fetch a transaction given its txid:
+    /// Try to fetch a transaction given its txid:
     /// - If it is already available, return `Fetched`.
     /// - If it is already pending, return `Pending`.
     /// - If it is pending retry or not found, return a future that calls `fetch_tx`.
-    /// - Otherwise return other conditions like `HighLoad` or `Error`.
+    /// - Or return other conditions like `HighLoad` or `Error`.
     fn try_fetch_tx<State: FetchState<T>>(
         &self,
         state: &State,
@@ -102,7 +111,7 @@ where
         }
     }
 
-    /// Fetch a transaction using http outcall by its transation id and set status to:
+    /// Fetch a transaction using http outcall by its txid and set its status to:
     /// - `Fetched`, if it is available.
     /// - `PendingRetry`, if the allocated buffer for outcall wasn't enough.
     /// - `Error`, if an irrecoverable error happened during the outcall of `get_tx`.
@@ -144,13 +153,14 @@ where
         }
     }
 
-    /// After a transaction is successfully fetched, we still needs to fetch
-    /// all of its inputs in order to calculate input addresses. The following
-    /// are the steps:
+    /// After a transaction is successfully fetched, we still need to fetch
+    /// all of its inputs in order to calculate input addresses. The steps
+    /// are described as follows:
     /// - Fetch more if there are transaction inputs to be fetched and checked.
     /// - When they are done, calculate input addresses and record them.
-    /// - For those failed due to insufficient outcall response buffer, mark them as `PendingRetry`.
-    /// - If we ran short of cycles and couldn't fetch all inputs, return `NotEnoughCycles`.
+    /// - For those failed due to insufficient outcall response buffer, mark their status
+    ///   as `PendingRetry`.
+    /// - If we are short of cycles and couldn't fetch all inputs, return `NotEnoughCycles`.
     /// - When all inputs are fetched, compute their addresses and return `Passed`
     ///   if all of them pass the check. Otherwise return `Failed`.
     ///
