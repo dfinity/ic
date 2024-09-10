@@ -993,27 +993,22 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
         env.tick();
     }
 
+    // The `update` canister call should be aborted.
     assert_eq!(
         ingress_state(env.ingress_status(&update)),
         Some(IngressState::Processing)
     );
-
-    assert_eq!(
-        ingress_state(env.ingress_status(&status)),
-        Some(IngressState::Received)
-    );
-
+    // The `ic0.install_code` should be blocked by the aborted execution.
     assert_eq!(
         ingress_state(env.ingress_status(&upgrade)),
         Some(IngressState::Received)
     );
+    // The `ic0.canister_status` is allowed for aborted canisters.
+    env.await_ingress(status, 30).unwrap();
 
     env.set_checkpoints_enabled(false);
 
     env.await_ingress(update, 30).unwrap();
-
-    env.await_ingress(status, 30).unwrap();
-
     env.await_ingress(upgrade, 30).unwrap();
 }
 
