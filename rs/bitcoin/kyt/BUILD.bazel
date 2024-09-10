@@ -29,6 +29,7 @@ rust_test(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:tokio",
     ],
 )
