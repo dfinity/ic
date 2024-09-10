@@ -68,13 +68,10 @@ pub fn main() -> Result<()> {
 
             let deployment = read_deployment_file(Path::new(&opts.deployment_file));
 
-            let deployment_name: Option<&str> = match &deployment {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
+            let deployment_name = match &deployment {
+                Ok(deployment) => Ok(deployment.deployment.name.as_str()),
+                Err(e) => Err(anyhow::format_err!("Error retrieving deployment file: {e}")),
+            }?;
 
             generate_network_config(
                 &network_settings,

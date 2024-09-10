@@ -63,18 +63,9 @@ pub fn main() -> Result<()> {
 
             eprintln!("Network settings config: {:?}", &setup_config.network_settings);
 
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file));
-            let deployment_name: Option<&str> = match &deployment {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
-
             generate_network_config(
                 &setup_config.network_settings,
-                deployment_name,
+                &setup_config.icos_settings.hostname,
                 NodeType::SetupOS,
                 Path::new(&output_directory),
             )
