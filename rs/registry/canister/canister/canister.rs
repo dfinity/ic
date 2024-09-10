@@ -203,12 +203,8 @@ fn get_changes_since() {
         }
 
         // Parse request.
-        let request = match deserialize_get_changes_since_request(arg_data()) {
-            Ok(ok) => ok,
-            Err(error) => {
-                return Err((Code::MalformedMessage, error.to_string()));
-            }
-        };
+        let request = deserialize_get_changes_since_request(arg_data())
+            .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
         let version = request;
 
         // All requirements met. Proceed with "real work".
