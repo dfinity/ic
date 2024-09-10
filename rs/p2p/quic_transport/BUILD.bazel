@@ -44,6 +44,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:turmoil",
+    "@crate_index//:rstest"
 ]
 
 ALIASES = {}

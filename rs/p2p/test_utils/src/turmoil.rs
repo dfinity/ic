@@ -37,7 +37,7 @@ use tokio::{
 };
 use turmoil::Sim;
 
-struct CustomUdp {
+pub struct CustomUdp {
     ip: IpAddr,
     inner: turmoil::net::UdpSocket,
 }
@@ -149,6 +149,7 @@ impl AsyncUdpSocket for CustomUdp {
         bufs: &mut [IoSliceMut<'_>],
         meta: &mut [quinn::udp::RecvMeta],
     ) -> Poll<io::Result<usize>> {
+        println!("POLL RECV");
         {
             let fut = self.inner.readable();
             tokio::pin!(fut);
@@ -159,6 +160,7 @@ impl AsyncUdpSocket for CustomUdp {
             };
         }
 
+        println!("RECEIVED A BUFFER");
         assert!(bufs.len() == meta.len());
         let mut packets_received = 0;
         for (packet_meta, packet_buf) in meta.iter_mut().zip(bufs) {
