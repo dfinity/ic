@@ -29,7 +29,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid_parser",
-        "@crate_index//:ic-btc-interface",
         "@crate_index//:tokio",
     ],
 )
@@ -44,6 +43,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-btc-interface",
     ],
 )
 
@@ -84,5 +84,6 @@ rust_ic_test(
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
     ],
 )
