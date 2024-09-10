@@ -2,8 +2,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use anyhow::{bail, Context, Result};
 
-use config::ConfigMap;
 use config::types::NetworkSettings;
+use config::ConfigMap;
 
 #[derive(Debug)]
 pub struct NetworkInfo {
@@ -20,15 +20,16 @@ pub struct NetworkInfo {
     pub mgmt_mac: Option<String>,
 }
 
+// TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration)
 impl NetworkInfo {
     pub fn to_network_settings(&self) -> NetworkSettings {
         NetworkSettings {
             ipv6_prefix: self.ipv6_prefix.clone(),
-            ipv6_address: self.ipv6_address.clone(),
+            ipv6_address: self.ipv6_address,
             ipv6_subnet: self.ipv6_subnet,
             ipv6_gateway: self.ipv6_gateway,
-            ipv4_address: None, // Assuming there's no `ipv4_address` in `NetworkInfo`, you may need to set this if available
-            ipv4_gateway: self.ipv4_gateway.clone(),
+            ipv4_address: None,
+            ipv4_gateway: self.ipv4_gateway,
             ipv4_prefix_length: self.ipv4_prefix_length,
             domain: self.domain.clone(),
             mgmt_mac: self.mgmt_mac.clone(),
@@ -46,16 +47,16 @@ impl NetworkInfo {
         let ipv6_subnet = 64_u8;
 
         let ipv6_prefix = config_map
-        .get("ipv6_prefix")
-        .map(|prefix| {
-            // Prefix should have a max length of 19 ("1234:6789:1234:6789")
-            // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
-            if !is_valid_prefix(prefix) {
-                bail!("Invalid ipv6 prefix: {}", prefix);
-            }
-            Ok(prefix.clone())
-        })
-        .transpose()?;
+            .get("ipv6_prefix")
+            .map(|prefix| {
+                // Prefix should have a max length of 19 ("1234:6789:1234:6789")
+                // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
+                if !is_valid_prefix(prefix) {
+                    bail!("Invalid ipv6 prefix: {}", prefix);
+                }
+                Ok(prefix.clone())
+            })
+            .transpose()?;
 
         // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
         let ipv6_address = match config_map.get("ipv6_address") {

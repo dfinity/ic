@@ -29,7 +29,11 @@ pub fn generate_network_config(
         return generate_systemd_config_files(output_directory, network_info, None, &address);
     };
 
-    let mac = generate_mac_address(deployment_name, &node_type, network_info.mgmt_mac.as_deref())?;
+    let mac = generate_mac_address(
+        deployment_name,
+        &node_type,
+        network_info.mgmt_mac.as_deref(),
+    )?;
     eprintln!("Using generated mac (unformatted) {}", mac.get());
 
     eprintln!("Generating ipv6 address");

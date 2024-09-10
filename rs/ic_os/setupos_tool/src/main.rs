@@ -5,8 +5,8 @@ use clap::{Parser, Subcommand};
 
 use config::types::SetupOSConfig;
 use config::{
-    deserialize_config, DEFAULT_SETUPOS_CONFIG_FILE_PATH,
-    DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
+    deserialize_config, DEFAULT_SETUPOS_CONFIG_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
+    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
@@ -59,7 +59,10 @@ pub fn main() -> Result<()> {
             let setup_config: SetupOSConfig =
                 deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
-            eprintln!("Network settings config: {:?}", &setup_config.network_settings);
+            eprintln!(
+                "Network settings config: {:?}",
+                &setup_config.network_settings
+            );
 
             generate_network_config(
                 &setup_config.network_settings,
@@ -79,10 +82,14 @@ pub fn main() -> Result<()> {
                 &node_type,
                 setup_config.network_settings.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = setup_config.network_settings.ipv6_prefix
-                .ok_or_else(|| anyhow!("ipv6_prefix required in config to generate ipv6 address"))?;
+            let ipv6_prefix = setup_config.network_settings.ipv6_prefix.ok_or_else(|| {
+                anyhow!("ipv6_prefix required in config to generate ipv6 address")
+            })?;
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
-            println!("{}", to_cidr(ipv6_address, setup_config.network_settings.ipv6_subnet));
+            println!(
+                "{}",
+                to_cidr(ipv6_address, setup_config.network_settings.ipv6_subnet)
+            );
 
             Ok(())
         }
@@ -90,7 +97,10 @@ pub fn main() -> Result<()> {
             let setup_config: SetupOSConfig =
                 deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
-            eprintln!("Network settings config: {:?}", &setup_config.network_settings);
+            eprintln!(
+                "Network settings config: {:?}",
+                &setup_config.network_settings
+            );
 
             let node_type = node_type.parse::<NodeType>()?;
 

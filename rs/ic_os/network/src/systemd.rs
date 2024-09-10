@@ -5,9 +5,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use config::types::NetworkSettings;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
 use crate::mac_address::FormattedMacAddress;
+use config::types::NetworkSettings;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
