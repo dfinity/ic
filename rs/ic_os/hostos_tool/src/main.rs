@@ -70,7 +70,7 @@ pub fn main() -> Result<()> {
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read mgmt_mac from depolyment directly.
+            // and we won't need to read mgmt_mac from deployment.json directly.
             network_settings.mgmt_mac = deployment.deployment.mgmt_mac;
 
             generate_network_config(
