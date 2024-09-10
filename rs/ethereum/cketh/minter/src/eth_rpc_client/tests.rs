@@ -18,7 +18,7 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
+                RpcNodeProvider::Sepolia(SepoliaProvider::Sepolia),
                 RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
             ]
         );
@@ -233,7 +233,7 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc::{FeeHistory, HttpOutcallError};
-        use crate::eth_rpc_client::tests::{POKT, LLAMA_NODES, PUBLIC_NODE};
+        use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use crate::numeric::{BlockNumber, WeiPerGas};
         use ic_cdk::api::call::RejectionCode;
@@ -458,7 +458,7 @@ mod multi_call_results {
 
     mod has_http_outcall_error_matching {
         use crate::eth_rpc::HttpOutcallError;
-        use crate::eth_rpc_client::tests::{POKT, LLAMA_NODES, PUBLIC_NODE};
+        use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
@@ -643,7 +643,7 @@ mod eth_get_transaction_count {
 mod evm_rpc_conversion {
     use crate::eth_rpc::SendRawTransactionResult;
     use crate::eth_rpc_client::responses::TransactionReceipt;
-    use crate::eth_rpc_client::tests::{POKT, LLAMA_NODES, PUBLIC_NODE};
+    use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
     use crate::eth_rpc_client::{
         providers::RpcNodeProvider, Block, Equality, FeeHistory, HttpOutcallError, LogEntry,
         MinByKey, MultiCallError, MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
