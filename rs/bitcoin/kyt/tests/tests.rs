@@ -182,7 +182,7 @@ fn test_check_transaction_passed() {
     // There wll be two outcalls because the canister will first fetch the above
     // given txid, and then fetch the vout[0] from the returned transaction body.
 
-    let canister_http_requests = tick_until_next_request(&env);
+    let canister_http_requests = tick_until_next_request(env);
     env.mock_canister_http_response(MockCanisterHttpResponse {
             subnet_id: canister_http_requests[0].subnet_id,
             request_id: canister_http_requests[0].request_id,
@@ -204,7 +204,7 @@ fn test_check_transaction_passed() {
             }),
         });
 
-    let canister_http_requests = tick_until_next_request(&env);
+    let canister_http_requests = tick_until_next_request(env);
     env.mock_canister_http_response(MockCanisterHttpResponse {
             subnet_id: canister_http_requests[0].subnet_id,
             request_id: canister_http_requests[0].request_id,
