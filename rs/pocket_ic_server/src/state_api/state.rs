@@ -1038,7 +1038,7 @@ impl ApiState {
         };
         let request = Request::new(canister_http_request);
         canister_http_adapter
-            .canister_http_send(request)
+            .https_outcall(request)
             .await
             .map(|adapter_response| {
                 let HttpsOutcallResponse {

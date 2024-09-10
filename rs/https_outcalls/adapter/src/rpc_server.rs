@@ -40,6 +40,7 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 type OutboundRequestBody = Full<Bytes>;
 
 /// Implements HttpsOutcallsService
+// TODO: consider making this private
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
     socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
