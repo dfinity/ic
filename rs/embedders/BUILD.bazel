@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:libflate",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
+    "@crate_index//:rand",
     "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",

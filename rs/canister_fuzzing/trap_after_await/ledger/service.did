@@ -1,0 +1,5 @@
+service : {
+    get_balance : (principal) -> (nat64) query;
+    setup_balance : (principal, nat64) -> ();
+    update_balance: (nat64) -> ();
+}

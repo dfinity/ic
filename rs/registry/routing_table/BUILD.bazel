@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -6,6 +7,10 @@ rust_library(
     name = "routing_table",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_routing_table",
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
     version = "0.9.0",
     deps = [
         # Keep sorted.
