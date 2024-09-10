@@ -28,7 +28,7 @@ pub struct FetchedTx<T> {
 }
 
 thread_local! {
-    static OUTCALL_CAPACITY: RefCell<u32> = RefCell::new(MAX_CONCURRENT);
+    static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
     static FETCH_TX_STATUS: RefCell<BTreeMap<Txid, FetchTxStatus<Transaction>>> = RefCell::new(BTreeMap::default());
 }
 

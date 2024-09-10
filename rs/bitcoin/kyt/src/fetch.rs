@@ -165,11 +165,9 @@ where
         fn check_completed<T>(fetched: &FetchedTx<T>) -> Option<CheckTransactionResponse> {
             if fetched.input_addresses.iter().all(|x| x.is_some()) {
                 // We have obtained all input addresses.
-                for address in fetched.input_addresses.iter() {
-                    if let Some(address) = address {
-                        if blocklist_contains(&address) {
-                            return Some(CheckTransactionResponse::Failed);
-                        }
+                for address in fetched.input_addresses.iter().flatten() {
+                    if blocklist_contains(address) {
+                        return Some(CheckTransactionResponse::Failed);
                     }
                 }
                 Some(CheckTransactionResponse::Passed)
