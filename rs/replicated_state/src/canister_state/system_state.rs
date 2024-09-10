@@ -427,7 +427,9 @@ impl OnLowWasmMemoryHookStatus {
         used_stable_memory: NumBytes,
         used_wasm_memory: NumBytes,
     ) {
-        // If wasm memory limit is not set, the default is 4 GiB.
+        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
+        // limit is ignored for query methods, response callback handlers,
+        // global timers, heartbeats, and canister pre_upgrade.
         let wasm_memory_limit = if let Some(limit) = wasm_memory_limit {
             limit
         } else {
@@ -448,16 +450,14 @@ impl OnLowWasmMemoryHookStatus {
             wasm_memory_limit
         };
 
-        debug_assert!(
-            used_wasm_memory <= wasm_capacity,
-            "Used wasm memory: {:?}, is larger than maximal possible: {:?}.",
-            used_wasm_memory,
-            wasm_capacity
-        );
-
-        let left_wasm_space = wasm_capacity - used_wasm_memory;
-
-        if left_wasm_space >= wasm_memory_threshold {
+        // Conceptually we can think that the remaining Wasm memory is
+        // equal to `wasm_capacity - used_wasm_memory` and that should
+        // be compared with `wasm_memory_threshold` when checking for
+        // the condition for the hook. However, since `wasm_memory_limit`
+        // is ignored in some executions as stated above it is possible
+        // that `used_wasm_memory` is greater than `wasm_capacity` to
+        // avoid overflowing subtraction we adopted inequality.
+        if wasm_capacity >= used_wasm_memory + wasm_memory_threshold {
             *self = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
         } else if *self != OnLowWasmMemoryHookStatus::Executed {
             *self = OnLowWasmMemoryHookStatus::Ready;

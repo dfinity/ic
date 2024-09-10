@@ -917,18 +917,15 @@ impl MemoryUsage {
     ) -> Result<(), HypervisorError> {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
-                let wasm_memory_limit = if let Some(wasm_memory_limit) = self.wasm_memory_limit {
-                    wasm_memory_limit.get()
-                } else {
-                    // If the wasm memory limit is not set, default is 4 GiB.
-                    4 * 1024 * 1024 * 1024
-                };
+                let (new_usage, overflow) = self
+                    .wasm_memory_usage
+                    .get()
+                    .overflowing_add(execution_bytes.get());
 
-                let new_usage = self.wasm_memory_usage.get() + execution_bytes.get();
-
-                if new_usage > wasm_memory_limit {
+                if overflow {
                     return Err(HypervisorError::OutOfMemory);
                 }
+
                 self.wasm_memory_usage = NumBytes::new(new_usage);
             }
             ExecutionMemoryType::StableMemory => {
