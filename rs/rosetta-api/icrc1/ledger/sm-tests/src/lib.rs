@@ -3815,6 +3815,25 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_message, message
     );
+
+    args.arg = Encode!(&TransferArg {
+        from_subaccount: None,
+        ..transfer_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From Subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
 }
 
 fn test_icrc21_approve_message(
@@ -3980,6 +3999,27 @@ test_bytes";
         "Expected: {}, got: {}",
         expected_message, message
     );
+
+    args.arg = Encode!(&ApproveArgs {
+        from_subaccount: None,
+        ..approve_args.clone()
+    })
+    .unwrap();
+    args.user_preferences.metadata.utc_offset_minutes = None;
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your Subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
+    .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
 }
 
 fn test_icrc21_transfer_from_message(
@@ -4054,6 +4094,27 @@ test_bytes";
     "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
     "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
 );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    args.arg = Encode!(&TransferFromArgs {
+        spender_subaccount: None,
+        ..transfer_from_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_transfer_from_message.replace(
+        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Subaccount sending the transfer request:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

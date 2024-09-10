@@ -169,13 +169,19 @@ impl ConsentMessageBuilder {
                 if from_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**From Subaccount:**\n{}",
-                        from_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Sender Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        match from_account.subaccount {
+                            None => hex::encode(from_account.effective_subaccount().as_slice()),
+                            Some(_) => from_account
+                                .to_string()
+                                .split('.')
+                                .last()
+                                .ok_or(Icrc21Error::GenericError {
+                                    error_code: Nat::from(500u64),
+                                    description: "Sender Subaccount has an unexpected format."
+                                        .to_owned(),
+                                })?
+                                .to_string(),
+                        }
                     ));
                 } else {
                     message.push_str(&format!("\n\n**From:**\n{}", from_account));
@@ -250,13 +256,19 @@ impl ConsentMessageBuilder {
                 if approver_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Your Subaccount:**\n{}",
-                        approver_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Approver Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        match approver_account.subaccount {
+                            None => hex::encode(approver_account.effective_subaccount().as_slice()),
+                            Some(_) => approver_account
+                                .to_string()
+                                .split('.')
+                                .last()
+                                .ok_or(Icrc21Error::GenericError {
+                                    error_code: Nat::from(500u64),
+                                    description: "Approver Subaccount has an unexpected format."
+                                        .to_owned(),
+                                })?
+                                .to_string(),
+                        }
                     ));
                 } else {
                     message.push_str(&format!("\n\n**Your account:**\n{}", approver_account));
@@ -273,13 +285,19 @@ impl ConsentMessageBuilder {
                 if approver_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
-                        approver_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Approver Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        match approver_account.subaccount {
+                            None => hex::encode(approver_account.effective_subaccount().as_slice()),
+                            Some(_) => approver_account
+                                .to_string()
+                                .split('.')
+                                .last()
+                                .ok_or(Icrc21Error::GenericError {
+                                    error_code: Nat::from(500u64),
+                                    description: "Approver Subaccount has an unexpected format."
+                                        .to_owned(),
+                                })?
+                                .to_string(),
+                        }
                     ));
                 } else {
                     message.push_str(&format!(
@@ -326,13 +344,19 @@ impl ConsentMessageBuilder {
                 if spender_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Subaccount sending the transfer request:**\n{}",
-                        spender_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Spender Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        match spender_account.subaccount {
+                            None => hex::encode(spender_account.effective_subaccount().as_slice()),
+                            Some(_) => spender_account
+                                .to_string()
+                                .split('.')
+                                .last()
+                                .ok_or(Icrc21Error::GenericError {
+                                    error_code: Nat::from(500u64),
+                                    description: "Spender Subaccount has an unexpected format."
+                                        .to_owned(),
+                                })?
+                                .to_string(),
+                        }
                     ));
                 } else {
                     message.push_str(&format!(
