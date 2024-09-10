@@ -149,7 +149,7 @@ fn generate_and_write_systemd_files(
 
 pub fn generate_systemd_config_files(
     output_directory: &Path,
-    network_info: &NetworkSettings,
+    network_settings: &NetworkSettings,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
@@ -157,13 +157,14 @@ pub fn generate_systemd_config_files(
     interfaces.sort_by(|a, b| a.speed_mbps.cmp(&b.speed_mbps));
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
 
-    let ping_target = network_info.ipv6_gateway.to_string();
+    let ping_target = network_settings.ipv6_gateway.to_string();
     // old nodes are still configured with a local IPv4 interface connection
     // local IPv4 interfaces must be filtered out
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
+            match has_ipv6_connectivity(i, ipv6_address, network_settings.ipv6_subnet, &ping_target)
+            {
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("Error testing connectivity on {}: {}", &i.name, e);
@@ -183,13 +184,17 @@ pub fn generate_systemd_config_files(
     eprintln!("Using fastest interface: {:?}", fastest_interface);
 
     // Format the ip address to include the subnet length. See `man systemd.network`.
-    let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
+    let ipv6_address = format!(
+        "{}/{}",
+        &ipv6_address.to_string(),
+        network_settings.ipv6_subnet
+    );
     generate_and_write_systemd_files(
         output_directory,
         fastest_interface,
         generated_mac,
         &ipv6_address,
-        &network_info.ipv6_gateway.to_string(),
+        &network_settings.ipv6_gateway.to_string(),
     )?;
 
     print!("Restarting systemd networkd");
