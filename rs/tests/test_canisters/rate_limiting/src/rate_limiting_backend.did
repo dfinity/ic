@@ -1,0 +1,17 @@
+type GetApiBoundaryNodeIdsResponse = variant {
+    Ok : vec ApiBoundaryNodeIdRecord;
+    Err : text;
+};
+
+type ApiBoundaryNodeIdRecord = record {
+  id : opt principal;
+};
+
+type GetApiBoundaryNodeIdsRequest = record {
+
+};
+
+service : (nat64) -> {
+    "counter": () -> (nat64) query;
+    get_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
+}

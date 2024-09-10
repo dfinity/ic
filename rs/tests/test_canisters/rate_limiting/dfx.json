@@ -1,0 +1,16 @@
+{
+    "canisters": {
+      "rate_limiting_canister_backend": {
+        "candid": "src/rate_limiting_backend.did",
+        "type": "rust"
+      }
+    },
+    "defaults": {
+      "build": {
+        "args": "",
+        "packtool": ""
+      }
+    },
+    "output_env_file": ".env",
+    "version": 1
+  }

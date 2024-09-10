@@ -1,0 +1,21 @@
+[package]
+name = "rate-limiting"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+dfn_candid = {path = "../../../rust_canisters/dfn_candid"}
+dfn_core = {path = "../../../rust_canisters/dfn_core"}
+registry-canister = { path = "../../../registry/canister" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+serde = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"

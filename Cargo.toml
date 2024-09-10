@@ -364,6 +364,7 @@ members = [
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
+    "rs/tests/test_canisters/rate_limiting",
     "rs/tests/testing_verification",
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",

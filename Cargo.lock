@@ -17207,6 +17207,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
 
 [[package]]
+name = "rate-limiting"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-cdk 0.13.5",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "registry-canister",
+ "serde",
+]
+
+[[package]]
 name = "ratelimit"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
