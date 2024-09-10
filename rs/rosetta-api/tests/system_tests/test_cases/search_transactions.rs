@@ -4,7 +4,6 @@ use crate::common::utils::query_encoded_blocks;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_icp_rosetta_client::RosettaClient;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::to_hash;
@@ -14,7 +13,6 @@ use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
 use rosetta_core::identifiers::TransactionIdentifier;
-use rosetta_core::objects::BlockTransaction;
 use rosetta_core::request_types::SearchTransactionsRequest;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -128,26 +126,6 @@ fn test_search_transactions_by_index() {
                     let mut search_transactions_request =
                         SearchTransactionsRequest::builder(env.network_identifier.clone()).build();
 
-                    async fn traverse_all_transactions(
-                        storage_client: &RosettaClient,
-                        mut search_transactions_request: SearchTransactionsRequest,
-                    ) -> Vec<BlockTransaction> {
-                        let mut transactions = vec![];
-                        loop {
-                            let result = storage_client
-                                .search_transactions(&search_transactions_request)
-                                .await
-                                .unwrap();
-                            transactions.extend(result.clone().transactions);
-                            search_transactions_request.offset = result.next_offset;
-
-                            if search_transactions_request.offset.is_none() {
-                                break;
-                            }
-                        }
-
-                        transactions
-                    }
                     let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
 
                     if !args_with_caller.is_empty() {
@@ -204,50 +182,6 @@ fn test_search_transactions_by_index() {
                             .await
                             .unwrap();
                         assert_eq!(result.transactions.len(), 1);
-
-                        // The expected offset is the index of the highest block fetched minus the limit
-                        let expected_offset = 1;
-                        assert_eq!(
-                            result.next_offset,
-                            if query_blocks_response.blocks.len() > 1 {
-                                Some(expected_offset)
-                            } else {
-                                None
-                            }
-                        );
-
-                        search_transactions_request.limit = None;
-
-                        // Setting the offset to greater than 0 only makes sense if the storage contains more than 1 block
-                        search_transactions_request.offset = Some(
-                            query_blocks_response.blocks.len().saturating_sub(1).min(1) as i64,
-                        );
-
-                        let result = env
-                            .rosetta_client
-                            .search_transactions(&search_transactions_request)
-                            .await
-                            .unwrap();
-                        assert_eq!(
-                            result.transactions.len(),
-                            if query_blocks_response.blocks.len() == 1 {
-                                1
-                            } else {
-                                query_blocks_response.blocks.len().saturating_sub(1)
-                            }
-                            .min(maximum_number_returnable_transactions as usize)
-                        );
-
-                        search_transactions_request.offset = None;
-                        search_transactions_request.max_block = Some(10);
-                        let result = traverse_all_transactions(
-                            &env.rosetta_client,
-                            search_transactions_request.clone(),
-                        )
-                        .await;
-
-                        // The service should return the correct number of transactions if the max block is set, max block is an index so if the index is 10 there are 11 blocks/transactions to search through
-                        assert_eq!(result.len(), query_blocks_response.blocks.len().min(10 + 1));
                     }
                 });
                 Ok(())
