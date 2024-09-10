@@ -205,8 +205,10 @@ impl InternalHttpQueryHandler {
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
-                    self.metrics
-                        .observe_subnet_query(&query.method_name, since.elapsed().as_secs_f64());
+                    self.metrics.observe_subnet_query_message(
+                        &query.method_name,
+                        since.elapsed().as_secs_f64(),
+                    );
                     return result;
                 }
                 Err(_) => {

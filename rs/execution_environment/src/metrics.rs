@@ -280,7 +280,7 @@ impl QueryHandlerMetrics {
         }
     }
 
-    pub fn observe_subnet_query(&self, method_name: &str, duration: f64) {
+    pub fn observe_subnet_query_message(&self, method_name: &str, duration: f64) {
         let label = match QueryMethod::from_str(method_name) {
             Ok(_) => format!("query_ic00_{}", method_name),
             Err(_) => "query_ic00_unknown".to_string(),
