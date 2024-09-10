@@ -16125,6 +16125,7 @@ name = "phantom_newtype"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "num-traits",
  "serde",
  "serde_json",
  "slog",
