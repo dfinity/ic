@@ -1238,10 +1238,11 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues.set_stream_responses_size_bytes(size_bytes);
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.queues
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
@@ -1322,18 +1323,18 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Times out requests in the `OutputQueues` of `self.queues`. Returns the number of requests
+    /// Drops expired messages given a current time. Returns the number of messages
     /// that were timed out.
     ///
-    /// See [`CanisterQueues::time_out_requests`] for further details.
-    pub fn time_out_requests(
+    /// See [`CanisterQueues::time_out_messages`] for further details.
+    pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> u64 {
+    ) -> usize {
         self.queues
-            .time_out_requests(current_time, own_canister_id, local_canisters)
+            .time_out_messages(current_time, own_canister_id, local_canisters)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`

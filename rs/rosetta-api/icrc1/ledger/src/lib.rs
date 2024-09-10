@@ -30,6 +30,8 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::DefaultMemoryImpl;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
@@ -47,6 +49,7 @@ use icrc_ledger_types::{
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -324,6 +327,18 @@ pub struct UpgradeArgs {
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
+}
+
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the ledger must write and read its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 }
 
 #[derive(Debug, Deserialize, Serialize)]

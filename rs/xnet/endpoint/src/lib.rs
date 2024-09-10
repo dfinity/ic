@@ -3,11 +3,14 @@ mod config_tests;
 #[cfg(test)]
 mod tests;
 
-use hyper::{Body, Request, Response, StatusCode};
+use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
+use hyper::{body::Incoming, Request, Response, StatusCode};
+use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
+use ic_async_utils::start_tcp_listener;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
@@ -21,9 +24,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::{
-    runtime,
+    runtime, select,
     sync::{Notify, Semaphore},
 };
+use tower::Service;
 use url::Url;
 
 pub struct XNetEndpointMetrics {
@@ -106,6 +110,171 @@ impl Drop for XNetEndpoint {
 const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
 
+/// Struct passed to each request handled by `enqueue_task`.
+#[derive(Clone)]
+struct Context {
+    log: ReplicaLogger,
+    semaphore: Arc<Semaphore>,
+    metrics: Arc<XNetEndpointMetrics>,
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+    base_url: Url,
+}
+
+fn ok<T>(t: T) -> Result<T, Infallible> {
+    Ok(t)
+}
+
+/// Handles an incoming HTTP request by taking a permit from the semaphore, parsing the URL,
+/// handing over to `route_request()` and replying with the produced response.
+async fn handle_xnet_request(
+    State(ctx): State<Context>,
+    request: Request<Body>,
+) -> impl IntoResponse {
+    let owned_permit = match ctx.semaphore.try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => {
+            ctx.metrics
+                .request_duration
+                .with_label_values(&[RESOURCE_UNKNOWN, StatusCode::SERVICE_UNAVAILABLE.as_str()])
+                .observe(0.0);
+
+            return ok(Response::builder()
+                .status(StatusCode::SERVICE_UNAVAILABLE)
+                .body(Body::from("Queue full"))
+                .unwrap());
+        }
+    };
+
+    ok(tokio::task::spawn_blocking(move || {
+        let _permit = owned_permit;
+
+        match ctx.base_url.join(
+            request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or(""),
+        ) {
+            Ok(url) => route_request(url, ctx.certified_stream_store.as_ref(), &ctx.metrics),
+            Err(e) => {
+                let msg = format!("Invalid URL {}: {}", request.uri(), e);
+                warn!(ctx.log, "{}", msg);
+                bad_request(msg)
+            }
+        }
+    })
+    .await
+    .expect("Processing http request panicked!"))
+}
+
+fn start_server(
+    address: SocketAddr,
+    metrics: Arc<XNetEndpointMetrics>,
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+    runtime_handle: runtime::Handle,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient + Send + Sync>,
+    log: ReplicaLogger,
+    shutdown_notify: Arc<Notify>,
+) -> SocketAddr {
+    let listener = start_tcp_listener(address, &runtime_handle);
+    let address = listener.local_addr().expect("Failed to get local addr.");
+
+    let _guard: runtime::EnterGuard<'_> = runtime_handle.enter();
+    let ctx = Context {
+        log: log.clone(),
+        metrics: Arc::clone(&metrics),
+        semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS)),
+        certified_stream_store,
+        base_url: Url::parse(&format!("http://{}/", address)).unwrap(),
+    };
+
+    // Create a router that handles all requests by calling `enqueue_task`
+    // and attaches the `Context` as state.
+    let router = any(handle_xnet_request).with_state(ctx);
+
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+
+    let server = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+    let graceful_shutdown = GracefulShutdown::new();
+
+    tokio::spawn(async move {
+        loop {
+            select! {
+                Ok((stream, _peer_addr)) = listener.accept() => {
+                    let log = log.clone();
+                    let hyper_service = hyper_service.clone();
+
+                    #[cfg(test)]
+                    {
+                        // TLS is not used in tests.
+                        let _ = tls;
+                        let _ = registry_client;
+
+                        let io = TokioIo::new(stream);
+                        let conn = server.serve_connection_with_upgrades(io, hyper_service);
+                        let conn = graceful_shutdown.watch(conn.into_owned());
+                        tokio::spawn(async move {
+                            if let Err(err) = conn.await {
+                                warn!(log, "failed to serve connection: {err}");
+                            }
+                        });
+                    }
+
+                    #[cfg(not(test))]
+                    {
+                        // Creates a new TLS server config and uses it to accept the request.
+                        let registry_version = registry_client.get_latest_version();
+                        let mut server_config = match tls.server_config(
+                            ic_crypto_tls_interfaces::SomeOrAllNodes::All,
+                            registry_version,
+                        ) {
+                            Ok(config) => config,
+                            Err(err) => {
+                                warn!(log, "Failed to get server config from crypto {err}");
+                                return;
+                            }
+                        };
+                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
+                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+                        const ALPN_HTTP2: &[u8; 2] = b"h2";
+
+                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
+                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+                        const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+
+                        server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                        let tls_acceptor =
+                            tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
+                        match tls_acceptor.accept(stream).await {
+                            Ok(tls_stream) => {
+                                let io = TokioIo::new(tls_stream);
+                                let conn = server.serve_connection_with_upgrades(io, hyper_service);
+                                let conn = graceful_shutdown.watch(conn.into_owned());
+                                tokio::spawn(async move {
+                                    if let Err(err) = conn.await {
+                                        warn!(log, "failed to serve connection: {err}");
+                                    }
+                                });
+                            }
+                            Err(err) => {
+                                warn!(log, "Error setting up TLS stream: {err}");
+                            }
+                        };
+                    }
+                }
+                _ = shutdown_notify.notified() => {
+                    graceful_shutdown.shutdown().await;
+                    break;
+                }
+            };
+        }
+    });
+
+    address
+}
+
 impl XNetEndpoint {
     /// Creates and starts an `XNetEndpoint` to publish XNet `Streams`.
     pub fn new(
@@ -117,135 +286,22 @@ impl XNetEndpoint {
         metrics: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
-        use hyper::service::{make_service_fn, service_fn};
-        use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnection};
-
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
-
-        // Spawn a request handler. We pass the certified stream store, which is
-        // currently realized by the state manager.
-
-        let make_service_closure = |address: SocketAddr| {
-            make_service_fn({
-                let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
-                #[derive(Clone)]
-                struct Context {
-                    log: ReplicaLogger,
-                    semaphore: Arc<Semaphore>,
-                    metrics: Arc<XNetEndpointMetrics>,
-                }
-
-                let ctx = Context {
-                    log: log.clone(),
-                    metrics: Arc::clone(&metrics),
-                    semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS)),
-                };
-
-                fn ok<T>(t: T) -> Result<T, Infallible> {
-                    Ok(t)
-                }
-
-                move |tls_conn: &TlsConnection| {
-                    let ctx = ctx.clone();
-                    let certified_stream_store = certified_stream_store.clone();
-                    let base_url = base_url.clone();
-
-                    debug!(
-                        ctx.log,
-                        "Serving XNet streams to peer {:?}",
-                        tls_conn.peer()
-                    );
-
-                    async move {
-                        ok(service_fn({
-                            move |request: Request<Body>| {
-                                let ctx = ctx.clone();
-                                let certified_stream_store = certified_stream_store.clone();
-                                let base_url = base_url.clone();
-
-                                async move {
-                                    let owned_permit = match ctx.semaphore.try_acquire_owned() {
-                                        Ok(permit) => permit,
-                                        Err(_) => {
-                                            ctx.metrics
-                                                .request_duration
-                                                .with_label_values(&[
-                                                    RESOURCE_UNKNOWN,
-                                                    StatusCode::SERVICE_UNAVAILABLE.as_str(),
-                                                ])
-                                                .observe(0.0);
-
-                                            return ok(Response::builder()
-                                                .status(StatusCode::SERVICE_UNAVAILABLE)
-                                                .body(Body::from("Queue full"))
-                                                .unwrap());
-                                        }
-                                    };
-                                    let metrics = ctx.metrics.clone();
-                                    let log = ctx.log.clone();
-
-                                    Ok(tokio::task::spawn_blocking(move || {
-                                        let _permit = owned_permit;
-
-                                        handle_http_request(
-                                            request,
-                                            certified_stream_store.as_ref(),
-                                            &base_url,
-                                            &metrics,
-                                            &log,
-                                        )
-                                    })
-                                    .await
-                                    .expect("Processing http request panicked!"))
-                                }
-                            }
-                        }))
-                    }
-                }
-            })
-        };
-        let (address, server) = {
-            let _guard = runtime_handle.enter();
-
-            #[cfg(test)]
-            use ic_xnet_hyper::tls_bind_for_test as tls_bind;
-
-            #[cfg(not(test))]
-            use ic_xnet_hyper::tls_bind;
-
-            let (addr, builder) =
-                tls_bind(&config.address, tls, registry_client).unwrap_or_else(|e| {
-                    panic!(
-                        "failed to bind XNet socket, address {:?}: {}",
-                        config.address, e
-                    )
-                });
-
-            (
-                addr,
-                builder
-                    .executor(ExecuteOnRuntime(runtime_handle.clone()))
-                    .serve(make_service_closure(addr)),
-            )
-        };
-
-        info!(log, "XNet Endpoint listening on {}", address);
 
         let shutdown_notify = Arc::new(Notify::new());
 
-        let shutdown = server.with_graceful_shutdown({
-            let shutdown_notify = Arc::clone(&shutdown_notify);
-            async move { shutdown_notify.notified().await }
-        });
+        let address = start_server(
+            config.address,
+            metrics,
+            certified_stream_store,
+            runtime_handle.clone(),
+            tls,
+            registry_client,
+            log.clone(),
+            shutdown_notify.clone(),
+        );
 
-        runtime_handle.spawn({
-            let log = log.clone();
-            async move {
-                if let Err(e) = shutdown.await {
-                    warn!(log, "XNet http server failed: {}", e);
-                }
-            }
-        });
+        info!(log, "XNet Endpoint listening on {}", address);
 
         Self {
             server_address: address,
@@ -262,31 +318,6 @@ impl XNetEndpoint {
     #[allow(dead_code)]
     pub fn server_port(&self) -> u16 {
         self.server_address.port()
-    }
-}
-
-/// Handles an incoming HTTP request by parsing the URL, handing over to
-/// `route_request()` and replying with the produced response.
-fn handle_http_request(
-    request: Request<Body>,
-    certified_stream_store: &dyn CertifiedStreamStore,
-    base_url: &Url,
-    metrics: &XNetEndpointMetrics,
-    log: &ReplicaLogger,
-) -> Response<Body> {
-    match base_url.join(
-        request
-            .uri()
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or(""),
-    ) {
-        Ok(url) => route_request(url, certified_stream_store, metrics),
-        Err(e) => {
-            let msg = format!("Invalid URL {}: {}", request.uri(), e);
-            warn!(log, "{}", msg);
-            bad_request(msg)
-        }
     }
 }
 

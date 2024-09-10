@@ -362,9 +362,9 @@ impl IngressPoolThrottler for IngressPoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
+    use ic_limits::MAX_INGRESS_TTL;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
