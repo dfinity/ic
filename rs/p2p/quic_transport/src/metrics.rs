@@ -53,6 +53,12 @@ pub struct QuicTransportMetrics {
     pub connection_handle_duration_seconds: HistogramVec,
     pub connection_handle_errors_total: IntCounterVec,
     // Quinn
+    quinn_udp_tx_datagrams: IntGaugeVec,
+    quinn_udp_tx_ios: IntGaugeVec,
+    quinn_udp_tx_bytes: IntGaugeVec,
+    quinn_udp_rx_datagrams: IntGaugeVec,
+    quinn_udp_rx_ios: IntGaugeVec,
+    quinn_udp_rx_bytes: IntGaugeVec,
     quinn_path_rtt_seconds: GaugeVec,
     quinn_path_congestion_window: IntGaugeVec,
     quinn_path_sent_packets: IntGaugeVec,
@@ -158,6 +164,37 @@ impl QuicTransportMetrics {
             ),
 
             // Quinn stats
+            quinn_udp_tx_datagrams: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_tx_datagrams",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_udp_tx_ios: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_tx_ios",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_udp_tx_bytes: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_tx_bytes",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_udp_rx_datagrams: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_rx_datagrams",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_udp_rx_ios: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_rx_ios",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_udp_rx_bytes: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_udp_rx_bytes",
+                "Estimated rtt of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+
             quinn_path_rtt_seconds: metrics_registry.gauge_vec(
                 "quic_transport_quinn_path_rtt_seconds",
                 "Estimated rtt of this connection.",
@@ -182,7 +219,10 @@ impl QuicTransportMetrics {
     }
 
     pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
-        let path_stats = conn.stats().path;
+        let stats = conn.stats();
+        let path_stats = stats.path;
+        let utx_stats = stats.udp_tx;
+        let urx_stats = stats.udp_rx;
         let peer_id_label: [&str; 1] = [&peer_id.to_string()];
 
         self.quinn_path_rtt_seconds
@@ -200,5 +240,24 @@ impl QuicTransportMetrics {
         self.quinn_path_lost_packets
             .with_label_values(&peer_id_label)
             .set(path_stats.lost_packets as i64);
+
+        self.quinn_udp_tx_datagrams
+            .with_label_values(&peer_id_label)
+            .set(utx_stats.datagrams as i64);
+        self.quinn_udp_tx_ios
+            .with_label_values(&peer_id_label)
+            .set(utx_stats.ios as i64);
+        self.quinn_udp_tx_bytes
+            .with_label_values(&peer_id_label)
+            .set(utx_stats.bytes as i64);
+        self.quinn_udp_rx_datagrams
+            .with_label_values(&peer_id_label)
+            .set(urx_stats.datagrams as i64);
+        self.quinn_udp_rx_ios
+            .with_label_values(&peer_id_label)
+            .set(urx_stats.datagrams as i64);
+        self.quinn_udp_rx_bytes
+            .with_label_values(&peer_id_label)
+            .set(urx_stats.bytes as i64);
     }
 }

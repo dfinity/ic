@@ -5,7 +5,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
@@ -18,8 +18,12 @@ use clap::Parser;
 use futures::StreamExt;
 use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+use ic_interfaces::{
+    p2p::consensus::{
+        ArtifactMutation, ArtifactWithOpt, Priority, PriorityFn, PriorityFnFactory,
+        ValidatedPoolReader,
+    },
+    self_validating_payload::SelfValidatingPayloadValidationFailure,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
@@ -31,10 +35,13 @@ use ic_types::{
     NodeId, PrincipalId,
 };
 use libp2p::{gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm, SwarmBuilder};
-use prometheus::{Histogram, IntCounter, TextEncoder};
+use prometheus::{
+    core::{AtomicF64, GenericGauge},
+    Gauge, Histogram, IntCounter, TextEncoder,
+};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use tokio::{runtime::Handle, select, sync::watch};
+use tokio::{runtime::Handle, select, sync::watch, time::Interval};
 use tokio_rustls::rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, PrivateKeyDer},
@@ -170,21 +177,53 @@ struct Args {
     #[arg(long)]
     relaying: bool,
 
+    #[arg(long)]
+    oneton: bool,
+
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     peers_addrs: Vec<SocketAddr>,
 }
 
 struct Metrics {
     received_bytes: IntCounter,
-    received_bytes_previous: AtomicU64,
-
+    send_artifact_period: Gauge,
     received_artifact_count: IntCounter,
-    received_artifact_count_previous: AtomicU64,
-
     message_latency: Histogram,
-
     sent_artifacts: IntCounter,
-    sent_artifacts_last: AtomicU64,
+}
+
+enum Mode {
+    OneToN(u64),
+    NtoN,
+}
+
+impl Mode {
+    const TARGET_MAX_BW_BITS_PER_S: usize = 10_000_000_000;
+    const TARGET_EXP_DURATION: Duration = Duration::from_secs(15 * 60);
+    fn should_send(&self) -> bool {
+        match self {
+            Self::OneToN(0) | Self::NtoN => true,
+            _ => false,
+        }
+    }
+
+    fn next_period(
+        &self,
+        current_interval: Interval,
+        last_tick: Instant,
+        peers_num: usize,
+        message_size: usize,
+    ) -> Duration {
+        let curr_rate = 1.0 / current_interval.period().as_secs_f64();
+        let saturate_rate =
+            (Self::TARGET_MAX_BW_BITS_PER_S as f64 / 8.0 / peers_num as f64 / message_size as f64)
+                as f64;
+        let drds = saturate_rate / Self::TARGET_EXP_DURATION.as_secs_f64();
+        let now = Instant::now();
+        let drate = now.duration_since(last_tick).as_secs_f64() * drds;
+        let new_rate = curr_rate + drate;
+        Duration::from_secs_f64(1.0 / new_rate)
+    }
 }
 
 async fn load_generator(
@@ -194,8 +233,9 @@ async fn load_generator(
     mut received_artifacts: tokio::sync::mpsc::UnboundedReceiver<
         UnvalidatedArtifactMutation<TestArtifact>,
     >,
-    message_rate: usize,
     message_size: usize,
+    peers_num: usize,
+    mode: Mode,
     relaying: bool,
     metrics: Arc<Metrics>,
     mut rps_rx: watch::Receiver<usize>,
@@ -215,11 +255,9 @@ async fn load_generator(
 
     let mut purge_queue: DelayQueue<TestArtifact> = DelayQueue::new();
 
-    let mut produce_and_send_artifact = tokio::time::interval(
-        Duration::from_secs(1)
-            .checked_div(*rps_rx.borrow() as u32)
-            .unwrap_or(Duration::from_secs(1000000)),
-    );
+    let mut produce_and_send_artifact = tokio::time::interval(Duration::from_secs(1));
+    let mut send_rate_update = tokio::time::interval(Duration::from_secs(1));
+    let mut now_n = Instant::now();
 
     // Calculated such that not exceed 20000 active adverts
     // let removal_delay_secs = 20000 / message_rate as u64;
@@ -272,21 +310,29 @@ async fn load_generator(
                     }
                 }
             }
-            Ok(()) = rps_rx.changed() => {
-                produce_and_send_artifact = tokio::time::interval(
-                    Duration::from_secs(1)
-                        .checked_div(*rps_rx.borrow() as u32)
-                        .unwrap_or(Duration::from_secs(100000000)),
-                );
-                info!(
-                    log,
-                    "Generating event every {:?}",
-                    produce_and_send_artifact.period()
-                );
-            }
+            // Ok(()) = rps_rx.changed() => {
+            //     produce_and_send_artifact = tokio::time::interval(
+            //         Duration::from_secs(1)
+            //             .checked_div(*rps_rx.borrow() as u32)
+            //             .unwrap_or(Duration::from_secs(100000000)),
+            //     );
+            //     info!(
+            //         log,
+            //         "Generating event every {:?}",
+            //         produce_and_send_artifact.period()
+            //     );
+            // }
             // Outgoing Artifact to peers
+            _ = send_rate_update.tick() => {
+                let new_period = mode.next_period(produce_and_send_artifact, now_n, peers_num, message_size);
+                metrics.send_artifact_period.set(new_period.as_secs_f64());
+                now_n = Instant::now();
+                produce_and_send_artifact = tokio::time::interval(new_period);
+            },
             _ = produce_and_send_artifact.tick() => {
-
+                if !mode.should_send() {
+                    continue
+                }
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
 
                 let mut id = Vec::with_capacity(16);
@@ -398,24 +444,28 @@ async fn main() {
     let rt_handle = tokio::runtime::Handle::current();
     let metrics_reg = MetricsRegistry::default();
 
-    let sent_artifacts = metrics_reg.int_counter("load_generator_sent_artifacts", "TODO");
-    let received_artifacts = metrics_reg.int_counter("load_generator_received_artifacts", "TODO");
+    let sent_artifacts = metrics_reg.int_counter("load_generator_sent_artifacts_total", "TODO");
+    let send_artifact_period = metrics_reg.gauge("send_artifact_period", "TODO");
+    let libp2p = metrics_reg.int_gauge("libp2p", "TODO");
+    libp2p.set(args.libp2p as i64);
+    let received_artifacts =
+        metrics_reg.int_counter("load_generator_received_artifacts_total", "TODO");
     let received_artifacts_bytes =
-        metrics_reg.int_counter("load_generator_received_artifacts_bytes", "TODO");
+        metrics_reg.int_counter("load_generator_received_artifacts_bytes_total", "TODO");
     let message_latency = metrics_reg.histogram(
         "load_generator_message_latency",
         "TODO",
         decimal_buckets(-2, 0),
     );
+    let message_size = metrics_reg.int_gauge("load_generator_message_size_bytes", "TODO");
+    message_size.set(args.message_size as i64);
 
     let metrics = Arc::new(Metrics {
         received_bytes: received_artifacts_bytes,
+        send_artifact_period,
         sent_artifacts,
         received_artifact_count: received_artifacts,
         message_latency,
-        received_bytes_previous: AtomicU64::default(),
-        received_artifact_count_previous: AtomicU64::default(),
-        sent_artifacts_last: AtomicU64::default(),
     });
 
     let (log, _async_log_guard) =
@@ -442,7 +492,7 @@ async fn main() {
             log.clone(),
             rt_handle.clone(),
             args.id,
-            peers_addrs,
+            peers_addrs.clone(),
             transport_addr,
             test_consensus,
             cb_tx,
@@ -455,7 +505,7 @@ async fn main() {
             log.clone(),
             rt_handle.clone(),
             args.id,
-            peers_addrs,
+            peers_addrs.clone(),
             transport_addr,
             test_consensus,
             cb_tx,
@@ -471,8 +521,13 @@ async fn main() {
         log.clone(),
         artifact_processor_tx,
         cb_rx,
-        args.message_rate as usize,
         args.message_size as usize,
+        peers_addrs.len(),
+        if args.oneton {
+            Mode::OneToN(args.id)
+        } else {
+            Mode::NtoN
+        },
         args.relaying,
         metrics.clone(),
         rps_rx,

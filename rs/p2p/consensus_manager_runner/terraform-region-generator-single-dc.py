@@ -40,13 +40,6 @@ resource "aws_key_pair" "deletable-key-eu_central_1" {
 """
 
 local_template = """
-resource "null_resource" "deletable-local-prov-REGION" {
-  depends_on = DEPENDS_ON
-
-  provisioner "local-exec" {
-    command = "python3 metrics-collector.py ALL_ADDRS"
-  }
-}
 """
 
 instance_template = """
@@ -97,7 +90,7 @@ resource "null_resource" "deletable-prov-REGION" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS LIBP2P"
+      "/tmp/binary --id ID --message-size MESSAGE_SIZE --message-rate MESSAGE_RATE --port 4100 --metrics-port 9090 --peers-addrs PEERS_ADDRS LIBP2P MODE"
     ]
   }
 }
@@ -118,11 +111,19 @@ num_regions = sys.argv[1]
 message_size = sys.argv[2]
 message_rate = sys.argv[3]
 libp2p = sys.argv[4]
+oneton = sys.argv[5]
+
 if libp2p == "true":
     libp2p_option = "--libp2p"
 else:
-    libp2p_option = "--relaying"
-    # libp2p_option = ""
+    # libp2p_option = "--relaying"
+    libp2p_option = ""
+
+if oneton == "true":
+    mode = "--oneton"
+else:
+    # libp2p_option = "--relaying"
+    mode = ""
 
 
 id = 0
@@ -133,7 +134,7 @@ for i in range(0, int(num_regions)):
   depends_on = f"[{', '.join(depends_on)}]"
   peers_addrs = [f"${{aws_instance.deletable-instance-{r}.private_ip}}:4100" for r in range(0, int(num_regions)) if r != i]
   peers_addrs = ' '.join(peers_addrs)
-  merged += instance_template.replace("REGION", str(i)).replace("AMI", ami).replace("DEPENDS_ON", depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", instance).replace("LIBP2P",libp2p_option)
+  merged += instance_template.replace("REGION", str(i)).replace("AMI", ami).replace("DEPENDS_ON", depends_on).replace("PEERS_ADDRS", peers_addrs).replace("ID", str(id)).replace("MESSAGE_SIZE", message_size).replace("MESSAGE_RATE", message_rate).replace("MACHINE", instance).replace("LIBP2P",libp2p_option).replace("MODE", mode)
   id += 1 
 
 depends_on = [f"aws_instance.deletable-instance-{region}" for region in range(0, int(num_regions))]

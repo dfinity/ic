@@ -237,7 +237,7 @@ resource "null_resource" "deletable-prov-0" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 0 --message-size 1000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100 --relaying"
+      "/tmp/binary --id 0 --message-size 500000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100  --oneton"
     ]
   }
 }
@@ -289,15 +289,8 @@ resource "null_resource" "deletable-prov-1" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 1 --message-size 1000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 --relaying"
+      "/tmp/binary --id 1 --message-size 500000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100  --oneton"
     ]
   }
 }
 
-resource "null_resource" "deletable-local-prov-REGION" {
-  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1]
-
-  provisioner "local-exec" {
-    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-0.public_ip} ${aws_instance.deletable-instance-1.public_ip}"
-  }
-}
