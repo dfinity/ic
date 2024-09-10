@@ -18,7 +18,7 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::Sepolia(SepoliaProvider::Sepolia),
+                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
                 RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
             ]
         );

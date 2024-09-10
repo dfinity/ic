@@ -8,7 +8,7 @@ pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
-    RpcNodeProvider::Sepolia(SepoliaProvider::Sepolia),
+    RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
 ];
 
@@ -60,8 +60,8 @@ impl EthereumProvider {
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum SepoliaProvider {
-    // https://sepolia.org/
-    Sepolia,
+    // https://blockpi.io/
+    BlockPi,
     // https://publicnode.com/
     PublicNode,
 }
@@ -69,7 +69,7 @@ pub(crate) enum SepoliaProvider {
 impl SepoliaProvider {
     fn ethereum_sepolia_endpoint_url(&self) -> &str {
         match self {
-            SepoliaProvider::Sepolia => "https://rpc.sepolia.org/",
+            SepoliaProvider::BlockPi => "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
             SepoliaProvider::PublicNode => "https://ethereum-sepolia-rpc.publicnode.com",
         }
     }
