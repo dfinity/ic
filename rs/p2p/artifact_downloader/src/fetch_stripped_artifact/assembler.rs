@@ -264,6 +264,8 @@ impl StrippedBlockProposal {
     ) -> Result<(), InsertionError> {
         let ingress_message_id = IngressMessageId::from(&ingress_message);
 
+        // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
+        // linear scan here.
         let ingress = self
             .stripped_ingress_payload
             .ingress_messages
