@@ -25,6 +25,7 @@ pub struct UpgradeArg {
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
     pub cycles_management: Option<UpdateCyclesManagement>,
+    pub manage_ledger_suites: Option<Vec<InstalledLedgerSuite>>,
 }
 
 impl UpgradeArg {
@@ -186,6 +187,20 @@ impl<T> From<&Canister<T>> for ManagedCanisterStatus {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct InstalledLedgerSuite {
+    pub token_symbol: String,
+    pub ledger: InstalledCanister,
+    pub index: InstalledCanister,
+    pub archives: Option<Vec<Principal>>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct InstalledCanister {
+    pub canister_id: Principal,
+    pub installed_wasm_hash: String,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ManagedCanisters {
     pub erc20_contract: Erc20Contract,
     pub ckerc20_token_symbol: String,
@@ -201,10 +216,29 @@ impl From<(Erc20Token, Canisters)> for ManagedCanisters {
                 chain_id: candid::Nat::from(*token.chain_id().as_ref()),
                 address: token.address().to_string(),
             },
-            ckerc20_token_symbol: canisters.metadata.ckerc20_token_symbol.to_string(),
+            ckerc20_token_symbol: canisters.metadata.token_symbol.to_string(),
             ledger: canisters.ledger.as_ref().map(ManagedCanisterStatus::from),
             index: canisters.index.as_ref().map(ManagedCanisterStatus::from),
             archives: canisters.archives.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ManagedLedgerSuite {
+    pub token_symbol: String,
+    pub ledger: Option<ManagedCanisterStatus>,
+    pub index: Option<ManagedCanisterStatus>,
+    pub archives: Vec<Principal>,
+}
+
+impl From<Canisters> for ManagedLedgerSuite {
+    fn from(value: Canisters) -> Self {
+        Self {
+            token_symbol: value.metadata.token_symbol.to_string(),
+            ledger: value.ledger.as_ref().map(ManagedCanisterStatus::from),
+            index: value.index.as_ref().map(ManagedCanisterStatus::from),
+            archives: value.archives.clone(),
         }
     }
 }
@@ -233,6 +267,7 @@ pub struct OrchestratorInfo {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
     pub ledger_suite_version: Option<LedgerSuiteVersion>,
+    pub managed_pre_existing_ledger_suites: Option<Vec<ManagedLedgerSuite>>,
 }
 
 #[derive(

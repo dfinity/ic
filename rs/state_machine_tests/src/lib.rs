@@ -43,10 +43,11 @@ use ic_management_canister_types::{
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
-    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
-    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
+    CanisterStatusType, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
+    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
