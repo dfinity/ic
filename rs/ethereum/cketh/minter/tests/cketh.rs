@@ -221,7 +221,7 @@ fn should_not_mint_when_logs_inconsistent() {
 
     CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-            mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
+            mock.respond_with(JsonRpcProvider::Pokt, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
                 .respond_with(JsonRpcProvider::LlamaNodes, ankr_logs.clone())
         }))
@@ -354,7 +354,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .start_processing_withdrawals()
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Ankr,
+                JsonRpcProvider::Pokt,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740742_u64.into()
                 },

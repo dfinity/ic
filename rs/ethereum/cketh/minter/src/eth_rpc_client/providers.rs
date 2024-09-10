@@ -4,7 +4,7 @@ use evm_rpc_client::types::candid::{
 };
 
 pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
-    RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
+    RpcNodeProvider::Ethereum(EthereumProvider::Pokt),
     RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
     RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
 ];
@@ -39,8 +39,8 @@ impl RpcNodeProvider {
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum EthereumProvider {
-    // https://www.ankr.com/rpc/
-    Ankr,
+    // https://eth-pokt.nodies.app/
+    Pokt,
     // https://publicnode.com/
     PublicNode,
     // https://llamanodes.com/
@@ -50,7 +50,7 @@ pub(crate) enum EthereumProvider {
 impl EthereumProvider {
     fn ethereum_mainnet_endpoint_url(&self) -> &str {
         match self {
-            EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
+            EthereumProvider::Pokt => "https://eth-pokt.nodies.app",
             EthereumProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             EthereumProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
