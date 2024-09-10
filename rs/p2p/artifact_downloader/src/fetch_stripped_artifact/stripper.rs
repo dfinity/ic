@@ -3,16 +3,12 @@ use ic_types::{
     artifact::{IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::ConsensusMessage,
-    CountBytes,
 };
 
 use super::types::stripped::{
     MaybeStrippedConsensusMessage, MaybeStrippedIngress, StrippedBlockProposal,
     StrippedIngressPayload,
 };
-
-/// If an ingress message has size above this threshold, we will strip it from the block.
-const INGRESS_MESSAGE_SIZE_STRIPPING_THRESHOLD_BYTES: usize = 1024;
 
 /// Provides functionality for stripping objects of given information.
 ///
@@ -70,12 +66,7 @@ impl Strippable for IngressPayload {
             .into_iter()
             .map(|ingress| {
                 let ingress_message_id = IngressMessageId::from(&ingress);
-
-                if ingress.count_bytes() > INGRESS_MESSAGE_SIZE_STRIPPING_THRESHOLD_BYTES {
-                    MaybeStrippedIngress::Stripped(ingress_message_id)
-                } else {
-                    MaybeStrippedIngress::Full(ingress_message_id, ingress)
-                }
+                MaybeStrippedIngress::Stripped(ingress_message_id)
             })
             .collect();
 
@@ -87,31 +78,9 @@ impl Strippable for IngressPayload {
 
 #[cfg(test)]
 mod tests {
-    use crate::fetch_stripped_artifact::test_utils::{
-        fake_ingress_message_with_arg_size, fake_summary_block_proposal,
-    };
+    use crate::fetch_stripped_artifact::test_utils::fake_summary_block_proposal;
 
     use super::*;
-
-    #[test]
-    fn stripping_only_big_messages_test() {
-        let (small_ingress, small_ingress_id) = fake_ingress_message_with_arg_size("small", 0);
-        let (big_ingress, big_ingress_id) = fake_ingress_message_with_arg_size("big", 1024);
-        let ingress_payload =
-            IngressPayload::from(vec![small_ingress.clone(), big_ingress.clone()]);
-
-        let stripped_ingress_payload = ingress_payload.strip();
-
-        assert_eq!(
-            stripped_ingress_payload,
-            StrippedIngressPayload {
-                ingress_messages: vec![
-                    MaybeStrippedIngress::Full(small_ingress_id, small_ingress),
-                    MaybeStrippedIngress::Stripped(big_ingress_id)
-                ],
-            }
-        );
-    }
 
     #[test]
     fn summary_blocks_are_not_stripped_test() {
