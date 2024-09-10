@@ -301,7 +301,16 @@ fn test_check_transaction_error() {
         .env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
-    assert!(matches!(result, WasmResult::Reject(msg) if msg.contains("Invalid txid")));
+    match &result {
+        WasmResult::Reply(bytes) => {
+            let response = Decode!(bytes, CheckTransactionResponse).unwrap();
+            assert!(matches!(
+                response,
+                CheckTransactionResponse::Error(msg) if msg.contains("Invalid txid"),
+            ));
+        }
+        WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
+    };
 }
 
 fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {

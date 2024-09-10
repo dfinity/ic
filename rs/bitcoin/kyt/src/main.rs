@@ -6,7 +6,6 @@ use ic_btc_kyt::{
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
-use std::convert::TryFrom;
 use std::str::FromStr;
 
 #[ic_cdk::query]
@@ -56,7 +55,7 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => CheckTransactionResponse::Error(format!("{}", err)),
+        Err(err) => CheckTransactionResponse::Error(format!("Invalid txid: {}", err)),
     }
 }
 
