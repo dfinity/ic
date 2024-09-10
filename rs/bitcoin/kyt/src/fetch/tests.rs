@@ -329,7 +329,7 @@ async fn test_check_fetched() {
         env.check_fetched(&state, txid_0, &fetched).await,
         CheckTransactionResponse::Passed
     ));
-    // Check accepted cycle
+    // Check accepted cycles
     assert_eq!(env.cycles_accepted(), 0);
 
     // case Failed

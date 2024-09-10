@@ -29,7 +29,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// Return `Passed` if all input addresses of the transaction of the given
 /// transaction id passed the KYT check, or `Failed` if any of them did not.
 ///
-/// Every call to check_transaction must attach at least `CHECK_TRANSACTION_CYCLES_REQUIRED`
+/// Every call to check_transaction must attach at least `CHECK_TRANSACTION_CYCLES_REQUIRED`.
 /// Return `NotEnoughCycles` if not enough cycles are attached.
 ///
 /// The actual cycle cost may be well less than `CHECK_TRANSACTION_CYCLES_REQUIRED`, and

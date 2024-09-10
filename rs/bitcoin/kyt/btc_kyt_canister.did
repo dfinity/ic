@@ -11,7 +11,7 @@ type CheckAddressResponse = variant { Passed; Failed };
 
 type CheckTransactionArgs = record { txid : blob };
 
-// The result of check_transaction call.
+// The result of a check_transaction call.
 type CheckTransactionResponse = variant {
     // When check finishes and all input addresses passed KYT.
     Passed;
@@ -29,7 +29,7 @@ type CheckTransactionResponse = variant {
 
 service : {
     // Check input addresses of a transaction matching the given transaction id.
-    // See `CheckTransactionResponse` for more details on return result.
+    // See `CheckTransactionResponse` for more details on the return result.
     //
     // The caller should attach at least 40 billion cycles with each call.
     // The actual cost may be well less than that, and unspent cycles will be refunded.

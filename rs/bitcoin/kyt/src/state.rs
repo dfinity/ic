@@ -15,8 +15,8 @@ pub enum FetchTxStatus<T> {
 #[derive(Debug, Clone)]
 pub struct FetchedTx<T> {
     pub tx: T,
-    /// The index is the index of the input of tx, and the value is
-    /// the calculated address when the input has been fetched.
+    /// The address at a certain index, when fetched, corresponds to
+    ///  the address of the input at the same index in the transaction `tx`.
     pub input_addresses: Vec<Option<Address>>,
 }
 

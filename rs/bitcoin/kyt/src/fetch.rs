@@ -17,10 +17,10 @@ pub fn get_tx_cycle_cost(buffer_size: u32) -> u128 {
 /// Caller of check_transaction must attach this amount of cycles with the call.
 pub const CHECK_TRANSACTION_CYCLES_REQUIRED: u128 = 40_000_000_000;
 
-/// One time charge for every check_transaction call.
+/// One-time charge for every check_transaction call.
 pub const CHECK_TRANSACTION_CYCLES_SERVICE_FEE: u128 = 100_000_000;
 
-// The response buffer size is set initially set to 4kB, and then
+// The response buffer size is initially set to 4kB, and then
 // increased to 400kB if the initial size isn't enough.
 // - The maximum size of a standard non-taproot transaction is 400k vBytes.
 // - Taproot transactions could be as big as full block size (4MiB).
