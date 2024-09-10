@@ -9,7 +9,7 @@ use ic_types::{
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
-use std::{cell::RefCell, rc::Rc, time::Instant, str::FromStr};
+use std::{cell::RefCell, rc::Rc, str::FromStr, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";
