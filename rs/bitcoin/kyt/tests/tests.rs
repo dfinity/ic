@@ -20,6 +20,17 @@ use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
 
+// Because we use universal_canister to make calls with attached cycles to
+// `check_transaction`, the actual_cost would be greater than expected_cost
+// by a small margin. Namely, the universal_canister itself would consume
+// some cycle for decoding args and sending the call.
+//
+// The number 7_000_000 is obtained empirically by running tests with pocket-ic
+// and checking the actual consumptions. It is both big enough to allow tests to
+// succeed, and small enough not to interfere with the expected cycle cost we
+// are testing for.
+const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 7_000_000;
+
 struct Setup {
     controller: Principal,
     universal_canister: Principal,
@@ -242,9 +253,8 @@ fn test_check_transaction_passed() {
     let expected_cost =
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_BUFFER_SIZE);
     let actual_cost = cycles_before - cycles_after;
-    // Since we use universal_canister, actual_cost is greater than expected_cost
     assert!(actual_cost > expected_cost);
-    assert!(actual_cost - expected_cost < 7_000_000);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 }
 
 #[test]
@@ -283,9 +293,8 @@ fn test_check_transaction_error() {
     let cycles_after = setup.env.cycle_balance(setup.universal_canister);
     let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
     let actual_cost = cycles_before - cycles_after;
-    // Since we use universal_canister, actual_cost is greater than expected_cost
     assert!(actual_cost > expected_cost);
-    assert!(actual_cost - expected_cost < 7_000_000);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
     // Test for malformatted txid
     txid.pop();
@@ -311,6 +320,11 @@ fn test_check_transaction_error() {
         }
         WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     };
+    let cycles_after = setup.env.cycle_balance(setup.universal_canister);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 }
 
 fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {

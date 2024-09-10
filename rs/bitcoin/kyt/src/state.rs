@@ -21,7 +21,7 @@ pub struct FetchedTx<T> {
 }
 
 // Max number of concurrent http outcalls.
-const MAX_CONCURRENT: u32 = 100;
+const MAX_CONCURRENT: u32 = 50;
 
 // The internal KYT state includes:
 // 1. Outcall capacity, a semaphore limiting max concurrent outcalls.
