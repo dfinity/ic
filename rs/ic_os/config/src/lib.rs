@@ -143,6 +143,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         ipv4_gateway,
         ipv4_prefix_length,
         domain,
+        mgmt_mac: None,
     };
 
     let verbose = config_map
@@ -194,6 +195,7 @@ mod tests {
             ipv4_gateway: None,
             ipv4_prefix_length: None,
             domain: None,
+            mgmt_mac: None,
         };
         let icos_settings = ICOSSettings {
             nns_public_key_path: PathBuf::from("/path/to/key"),

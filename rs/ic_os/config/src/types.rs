@@ -46,6 +46,7 @@ pub struct NetworkSettings {
     pub ipv4_gateway: Option<Ipv4Addr>,
     pub ipv4_prefix_length: Option<u8>,
     pub domain: Option<String>,
+    pub mgmt_mac: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

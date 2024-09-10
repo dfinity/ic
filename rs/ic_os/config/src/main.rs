@@ -66,7 +66,7 @@ pub fn main() -> Result<()> {
                 .then_some(node_operator_private_key_path);
 
             // get config.ini variables
-            let (network_settings, verbose) = get_config_ini_settings(&config_ini_path)?;
+            let (mut network_settings, verbose) = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
             let deployment_json = read_deployment_file(&deployment_json_path)?;
@@ -79,6 +79,7 @@ pub fn main() -> Result<()> {
             let nns_urls = deployment_json.nns.url.clone();
             let hostname = deployment_json.deployment.name.to_string();
             let elasticsearch_hosts = deployment_json.logging.hosts.to_string();
+            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
 
             let icos_settings = ICOSSettings {
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
