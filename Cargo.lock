@@ -12986,10 +12986,7 @@ dependencies = [
  "hyper 1.4.1",
  "hyper-util",
  "ic-async-utils",
-<<<<<<< HEAD
  "ic-config",
-=======
->>>>>>> origin/master
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
