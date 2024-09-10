@@ -159,7 +159,7 @@ if is_inside_DFINITY_container; then
     eval "$BUILD_CMD"
 else
     echo_blue "Building by using a new DFINITY container"
-    "$ROOT_DIR"/gitlab-ci/container/container-run.sh bash -c "$BUILD_CMD"
+    "$ROOT_DIR"/ci/container/container-run.sh bash -c "$BUILD_CMD"
 fi
 
 if "$BUILD_BIN"; then
