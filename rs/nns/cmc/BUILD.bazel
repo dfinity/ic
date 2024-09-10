@@ -2,7 +2,14 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
+
+exports_files(
+    [
+        "cmc.did",
+    ],
+    ["//rs:release-pkg"],
+)
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -58,6 +65,11 @@ cargo_build_script(
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
     version = "0.9.0",
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -68,6 +80,11 @@ rust_library(
     crate_name = "cycles_minting_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -77,6 +94,11 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":cmc.did",
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [
         ":build_script",
         ":cmc",
