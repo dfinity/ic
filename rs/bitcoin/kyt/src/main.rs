@@ -50,7 +50,7 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
             if ic_cdk::api::call::msg_cycles_available128() + CHECK_TRANSACTION_CYCLES_SERVICE_FEE
                 < CHECK_TRANSACTION_CYCLES_REQUIRED
             {
-                return CheckTransactionResponse::NotEnoughCycles;
+                CheckTransactionResponse::NotEnoughCycles
             } else {
                 check_transaction_inputs(txid).await
             }
