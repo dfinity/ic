@@ -217,148 +217,17 @@ async fn write_request(
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-    use bytes::Bytes;
     use ic_p2p_test_utils::{
         generate_self_signed_cert, turmoil::CustomUdp, SkipServerVerification,
     };
-    use quinn::{
-        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig, ReadError,
-        ReadToEndError,
-    };
-    use rstest::rstest;
+    use quinn::{crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig};
     use std::{
         net::{Ipv4Addr, SocketAddr},
         sync::Arc,
     };
     use turmoil::Builder;
 
-    use crate::connection_handle::SendStreamDropGuard;
-
     const MAX_READ_SIZE: usize = 10_000;
-
-    // /// Test that [`SendStreamDropGuard`] correctly sends a reset frame if it is dropped, iff
-    // /// the stream is not finished + stopped.
-    // #[rstest]
-    // fn test_dropped_connection_handle_resets_the_stream(
-    //     #[values(false)] stream_is_finished_and_stopped: bool,
-    // ) {
-    //     let mut sim = Builder::new().build();
-
-    //     let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 8080).into();
-    //     let receiver = "receiver";
-    //     // Receiver
-    //     sim.client(receiver, async move {
-    //         let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
-    //         let this_ip = turmoil::lookup(receiver);
-    //         let custom_udp = CustomUdp::new(this_ip, udp_listener);
-    //         let server_config = generate_self_signed_cert();
-
-    //         let endpoint = Endpoint::new_with_abstract_socket(
-    //             EndpointConfig::default(),
-    //             Some(server_config),
-    //             Arc::new(custom_udp),
-    //             Arc::new(quinn::TokioRuntime),
-    //         )
-    //         .unwrap();
-
-    //         println!("Waiting for client to connect");
-    //         let (_send_stream, mut recv_stream) = endpoint
-    //             .accept()
-    //             .await
-    //             .unwrap()
-    //             .await
-    //             .unwrap()
-    //             .accept_bi()
-    //             .await
-    //             .unwrap();
-    //         println!("Client connected");
-
-    //         let server_result = recv_stream.read_to_end(MAX_READ_SIZE).await;
-
-    //         if stream_is_finished_and_stopped {
-    //             assert_matches!(
-    //                 server_result,
-    //                 Ok(data) if String::from_utf8(data.clone()).unwrap().as_str() == "hello world");
-    //         } else {
-    //             assert_matches!(
-    //                 server_result,
-    //                 Err(ReadToEndError::Read(ReadError::Reset { .. }))
-    //             );
-    //         }
-    //         Ok(())
-    //     });
-
-    //     let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 8080).into();
-    //     let sender = "sender";
-    //     // Sender
-    //     sim.client(sender, async move {
-    //         let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
-    //         let this_ip = turmoil::lookup(sender);
-    //         let custom_udp = CustomUdp::new(this_ip, udp_listener);
-
-    //         let mut endpoint = Endpoint::new_with_abstract_socket(
-    //             EndpointConfig::default(),
-    //             None,
-    //             Arc::new(custom_udp),
-    //             Arc::new(quinn::TokioRuntime),
-    //         )
-    //         .unwrap();
-
-    //         endpoint.set_default_client_config(ClientConfig::new(Arc::new(
-    //             QuicClientConfig::try_from(
-    //                 rustls::ClientConfig::builder()
-    //                     .dangerous()
-    //                     .with_custom_certificate_verifier(SkipServerVerification::new())
-    //                     .with_no_client_auth(),
-    //             )
-    //             .unwrap(),
-    //         )));
-
-    //         let peer_ip = turmoil::lookup(receiver);
-    //         let peer_socket_addr = (peer_ip, 8080).into();
-
-    //         // connect to server
-    //         println!("Connecting to server");
-    //         let connection = endpoint
-    //             .connect(peer_socket_addr, "peer1")
-    //             .unwrap()
-    //             .await
-    //             .unwrap();
-
-    //         println!("Connected to server");
-
-    //         let (send_stream, _recv_stream) = connection.open_bi().await.unwrap();
-    //         println!("Opened bi stream");
-    //         let mut drop_guard = SendStreamDropGuard::new(send_stream);
-    //         let send_stream = &mut drop_guard.send_stream;
-    //         send_stream
-    //             .write_chunk(Bytes::from(&b"hello wo"[..]))
-    //             .await
-    //             .unwrap();
-
-    //         // sleep
-
-    //         if stream_is_finished_and_stopped {
-    //             send_stream
-    //                 .write_chunk(Bytes::from(&b"rld"[..]))
-    //                 .await
-    //                 .unwrap();
-
-    //             send_stream.finish().unwrap();
-
-    //             send_stream.stopped().await.unwrap();
-    //         } else {
-    //             send_stream.finish().unwrap();
-    //         }
-
-    //         // tokio::time::sleep(tokio::time::Duration::from_secs(8)).await;
-
-    //         Ok(())
-    //     });
-
-    //     sim.run().unwrap();
-    // }
 
     #[test]
     fn maybe_quinn_bug() {
