@@ -50,7 +50,6 @@ pub struct RpcApi {
 
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
 pub enum RpcService {
-    Chain(u64),
     Provider(u64),
     Custom(RpcApi),
     EthMainnet(EthMainnetService),
@@ -63,7 +62,6 @@ pub enum RpcService {
 impl std::fmt::Debug for RpcService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RpcService::Chain(chain_id) => write!(f, "Chain({})", chain_id),
             RpcService::Provider(provider_id) => write!(f, "Provider({})", provider_id),
             RpcService::Custom(_) => write!(f, "Custom(..)"), // Redact credentials
             RpcService::EthMainnet(service) => write!(f, "{:?}", service),
