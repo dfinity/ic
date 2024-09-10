@@ -298,15 +298,22 @@ def main():
     if not context_dir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
+    start = time.time()
+    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", destination_tar_filename] + ["3G"]
+    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    print("MKEXT %f" % (time.time() - start))
+
     container_dir = os.path.join(context_dir, "container")
     os.mkdir(container_dir)
-    print("STILL HERE 2", flush=True)
+    # subprocess.run(["sudo", "mount", destination_tar_filename, container_dir], check=True)
+    # subprocess.run(["sudo", "chown", "ubuntu:ubuntu", container_dir], check=True)
     # urllib.request.urlretrieve(
     #     "https://cdimage.ubuntu.com/ubuntu-base/releases/jammy/release/ubuntu-base-22.04-base-amd64.tar.gz",
     #     base_tar_path)
 
-    subprocess.run(["time", "tar", "-xf", "/ic/host_base.tar", "-C", container_dir], check=True)
-    print("STILL HERE 3", flush=True)
+    start = time.time()
+    subprocess.run(["tar", "-xf", "/ic/host_base.tar", "-C", container_dir], check=True)
+    print("UNTARRING % f" % (time.time() - start))
 
     # Fill context with remaining component files from map
     arrange_component_files(container_dir, component_files)
@@ -319,12 +326,23 @@ def main():
     shutil.copy("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
     shutil.copymode("/ic/ic-os/hostos/context/setup.sh", os.path.join(container_dir, "etc"))
 
-    subprocess.run(["sudo", "chroot", container_dir, "/usr/bin/env", "ROOT_PASSWORD=root", "faketime", "-f", "1970-1-1 0:0:0", "/etc/setup.sh"], check=True)
+    print("RUNNING SETUP")
+    start = time.time()
+    subprocess.run(["sudo", "/ic/toolchains/sysimage/tschroot.sh", container_dir, "/usr/bin/env", "ROOT_PASSWORD=root", "faketime", "-f", "1970-1-1 0:0:0", "/etc/setup.sh"], check=True)
+    # subprocess.run(["sudo", "chroot", container_dir, "/usr/bin/env", "ROOT_PASSWORD=root", "faketime", "-f", "1970-1-1 0:0:0", "/etc/setup.sh"], check=True)
+    print(time.time() - start)
+    print("SETUP ENDED")
     subprocess.run(["sudo", "chown", "ubuntu", "-R", container_dir], check=True)
 
     print(destination_tar_filename)
     os.remove(os.path.join(container_dir, "etc", "setup.sh"))
+
+    start = time.time()
     subprocess.check_call(f"time tar --mtime='UTC 1970-01-01' -cf {destination_tar_filename} *", cwd=container_dir, shell=True)
+    # subprocess.run(["sudo", "umount", container_dir], check=True)
+    # mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-d", container_dir, "-F", destination_tar_filename] + ["3G"]
+    # subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    print("MKEXT %f" % (time.time() - start))
 
     # os.setxattr(destination_tar_filename, "trusted.md5sum", b"123441")
 

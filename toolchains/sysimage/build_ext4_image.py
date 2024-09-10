@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -215,8 +216,10 @@ def main():
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
+    start = time.time()
     mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file] + (["-d", in_file] if in_file else []) + [str(image_size)]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    print("mkfs took %f s" % (time.time() - start))
 
     # os.setxattr(image_file, "trusted.md5sum", b"123441")
 
@@ -234,7 +237,9 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
+    start = time.time()
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    print("e2fsdroid took %f s" % (time.time() - start))
 
     # subprocess.run(['sync'], check=True)
     #
