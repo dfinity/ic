@@ -24,7 +24,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
-use ic_metrics::MetricsRegistry;
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
@@ -44,6 +44,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
@@ -111,6 +112,8 @@ pub struct InternalHttpQueryHandler {
 #[derive(Clone)]
 struct HttpQueryHandlerMetrics {
     pub height_diff_during_query_scheduling: Histogram,
+    // A copy of `execution_subnet_message_duration_seconds` but for query.
+    subnet_queries: HistogramVec,
 }
 
 impl HttpQueryHandlerMetrics {
@@ -121,7 +124,24 @@ impl HttpQueryHandlerMetrics {
                 "The height difference between the latest certified height before query scheduling and state height used for execution",
                 vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 20.0, 50.0, 100.0],
             ),
+            // A copy of `execution_subnet_message_duration_seconds` but for query.
+            subnet_queries: metrics_registry.histogram_vec(
+                "execution_subnet_query_duration_seconds",
+                "Duration of a subnet query execution, in seconds.",
+                decimal_buckets(-3, 2),
+                &["method_name"],
+            ),
         }
+    }
+
+    fn observe_subnet_query(&self, method_name: &str, duration: f64) {
+        let method_name_label = match QueryMethod::from_str(method_name) {
+            Ok(_) => format!("query_ic00_{}", method_name),
+            Err(_) => String::from("query_ic00_unknown"),
+        };
+        self.subnet_queries
+            .with_label_values(&[&method_name_label])
+            .observe(duration);
     }
 }
 
@@ -198,11 +218,15 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return fetch_canister_logs(
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
+                    self.metrics
+                        .observe_subnet_query(&query.method_name, since.elapsed().as_secs_f64());
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
