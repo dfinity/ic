@@ -3,6 +3,7 @@ use prometheus::{IntCounter, IntCounterVec};
 
 /// Labels for request errors
 pub(crate) const LABEL_BODY_RECEIVE_SIZE: &str = "body_receive_size";
+pub(crate) const LABEL_BODY_RECEIVE_TIMEOUT: &str = "body_receive_timeout";
 pub(crate) const LABEL_HEADER_RECEIVE_SIZE: &str = "header_receive_size";
 #[cfg(not(feature = "http"))]
 pub(crate) const LABEL_HTTP_SCHEME: &str = "http_scheme";
