@@ -68,9 +68,24 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
+            let deployment = read_deployment_file(Path::new(&opts.deployment_file));
+            let deployment_name: Option<&str> = match &deployment {
+                Ok(deployment) => Some(deployment.deployment.name.as_str()),
+                Err(e) => {
+                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
+                    None
+                }
+            };
+
+            let mgmt_mac: Option<&str> = match &deployment {
+                Ok(deployment) => deployment.deployment.mgmt_mac.as_deref(),
+                Err(_) => None,
+            };
+
             generate_network_config(
                 &network_info,
-                &setup_config.icos_settings.hostname,
+                mgmt_mac,
+                deployment_name,
                 NodeType::SetupOS,
                 Path::new(&output_directory),
             )
@@ -88,10 +103,11 @@ pub fn main() -> Result<()> {
             eprintln!("Network info config: {:?}", &network_info);
 
             let node_type = node_type.parse::<NodeType>()?;
+
             let mac = generate_mac_address(
                 &deployment.deployment.name,
                 &node_type,
-                &network_info.bmc_mac,
+                deployment.deployment.mgmt_mac.as_deref(),
             )?;
             let ipv6_prefix = network_info
                 .ipv6_prefix
@@ -116,7 +132,7 @@ pub fn main() -> Result<()> {
             let mac = generate_mac_address(
                 &deployment.deployment.name,
                 &node_type,
-                &network_info.bmc_mac,
+                deployment.deployment.mgmt_mac.as_deref(),
             )?;
             let mac = FormattedMacAddress::from(&mac);
             println!("{}", mac.get());

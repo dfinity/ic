@@ -22,7 +22,6 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/backup",
-        "//rs/recovery",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
