@@ -2075,7 +2075,7 @@ fn test_register_vote_fails_if_neuron_not_present_in_proposal() {
             current_deadline_timestamp_seconds: proposal_deadline,
         }),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         // The `ballots` will be initialized to an empty map.
@@ -2113,7 +2113,7 @@ fn test_register_vote_fails_if_neuron_already_voted() {
             current_deadline_timestamp_seconds: proposal_deadline,
         }),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         ballots: btreemap! {
@@ -2165,7 +2165,7 @@ fn test_register_vote_fails_if_past_deadline() {
             current_deadline_timestamp_seconds: proposal_deadline,
         }),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         ballots: btreemap! {
@@ -2213,7 +2213,7 @@ fn test_register_vote_fails_if_past_deadline_no_wait_for_quiet() {
     let proposal = ProposalData {
         id: Some(proposal_id),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         ballots: btreemap! {
@@ -2263,7 +2263,7 @@ fn test_register_vote_happy() {
             current_deadline_timestamp_seconds: proposal_deadline,
         }),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         ballots: btreemap! {
@@ -2379,9 +2379,7 @@ fn test_neurons_can_follow_themselves() {
     let (proposal_id, _) = canister_fixture
         .make_default_proposal(
             &proposer_neuron_id,
-            Motion {
-                motion_text: "Test self following".to_string(),
-            },
+            Motion::default(),
             proposer_principal_id,
         )
         .unwrap();
@@ -2473,7 +2471,7 @@ fn test_register_vote_happy_no_wait_for_quiet() {
     let proposal = ProposalData {
         id: Some(proposal_id),
         proposal: Some(Proposal {
-            action: Some(Action::Motion(Motion::new("Test"))),
+            action: Some(Action::Motion(Motion::default())),
             ..Proposal::default()
         }),
         ballots: btreemap! {
@@ -2561,9 +2559,7 @@ fn test_empty_followees_are_filtered() {
     let (proposal_id, _) = canister_fixture
         .make_default_proposal(
             &proposer_neuron_id,
-            Motion {
-                motion_text: "Test self following".to_string(),
-            },
+            Motion::default(),
             proposer_principal_id,
         )
         .unwrap();
@@ -2872,9 +2868,7 @@ async fn test_process_proposals_tallies_votes_for_proposals_where_voting_is_poss
                 current_deadline_timestamp_seconds: 20, // voting period is still open
             }),
             proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Test".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Proposal::default()
             }),
             latest_tally: None,
@@ -2907,9 +2901,7 @@ async fn test_process_proposals_doesnt_tally_votes_for_proposals_where_voting_is
                 current_deadline_timestamp_seconds: 20, // voting period is still open
             }),
             proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Test".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Proposal::default()
             }),
             latest_tally: None,
@@ -2944,9 +2936,7 @@ fn test_motion_has_normal_voting_thresholds() {
         // Create with a test neuron so that the proposal doesn't instantly pass
         .create_with_test_neuron();
 
-    let proposal = Motion {
-        motion_text: "Do stuff".to_string(),
-    };
+    let proposal = Motion::default();
 
     // Create the proposal with neuron_id so it doesn't instantly pass
     let (_, proposal_data) = canister_fixture

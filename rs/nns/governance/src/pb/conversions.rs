@@ -328,6 +328,7 @@ impl From<pb_api::ExecuteNnsFunction> for pb::ExecuteNnsFunction {
 
 impl From<pb::Motion> for pb_api::Motion {
     fn from(item: pb::Motion) -> Self {
+        #[allow(deprecated)]
         Self {
             motion_text: item.motion_text,
         }
@@ -335,6 +336,7 @@ impl From<pb::Motion> for pb_api::Motion {
 }
 impl From<pb_api::Motion> for pb::Motion {
     fn from(item: pb_api::Motion) -> Self {
+        #[allow(deprecated)]
         Self {
             motion_text: item.motion_text,
         }

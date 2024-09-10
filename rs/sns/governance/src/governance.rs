@@ -5715,9 +5715,7 @@ mod tests {
             title: "This Proposal is Wunderbar!".to_string(),
             summary: "This will solve all of your problems.".to_string(),
             url: "https://www.example.com/some/path".to_string(),
-            action: Some(Action::Motion(Motion {
-                motion_text: "See the summary.".to_string(),
-            }))
+            action: Some(Action::Motion(Motion::default()))
         };
 
         static ref TEST_ROOT_CANISTER_ID: CanisterId = CanisterId::from(500);

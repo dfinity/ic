@@ -51,8 +51,8 @@ use ic_nns_governance::{
         validate_proposal_title, Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     is_private_neuron_enforcement_enabled,
@@ -1639,9 +1639,7 @@ async fn test_sufficient_stake() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "test".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "dummy text".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -1854,9 +1852,7 @@ async fn test_no_default_follow_for_governance() {
         &Proposal {
             title: Some("dummy title".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     )
@@ -1923,9 +1919,7 @@ async fn test_no_voting_after_deadline() {
             &Proposal {
                 title: Some("dummy title".to_string()),
                 summary: "test".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "dummy text".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -2446,7 +2440,6 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 }
 
 #[tokio::test]
-#[should_panic]
 async fn test_invalid_proposals_fail() {
     let fake_driver = fake::FakeDriver::default();
     let governance_proto = fixture_two_neurons_second_is_bigger();
@@ -2457,10 +2450,8 @@ async fn test_invalid_proposals_fail() {
         fake_driver.get_fake_cmc(),
     );
 
-    let long_string = (0..(PROPOSAL_MOTION_TEXT_BYTES_MAX + 1))
-        .map(|_| "X")
-        .collect::<String>();
-    // Now let's send a proposal
+    // Now let's send a proposal. We'll make it invalid by making the deprecated "motion_text" field nonempty.
+    #[allow(deprecated)]
     gov.make_proposal(
         &NeuronId { id: 1 },
         // Must match neuron 1's serialized_id.
@@ -2469,12 +2460,12 @@ async fn test_invalid_proposals_fail() {
             title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1".to_string(),
             action: Some(proposal::Action::Motion(Motion {
-                motion_text: long_string,
+                motion_text: "Nothing is allowed in here!".to_string(),
             })),
             ..Default::default()
         },
     )
-    .unwrap();
+    .unwrap_err();
 }
 
 fn get_current_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
@@ -2506,9 +2497,7 @@ async fn test_compute_tally_while_open() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -2549,9 +2538,7 @@ async fn test_compute_tally_after_decided() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -2613,9 +2600,7 @@ async fn test_no_compute_tally_after_deadline() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -2722,9 +2707,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Thou shall not do bad things with the IC".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -2967,9 +2950,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
                 title: Some("Test motion proposal".to_string()),
                 summary: "A proposal voted on by a now-gone neuron".to_string(),
                 url: "https://oops".to_string(),
-                action: Some(Action::Motion(Motion {
-                    motion_text: "a motion".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
             }),
             proposal_timestamp_seconds: 2530,
             ballots: [
@@ -3112,9 +3093,7 @@ async fn test_genesis_in_the_future_in_supported() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1 (long)".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "a".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -3199,9 +3178,7 @@ async fn test_genesis_in_the_future_in_supported() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "pre_genesis_proposal_that_should_settle_in_period_2".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "b".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -5810,9 +5787,7 @@ fn test_staked_maturity() {
                     title: Some("Dummy governance proposal".to_string()),
                     summary: "".to_string(),
                     url: "".to_string(),
-                    action: Some(proposal::Action::Motion(Motion {
-                        motion_text: "".to_string(),
-                    })),
+                    action: Some(proposal::Action::Motion(Motion::default())),
                 }))),
             },
         )
@@ -8016,9 +7991,7 @@ fn test_filter_proposals_excluding_topics() {
                 id: Some(ProposalId { id: 1 }),
                 proposer: Some(NeuronId { id: 1 }),
                 proposal: Some(Proposal {
-                    action: Some(proposal::Action::Motion(Motion {
-                        motion_text: "Some proposal".to_string(),
-                    })),
+                    action: Some(proposal::Action::Motion(Motion::default())),
                     ..new_motion_proposal()
                 }),
                 ..Default::default()
@@ -8418,9 +8391,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: format!("proposal {} summary", i),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "dummy text".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -8438,9 +8409,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "this one should not make it though...".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "so many proposals!".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
@@ -8486,9 +8455,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "this one should not make it though...".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "so many proposals!".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
@@ -8505,9 +8472,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "Now it should work!".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "did it?".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     )
@@ -9906,9 +9871,7 @@ fn wait_for_quiet_test_helper(
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "Summary".to_string(),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Some proposal".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Default::default()
             },
         )
@@ -12783,9 +12746,7 @@ async fn distribute_rewards_load_test() {
             let p = ProposalData {
                 id: Some(ProposalId { id }),
                 proposal: Some(Proposal {
-                    action: Some(proposal::Action::Motion(Motion {
-                        motion_text: "For great justice.".to_string(),
-                    })),
+                    action: Some(proposal::Action::Motion(Motion::default())),
                     ..Default::default()
                 }),
                 ballots: neurons
@@ -12953,9 +12914,7 @@ async fn test_proposal_url_not_on_list_fails() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1 (long)".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "a".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             url: "https://foo.com".to_string(),
         },
     )
@@ -12969,9 +12928,7 @@ async fn test_proposal_url_not_on_list_fails() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1 (long)".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "a".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             url: "https://forum.dfinity.org/anything".to_string(),
         },
     )

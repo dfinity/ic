@@ -73,9 +73,7 @@ pub fn test(env: TestEnv) {
     let proposal = MakeProposalRequest {
         title: Some("dummy title".to_string()),
         summary: "test".to_string(),
-        action: Some(ProposalActionRequest::Motion(Motion {
-            motion_text: "dummy text".to_string(),
-        })),
+        action: Some(ProposalActionRequest::Motion(Motion::default())),
         ..Default::default()
     };
     // Create Rosetta and ledger clients.
@@ -100,9 +98,7 @@ pub fn test(env: TestEnv) {
         let expected_proposal = Proposal {
             title: Some("dummy title".to_string()),
             summary: "test".to_string(),
-            action: Some(Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
         assert_eq!(proposal_info.0.proposal.unwrap(), expected_proposal);

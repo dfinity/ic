@@ -157,9 +157,7 @@ async fn test_cannot_submit_motion_in_degraded_mode() {
         &Proposal {
             title: Some("A Reasonable Title".to_string()),
             summary: "proposal 1".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "Rabbits are cute".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     ),

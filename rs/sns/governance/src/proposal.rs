@@ -59,8 +59,6 @@ pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 pub const PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
 /// The maximum number of bytes in an SNS proposal's URL.
 pub const PROPOSAL_URL_CHAR_MAX: usize = 2048;
-/// The maximum number of bytes in an SNS motion proposal's motion_text.
-pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 
 /// The maximum number of proposals returned by one call to the method `list_proposals`,
 /// which can be used to list all proposals in a paginated fashion.
@@ -450,20 +448,13 @@ pub(crate) async fn validate_and_render_action(
 
 /// Validates and renders a proposal with action Motion.
 fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
-    validate_len(
-        "motion.motion_text",
-        &motion.motion_text,
-        0, // min
-        PROPOSAL_MOTION_TEXT_BYTES_MAX,
-    )?;
+    // Check that the deprecated motion_text field has not been set to a non-empty string.
+    #[allow(deprecated)]
+    if !motion.motion_text.is_empty() {
+        return Err("Motion text must be empty.".to_string());
+    }
 
-    Ok(format!(
-        r"# Motion Proposal:
-## Motion Text:
-
-{}",
-        &motion.motion_text
-    ))
+    Ok("# Motion Proposal".to_string())
 }
 
 /// Validates and renders a proposal with action ManageNervousSystemParameters.
@@ -2601,7 +2592,7 @@ mod tests {
     }
 
     #[test]
-    fn motion_text_not_too_long() {
+    fn motion_text_empty() {
         let mut proposal = basic_motion_proposal();
 
         fn validate_is_ok(proposal: &Proposal) {
@@ -2616,17 +2607,9 @@ mod tests {
         }
 
         validate_is_ok(&proposal);
-        for _ in 0..PROPOSAL_MOTION_TEXT_BYTES_MAX {
-            // Push a character to motion_text.
-            match proposal.action.as_mut().unwrap() {
-                proposal::Action::Motion(motion) => motion.motion_text.push('a'),
-                _ => panic!("proposal.action is not Motion."),
-            }
 
-            validate_is_ok(&proposal);
-        }
-
-        // The straw that breaks the camel's back: push one more character to motion_text.
+        // Add one character to motion_text, which must be empty in order to be valid as it is deprecated.
+        #[allow(deprecated)]
         match proposal.action.as_mut().unwrap() {
             proposal::Action::Motion(motion) => motion.motion_text.push('a'),
             _ => panic!("proposal.action is not Motion."),
@@ -4126,9 +4109,7 @@ Version {
             proposal: Some(Proposal {
                 url: "".to_string(),
                 title: "SNS Token".to_string(),
-                action: Some(Action::Motion(Motion {
-                    motion_text: "hold token SNS be the main key to enter the next project".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 summary: "".to_string()
             }),
             proposer: Some(NeuronId {
@@ -4562,9 +4543,7 @@ Payload rendering here"#
     fn limited_proposal_data_for_list_proposals_retain_ballots_by_caller() {
         let original_proposal_data = ProposalData {
             proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Some motion text".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             }),
             ballots: btreemap! {
@@ -4621,9 +4600,7 @@ Payload rendering here"#
             .collect::<BTreeMap<_, _>>();
         let original_proposal_data = ProposalData {
             proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Some motion text".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             }),
             ballots,

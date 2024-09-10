@@ -70,9 +70,7 @@ pub fn new_motion_proposal() -> Proposal {
     Proposal {
         title: Some("A Reasonable Title".to_string()),
         summary: "Summary".to_string(),
-        action: Some(proposal::Action::Motion(Motion {
-            motion_text: "Some proposal".to_string(),
-        })),
+        action: Some(proposal::Action::Motion(Motion::default())),
         ..Default::default()
     }
 }
@@ -581,9 +579,7 @@ impl ProposalNeuronBehavior {
     pub fn propose_and_vote(&self, nns: &mut NNS, summary: String) -> ProposalId {
         // Submit proposal
         let action = match self.proposal_topic {
-            ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
-            }),
+            ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion::default()),
             ProposalTopicBehaviour::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     ..Default::default()

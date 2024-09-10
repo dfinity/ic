@@ -468,12 +468,10 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
             *WHALE,
             whale_neuron_id,
             Proposal {
-                title: "Transfer treasury SNS".to_string(),
-                summary: "Transfer treasury to user".to_string(),
+                title: "Normal benign proposal".to_string(),
+                summary: "This is just a normal benign proposal".to_string(),
                 url: "".to_string(),
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Nothing to see here.".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
             },
         )
         .unwrap();

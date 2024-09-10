@@ -312,6 +312,7 @@ pub struct ExecuteGenericNervousSystemFunction {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Motion {
     /// The text of the motion, which can at most be 100kib.
+    #[deprecated]
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }

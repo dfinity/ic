@@ -932,9 +932,7 @@ impl SnsCanisters<'_> {
         // Make and immediately vote on a proposal so that the neuron earns some rewards aka maturity.
         let proposal = Proposal {
             title: "A proposal that should pass unanimously".into(),
-            action: Some(Action::Motion(Motion {
-                motion_text: "GIMMIE MATURITY".into(),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 

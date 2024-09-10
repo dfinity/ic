@@ -270,6 +270,7 @@ fn allocate_proposal_data(
         _ => panic!("Undefined proposal action"),
     };
 
+    #[allow(deprecated)]
     let mut proposal_data = ProposalData {
         action,
         id: Some(ProposalId { id }),
@@ -279,6 +280,8 @@ fn allocate_proposal_data(
             url: ['u'; PROPOSAL_URL_CHAR_MAX].iter().collect(),
             action: Some(Action::Motion(Motion {
                 // We use "motion" for all actions for convenience. All that matters is the size.
+                // This is not a valid motion proposal because it has content in motion_text, which is deprecated.
+                // But it is good enough for the purpose of this test.
                 motion_text: "a".repeat(payload_size),
             })),
         }),

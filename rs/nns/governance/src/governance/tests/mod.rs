@@ -854,9 +854,7 @@ mod metrics_tests {
         let proposal_1 = ProposalData {
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Text for this motion".to_string(),
-                })),
+                action: Some(proposal::Action::Motion(Motion::default())),
                 ..Proposal::default()
             }),
             latest_tally: Some(Tally {
@@ -912,9 +910,7 @@ mod metrics_tests {
     #[test]
     fn test_metrics_proposal_deadline_timestamp_seconds() {
         let manage_neuron_action = proposal::Action::ManageNeuron(Box::default());
-        let motion_action = proposal::Action::Motion(Motion {
-            motion_text: "Text for this motion".to_string(),
-        });
+        let motion_action = proposal::Action::Motion(Motion::default());
 
         let open_proposal = ProposalData {
             proposal: Some(Proposal {

@@ -342,6 +342,7 @@ fn allocate_proposal_data(with_ballots: bool, topic: Topic) -> ProposalData {
         _ => 200,
     };
 
+    #[allow(deprecated)] // Required because motion_text is deprecated
     ProposalData {
         id: Some(ProposalIdProto { id: 0 }),
         proposer: Some(NeuronIdProto { id: 0 }),
@@ -355,6 +356,8 @@ fn allocate_proposal_data(with_ballots: bool, topic: Topic) -> ProposalData {
             url: ['a'; 2000].iter().collect(), // 2000-bytes upper limit copied from type definition
             action: Some(Action::Motion(Motion {
                 // We use "motion" for all topics for convenience. All that matters is the size.
+                // This is not a valid proposal, since the motion_text field is deprecated, but
+                // it is fine for our purposes.
                 motion_text: "a".repeat(payload_size),
             })),
         }),

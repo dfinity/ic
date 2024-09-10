@@ -396,7 +396,8 @@ pub struct ExecuteNnsFunction {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Motion {
-    /// The text of the motion. Maximum 100kib.
+    /// Depreacted and must be set to `""`. Use `proposal_summary` instead.
+    #[deprecated]
     #[prost(string, tag = "1")]
     pub motion_text: ::prost::alloc::string::String,
 }

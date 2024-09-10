@@ -151,7 +151,6 @@ pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = 2 * ONE_DAY_SECONDS;
 // proposals
 pub const EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000;
 // 10 KB
-pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 
 // The maximum dissolve delay allowed for a neuron.
 pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
@@ -8102,14 +8101,14 @@ pub fn validate_proposal_url(url: &str) -> Result<(), String> {
 }
 
 fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
-    if motion.motion_text.len() > PROPOSAL_MOTION_TEXT_BYTES_MAX {
+    #[allow(deprecated)]
+    // Let's examine the deprecated `motion_text` field to make sure it is unused.
+    if !motion.motion_text.is_empty() {
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            format!(
-                "The maximum motion text size in a proposal action is {} bytes, this motion text is: {} bytes",
-                PROPOSAL_MOTION_TEXT_BYTES_MAX,
-                motion.motion_text.len()
-            ),
+            "The motion text is deprecated and should no longer be used. \
+                Please put the contents of the motion in the proposal summary instead."
+                .to_string(),
         ));
     }
 

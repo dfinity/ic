@@ -572,9 +572,7 @@ impl ProposalNeuronBehavior {
     pub fn propose_and_vote(&self, gov: &mut Governance, summary: String) -> ProposalId {
         // Submit proposal
         let action = match self.proposal_topic {
-            ProposalTopicBehavior::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
-            }),
+            ProposalTopicBehavior::Governance => proposal::Action::Motion(Motion::default()),
             ProposalTopicBehavior::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     ..Default::default()

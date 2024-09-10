@@ -154,9 +154,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                     &user_1_subaccount,
                     Proposal {
                         title: "We'll let a couple users vote, then wait to see when the proposal closes on its own".into(),
-                        action: Some(Action::Motion(Motion {
-                            motion_text: "Make the Internet Computer AMAZING!".into(),
-                        })),
+                        action: Some(Action::Motion(Motion::default())),
                         ..Default::default()
                     },
                 )

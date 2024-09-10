@@ -690,10 +690,8 @@ fn test_neuron_action_is_not_authorized() {
             .expect("Error creating the subaccount");
 
         let proposal_payload = Proposal {
-            title: "Motion to delete this SNS".into(),
-            action: Some(Action::Motion(Motion {
-                motion_text: "I'm a bad actor and this should not be tolerated".into(),
-            })),
+            title: "Motion to delete this SNS. I'm a bad actor and should not be tolerated.".into(),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1221,9 +1219,7 @@ async fn zero_total_reward_shares() {
     // Step 1.2: Craft a ProposalData that is ReadyToSettle.
     let proposal_id = 99;
     let do_nothing_proposal = Proposal {
-        action: Some(Action::Motion(Motion {
-            motion_text: "For great justice.".to_string(),
-        })),
+        action: Some(Action::Motion(Motion::default())),
         ..Default::default()
     };
     let ready_to_settle_proposal_data = ProposalData {
@@ -1432,9 +1428,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     // voted no, and the third did not vote.
     let proposal_id = 99;
     let do_nothing_proposal = Proposal {
-        action: Some(Action::Motion(Motion {
-            motion_text: "For great justice.".to_string(),
-        })),
+        action: Some(Action::Motion(Motion::default())),
         ..Default::default()
     };
     let ready_to_settle_proposal_data = ProposalData {
@@ -2840,9 +2834,7 @@ fn test_disburse_neuron_burns_neuron_fees() {
 
         // Create a proposal and have the user submit it
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -3051,9 +3043,7 @@ fn test_split_neuron_inheritance() {
 
         // Create a proposal and have the parent submit it
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -3347,9 +3337,7 @@ fn test_neuron_voting_power_multiplier_with_ballots() {
 
         let proposal_payload = Proposal {
             title: "Test Motion proposal".into(),
-            action: Some(Action::Motion(Motion {
-                motion_text: "motion_text".into(),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 

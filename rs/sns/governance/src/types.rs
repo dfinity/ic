@@ -2431,14 +2431,6 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
     }
 }
 
-impl Motion {
-    pub fn new(text: &str) -> Self {
-        Motion {
-            motion_text: text.to_string(),
-        }
-    }
-}
-
 impl From<Motion> for Action {
     fn from(motion: Motion) -> Action {
         Action::Motion(motion)
@@ -3902,9 +3894,7 @@ pub(crate) mod tests {
     fn test_limited_for_get_proposal() {
         let motion_proposal = ProposalData {
             proposal: Some(Proposal {
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Hello, world!".to_string(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             }),
             ..Default::default()

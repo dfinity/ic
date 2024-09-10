@@ -17,10 +17,7 @@ use ic_sns_governance::{
         NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
         ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
     },
-    proposal::{
-        PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
-        PROPOSAL_URL_CHAR_MAX,
-    },
+    proposal::{PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX, PROPOSAL_URL_CHAR_MAX},
     reward,
 };
 use ic_sns_test_utils::{
@@ -76,9 +73,7 @@ fn test_motion_proposal_execution() {
 
             let proposal_payload = Proposal {
                 title: "Test Motion proposal".into(),
-                action: Some(Action::Motion(Motion {
-                    motion_text: "Spoon".into(),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             };
 
@@ -97,7 +92,7 @@ fn test_motion_proposal_execution() {
 
             match proposal_data.proposal.unwrap().action.unwrap() {
                 Action::Motion(motion) => {
-                    assert_eq!(motion.motion_text, "Spoon".to_string());
+                    assert_eq!(motion, Motion::default());
                 }
                 _ => panic!("Proposal has unexpected action"),
             }
@@ -277,9 +272,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                     &user_1_subaccount,
                     Proposal {
                         title: "This time, we need more than one user to vote".into(),
-                        action: Some(Action::Motion(Motion {
-                            motion_text: "Make the Internet Computer AMAZING!".into(),
-                        })),
+                        action: Some(Action::Motion(Motion::default())),
                         ..Default::default()
                     },
                 )
@@ -510,9 +503,7 @@ fn test_list_proposals_determinism() {
         for i in 0..10 {
             proposals.push(Proposal {
                 title: format!("Test Motion proposal-{}", i),
-                action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             });
         }
@@ -616,10 +607,11 @@ fn test_proposal_format_validation() {
             .stake_and_claim_neuron(&user.sender, Some(ONE_YEAR_SECONDS as u32))
             .await;
 
-        // Create a proposal with an illegal number of characters in the motion text
+        // Create a proposal with some content in the motion text, which is not allowed as motion_text is deprecated.
+        #[allow(deprecated)]
         let mut proposal = Proposal {
             action: Some(Action::Motion(Motion {
-                motion_text: "X".repeat(PROPOSAL_MOTION_TEXT_BYTES_MAX + 1),
+                motion_text: "Nothing is allowed in here!".to_string(),
             })),
             ..Default::default()
         };
@@ -634,9 +626,7 @@ fn test_proposal_format_validation() {
 
         // Set the motion text to default and update the proposal with an illegal number of
         // characters in the proposal title
-        proposal.action = Some(Action::Motion(Motion {
-            motion_text: String::from(""),
-        }));
+        proposal.action = Some(Action::Motion(Motion::default()));
         proposal.title = "X".repeat(PROPOSAL_TITLE_BYTES_MAX + 1);
 
         // Submit a proposal and expect an error
@@ -727,9 +717,7 @@ fn test_neuron_configuration_needed_for_proposals() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -857,9 +845,7 @@ fn test_ballots_set_for_multiple_neurons() {
         let proposer = users[0].clone();
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -978,9 +964,7 @@ fn test_ineligible_neuron_voting_fails() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1039,9 +1023,7 @@ fn test_repeated_voting_fails() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1178,9 +1160,7 @@ fn test_following_and_voting() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1283,9 +1263,7 @@ fn test_following_and_voting_from_non_proposer() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1385,9 +1363,7 @@ fn test_following_multiple_neurons_reach_majority() {
             .await;
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1478,9 +1454,7 @@ fn test_proposal_rejection() {
         assert_eq!(neuron.neuron_fees_e8s, 0);
 
         let proposal = Proposal {
-            action: Some(Action::Motion(Motion {
-                motion_text: String::from(""),
-            })),
+            action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
 
@@ -1588,9 +1562,7 @@ fn test_proposal_garbage_collection() {
         let proposals: Vec<Proposal> = (0..10)
             .map(|i| Proposal {
                 title: format!("Motion-{}", i),
-                action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
-                })),
+                action: Some(Action::Motion(Motion::default())),
                 ..Default::default()
             })
             .collect();

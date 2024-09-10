@@ -309,7 +309,7 @@ message ExecuteGenericNervousSystemFunction {
 // ecosystem but does not have immediate effect in the sense that a method is executed.
 message Motion {
   // The text of the motion, which can at most be 100kib.
-  string motion_text = 1;
+  string motion_text = 1 [deprecated = true];
 }
 
 // A proposal function that upgrades a canister that is controlled by the

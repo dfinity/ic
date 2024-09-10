@@ -695,8 +695,8 @@ message ExecuteNnsFunction {
 // If adopted, a motion should guide the future strategy of the
 // Internet Computer ecosystem.
 message Motion {
-  // The text of the motion. Maximum 100kib.
-  string motion_text = 1;
+  // Depreacted and must be set to `""`. Use `proposal_summary` instead.
+  string motion_text = 1 [deprecated = true];
 }
 
 // For all Neurons controlled by the given principals, set their

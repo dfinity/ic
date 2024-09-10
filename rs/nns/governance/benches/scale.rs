@@ -121,9 +121,7 @@ fn make_and_process_proposal(gov: &mut Governance) {
         &Proposal {
             title: Some("Celebrate Good Times".to_string()),
             summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
-            })),
+            action: Some(proposal::Action::Motion(Motion::default())),
             ..Default::default()
         },
     )
