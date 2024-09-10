@@ -321,7 +321,7 @@ mod test {
     });
 
     #[test]
-    fn read_deployment() {
+    fn deserialize_deployment() {
         let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
@@ -365,37 +365,38 @@ mod test {
     }
 
     #[test]
-    fn write_deployment() {
-        let written_deployment =
+    fn serialize_deployment() {
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, written_deployment);
+        // DEPLOYMENT_STRUCT serializes to DEPLOYMENT_STR_NO_MGMT_MAC because mgmt_mac field is skipped in serialization
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
 
-        let written_no_cpu_deployment =
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
                 .unwrap();
 
-        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, written_no_cpu_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
 
-        let written_no_cpu_deployment =
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_MGMT_MAC).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, written_no_cpu_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
 
-        let written_no_cpu_deployment =
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
                 .unwrap();
 
-        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, written_no_cpu_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
 
-        let written_cpu_deployment =
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
 
-        assert_eq!(QEMU_CPU_DEPLOYMENT_STR, written_cpu_deployment);
+        assert_eq!(QEMU_CPU_DEPLOYMENT_STR, serialized_deployment);
 
-        let written_multi_url_deployment =
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&MULTI_URL_STRUCT).unwrap();
 
-        assert_eq!(MULTI_URL_STR, written_multi_url_deployment);
+        assert_eq!(MULTI_URL_STR, serialized_deployment);
     }
 }
