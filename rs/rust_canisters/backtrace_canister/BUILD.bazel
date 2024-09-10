@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_test", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
@@ -24,10 +24,10 @@ rust_canister(
     name = "backtrace-canister",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
+    keep_name_section = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":backtrace_canister.did",
     deps = DEPENDENCIES,
-    keep_name_section = True,
 )
 
 rust_test(
@@ -48,5 +48,5 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = [],
-    deps = DEPENDENCIES, 
+    deps = DEPENDENCIES,
 )
