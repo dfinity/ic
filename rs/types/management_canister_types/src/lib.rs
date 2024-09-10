@@ -2586,6 +2586,13 @@ pub enum QueryMethod {
     FetchCanisterLogs,
 }
 
+impl QueryMethod {
+    /// Returns `true` if the query is directed to the management canister (subnet query).
+    pub fn is_subnet_query(&self) -> bool {
+        matches!(self, QueryMethod::FetchCanisterLogs)
+    }
+}
+
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text
 /// record {
