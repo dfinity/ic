@@ -202,14 +202,7 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
     );
 
     assert_eq!(fetch_canister_logs_count(&env), 0);
-
-    env.query_as(
-        PrincipalId::new_anonymous(),
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-
+    let _ = fetch_canister_logs(&env, PrincipalId::new_anonymous(), canister_id);
     assert_eq!(fetch_canister_logs_count(&env), 1);
 }
 
