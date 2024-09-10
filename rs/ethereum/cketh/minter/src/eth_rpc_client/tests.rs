@@ -264,10 +264,10 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [ankr_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
+                let [pokt_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
                 let results: MultiCallResults<FeeHistory> =
                     MultiCallResults::from_non_empty_iter(vec![
-                        (POKT, Ok(ankr_fee_history)),
+                        (POKT, Ok(pokt_fee_history)),
                         (LLAMA_NODES, Ok(llama_nodes_fee_history)),
                         (PUBLIC_NODE, Ok(public_node_fee_history)),
                     ]);
@@ -303,7 +303,7 @@ mod multi_call_results {
 
         #[test]
         fn should_fail_when_no_strict_majority() {
-            let ankr_fee_history = FeeHistory {
+            let pokt_fee_history = FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fd),
                 ..fee_history()
             };
@@ -317,7 +317,7 @@ mod multi_call_results {
             };
             let three_distinct_results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (POKT, Ok(ankr_fee_history.clone())),
+                    (POKT, Ok(pokt_fee_history.clone())),
                     (PUBLIC_NODE, Ok(public_node_fee_history.clone())),
                 ]);
 
@@ -329,7 +329,7 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (POKT, Ok(ankr_fee_history.clone())),
+                        (POKT, Ok(pokt_fee_history.clone())),
                         (PUBLIC_NODE, Ok(public_node_fee_history)),
                     ])
                 ))
@@ -337,7 +337,7 @@ mod multi_call_results {
 
             let two_distinct_results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (POKT, Ok(ankr_fee_history.clone())),
+                    (POKT, Ok(pokt_fee_history.clone())),
                     (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
@@ -349,7 +349,7 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (POKT, Ok(ankr_fee_history.clone())),
+                        (POKT, Ok(pokt_fee_history.clone())),
                         (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                     ])
                 ))
@@ -357,7 +357,7 @@ mod multi_call_results {
 
             let two_distinct_results_and_error: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (POKT, Ok(ankr_fee_history.clone())),
+                    (POKT, Ok(pokt_fee_history.clone())),
                     (
                         PUBLIC_NODE,
                         Err(SingleCallError::JsonRpcError {
@@ -376,7 +376,7 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (POKT, Ok(ankr_fee_history)),
+                        (POKT, Ok(pokt_fee_history)),
                         (LLAMA_NODES, Ok(llama_nodes_fee_history)),
                     ])
                 ))
@@ -891,14 +891,14 @@ mod evm_rpc_conversion {
             second_tx_count in arb_evm_rpc_transaction_count(),
             third_tx_count in arb_evm_rpc_transaction_count(),
         ) {
-            let (ankr_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+            let (pokt_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
                 evm_rpc_providers();
             let evm_results = match (&first_tx_count, &second_tx_count, &third_tx_count) {
                 (Ok(count_1), Ok(count_2), Ok(count_3)) if count_1 == count_2 && count_2 == count_3 => {
                     EvmMultiRpcResult::Consistent(Ok(count_1.clone()))
                 }
                 _ => EvmMultiRpcResult::Inconsistent(vec![
-                    (ankr_evm_rpc_provider, first_tx_count.clone()),
+                    (pokt_evm_rpc_provider, first_tx_count.clone()),
                     (public_node_evm_rpc_provider, second_tx_count.clone()),
                     (llama_nodes_evm_rpc_provider, third_tx_count.clone()),
                 ]),
@@ -951,7 +951,7 @@ mod evm_rpc_conversion {
         MultiCallResults<M>: Reduce<Item = R>,
         EvmMultiRpcResult<E>: Reduce<Item = R>,
     {
-        let (ankr_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+        let (pokt_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
             evm_rpc_providers();
 
         // 0 error
@@ -966,7 +966,7 @@ mod evm_rpc_conversion {
         // 1 error
         for first_error_index in 0..3_usize {
             let mut evm_results = vec![
-                (ankr_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+                (pokt_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
                 (public_node_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
                 (llama_nodes_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
             ];
@@ -989,7 +989,7 @@ mod evm_rpc_conversion {
         // 2 errors
         for ok_index in 0..3_usize {
             let mut evm_results = vec![
-                (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
+                (pokt_evm_rpc_provider.clone(), Err(first_error.clone())),
                 (
                     public_node_evm_rpc_provider.clone(),
                     Err(second_error.clone()),
@@ -1019,7 +1019,7 @@ mod evm_rpc_conversion {
 
         // 3 errors
         let evm_result: EvmMultiRpcResult<E> = EvmMultiRpcResult::Inconsistent(vec![
-            (ankr_evm_rpc_provider.clone(), Err(first_error.clone())),
+            (pokt_evm_rpc_provider.clone(), Err(first_error.clone())),
             (
                 public_node_evm_rpc_provider.clone(),
                 Err(second_error.clone()),
@@ -1043,8 +1043,8 @@ mod evm_rpc_conversion {
     }
 
     fn evm_rpc_providers() -> (RpcService, RpcService, RpcService) {
-        let ankr_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
-            url: "ankr".to_string(),
+        let pokt_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "pokt".to_string(),
             headers: None,
         });
         let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
@@ -1056,7 +1056,7 @@ mod evm_rpc_conversion {
             headers: None,
         });
         (
-            ankr_evm_rpc_provider,
+            pokt_evm_rpc_provider,
             public_node_evm_rpc_provider,
             llama_nodes_evm_rpc_provider,
         )
