@@ -17,7 +17,7 @@ pub struct CliArgs {
     source: CommandArg,
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Clone, Debug, Parser)]
 #[clap(name = "ic-regedit", about = "Registry (Local Store) Editor.", version)]
 pub enum CommandArg {
     Snapshot {
@@ -295,19 +295,19 @@ pub enum ArgError {
     JsonError(PathBuf, serde_json::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySpec {
     pub version: VersionSpec,
     pub source: SourceSpec,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum SourceSpec {
     LocalStore(PathBuf),
     Canister(Url, Option<ThresholdSigPublicKey>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum Command {
     Snapshot {
         registry_spec: RegistrySpec,
@@ -330,7 +330,7 @@ pub enum Command {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VersionSpec {
     RelativeToLatest(u64),
     Absolute(RegistryVersion),

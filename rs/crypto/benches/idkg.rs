@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, EnumIter)]
 enum VaultType {
     Local,
     #[default]

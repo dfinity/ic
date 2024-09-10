@@ -6,6 +6,7 @@ package types.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
+import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
 import "types/v1/types.proto";
@@ -206,4 +207,27 @@ message IngressIdOffset {
 message IngressPayload {
   repeated IngressIdOffset id_and_pos = 1;
   bytes buffer = 2;
+}
+
+// Stripped consensus artifacts messages below
+message GetIngressMessageInBlockRequest {
+  IngressMessageId ingress_message_id = 1;
+  ConsensusMessageId block_proposal_id = 2;
+}
+
+message GetIngressMessageInBlockResponse {
+  bytes ingress_message = 1;
+}
+
+message StrippedBlockProposal {}
+
+message StrippedConsensusMessage {
+  oneof msg {
+    StrippedBlockProposal stripped_block_proposal = 1;
+    ConsensusMessage unstripped = 2;
+  }
+}
+
+message StrippedConsensusMessageId {
+  ConsensusMessageId unstripped_id = 1;
 }

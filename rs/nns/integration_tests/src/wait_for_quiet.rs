@@ -6,15 +6,17 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::TimeWarp;
-use ic_nns_governance_api::pb::v1::{
-    add_or_remove_node_provider::Change,
-    manage_neuron::{self, Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    neuron::DissolveState,
-    proposal::Action,
-    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider, Proposal,
-    ProposalInfo, Vote,
+use ic_nns_governance_api::{
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        manage_neuron::{self, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        neuron::DissolveState,
+        AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest,
+        ManageNeuronRequest, ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest,
+        ProposalInfo, Vote,
+    },
+    test_api::TimeWarp,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -60,22 +62,26 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_2_ID,
                     })),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Just want to add this NP.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
-                            change: Some(Change::ToAdd(NodeProvider {
-                                id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                                reward_account: None,
-                            })),
-                        })),
-                    }))),
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
+                            title: Some("Just want to add this NP.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(
+                                AddOrRemoveNodeProvider {
+                                    change: Some(Change::ToAdd(NodeProvider {
+                                        id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                                        reward_account: None,
+                                    })),
+                                },
+                            )),
+                        },
+                    ))),
                 },
                 &Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
             )
@@ -116,13 +122,15 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
                     id: None,
-                    command: Some(Command::RegisterVote(manage_neuron::RegisterVote {
-                        proposal: Some(pid),
-                        vote: Vote::No as i32,
-                    })),
+                    command: Some(ManageNeuronCommandRequest::RegisterVote(
+                        manage_neuron::RegisterVote {
+                            proposal: Some(pid),
+                            vote: Vote::No as i32,
+                        },
+                    )),
                 },
                 &Sender::from_keypair(neuron_4_owner_keypair),
             )

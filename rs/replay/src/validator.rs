@@ -11,7 +11,7 @@ use ic_consensus::{
     consensus::{dkg_key_manager::DkgKeyManager, validator::Validator, ValidatorMetrics},
 };
 use ic_consensus_utils::{
-    active_high_threshold_transcript, crypto::ConsensusCrypto, membership::Membership,
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
     pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
     pub id: ConsensusMessageId,
     pub block_hash: Option<CryptoHashOf<Block>>,
@@ -269,10 +269,8 @@ impl ReplayValidator {
             // The signer is valid.
             Ok(true) => {
                 // Verify the signature.
-                let dkg_id =
-                    active_high_threshold_transcript(self.pool_cache.as_ref(), share.height)
-                        .ok_or_else(|| "Failed to get active transcript.".to_string())?
-                        .dkg_id;
+                let dkg_id = active_high_threshold_nidkg_id(self.pool_cache.as_ref(), share.height)
+                    .ok_or_else(|| "Failed to get active transcript.".to_string())?;
                 self.certification_crypto
                     .verify(&share.signed, dkg_id)
                     .map_err(|e| e.to_string())

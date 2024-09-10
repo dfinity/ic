@@ -4,15 +4,15 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId},
     NodeId,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
-) -> HashMap<NiDkgId, HashSet<NodeId>> {
+) -> HashSet<(NiDkgId, NodeId)> {
     get_dkg_dealings(pool_reader, block)
         .into_iter()
-        .map(|(dkg_id, dealings)| (dkg_id, dealings.into_keys().collect()))
+        .flat_map(|(dkg_id, dealings)| dealings.into_keys().map(move |node_id| (dkg_id, node_id)))
         .collect()
 }
 

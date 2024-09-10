@@ -36,7 +36,7 @@ slog-scope = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [[bin]]
 name = "ic-workload-generator"

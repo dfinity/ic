@@ -9,7 +9,7 @@ use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 
 /// An object that represents the burning of neuron fees.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BurnNeuronFeesOperation {
     pub neuron_id: NeuronId,
     pub amount_e8s: u64,
@@ -69,7 +69,7 @@ impl BurnNeuronFeesOperation {
 }
 
 /// An object that represents the transfer of stake from one neuron to another.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NeuronStakeTransferOperation {
     pub source_neuron_id: NeuronId,
     pub target_neuron_id: NeuronId,

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-embedders = { path = "../../embedders" }
 ic-error-types = { path = "../../types/error_types" }
@@ -37,4 +37,4 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

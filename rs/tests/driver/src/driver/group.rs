@@ -69,7 +69,7 @@ const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
 
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 pub struct CliArgs {
     #[clap(flatten)]
     group_dir: GroupDir,
@@ -88,6 +88,12 @@ pub struct CliArgs {
         help = "If set, Farm group is not deleted in the tear down."
     )]
     pub no_delete_farm_group: bool,
+
+    #[clap(
+        long = "no-group-ttl",
+        help = "If set, The group won't have a Time-To-Live set and thus won't be garbage collected"
+    )]
+    pub no_group_ttl: bool,
 
     #[clap(
         long = "no-summary-report",
@@ -151,7 +157,7 @@ impl CliArgs {
     }
 }
 
-#[derive(clap::Args, Clone, Debug)]
+#[derive(Clone, Debug, clap::Args)]
 pub struct GroupDir {
     #[clap(
         long = "working-dir",
@@ -162,7 +168,7 @@ all test environments including the one of the setup."#
     pub path: PathBuf,
 }
 
-#[derive(clap::Subcommand, Clone, Debug)]
+#[derive(Clone, Debug, clap::Subcommand)]
 pub enum SystemTestsSubcommand {
     /// run all tests in this test group
     Run,
@@ -801,7 +807,7 @@ impl SystemTestGroup {
             args.subproc_id(),
             args.filter_tests,
             args.debug_keepalive,
-            args.no_farm_keepalive,
+            args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
         )?;
@@ -820,7 +826,7 @@ impl SystemTestGroup {
                 InfraProvider::Farm.write_attribute(&root_env);
             }
             if with_farm || args.k8s {
-                root_env.create_group_setup(group_ctx.group_base_name.clone());
+                root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }

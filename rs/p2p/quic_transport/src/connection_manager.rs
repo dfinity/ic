@@ -33,14 +33,14 @@ use std::{
     time::Duration,
 };
 
-use axum::{middleware::from_fn_with_state, Router};
-use either::Either;
+use axum::{
+    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
+    middleware::Next, Router,
+};
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{
-    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -48,17 +48,17 @@ use ic_metrics::MetricsRegistry;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
-    VarInt,
+    Runtime, TokioRuntime, VarInt,
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    utils::collect_metrics,
     ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
@@ -86,7 +86,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum Direction {
     Inbound,
     Outbound,
@@ -132,28 +132,33 @@ struct ConnectionManager {
     router: Router,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ConnectionEstablishError {
+    #[error("Timeout during connection establishment")]
     Timeout,
+    #[error("Gruezi handshake failed. {0}")]
     Gruezi(String),
+    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
     TlsClientConfigError {
         peer_id: NodeId,
         cause: TlsConfigError,
     },
+    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
     ConnectError {
         peer_id: NodeId,
         cause: ConnectError,
     },
+    #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
+    #[error("No peer identity available.")]
     MissingPeerIdentity,
-    MalformedPeerIdentity(MalformedPeerCertificateError),
-    PeerIdMismatch {
-        client: NodeId,
-        server: NodeId,
-    },
+    #[error("Malformed peer identity. {0}")]
+    MalformedPeerIdentity(String),
+    #[error("Received peer ids didn't match {client:?} and {server:?}.")]
+    PeerIdMismatch { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
@@ -161,33 +166,23 @@ struct ConnectionWithPeerId {
     connection: Connection,
 }
 
-impl std::fmt::Display for ConnectionEstablishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Timeout => write!(f, "Timeout during connection establishment."),
-            Self::Gruezi(e) => write!(f, "Gruezi handshake failed. {e}"),
-            Self::TlsClientConfigError { peer_id, cause } => {
-                write!(
-                    f,
-                    "Failed to get rustls client config for peer {peer_id}. {cause}"
-                )
-            }
-            Self::ConnectError { peer_id, cause } => {
-                write!(f, "Failed to connect to peer {peer_id}. {cause}")
-            }
-            Self::ConnectionError { peer_id, cause } => match peer_id {
-                Some(peer_id) => write!(f, "Outgoing connection to peer {peer_id}. {cause}"),
-                None => write!(f, "Incoming connection failed. {cause}"),
-            },
-            Self::MissingPeerIdentity => write!(f, "No peer identity available."),
-            Self::MalformedPeerIdentity(MalformedPeerCertificateError { internal_error }) => {
-                write!(f, "Malformed peer identity. {internal_error}")
-            }
-            Self::PeerIdMismatch { client, server } => {
-                write!(f, "Received peer ids didn't match {client} and {server}.")
-            }
-        }
-    }
+pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocket> {
+    let _guard = rt.enter();
+    let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
+        .expect("Failed to create udp socket");
+
+    // Set socket send/recv buffer size. Setting these explicitly makes sure that a
+    // sufficiently large value is used. Increasing these buffers can help with high packet loss.
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE);
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_send_buffer_size(UDP_BUFFER_SIZE);
+
+    socket2
+        .bind(&SockAddr::from(addr))
+        .expect("Failed to bind to UDP socket");
+
+    TokioRuntime::wrap_udp_socket(&TokioRuntime, socket2.into()).unwrap()
 }
 
 pub(crate) fn start_connection_manager(
@@ -199,7 +194,7 @@ pub(crate) fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    socket: Either<SocketAddr, impl AsyncUdpSocket>,
+    socket: Arc<dyn AsyncUdpSocket>,
     router: Router,
 ) -> Shutdown {
     let topology = watcher.borrow().clone();
@@ -241,52 +236,15 @@ pub(crate) fn start_connection_manager(
     ));
     server_config.transport_config(transport_config.clone());
 
-    // Start endpoint
-    let endpoint = match socket {
-        Either::Left(addr) => {
-            let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
-                .expect("Failed to create udp socket");
-
-            // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packet loss.
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE) {
-                info!(log, "Failed to set receive udp buffer. {}", e)
-            }
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(UDP_BUFFER_SIZE) {
-                info!(log, "Failed to set send udp buffer. {}", e)
-            }
-            info!(
-                log,
-                "Udp receive buffer size: {:?}",
-                socket2.recv_buffer_size()
-            );
-            info!(
-                log,
-                "Udp send buffer size: {:?}",
-                socket2.send_buffer_size()
-            );
-            socket2
-                .bind(&SockAddr::from(addr))
-                .expect("Failed to bind to UDP socket");
-
-            let _enter_guard = rt.enter();
-            Endpoint::new(
-                endpoint_config,
-                Some(server_config),
-                socket2.into(),
-                Arc::new(quinn::TokioRuntime),
-            )
-            .expect("Failed to create endpoint")
-        }
-        Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
+    let endpoint = {
+        let _guard = rt.enter();
+        Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            Arc::new(async_udp_socket),
+            socket,
             Arc::new(quinn::TokioRuntime),
         )
-        .expect("Failed to create endpoint"),
+        .expect("Failed to create endpoint")
     };
     let manager = ConnectionManager {
         log: log.clone(),
@@ -634,15 +592,10 @@ impl ConnectionManager {
                 rustls_certs
                     .first()
                     .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
-                        MalformedPeerCertificateError {
-                            internal_error: "a single cert must be present".to_string(),
-                        },
+                        "a single cert must be present".to_string(),
                     ))?;
-            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
-                ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: format!("{:?}", err),
-                })
-            })?;
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
+                .map_err(|err| ConnectionEstablishError::MalformedPeerIdentity(err.to_string()))?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
@@ -730,4 +683,26 @@ impl ConnectionManager {
         };
         Ok(conn)
     }
+}
+
+/// Axum middleware to collect metrics
+async fn collect_metrics(
+    State(state): State<QuicTransportMetrics>,
+    request: Request<Body>,
+    next: Next,
+) -> axum::response::Response {
+    state
+        .request_handle_bytes_received_total
+        .with_label_values(&[request.uri().path()])
+        .inc_by(request.body().size_hint().lower());
+    let _timer = state
+        .request_handle_duration_seconds
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
+    let out_counter = state
+        .request_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let response = next.run(request).await;
+    out_counter.inc_by(response.body().size_hint().lower());
+    response
 }

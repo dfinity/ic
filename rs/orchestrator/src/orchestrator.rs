@@ -65,7 +65,7 @@ pub struct Orchestrator {
     ipv4_configurator: Option<Ipv4Configurator>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum OrchestratorInstantiationError {
     /// If an error occurs during key generation
     KeyGenerationError(String),
@@ -217,6 +217,7 @@ impl Orchestrator {
         let cup_provider = Arc::new(CatchUpPackageProvider::new(
             Arc::clone(&registry),
             args.cup_dir.clone(),
+            Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,

@@ -13,21 +13,12 @@
 
 set -eo pipefail
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function get_guestos_version() {
     if [ -r ${GUESTOS_VERSION_FILE} ]; then

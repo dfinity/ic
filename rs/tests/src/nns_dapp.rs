@@ -24,19 +24,19 @@ use std::collections::HashMap;
 use std::env;
 
 /// Init and post_upgrade arguments for SNS aggregator.
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Config {
     pub update_interval_ms: u64,
     pub fast_interval_ms: u64,
 }
 
 /// Init and post_upgrade arguments for NNS frontend dapp.
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum SchemaLabel {
     Map,
     AccountsInStableMemory,
 }
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterArguments {
     pub args: Vec<(String, String)>,
     pub schema: Option<SchemaLabel>,

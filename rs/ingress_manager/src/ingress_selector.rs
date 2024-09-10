@@ -3,7 +3,6 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::{CustomRandomState, IngressManager};
-use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     execution_environment::{IngressHistoryError, IngressHistoryReader},
@@ -14,6 +13,7 @@ use ic_interfaces::{
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
+use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
@@ -816,10 +816,8 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                        ))]);
+                        ingress_pool
+                            .apply_changes(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
                     });
@@ -998,10 +996,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -1050,10 +1045,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -1119,10 +1111,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1130,10 +1119,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1195,10 +1181,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1206,10 +1189,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1368,19 +1348,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id1,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id1)]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id2,
-                        node_test_id(0),
-                    ))]);
+                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id2)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1558,10 +1532,8 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                        ))]);
+                        ingress_pool
+                            .apply_changes(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
                     });
@@ -2080,10 +2052,7 @@ mod tests {
                 ingress_pool
                     .write()
                     .unwrap()
-                    .apply_changes(vec![ChangeAction::MoveToValidated((
-                        msg_id,
-                        node_test_id(0),
-                    ))]);
+                    .apply_changes(vec![ChangeAction::MoveToValidated(msg_id)]);
 
                 let validation_context = ValidationContext {
                     registry_version: RegistryVersion::new(1),
@@ -2113,10 +2082,7 @@ mod tests {
                     peer_id: node_test_id(0),
                     timestamp,
                 });
-                ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                    message_id.clone(),
-                    node_test_id(0),
-                ))]);
+                ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                 // check that message is indeed in the pool
                 assert!(ingress_pool.get(&message_id).is_some());
             });
