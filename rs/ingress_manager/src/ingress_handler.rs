@@ -61,7 +61,8 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 // If the ingress pool is full, discard the message.
                 // Note: since here we don't remove ingress messages from the ingress pool directly,
                 // if `exceeds_limit` returns `true` for a peer `p`, we will remove *all*
-                // unvalidated ingress messages originating from that peer. This should be okay, as
+                // unvalidated ingress messages originating from that peer. Conversely, we will 
+                // add all unvalidated ingress message from that peer. This should be okay, as
                 // we don't expect to have many unvalidated ingress messages in the pool at any
                 // time, because we call `on_state_change` at most every 200ms and every time we
                 // receive an ingress message from a peer. Historically, we have had at most 2
