@@ -58,6 +58,8 @@ function fetch_mgmt_mac() {
 function main() {
     # Establish run order
 
+    # NOTE: `fetch-property` will error if the target is not found. Here we
+    # only want to act when the field is set.
     MGMT_MAC=$(jq -r ".deployment.mgmt_mac" ${DEPLOYMENT})
 
     if [ -z "${MGMT_MAC}" ] || [ "${MGMT_MAC}" = "null" ]; then
