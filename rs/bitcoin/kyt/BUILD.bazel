@@ -62,6 +62,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
     ],
 )
