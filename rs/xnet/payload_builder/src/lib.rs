@@ -16,7 +16,6 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -28,6 +27,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -61,7 +61,7 @@ use tokio::{runtime, sync::mpsc};
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
 pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,
@@ -265,7 +265,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -284,7 +284,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -1415,13 +1415,13 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SignalsValidationResult {
     Valid,
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SliceValidationResult {
     /// Slice is valid.
     Valid {

@@ -4,8 +4,12 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
     "//rs/rosetta-api",
     "//rs/rosetta-api:ic-rosetta-api",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
@@ -26,6 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
+    "//rs/rosetta-api/test_utils",
     "@crate_index//:candid",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

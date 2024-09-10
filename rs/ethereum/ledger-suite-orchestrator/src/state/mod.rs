@@ -4,8 +4,9 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::candid::{CyclesManagement, InitArg};
-use crate::scheduler::{Erc20Token, Task};
+use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
 use crate::storage::memory::{state_memory, StableMemory};
+use crate::storage::WasmHashError;
 use candid::Principal;
 use ic_cdk::trap;
 use ic_stable_structures::{storable::Bound, Cell, Storable};
@@ -15,6 +16,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::once;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -45,7 +47,7 @@ pub type LedgerWasm = Wasm<Ledger>;
 pub type IndexWasm = Wasm<Index>;
 pub type ArchiveWasm = Wasm<Archive>;
 
-#[derive(Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize, Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 #[serde(from = "serde_bytes::ByteArray<N>", into = "serde_bytes::ByteArray<N>")]
 pub struct Hash<const N: usize>([u8; N]);
 
@@ -211,12 +213,105 @@ impl<T> From<&[u8]> for Wasm<T> {
 /// see [Git Revision Selection](https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection).
 pub type GitCommitHash = Hash<GIT_COMMIT_HASH_LENGTH>;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ManagedCanisters {
+    /// Canisters for an ERC-20 token
     canisters: BTreeMap<Erc20Token, Canisters>,
+    /// Canisters for a non-ERC-20 token, identified by its token symbol
+    #[serde(default)]
+    other_canisters: BTreeMap<TokenSymbol, Canisters>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+impl ManagedCanisters {
+    pub fn find_by_id(&self, token_id: &TokenId) -> Option<&Canisters> {
+        match token_id {
+            TokenId::Erc20(contract) => self.canisters.get(contract),
+            TokenId::Other(symbol) => self.other_canisters.get(symbol),
+        }
+    }
+
+    pub fn get_mut(&mut self, token_id: &TokenId) -> Option<&mut Canisters> {
+        match token_id {
+            TokenId::Erc20(contract) => self.canisters.get_mut(contract),
+            TokenId::Other(symbol) => self.other_canisters.get_mut(symbol),
+        }
+    }
+
+    pub fn insert_once(&mut self, token_id: TokenId, canisters: Canisters) {
+        assert_eq!(
+            self.find_by_id(&token_id),
+            None,
+            "BUG: token {:?} is already managed",
+            token_id
+        );
+        let previous_element = match token_id {
+            TokenId::Erc20(contract) => self.canisters.insert(contract, canisters),
+            TokenId::Other(token_symbol) => self.other_canisters.insert(token_symbol, canisters),
+        };
+        assert_eq!(previous_element, None);
+    }
+
+    pub fn all_canisters_iter(&self) -> impl Iterator<Item = (TokenId, &Canisters)> {
+        self.canisters
+            .iter()
+            .map(|(key, value)| (TokenId::from(key.clone()), value))
+            .chain(
+                self.other_canisters
+                    .iter()
+                    .map(|(key, value)| (TokenId::from(key.clone()), value)),
+            )
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct TokenSymbol(String);
+
+impl Display for TokenSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for TokenSymbol {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub enum TokenId {
+    Erc20(Erc20Token),
+    Other(TokenSymbol),
+}
+impl TokenId {
+    pub fn into_erc20_unchecked(self) -> Erc20Token {
+        match self {
+            TokenId::Erc20(token) => token,
+            TokenId::Other(symbol) => panic!("BUG: token id {:?} is not an ERC-20 token", symbol),
+        }
+    }
+
+    pub fn into_other_unchecked(self) -> TokenSymbol {
+        match self {
+            TokenId::Erc20(token) => panic!("BUG: token id {:?} is an ERC-20 token", token),
+            TokenId::Other(symbol) => symbol,
+        }
+    }
+}
+
+impl From<Erc20Token> for TokenId {
+    fn from(value: Erc20Token) -> Self {
+        TokenId::Erc20(value)
+    }
+}
+
+impl From<TokenSymbol> for TokenId {
+    fn from(value: TokenSymbol) -> Self {
+        TokenId::Other(value)
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Canisters {
     pub ledger: Option<LedgerCanister>,
     pub index: Option<IndexCanister>,
@@ -224,9 +319,9 @@ pub struct Canisters {
     pub metadata: CanistersMetadata,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct CanistersMetadata {
-    pub ckerc20_token_symbol: String,
+    pub token_symbol: String,
 }
 
 impl Canisters {
@@ -251,16 +346,11 @@ impl Canisters {
         &self.archives
     }
 
-    pub fn collect_principals(&self) -> Vec<Principal> {
-        let mut result: Vec<Principal> = vec![];
-        if let Some(ledger_principal) = self.ledger_canister_id() {
-            result.push(*ledger_principal);
-        }
-        if let Some(index_principal) = self.index_canister_id() {
-            result.push(*index_principal);
-        }
-        result.extend(self.archives.clone());
-        result
+    pub fn principals_iter(&self) -> impl Iterator<Item = &Principal> {
+        self.ledger_canister_id()
+            .into_iter()
+            .chain(self.index_canister_id())
+            .chain(self.archive_canister_ids().iter())
     }
 }
 
@@ -328,7 +418,7 @@ pub type IndexCanister = Canister<Index>;
 #[derive(Debug)]
 pub enum Archive {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ManagedCanisterStatus {
     /// Canister created with the given principal
     /// but wasm module is not yet installed.
@@ -362,7 +452,7 @@ impl ManagedCanisterStatus {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LedgerSuiteVersion {
     pub ledger_compressed_wasm_hash: WasmHash,
     pub index_compressed_wasm_hash: WasmHash,
@@ -370,7 +460,7 @@ pub struct LedgerSuiteVersion {
 }
 
 /// Configuration state of the ledger orchestrator.
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 enum ConfigState {
     #[default]
     Uninitialized,
@@ -416,7 +506,7 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
         .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct State {
     managed_canisters: ManagedCanisters,
     cycles_management: CyclesManagement,
@@ -445,16 +535,21 @@ impl State {
         &mut self.cycles_management
     }
 
-    pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
-        self.managed_canisters.canisters.iter()
+    pub fn all_managed_canisters_iter(&self) -> impl Iterator<Item = (TokenId, &Canisters)> {
+        self.managed_canisters.all_canisters_iter()
     }
 
-    pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
-        self.managed_canisters.canisters.keys()
+    pub fn all_managed_principals(&self) -> impl Iterator<Item = &Principal> {
+        self.all_managed_canisters_iter()
+            .flat_map(|(_, canisters)| canisters.principals_iter())
     }
 
-    pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {
-        self.managed_canisters.canisters.get(contract)
+    pub fn all_managed_tokens_ids_iter(&self) -> impl Iterator<Item = TokenId> + '_ {
+        self.all_managed_canisters_iter().map(|(id, _)| id)
+    }
+
+    pub fn managed_canisters(&self, token_id: &TokenId) -> Option<&Canisters> {
+        self.managed_canisters.find_by_id(token_id)
     }
 
     pub fn ledger_suite_version(&self) -> Option<&LedgerSuiteVersion> {
@@ -473,40 +568,38 @@ impl State {
         self.ledger_suite_version = Some(new_version);
     }
 
-    fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
-        self.managed_canisters.canisters.get_mut(contract)
+    fn managed_canisters_mut(&mut self, token_id: &TokenId) -> Option<&mut Canisters> {
+        self.managed_canisters.get_mut(token_id)
     }
 
     pub fn managed_status<'a, T: 'a>(
         &'a self,
-        contract: &Erc20Token,
+        token_id: &TokenId,
     ) -> Option<&'a ManagedCanisterStatus>
     where
         Canisters: ManageSingleCanister<T>,
     {
-        self.managed_canisters(contract)
+        self.managed_canisters(token_id)
             .and_then(|c| c.get().map(|c| &c.status))
     }
 
-    pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
-        assert_eq!(
-            self.managed_canisters(&contract),
-            None,
-            "BUG: ERC-20 token {:?} is already managed",
-            contract
-        );
-        assert_eq!(
-            self.managed_canisters
-                .canisters
-                .insert(contract, Canisters::new(metadata)),
-            None
-        );
+    /// Record other canisters managed by the orchestrator.
+    pub fn record_manage_other_canisters(&mut self, other_canisters: InstalledLedgerSuite) {
+        let token_id = TokenId::from(other_canisters.token_symbol.clone());
+        self.managed_canisters
+            .insert_once(token_id, Canisters::from(other_canisters));
     }
 
-    pub fn record_archives(&mut self, contract: &Erc20Token, archives: Vec<Principal>) {
+    pub fn record_new_erc20_token(&mut self, contract: Erc20Token, metadata: CanistersMetadata) {
+        let token_id = TokenId::from(contract);
+        self.managed_canisters
+            .insert_once(token_id, Canisters::new(metadata));
+    }
+
+    pub fn record_archives(&mut self, token_id: &TokenId, archives: Vec<Principal>) {
         let canisters = self
-            .managed_canisters_mut(contract)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
+            .managed_canisters_mut(token_id)
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
         canisters.archives = archives;
     }
 
@@ -517,9 +610,10 @@ impl State {
     ) where
         Canisters: ManageSingleCanister<T>,
     {
+        let token_id = TokenId::from(contract.clone());
         let canisters = self
-            .managed_canisters_mut(contract)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
+            .managed_canisters_mut(&token_id)
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
         canisters
             .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
                 canister_id,
@@ -537,14 +631,15 @@ impl State {
     where
         Canisters: ManageSingleCanister<T>,
     {
+        let token_id = TokenId::from(contract.clone());
         let managed_canister = self
-            .managed_canisters_mut(contract)
+            .managed_canisters_mut(&token_id)
             .and_then(Canisters::get_mut)
             .unwrap_or_else(|| {
                 panic!(
                     "BUG: no managed canisters or no {} canister for {:?}",
                     Canisters::display_name(),
-                    contract
+                    token_id
                 )
             });
         let canister_id = *managed_canister.canister_id();
@@ -576,7 +671,7 @@ pub trait ManageSingleCanister<T> {
     fn try_insert(&mut self, canister: Canister<T>) -> Result<(), OccupiedError<Canister<T>>>;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct OccupiedError<T> {
     value: T,
 }
@@ -635,7 +730,7 @@ impl ManageSingleCanister<Index> for Canisters {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidStateError {
     TooManyAdditionalControllers { max: usize, actual: usize },
 }
@@ -697,4 +792,90 @@ pub fn init_state(state: State) {
             .set(ConfigState::Initialized(state))
             .expect("failed to initialize state in stable cell")
     });
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct InstalledLedgerSuite {
+    token_symbol: TokenSymbol,
+    ledger: Principal,
+    ledger_wasm_hash: WasmHash,
+    index: Principal,
+    index_wasm_hash: WasmHash,
+    archives: Vec<Principal>,
+}
+
+impl From<InstalledLedgerSuite> for Canisters {
+    fn from(value: InstalledLedgerSuite) -> Self {
+        Self {
+            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: value.ledger,
+                installed_wasm_hash: value.ledger_wasm_hash,
+            })),
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Installed {
+                canister_id: value.index,
+                installed_wasm_hash: value.index_wasm_hash,
+            })),
+            archives: value.archives,
+            metadata: CanistersMetadata {
+                token_symbol: value.token_symbol.to_string(),
+            },
+        }
+    }
+}
+
+impl InstalledLedgerSuite {
+    pub fn validate(
+        state: &State,
+        args: crate::candid::InstalledLedgerSuite,
+    ) -> Result<InstalledLedgerSuite, InvalidManageInstalledCanistersError> {
+        let token_symbol = TokenSymbol(args.token_symbol);
+        let token_id = TokenId::Other(token_symbol.clone());
+        if state.managed_canisters(&token_id).is_some() {
+            return Err(InvalidManageInstalledCanistersError::TokenAlreadyManaged(
+                token_symbol,
+            ));
+        }
+        let ledger = args.ledger.canister_id;
+        let ledger_wasm_hash = args.ledger.installed_wasm_hash.parse().map_err(|e| {
+            InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
+        })?;
+        let index = args.index.canister_id;
+        let index_wasm_hash = args.index.installed_wasm_hash.parse().map_err(|e| {
+            InvalidManageInstalledCanistersError::WasmHashError(WasmHashError::Invalid(e))
+        })?;
+        if ledger_wasm_hash == index_wasm_hash {
+            return Err(InvalidManageInstalledCanistersError::WasmHashError(
+                WasmHashError::Invalid("ledger and index wasm hashes are the same".to_string()),
+            ));
+        }
+        let archives = args.archives.unwrap_or_default();
+
+        let installed_principals: BTreeSet<_> = once(&ledger)
+            .chain(once(&index))
+            .chain(archives.iter())
+            .collect();
+        let managed_principals: BTreeSet<_> = state.all_managed_principals().collect();
+        let overlapping_principals: BTreeSet<_> = managed_principals
+            .intersection(&installed_principals)
+            .collect();
+        if !overlapping_principals.is_empty() {
+            return Err(
+                InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(
+                    overlapping_principals
+                        .into_iter()
+                        .cloned()
+                        .cloned()
+                        .collect(),
+                ),
+            );
+        }
+        Ok(InstalledLedgerSuite {
+            token_symbol,
+            ledger,
+            ledger_wasm_hash,
+            index,
+            index_wasm_hash,
+            archives,
+        })
+    }
 }

@@ -21,7 +21,7 @@ use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -37,14 +37,14 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
 pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
 
 /// Input queue type: local or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum InputQueueType {
     /// Local subnet input messages.
     LocalSubnet,
@@ -52,9 +52,10 @@ pub enum InputQueueType {
     RemoteSubnet,
 }
 
-/// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
-pub enum NextInputQueue {
+/// Next input source: round-robin across local subnet canister messages;
+/// ingress messages; and remote subnet canister messages.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumCount, EnumIter)]
+pub enum InputSource {
     /// Local subnet input messages.
     #[default]
     LocalSubnet = 0,
@@ -64,31 +65,29 @@ pub enum NextInputQueue {
     RemoteSubnet = 2,
 }
 
-impl From<&NextInputQueue> for ProtoNextInputQueue {
-    fn from(next: &NextInputQueue) -> Self {
+impl From<&InputSource> for NextInputQueue {
+    fn from(next: &InputSource) -> Self {
         match next {
             // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
             // serializes to zero bytes).
-            NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
-            NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
-            NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
+            InputSource::LocalSubnet => NextInputQueue::Unspecified,
+            InputSource::Ingress => NextInputQueue::Ingress,
+            InputSource::RemoteSubnet => NextInputQueue::RemoteSubnet,
         }
     }
 }
 
-impl From<ProtoNextInputQueue> for NextInputQueue {
-    fn from(next: ProtoNextInputQueue) -> Self {
+impl From<NextInputQueue> for InputSource {
+    fn from(next: NextInputQueue) -> Self {
         match next {
-            ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
-                NextInputQueue::LocalSubnet
-            }
-            ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
-            ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
+            NextInputQueue::Unspecified | NextInputQueue::LocalSubnet => InputSource::LocalSubnet,
+            NextInputQueue::Ingress => InputSource::Ingress,
+            NextInputQueue::RemoteSubnet => InputSource::RemoteSubnet,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateError {
     /// Message enqueuing failed due to no matching canister ID.
     CanisterNotFound(CanisterId),
@@ -145,7 +144,7 @@ struct OutputIterator<'a> {
     /// popped / peeked from the first iterator.
     canister_iterators: VecDeque<CanisterOutputQueuesIterator<'a>>,
 
-    /// Number of messages left in the iterator.
+    /// Number of (potentially stale) message references left in the iterator.
     size: usize,
 }
 
@@ -167,10 +166,10 @@ impl<'a> OutputIterator<'a> {
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
-        let subnet_queues_iter = subnet_queues.output_into_iter();
-        if !subnet_queues_iter.is_empty() {
-            canister_iterators.push_front(subnet_queues_iter)
+        if subnet_queues.has_output() {
+            canister_iterators.push_front(subnet_queues.output_into_iter());
         }
+
         let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
@@ -179,7 +178,8 @@ impl<'a> OutputIterator<'a> {
         }
     }
 
-    /// Computes the number of messages left in `queue_handles`.
+    /// Computes the number of (potentially stale) message references left in
+    /// `queue_handles`.
     ///
     /// Time complexity: O(N).
     fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
@@ -194,15 +194,19 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some(msg) = canister_iterator.next() {
-                self.size -= 1;
+        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+            // `next()` may consume an arbitrary number of stale references.
+            self.size -= canister_iterator.size();
+            let next = canister_iterator.next();
+            self.size += canister_iterator.size();
+
+            if next.is_some() {
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
-                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
-                return Some(msg);
+                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+                return next;
             }
         }
 
@@ -211,14 +215,18 @@ impl std::iter::Iterator for OutputIterator<'_> {
     }
 
     /// Returns the bounds on the number of messages remaining in the iterator.
+    ///
+    /// Since any message reference may or may not be stale (due to expiration /
+    /// load shedding), there may be anywhere between 0 and `size` messages left in
+    /// the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        (0, Some(self.size))
     }
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
-    /// Peeks into the iterator and returns a reference to the item that `next()`
-    /// would return.
+    /// Peeks into the iterator and returns a reference to the message that
+    /// `next()` would return.
     fn peek(&self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
@@ -226,13 +234,14 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
     /// in the output queue.
     fn exclude_queue(&mut self);
 
-    /// Returns the exact number of messages left in the iterator.
+    /// Returns the number of (potentially stale) message references left in the
+    /// iterator.
     fn size(&self) -> usize;
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
     fn peek(&self) -> Option<&RequestOrResponse> {
-        self.canister_iterators.front().and_then(|it| it.peek())
+        self.canister_iterators.front()?.peek()
     }
 
     fn exclude_queue(&mut self) {
@@ -366,7 +375,7 @@ impl MemoryTaken {
 //
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
-#[derive(Clone, Debug, PartialEq, ValidateEq)]
+#[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     #[validate_eq(CompareWithValidateEq)]
@@ -426,7 +435,7 @@ impl ReplicatedState {
             epoch_query_stats,
             canister_snapshots,
         };
-        res.update_stream_responses_size_bytes();
+        res.update_stream_guaranteed_responses_size_bytes();
         res
     }
 
@@ -715,6 +724,7 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if msg.receiver().get_ref() == subnet_id {
+                    // TODO(MR-523) Assert that this is a request; else check for a matching `Callback`.
                     push_input(
                         &mut self.subnet_queues,
                         msg,
@@ -824,14 +834,14 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of responses in streams for each canister.
-    fn update_stream_responses_size_bytes(&mut self) {
-        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+    /// Updates the byte size of guaranteed responses in streams for each canister.
+    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
+        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
             if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
             }
         }
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.
@@ -855,15 +865,14 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out all requests with expired deadlines (given the state time) in
-    /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
-    /// out requests.
+    /// Times out all messages with expired deadlines (given the state time) in all
+    /// canister (but not subnet) queues. Returns the number of timed out messages.
     ///
-    /// See `CanisterQueues::time_out_requests` for further details.
-    pub fn time_out_requests(&mut self) -> u64 {
+    /// See `CanisterQueues::time_out_messages` for further details.
+    pub fn time_out_messages(&mut self) -> usize {
         let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
-        // calling `time_out_requests()` on it and replace it afterwards; and removing
+        // calling `time_out_messages()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
         // filter for the (usually much fewer) canisters with timed requests and only
         // apply the costly remove-call-replace to those.
@@ -878,10 +887,10 @@ impl ReplicatedState {
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
 
-        let mut timed_out_requests_count = 0;
+        let mut timed_out_messages_count = 0;
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            timed_out_requests_count += canister.system_state.time_out_requests(
+            timed_out_messages_count += canister.system_state.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,
@@ -889,7 +898,7 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
-        timed_out_requests_count
+        timed_out_messages_count
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1031,7 +1040,7 @@ impl ReplicatedState {
             subnet_queues,
         );
 
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1062,7 +1071,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.streams().is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 

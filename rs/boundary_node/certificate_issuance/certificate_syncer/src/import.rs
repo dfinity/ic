@@ -24,13 +24,13 @@ pub enum ImportError {
     VerificationError(#[from] VerifyError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize)]
 pub struct Pair(
     pub Vec<u8>, // Private Key
     pub Vec<u8>, // Certificate Chain
 );
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize)]
 pub struct Package {
     pub name: String,
     pub canister: Principal,

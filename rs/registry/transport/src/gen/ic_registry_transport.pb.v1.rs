@@ -33,6 +33,8 @@ pub mod registry_error {
         /// The 'version' specified in a precondition for a mutation
         /// is beyond the latest version in the registry.
         VersionBeyondLatest = 4,
+        /// The caller is not authorized.
+        Authorization = 5,
         /// A generic internal error occurred in the registry.
         InternalError = 999,
     }
@@ -48,6 +50,7 @@ pub mod registry_error {
                 Code::KeyAlreadyPresent => "KEY_ALREADY_PRESENT",
                 Code::VersionNotLatest => "VERSION_NOT_LATEST",
                 Code::VersionBeyondLatest => "VERSION_BEYOND_LATEST",
+                Code::Authorization => "AUTHORIZATION",
                 Code::InternalError => "INTERNAL_ERROR",
             }
         }
@@ -59,6 +62,7 @@ pub mod registry_error {
                 "KEY_ALREADY_PRESENT" => Some(Self::KeyAlreadyPresent),
                 "VERSION_NOT_LATEST" => Some(Self::VersionNotLatest),
                 "VERSION_BEYOND_LATEST" => Some(Self::VersionBeyondLatest),
+                "AUTHORIZATION" => Some(Self::Authorization),
                 "INTERNAL_ERROR" => Some(Self::InternalError),
                 _ => None,
             }

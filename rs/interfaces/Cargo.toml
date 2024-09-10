@@ -28,4 +28,4 @@ tower = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
-proptest = "1.0"
+proptest = { workspace = true }
