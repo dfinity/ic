@@ -297,6 +297,7 @@ fn test_check_transaction_error() {
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
     // Test for malformatted txid
+    let cycles_before = setup.env.cycle_balance(setup.universal_canister);
     txid.pop();
     let call_id = submit_universal_call(
         &setup,
