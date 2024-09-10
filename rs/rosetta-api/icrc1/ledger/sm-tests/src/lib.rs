@@ -2591,7 +2591,6 @@ pub fn test_upgrade_serialization(
 pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_nextmigrationversionmemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2685,18 +2684,6 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test the new wasm serialization
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // Test serializing to the memory manager
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager.clone(),
-        balances.clone(),
-    );
-    // Test upgrade to memory manager again
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager,
-        balances.clone(),
-    );
-    // Test deserializing from memory manager
-    test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
     for a1 in &accounts {
