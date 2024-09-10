@@ -12,7 +12,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
@@ -178,6 +178,39 @@ fn test_fetch_canister_logs_via_query_call() {
             .encode(),
         ))
     );
+}
+
+#[test]
+fn test_metrics_for_fetch_canister_logs_via_query_call() {
+    // Test the metrics for executing `fetch_canister_logs` as a query.
+    fn get_fetch_canister_logs_calls(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(
+            &env.metrics_registry(),
+            "execution_subnet_query_message_duration_seconds",
+        )
+        .get(&labels(&[(
+            "method_name",
+            "query_ic00_fetch_canister_logs",
+        )]))
+        .map(|stats| stats.count)
+        .unwrap_or(0)
+    }
+    let (env, canister_id) = setup_and_install_wasm(
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister().build_wasm(),
+    );
+    // Assert no calls recorded.
+    assert_eq!(get_fetch_canister_logs_calls(&env), 0);
+    let _ = env.query_as(
+        PrincipalId::new_anonymous(),
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest::new(canister_id).encode(),
+    );
+    // Assert one call recorded.
+    assert_eq!(get_fetch_canister_logs_calls(&env), 1);
 }
 
 #[test]
