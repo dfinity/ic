@@ -126,6 +126,10 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
+    "@crate_index//:ic-cbor",
+    "@crate_index//:ic-certification",
+    "@crate_index//:ic-certificate-verification",
+    "@crate_index//:serde_cbor",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
