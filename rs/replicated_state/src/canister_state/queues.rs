@@ -1239,21 +1239,17 @@ fn queue_front_not_stale(
 }
 
 /// Collects the `CallbackIds` of all the responses enqueued in input queues.
-///
 /// Returns an error if there are duplicate `CallbackIds` among the responses.
+///
+/// Time complexity: `O(n * log(n))`.
 fn callbacks_with_enqueued_response(
-    canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    _canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
     pool: &MessagePool,
 ) -> Result<BTreeSet<CallbackId>, String> {
-    let mut callbacks_with_enqueued_response = BTreeSet::new();
-    let duplicates: Vec<_> = canister_queues
-        .values()
-        .flat_map(|(input_queue, _)| input_queue.iter())
-        .filter_map(|reference| match pool.get(*reference) {
-            Some(RequestOrResponse::Response(rep)) => Some(rep.originator_reply_callback),
-            _ => None,
-        })
-        .filter(|callback_id| !callbacks_with_enqueued_response.insert(*callback_id))
+    let mut callbacks = BTreeSet::new();
+    let duplicates: Vec<_> = pool
+        .inbound_response_callbacks()
+        .filter(|callback_id| !callbacks.insert(*callback_id))
         .collect();
     if !duplicates.is_empty() {
         return Err(format!(
@@ -1262,7 +1258,7 @@ fn callbacks_with_enqueued_response(
         ));
     }
 
-    Ok(callbacks_with_enqueued_response)
+    Ok(callbacks)
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
