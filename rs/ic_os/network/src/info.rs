@@ -1,4 +1,4 @@
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use anyhow::{bail, Context, Result};
 
@@ -9,10 +9,14 @@ pub struct NetworkInfo {
     // Config files can specify ipv6 prefix, address and prefix, or just address.
     // ipv6_address takes precedence. Some tests provide only the address.
     // Should be kept as a string until parsing later.
-    pub ipv6_prefix: Option<String>,
+    pub ipv6_prefix: Option<Ipv6Addr>,
     pub ipv6_address: Option<Ipv6Addr>,
     pub ipv6_subnet: u8,
     pub ipv6_gateway: Ipv6Addr,
+    pub ipv4_gateway: Option<Ipv4Addr>,
+    pub ipv4_prefix_length: Option<u8>,
+    pub domain: Option<String>,
+    pub mgmt_mac: Option<String>,
 }
 
 fn is_valid_prefix(ipv6_prefix: &str) -> bool {
@@ -24,17 +28,19 @@ impl NetworkInfo {
         // Per PFOPS - this will never not be 64
         let ipv6_subnet = 64_u8;
 
-        let ipv6_prefix = match config_map.get("ipv6_prefix") {
-            Some(ipv6_prefix) => {
-                // Prefix should have a max length of 19 ("1234:6789:1234:6789")
-                // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
-                if !is_valid_prefix(ipv6_prefix) {
-                    bail!("Invalid ipv6 prefix: {}", ipv6_prefix);
-                }
-                Some(ipv6_prefix.clone())
+        let ipv6_prefix = config_map
+        .get("ipv6_prefix")
+        .map(|prefix| {
+            // Prefix should have a max length of 19 ("1234:6789:1234:6789")
+            // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
+            if !is_valid_prefix(prefix) {
+                bail!("Invalid IPv6 prefix: {}", prefix);
             }
-            None => None,
-        };
+            format!("{}::", prefix)
+                .parse::<Ipv6Addr>()
+                .context(format!("Failed to parse IPv6 prefix: {}", prefix))
+        })
+        .transpose()?;
 
         // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
         let ipv6_address = match config_map.get("ipv6_address") {
@@ -66,6 +72,10 @@ impl NetworkInfo {
             ipv6_subnet,
             ipv6_gateway,
             ipv6_address,
+            ipv4_gateway: None,
+            ipv4_prefix_length: None,
+            domain: None,
+            mgmt_mac: None,
         })
     }
 }
