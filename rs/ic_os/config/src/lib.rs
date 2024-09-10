@@ -66,11 +66,9 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
             // Prefix should have a max length of 19 ("1234:6789:1234:6789")
             // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
             if !is_valid_ipv6_prefix(prefix) {
-                bail!("Invalid IPv6 prefix: {}", prefix);
+                bail!("Invalid ipv6 prefix: {}", prefix);
             }
-            format!("{}::", prefix)
-                .parse::<Ipv6Addr>()
-                .context(format!("Failed to parse IPv6 prefix: {}", prefix))
+            Ok(prefix.clone())
         })
         .transpose()?;
 
@@ -138,6 +136,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
     let networking = crate::types::NetworkSettings {
         ipv6_prefix,
         ipv6_address,
+        ipv6_subnet,
         ipv6_gateway,
         ipv4_address,
         ipv4_gateway,
@@ -190,6 +189,7 @@ mod tests {
         let network_settings = NetworkSettings {
             ipv6_prefix: None,
             ipv6_address: None,
+            ipv6_subnet: 64_u8,
             ipv6_gateway: "2001:db8::1".parse().unwrap(),
             ipv4_address: None,
             ipv4_gateway: None,
@@ -349,7 +349,7 @@ mod tests {
 
         assert_eq!(
             networking.ipv6_prefix.unwrap(),
-            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
+            "2a00:fb01:400:200".to_string()
         );
         assert_eq!(
             networking.ipv6_address.unwrap(),

@@ -3,13 +3,14 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use anyhow::{bail, Context, Result};
 
 use config::ConfigMap;
+use config::types::NetworkSettings;
 
 #[derive(Debug)]
 pub struct NetworkInfo {
     // Config files can specify ipv6 prefix, address and prefix, or just address.
     // ipv6_address takes precedence. Some tests provide only the address.
     // Should be kept as a string until parsing later.
-    pub ipv6_prefix: Option<Ipv6Addr>,
+    pub ipv6_prefix: Option<String>,
     pub ipv6_address: Option<Ipv6Addr>,
     pub ipv6_subnet: u8,
     pub ipv6_gateway: Ipv6Addr,
@@ -17,6 +18,22 @@ pub struct NetworkInfo {
     pub ipv4_prefix_length: Option<u8>,
     pub domain: Option<String>,
     pub mgmt_mac: Option<String>,
+}
+
+impl NetworkInfo {
+    pub fn to_network_settings(&self) -> NetworkSettings {
+        NetworkSettings {
+            ipv6_prefix: self.ipv6_prefix.clone(),
+            ipv6_address: self.ipv6_address.clone(),
+            ipv6_subnet: self.ipv6_subnet,
+            ipv6_gateway: self.ipv6_gateway,
+            ipv4_address: None, // Assuming there's no `ipv4_address` in `NetworkInfo`, you may need to set this if available
+            ipv4_gateway: self.ipv4_gateway.clone(),
+            ipv4_prefix_length: self.ipv4_prefix_length,
+            domain: self.domain.clone(),
+            mgmt_mac: self.mgmt_mac.clone(),
+        }
+    }
 }
 
 fn is_valid_prefix(ipv6_prefix: &str) -> bool {
@@ -34,11 +51,9 @@ impl NetworkInfo {
             // Prefix should have a max length of 19 ("1234:6789:1234:6789")
             // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
             if !is_valid_prefix(prefix) {
-                bail!("Invalid IPv6 prefix: {}", prefix);
+                bail!("Invalid ipv6 prefix: {}", prefix);
             }
-            format!("{}::", prefix)
-                .parse::<Ipv6Addr>()
-                .context(format!("Failed to parse IPv6 prefix: {}", prefix))
+            Ok(prefix.clone())
         })
         .transpose()?;
 
