@@ -27,6 +27,7 @@ use tonic::transport::{
 };
 use tower::layer::util::Identity;
 
+/// Start the HttpsOutcallsService server.
 pub struct AdapterServer(Router<Identity>);
 
 impl AdapterServer {
