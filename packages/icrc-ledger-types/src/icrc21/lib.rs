@@ -135,7 +135,7 @@ impl ConsentMessageBuilder {
 
     pub fn build(self) -> Result<ConsentMessage, Icrc21Error> {
         let mut message = "".to_string();
-        let extract_subaccount =|account:Account| -> Result<String,Icrc21Error>{
+        let extract_subaccount = |account: Account| -> Result<String, Icrc21Error> {
             Ok(match account.subaccount {
                 None => hex::encode(account.effective_subaccount().as_slice()),
                 Some(_) => account
@@ -144,8 +144,7 @@ impl ConsentMessageBuilder {
                     .last()
                     .ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
-                        description: "Subaccount has an unexpected format."
-                            .to_owned(),
+                        description: "Subaccount has an unexpected format.".to_owned(),
                     })?
                     .to_string(),
             })
