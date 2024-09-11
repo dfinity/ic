@@ -3,6 +3,7 @@ use ic_system_test_driver::driver::test_env::TestEnvAttribute;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasRegistryLocalStore};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::{
+    constants::GROUP_TTL,
     test_env::{HasIcPrepDir, TestEnv},
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
@@ -24,7 +25,7 @@ pub fn get_mainnet_delta_6d_c1() -> Changelog {
 pub fn mainnet_config(env: TestEnv) {
     let log = env.logger();
 
-    let group_setup = GroupSetup::new("mainnet_config_group".to_string());
+    let group_setup = GroupSetup::new("mainnet_config_group".to_string(), Some(GROUP_TTL));
     group_setup.write_attribute(&env);
     info!(&log, "Created group_setup directory");
 

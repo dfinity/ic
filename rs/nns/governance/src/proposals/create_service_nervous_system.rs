@@ -1,66 +1,6 @@
 use crate::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
-use ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints;
-
-#[derive(Clone, Debug)]
-pub struct ExecutedCreateServiceNervousSystemProposal {
-    pub current_timestamp_seconds: u64,
-    pub create_service_nervous_system: CreateServiceNervousSystem,
-    pub proposal_id: u64,
-    pub random_swap_start_time: GlobalTimeOfDay,
-    /// Information about the Neurons' Fund participation needed by the Swap canister.
-    pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
-}
-
-impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
-    type Error = String;
-
-    fn try_from(src: ExecutedCreateServiceNervousSystemProposal) -> Result<Self, Self::Error> {
-        let mut defects = vec![];
-
-        let current_timestamp_seconds = src.current_timestamp_seconds;
-        let nns_proposal_id = Some(src.proposal_id);
-        let neurons_fund_participation_constraints = src.neurons_fund_participation_constraints;
-        let start_time = src
-            .create_service_nervous_system
-            .swap_parameters
-            .as_ref()
-            .and_then(|swap_parameters| swap_parameters.start_time);
-        let duration = src
-            .create_service_nervous_system
-            .swap_parameters
-            .as_ref()
-            .and_then(|swap_parameters| swap_parameters.duration);
-
-        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
-            match CreateServiceNervousSystem::swap_start_and_due_timestamps(
-                start_time.unwrap_or(src.random_swap_start_time),
-                duration.unwrap_or_default(),
-                current_timestamp_seconds,
-            ) {
-                Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds)) => (
-                    Some(swap_start_timestamp_seconds),
-                    Some(swap_due_timestamp_seconds),
-                ),
-                Err(err) => {
-                    defects.push(err);
-                    (None, None)
-                }
-            };
-
-        let mut result = SnsInitPayload::try_from(src.create_service_nervous_system)?;
-
-        result.nns_proposal_id = nns_proposal_id;
-        result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
-        result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
-        result.neurons_fund_participation_constraints = neurons_fund_participation_constraints;
-
-        result.validate_post_execution()?;
-
-        Ok(result)
-    }
-}
 
 impl CreateServiceNervousSystem {
     pub fn sns_token_e8s(&self) -> Option<u64> {
@@ -366,7 +306,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             neurons_fund_participation,
 
             // These are not known from only the CreateServiceNervousSystem
-            // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>
+            // proposal. See `Governance::make_sns_init_payload`.
             nns_proposal_id: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,

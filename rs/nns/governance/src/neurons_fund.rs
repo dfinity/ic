@@ -422,10 +422,11 @@ impl NeuronsFundNeuronPortionPb {
                 maturity_equivalent_icp_e8s,
             });
         }
-        #[allow(deprecated)] // TODO(NNS1-3198): remove .or(hotkey_principal)
-        let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
-            NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
-        })?;
+        let Some(controller) = self.controller else {
+            return Err(NeuronsFundNeuronPortionError::UnspecifiedField(
+                "controller".to_string(),
+            ));
+        };
         let hotkeys = self.hotkeys.clone();
         let is_capped = self.is_capped.ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
@@ -1074,27 +1075,9 @@ where
         // `u64`, so we keep the sum as precise as possible. This gives us more precision than
         // `neurons_fund_reserves.total_amount_icp_e8s()`, the sum of (pre-rounded) `u64` values.
         let (neurons_fund_reserves, allocated_neurons_fund_participation_icp_e8s) =
-            if total_maturity_equivalent_icp_e8s == 0 {
-                println!(
-                    "{}WARNING: Neurons' Fund has zero total maturity.",
-                    governance::LOG_PREFIX
-                );
-                (NeuronsFundSnapshot::empty(), Decimal::ZERO)
-            } else if intended_neurons_fund_participation_icp_e8s == 0 {
-                println!(
-                    "{}WARNING: intended_neurons_fund_participation_icp_e8s is zero, matching \
-                    direct_participation_icp_e8s = {}. total_maturity_equivalent_icp_e8s = {}. \
-                    ideal_matched_participation_function = {:?}\n \
-                    Plot: \n{:?}",
-                    governance::LOG_PREFIX,
-                    direct_participation_icp_e8s,
-                    total_maturity_equivalent_icp_e8s,
-                    ideal_matched_participation_function,
-                    ideal_matched_participation_function
-                        .plot(NonZeroU64::try_from(50).unwrap())
-                        .map(|plot| format!("{:?}", plot))
-                        .unwrap_or_else(|e| e),
-                );
+            if total_maturity_equivalent_icp_e8s == 0
+                || intended_neurons_fund_participation_icp_e8s == 0
+            {
                 (NeuronsFundSnapshot::empty(), Decimal::ZERO)
             } else {
                 // Unlike in most other places, here we keep the ICP values in e8s (even after converting
@@ -1140,25 +1123,9 @@ where
                     if ideal_participation_amount_icp_e8s < min_participant_icp_e8s
                         || ideal_participation_amount_icp_e8s < Decimal::ONE {
                         // Do not include neurons that cannot participate under any circumstances.
-                        println!(
-                            "{}INFO: discarding neuron {:?} ({} ICP e8s maturity equivalent) as it \
-                            cannot participate in the swap with its proportional participation \
-                            amount ({}) that is less than `min_participant_icp_e8s` ({}) or 1 e8.",
-                            governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
-                            ideal_participation_amount_icp_e8s,
-                            min_participant_icp_e8s,
-                        );
                         return Ok((overall_neuron_portions, allocated_neurons_fund_participation_icp_e8s));
                     }
                     let (amount_icp_e8s, is_capped) = if ideal_participation_amount_icp_e8s > max_participant_icp_e8s {
-                        println!(
-                            "{}INFO: capping neuron {:?} ({} ICP e8s maturity equivalent) as it \
-                            cannot participate in the swap with all of its proportional \
-                            participation amount ({}) that exceeds `max_participant_icp_e8s` ({}).",
-                            governance::LOG_PREFIX, id, maturity_equivalent_icp_e8s,
-                            ideal_participation_amount_icp_e8s,
-                            max_participant_icp_e8s,
-                        );
                         (max_participant_icp_e8s, true)
                     } else {
                         (ideal_participation_amount_icp_e8s, false)
@@ -1550,6 +1517,7 @@ impl PolynomialNeuronsFundParticipation {
         let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
             total_maturity_equivalent_icp_e8s,
             neurons_fund_participation_limits,
+            cfg!(not(test)),
         )?);
         Self::new_impl(
             total_maturity_equivalent_icp_e8s,
@@ -1745,8 +1713,6 @@ where
                 is_capped: Some(neuron.is_capped),
                 controller: Some(neuron.controller),
                 hotkeys: neuron.hotkeys.clone(),
-                // TODO(NNS1-3198): remove due to the  very misleading name
-                hotkey_principal: Some(neuron.controller),
             })
             .collect();
         let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {
@@ -2335,15 +2301,9 @@ mod test_functions_tests {
         F: InvertibleFunction + AnalyticallyInvertibleFunction,
     {
         let Ok(expected) = function.invert_analytically(target_y) else {
-            println!(
-                "Cannot run inverse test as a u64 analytical inverse does not exist for {}.",
-                target_y,
-            );
             return;
         };
         let observed = function.invert(target_y).unwrap();
-        println!("{}, target_y = {target_y}", std::any::type_name::<F>(),);
-
         // Sometimes exact equality cannot be reached with our search strategy. We tolerate errors
         // up to 1 E8.
         assert!(
@@ -2417,7 +2377,7 @@ mod test_functions_tests {
                 let f = LinearFunction { slope, intercept };
                 for i in generate_potentially_intresting_target_values() {
                     let target_y = u64_to_dec(i).unwrap();
-                    println!("Inverting linear function {target_y} = f(x) = {slope} * x + {intercept} ...");
+                    // println!("Inverting linear function {target_y} = f(x) = {slope} * x + {intercept} ...");
                     run_inverse_function_test(&f, target_y);
                 }
             }

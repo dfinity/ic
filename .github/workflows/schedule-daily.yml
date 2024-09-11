@@ -12,7 +12,7 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
@@ -42,7 +42,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       # running on bare metal machine using ubuntu user
       options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
@@ -56,16 +56,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash
         run: |
-          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+          ./ci/scripts/rust-benchmarks.sh
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"
@@ -76,7 +71,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -93,7 +88,7 @@ jobs:
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -122,7 +117,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 240
@@ -136,7 +131,7 @@ jobs:
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -167,7 +162,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 20
@@ -181,7 +176,7 @@ jobs:
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -212,7 +207,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 480
@@ -226,7 +221,7 @@ jobs:
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        run: ./ci/scripts/docker-login.sh
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -262,7 +257,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -301,8 +296,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

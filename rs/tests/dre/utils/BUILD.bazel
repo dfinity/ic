@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "MACRO_DEPENDENCIES")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "os_qualification_utils",
+    testonly = True,
+    srcs = glob(["**/*.rs"]),
+    crate_name = "os_qualification_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/tests",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:itertools",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)

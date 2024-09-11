@@ -3,7 +3,6 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::{CustomRandomState, IngressManager};
-use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     execution_environment::{IngressHistoryError, IngressHistoryReader},
@@ -14,6 +13,7 @@ use ic_interfaces::{
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
+use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;

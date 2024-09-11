@@ -1467,7 +1467,6 @@ fn query_cache_future_proof_test() {
         SystemApiCallId::AcceptMessage
         | SystemApiCallId::CallCyclesAdd
         | SystemApiCallId::CallCyclesAdd128
-        | SystemApiCallId::CallCyclesAdd128UpTo
         | SystemApiCallId::CallDataAppend
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup
