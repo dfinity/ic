@@ -3,6 +3,17 @@ load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
+# Allows temporarily disabling TLA checks from the command line;
+# just pass `--define tla_disabled=true` to your Bazel command
+# See feature_flags.bzl for how to disable TLA checks permanently
+# (in the CI)
+config_setting(
+    name = "tla_disabled",
+    values = {
+        "define": "tla_disabled=true",
+    },
+)
+
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",

@@ -1,3 +1,9 @@
+This module serves to add Apalache type annotations to the TLA model of split_neuron.
+
+We can't add the annotations to Split_Neuron.tla (which contains the actual transition predicate) 
+because we use PlusCal. PlusCal autogenerates the TLA+ code, which means that every change to the
+PlusCal code would overwrite the annotations on the VARIABLES.
+
 ---- MODULE Split_Neuron_Apalache ----
 
 EXTENDS TLC, Variants
@@ -11,6 +17,7 @@ EXTENDS TLC, Variants
 *)
 _type_alias_dummy == TRUE
 
+\* This marker is necessary for the code link tooling to insert the constants
 \* CODE_LINK_INSERT_CONSTANTS
 
 (*

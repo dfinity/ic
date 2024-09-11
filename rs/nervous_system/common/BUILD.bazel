@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/tla_instrumentation",
     "//rs/types/base_types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
@@ -61,17 +60,6 @@ DEV_DEPENDENCIES = [
 MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
-
-# Allows temporarily disabling TLA checks from the command line;
-# just pass `--define tla_disabled=true` to your Bazel command
-# See feature_flags.bzl for how to disable TLA checks permanently
-# (in the CI)
-config_setting(
-    name = "tla_disabled",
-    values = {
-        "define": "tla_disabled=true",
-    },
-)
 
 cargo_build_script(
     name = "build_script",

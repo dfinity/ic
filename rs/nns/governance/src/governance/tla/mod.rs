@@ -168,7 +168,7 @@ pub fn check_traces() {
                 println!("Possible divergence from the TLA model detected when interacting with the ledger!");
                 println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
                 println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
-                println!("You can edit nervous_system/common/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                println!("You can edit nervous_system/tla/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 println!("-------------------");
                 println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
                 println!("Apalache returned:\n{:#?}", e.apalache_error);

@@ -31,6 +31,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",
@@ -79,25 +80,22 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nervous_system/tla",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
-    "//rs/nns/governance/init",
-    "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
     "//rs/sns/root",
+    "//rs/nns/governance/init",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nervous_system/tla:tla--test_feature",
-    "//rs/nns/constants:constants--test_feature",
-    "//rs/nns/handlers/root/interface:interface--test_feature",
     "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/governance/init:init--test_feature",
-    "//rs/nns/handlers/root/interface",
+    "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
+    "//rs/nns/governance/init:init--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
