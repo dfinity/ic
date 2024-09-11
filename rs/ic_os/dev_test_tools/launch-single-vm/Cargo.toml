@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic-prep = { path = "../../prep" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-system-test-driver = { path = "../../tests/driver" }
-ic-types = { path = "../../types/types" }
+ic-prep = { path = "../../../prep" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../../tests/driver" }
+ic-types = { path = "../../../types/types" }
 
 clap = { version = "3.2.25", features = ["derive"] }
 reqwest = { workspace = true }
