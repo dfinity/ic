@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package canister_http_service.v1;
+package https_outcalls_service.v1;
 
 message HttpHeader {
   string name = 1;
@@ -14,7 +14,7 @@ enum HttpMethod {
   HTTP_METHOD_HEAD = 3;
 }
 
-message CanisterHttpSendRequest {
+message HttpsOutcallRequest {
   string url = 1;
   bytes body = 2;
   repeated HttpHeader headers = 3;
@@ -23,12 +23,12 @@ message CanisterHttpSendRequest {
   bool socks_proxy_allowed = 6;
 }
 
-message CanisterHttpSendResponse {
+message HttpsOutcallResponse {
   uint32 status = 1;
   repeated HttpHeader headers = 2;
   bytes content = 3;
 }
 
-service CanisterHttpService {
-  rpc CanisterHttpSend(CanisterHttpSendRequest) returns (CanisterHttpSendResponse);
+service HttpsOutcallsService {
+  rpc HttpsOutcall(HttpsOutcallRequest) returns (HttpsOutcallResponse);
 }
