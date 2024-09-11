@@ -163,7 +163,7 @@ pub fn generate_systemd_config_files(
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_settings.ipv6_subnet, &ping_target)
+            match has_ipv6_connectivity(i, ipv6_address, network_settings.ipv6_prefix_length, &ping_target)
             {
                 Ok(result) => result,
                 Err(e) => {
@@ -187,7 +187,7 @@ pub fn generate_systemd_config_files(
     let ipv6_address = format!(
         "{}/{}",
         &ipv6_address.to_string(),
-        network_settings.ipv6_subnet
+        network_settings.ipv6_prefix_length
     );
     generate_and_write_systemd_files(
         output_directory,

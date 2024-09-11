@@ -88,7 +88,7 @@ pub fn main() -> Result<()> {
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
             println!(
                 "{}",
-                to_cidr(ipv6_address, setup_config.network_settings.ipv6_subnet)
+                to_cidr(ipv6_address, setup_config.network_settings.ipv6_prefix_length)
             );
 
             Ok(())

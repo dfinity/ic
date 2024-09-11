@@ -100,7 +100,7 @@ pub fn main() -> Result<()> {
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
-            println!("{}", to_cidr(ipv6_address, network_settings.ipv6_subnet));
+            println!("{}", to_cidr(ipv6_address, network_settings.ipv6_prefix_length));
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {

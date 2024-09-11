@@ -70,7 +70,7 @@ pub struct NetworkSettings {
     // ipv6_address takes precedence. Some tests provide only ipv6_address.
     pub ipv6_prefix: Option<String>,
     pub ipv6_address: Option<Ipv6Addr>,
-    pub ipv6_subnet: u8,
+    pub ipv6_prefix_length: u8,
     pub ipv6_gateway: Ipv6Addr,
     pub ipv4_address: Option<Ipv4Addr>,
     pub ipv4_gateway: Option<Ipv4Addr>,
