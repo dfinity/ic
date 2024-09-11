@@ -448,7 +448,7 @@ fn test_dashboard() {
         application: 1,
         ..Default::default()
     };
-    let pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url.clone());
+    let mut pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url.clone());
 
     // retrieve the NNS and application subnets
     let topology = pic.topology();
@@ -460,14 +460,20 @@ fn test_dashboard() {
     let canister_2 = pic.create_canister_on_subnet(None, None, app_subnet);
     assert_eq!(pic.get_subnet(canister_2).unwrap(), app_subnet);
 
+    let gateway = pic.make_live(None);
+
     let client = Client::new();
-    let dashboard_url = format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
-    let dashboard = client.get(dashboard_url).send().unwrap();
-    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains(&canister_1.to_string()));
-    assert!(page.contains(&canister_2.to_string()));
-    assert!(page.contains(&nns_subnet.to_string()));
-    assert!(page.contains(&app_subnet.to_string()));
+    let instance_dashboard_url =
+        format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
+    let gateway_dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
+    for dashboard_url in [instance_dashboard_url, gateway_dashboard_url] {
+        let dashboard = client.get(dashboard_url).send().unwrap();
+        let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+        assert!(page.contains(&canister_1.to_string()));
+        assert!(page.contains(&canister_2.to_string()));
+        assert!(page.contains(&nns_subnet.to_string()));
+        assert!(page.contains(&app_subnet.to_string()));
+    }
 }
 
 #[test]

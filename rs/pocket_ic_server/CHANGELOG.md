@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The argument of the endpoint `/instances/` takes an additional optional field `log_level` specifying the replica log level of the PocketIC instance.
 - ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II and fiduciary subnet.
 - tSchnorr support (IC mainnet-like): there are three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm BIP340 as well as three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm Ed25519 on the II and fiduciary subnet. The messages to sign with tSchnorr must be of length 32 bytes.
+- New endpoint `/_/dashboard` of the PocketIC HTTP gateway returning the dashboard of the underlying PocketIC instance or replica.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
