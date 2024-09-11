@@ -8,16 +8,12 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:once_cell",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:once_cell",
     "@crate_index//:tempfile",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -43,11 +39,4 @@ rust_binary(
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":config_lib"] + DEPENDENCIES,
-)
-
-rust_test(
-    name = "test",
-    size = "small",
-    crate = ":config",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
