@@ -1,3 +1,6 @@
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-exports_files(["benchmark.sh", "stress.sh"])
+exports_files([
+    "benchmark.sh",
+    "stress.sh",
+])

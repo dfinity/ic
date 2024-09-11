@@ -80,7 +80,6 @@ OUTPUT_FILE="${OUTPUT_DIR}/${TEST_NAME}.txt"
         --memory-access-mode=rnd \
         --validate=on
 
-
     # File IO test
     ## Benchmarks: sync, mmap, fsync all, fsync every 10th
 
