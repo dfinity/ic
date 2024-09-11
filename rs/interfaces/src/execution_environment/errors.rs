@@ -69,6 +69,24 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
     }
 }
 
+/// Backtrace coming from canister code. Suitable for displaying to users for
+/// assistance in debugging canisters.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CanisterBacktrace(pub Vec<(u32, Option<String>)>);
+
+impl std::fmt::Display for CanisterBacktrace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Canister Backtrace:")?;
+        for (index, name) in &self.0 {
+            match name {
+                Some(name) => writeln!(f, "{}", name)?,
+                None => writeln!(f, "unknown function at index {}", index)?,
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Errors returned by the Hypervisor.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum HypervisorError {
@@ -100,7 +118,13 @@ pub enum HypervisorError {
     InstrumentationFailed(WasmInstrumentationError),
     /// Canister Wasm trapped (e.g. by executing the `unreachable`
     /// instruction or dividing by zero).
-    Trapped(TrapCode),
+    /// The contained backtrace may be `None` if the canister does not include
+    /// suitable debug information or if the caller does not have permission to
+    /// view the backtrace.
+    Trapped {
+        trap_code: TrapCode,
+        backtrace: Option<CanisterBacktrace>,
+    },
     /// Canister explicitly called `ic.trap`.
     CalledTrap(String),
     /// An attempt was made to execute a message on a canister that does not
@@ -217,7 +241,24 @@ impl std::fmt::Display for HypervisorError {
             Self::InstrumentationFailed(err) => {
                 write!(f, "Could not instrument wasm module of canister: {}", err)
             }
-            Self::Trapped(code) => write!(f, "Canister trapped: {}", code),
+            Self::Trapped {
+                trap_code,
+                backtrace,
+            } => {
+                writeln!(f, "Canister trapped: {}", trap_code)?;
+                // When the wasm_backtrace feature is enabled, we can provide a
+                // more helpful message on how to get backtraces. E.g.:
+                // "Canister backtrace omitted here, but may be included in
+                // canister logs. To view a backtrace in reject responses,
+                // upgrade the canister to a version that includes debug info
+                // and call it from a canister with permission to view
+                // backtraces."
+                if let Some(bt) = backtrace {
+                    write!(f, "{}", bt)
+                } else {
+                    Ok(())
+                }
+            }
             Self::CalledTrap(msg) => {
                 write!(f, "Canister called `ic0.trap` with message: {}", msg)
             }
@@ -359,7 +400,7 @@ impl AsErrorHelp for HypervisorError {
                     .to_string(),
                 doc_link: doc_ref("instruction-limit-exceeded"),
             },
-            Self::Trapped(_) => ErrorHelp::UserError {
+            Self::Trapped { .. } => ErrorHelp::UserError {
                 suggestion: "Consider gracefully handling failures from this canister \
                 or altering the canister to handle exceptions."
                     .to_string(),
@@ -469,7 +510,7 @@ impl HypervisorError {
             Self::InstructionLimitExceeded(_) => E::CanisterInstructionLimitExceeded,
             Self::InvalidWasm(_) => E::CanisterInvalidWasm,
             Self::InstrumentationFailed(_) => E::CanisterInvalidWasm,
-            Self::Trapped(_) => E::CanisterTrapped,
+            Self::Trapped { .. } => E::CanisterTrapped,
             Self::CalledTrap(_) => E::CanisterCalledTrap,
             Self::WasmModuleNotFound => E::CanisterWasmModuleNotFound,
             Self::OutOfMemory => E::CanisterOutOfMemory,
@@ -510,7 +551,7 @@ impl HypervisorError {
             HypervisorError::InstructionLimitExceeded(_) => "InstructionLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
-            HypervisorError::Trapped(_) => "Trapped",
+            HypervisorError::Trapped { .. } => "Trapped",
             HypervisorError::CalledTrap(_) => "CalledTrap",
             HypervisorError::WasmModuleNotFound => "WasmModuleNotFound",
             HypervisorError::OutOfMemory => "OutOfMemory",

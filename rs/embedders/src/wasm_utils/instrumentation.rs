@@ -792,6 +792,10 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
     }
+
+    for (index, _name) in &mut module.function_names {
+        *index = f(*index);
+    }
 }
 
 /// Injects hidden api functions.

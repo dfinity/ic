@@ -25,7 +25,7 @@ use wasmtime::{
 pub use host_memory::WasmtimeMemoryCreator;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
@@ -65,9 +65,29 @@ pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 pub(crate) const MAX_STORE_TABLES: usize = 1;
 pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
 
+fn demangle(func_name: &str) -> String {
+    if let Ok(name) = rustc_demangle::try_demangle(func_name) {
+        format!("{:#}", name)
+    } else {
+        func_name.to_string()
+    }
+}
+
+fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> CanisterBacktrace {
+    let funcs: Vec<_> = wasm
+        .frames()
+        .iter()
+        .map(|f| (f.func_index(), f.func_name().map(demangle)))
+        .collect();
+    CanisterBacktrace(funcs)
+}
+
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+    let backtrace = err
+        .downcast_ref::<wasmtime::WasmBacktrace>()
+        .map(convert_backtrace);
     match err.downcast::<wasmtime::Trap>() {
-        Ok(trap) => trap_code_to_hypervisor_error(trap),
+        Ok(trap) => trap_code_to_hypervisor_error(trap, backtrace),
         Err(err) => {
             // The error could be either a compile error or some other error.
             // We have to inspect the error message to distinguish these cases.
@@ -95,27 +115,49 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
                     error: BAD_SIGNATURE_MESSAGE.to_string(),
                 };
             }
-            HypervisorError::Trapped(TrapCode::Other)
+            HypervisorError::Trapped {
+                trap_code: TrapCode::Other,
+                backtrace,
+            }
         }
     }
 }
 
-fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
+fn trap_code_to_hypervisor_error(
+    trap: wasmtime::Trap,
+    backtrace: Option<CanisterBacktrace>,
+) -> HypervisorError {
     match trap {
-        wasmtime::Trap::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
-        wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-        wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped(TrapCode::TableOutOfBounds),
+        wasmtime::Trap::StackOverflow => HypervisorError::Trapped {
+            trap_code: TrapCode::StackOverflow,
+            backtrace,
+        },
+        wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped {
+            trap_code: TrapCode::HeapOutOfBounds,
+            backtrace,
+        },
+        wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped {
+            trap_code: TrapCode::TableOutOfBounds,
+            backtrace,
+        },
         wasmtime::Trap::BadSignature => HypervisorError::ToolchainContractViolation {
             error: BAD_SIGNATURE_MESSAGE.to_string(),
         },
-        wasmtime::Trap::IntegerDivisionByZero => {
-            HypervisorError::Trapped(TrapCode::IntegerDivByZero)
-        }
-        wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped(TrapCode::Unreachable),
+        wasmtime::Trap::IntegerDivisionByZero => HypervisorError::Trapped {
+            trap_code: TrapCode::IntegerDivByZero,
+            backtrace,
+        },
+        wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped {
+            trap_code: TrapCode::Unreachable,
+            backtrace,
+        },
         _ => {
             // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
             // so we have to use the wildcard matching here.
-            HypervisorError::Trapped(TrapCode::Other)
+            HypervisorError::Trapped {
+                trap_code: TrapCode::Other,
+                backtrace,
+            }
         }
     }
 }

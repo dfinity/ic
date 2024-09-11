@@ -4,15 +4,28 @@ use ic_cdk_macros::update;
 #[candid_method(update)]
 #[update]
 fn unreachable() {
+    unreachable_foo();
+}
+
+#[inline(never)]
+fn unreachable_foo() {
+    unreachable_bar();
+}
+
+#[inline(never)]
+fn unreachable_bar() {
     #[cfg(target_arch = "wasm32")]
     core::arch::wasm32::unreachable();
-    #[cfg(not(target_arch = "wasm32"))]
-    panic!("uh oh");
 }
 
 #[candid_method(update)]
 #[update]
 fn oob() {
+    oob_foo();
+}
+
+#[inline(never)]
+fn oob_foo() {
     let address = (u32::MAX - 10) as *const usize; // In the last page of Wasm memory.
     let _count = unsafe { core::ptr::read_volatile(address) };
 }

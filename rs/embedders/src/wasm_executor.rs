@@ -773,7 +773,13 @@ pub fn process(
         }
         Err(err) => {
             if let Some(log_message) = match err {
-                HypervisorError::Trapped(trap_code) => Some(format!("[TRAP]: {}", trap_code)),
+                HypervisorError::Trapped {
+                    trap_code,
+                    backtrace,
+                } => match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\nCanister Backtrace: {}", trap_code, bt)),
+                    None => Some(format!("[TRAP]: {}", trap_code)),
+                },
                 HypervisorError::CalledTrap(text) if text.is_empty() => {
                     Some("[TRAP]: (no message)".to_string())
                 }

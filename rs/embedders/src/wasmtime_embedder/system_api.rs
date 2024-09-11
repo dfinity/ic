@@ -1089,7 +1089,10 @@ pub(crate) fn syscalls<
                         additional_pages as u64,
                         stable_memory_api
                             .try_into()
-                            .map_err(|()| HypervisorError::Trapped(TrapCode::Other))?,
+                            .map_err(|()| HypervisorError::Trapped {
+                                trap_code: TrapCode::Other,
+                                backtrace: None,
+                            })?,
                     )? {
                         StableGrowOutcome::Success => Ok(current_size),
                         StableGrowOutcome::Failure => Ok(-1),
@@ -1243,13 +1246,13 @@ pub(crate) fn syscalls<
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
                     InternalErrorCode::HeapOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
+                        HypervisorError::Trapped {trap_code:TrapCode::HeapOutOfBounds, backtrace:None}
                     }
                     InternalErrorCode::StableMemoryOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
+                        HypervisorError::Trapped {trap_code:TrapCode::StableMemoryOutOfBounds, backtrace:None}
                     }
                     InternalErrorCode::StableMemoryTooBigFor32Bit => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
+                        HypervisorError::Trapped {trap_code:TrapCode::StableMemoryTooBigFor32Bit, backtrace:None}
                     }
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(

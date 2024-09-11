@@ -8093,6 +8093,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "rayon",
+ "rustc-demangle",
  "serde",
  "serde_bytes",
  "slog",

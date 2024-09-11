@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use wasmparser::Name;
 use wasmparser::{
     BinaryReaderError, Export, GlobalType, Import, MemoryType, Operator, Parser, Payload, RefType,
     SubType, TableType, ValType,
@@ -173,6 +174,9 @@ pub struct Module<'a> {
     pub elements: Vec<(ElementKind<'a>, ElementItems<'a>)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
+    // Instead of keeping the "name" custom section, we parse out the function
+    // names into this field. It is a mapping from function index to name.
+    pub function_names: Vec<(u32, &'a str)>,
 }
 
 impl<'a> Module<'a> {
@@ -192,6 +196,7 @@ impl<'a> Module<'a> {
         let mut start = None;
         let mut data_section_count = None;
         let mut custom_sections = vec![];
+        let mut function_names = vec![];
         for payload in parser.parse_all(wasm) {
             let payload = payload?;
             match payload {
@@ -305,8 +310,21 @@ impl<'a> Module<'a> {
                     });
                 }
                 Payload::CustomSection(custom_section_reader) => {
-                    custom_sections
-                        .push((custom_section_reader.name(), custom_section_reader.data()));
+                    if let wasmparser::KnownCustom::Name(name_section) =
+                        custom_section_reader.as_known()
+                    {
+                        for subsection_reader in name_section.into_iter() {
+                            if let Name::Function(name_map) = subsection_reader? {
+                                for naming in name_map.into_iter() {
+                                    let naming = naming?;
+                                    function_names.push((naming.index, naming.name));
+                                }
+                            }
+                        }
+                    } else {
+                        custom_sections
+                            .push((custom_section_reader.name(), custom_section_reader.data()));
+                    }
                 }
                 Payload::Version {
                     num,
@@ -372,6 +390,7 @@ impl<'a> Module<'a> {
             code_sections,
             data,
             custom_sections,
+            function_names,
         })
     }
 
@@ -564,6 +583,16 @@ impl<'a> Module<'a> {
                 };
             }
             module.section(&data);
+        }
+
+        if !self.function_names.is_empty() {
+            let mut name_section = wasm_encoder::NameSection::new();
+            let mut functions = wasm_encoder::NameMap::new();
+            for (index, name) in self.function_names {
+                functions.append(index, name);
+            }
+            name_section.functions(&functions);
+            module.section(&name_section);
         }
 
         for (name, data) in self.custom_sections {
