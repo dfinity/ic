@@ -13,6 +13,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 
 pub fn execute_inspect_message_bench(c: &mut Criterion) {
+    let wasm64_enabled = Wasm64::Enabled;
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
@@ -21,7 +22,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "msg_method_name_size",
                 NoParams,
                 Result::I64,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517000511,
         ),
@@ -31,7 +32,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "msg_method_name_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             520000511,
         ),
@@ -41,13 +42,13 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "msg_method_name_copy",
                 Params3(0_i64, 0_i64, 20_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             539000511,
         ),
         common::Benchmark(
             "ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Enabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", ""), wasm64_enabled), // inspect_message accepts by default
             506,
         ),
     ];
@@ -92,7 +93,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Enabled,
+        wasm64_enabled,
     );
 }
 

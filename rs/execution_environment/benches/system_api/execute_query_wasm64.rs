@@ -15,6 +15,7 @@ use ic_types::PrincipalId;
 use crate::common::Wasm64;
 
 pub fn execute_query_bench(c: &mut Criterion) {
+    let wasm64_enabled = Wasm64::Enabled;
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
@@ -23,7 +24,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "data_certificate_size",
                 NoParams,
                 Result::I64,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517000006,
         ),
@@ -33,7 +34,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "data_certificate_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             520000006,
         ),
@@ -43,7 +44,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "data_certificate_copy",
                 Params3(0_i64, 0_i64, 64_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             583000006,
         ),
@@ -95,7 +96,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Enabled,
+        wasm64_enabled,
     );
 }
 

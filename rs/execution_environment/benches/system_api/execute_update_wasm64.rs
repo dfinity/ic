@@ -1,26 +1,28 @@
-use crate::common::Wasm64;
 ///
 /// Benchmark System API performance in `execute_update()`.
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
 
+use crate::common::Wasm64;
+
 pub fn execute_update_bench(c: &mut Criterion) {
+    let wasm64_enabled = Wasm64::Enabled;
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
             "baseline/empty test*".into(),
-            Module::Test.from_sections(("", "(drop (i32.const 0))"), Wasm64::Enabled),
+            Module::Test.from_sections(("", "(drop (i32.const 0))"), wasm64_enabled),
             3,
         ),
         common::Benchmark(
@@ -28,9 +30,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_sections(
                 (
                     "",
-                    Module::render_loop(LoopIterations::Mi, "", Wasm64::Enabled),
+                    Module::render_loop(LoopIterations::Mi, "", wasm64_enabled),
                 ),
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             11000006,
         ),
@@ -42,16 +44,16 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     Module::render_loop(
                         LoopIterations::Mi,
                         "(local.set $s (i64.add (local.get $s) (i64.load (i64.const 0))))",
-                        Wasm64::Enabled,
+                        wasm64_enabled,
                     ),
                 ),
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             16000006,
         ),
         common::Benchmark(
             "ic0_msg_caller_size()".into(),
-            Module::Test.from_ic0("msg_caller_size", NoParams, Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("msg_caller_size", NoParams, Result::I64, wasm64_enabled),
             517000006,
         ),
         common::Benchmark(
@@ -60,7 +62,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_caller_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             520000006,
         ),
@@ -70,13 +72,13 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_caller_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 10B max
             520000006,
         ),
         common::Benchmark(
             "ic0_msg_arg_data_size()".into(),
-            Module::Test.from_ic0("msg_arg_data_size", NoParams, Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("msg_arg_data_size", NoParams, Result::I64, wasm64_enabled),
             517000006,
         ),
         common::Benchmark(
@@ -85,7 +87,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_arg_data_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             520000006,
         ),
@@ -95,7 +97,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_arg_data_copy",
                 Params3(0_i64, 0_i64, 1024_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             1_543_000_006,
         ),
@@ -108,9 +110,9 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reply",
                     NoParams,
                     Result::No,
-                    Wasm64::Enabled,
+                    wasm64_enabled,
                 ),
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             506,
         ),
@@ -120,7 +122,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_reply_data_append",
                 Params2(0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 2MiB max
             568000006,
         ),
@@ -130,7 +132,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_reply_data_append",
                 Params2(0_i64, 2_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 2MiB max
             618000006,
         ),
@@ -143,15 +145,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reject",
                     Params2(0_i64, 0_i64),
                     Result::No,
-                    Wasm64::Enabled,
+                    wasm64_enabled,
                 ),
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             508,
         ),
         common::Benchmark(
             "ic0_canister_self_size()".into(),
-            Module::Test.from_ic0("canister_self_size", NoParams, Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("canister_self_size", NoParams, Result::I64, wasm64_enabled),
             517000006,
         ),
         common::Benchmark(
@@ -160,7 +162,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "canister_self_copy",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             520000006,
         ),
@@ -170,7 +172,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "canister_self_copy",
                 Params3(0_i64, 0_i64, 10_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 10B max
             529001006,
         ),
@@ -180,7 +182,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "debug_print",
                 Params2(0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             170000006,
         ),
@@ -190,13 +192,13 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "debug_print",
                 Params2(0_i64, 1024_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             47366018006,
         ),
         common::Benchmark(
             "ic0_call_new()".into(),
-            Module::CallNewLoop.from_sections(("", ""), Wasm64::Enabled), // call_new in a loop is rendered by default
+            Module::CallNewLoop.from_sections(("", ""), wasm64_enabled), // call_new in a loop is rendered by default
             1552000006,
         ),
         common::Benchmark(
@@ -205,7 +207,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "call_data_append",
                 Params2(0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 2MiB max
             2109000006,
         ),
@@ -215,7 +217,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "call_data_append",
                 Params2(0_i64, 1024_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             53259000006,
         ),
@@ -225,7 +227,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "call_on_cleanup",
                 Params2(33_i64, 0_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             2059000006,
         ),
@@ -235,23 +237,23 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "call_cycles_add128",
                 Params2(0_i64, 100_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             2059000006,
         ),
         common::Benchmark(
             "call_new+ic0_call_perform()".into(),
-            Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32, Wasm64::Enabled),
+            Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32, wasm64_enabled),
             6558000006,
         ),
         common::Benchmark(
             "ic0_stable64_size()".into(),
-            Module::Test.from_ic0("stable64_size", NoParams, Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("stable64_size", NoParams, Result::I64, wasm64_enabled),
             17000006,
         ),
         common::Benchmark(
             "ic0_stable64_grow()".into(),
-            Module::Test.from_ic0("stable64_grow", Param1(0_i64), Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("stable64_grow", Param1(0_i64), Result::I64, wasm64_enabled),
             118000006,
         ),
         common::Benchmark(
@@ -260,7 +262,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "stable64_read",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             40000113,
         ),
@@ -270,7 +272,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "stable64_read",
                 Params3(0_i64, 0_i64, 1024_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             1063000113,
         ),
@@ -280,7 +282,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "stable64_write",
                 Params3(0_i64, 0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             40001113,
         ),
@@ -290,13 +292,13 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "stable64_write",
                 Params3(0_i64, 0_i64, 1024_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             1063001113,
         ),
         common::Benchmark(
             "ic0_time()".into(),
-            Module::Test.from_ic0("time", NoParams, Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("time", NoParams, Result::I64, wasm64_enabled),
             517000006,
         ),
         common::Benchmark(
@@ -305,7 +307,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "global_timer_set",
                 Param1(0_i64),
                 Result::I64,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             518000006,
         ),
@@ -315,7 +317,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "performance_counter",
                 Param1(0),
                 Result::I64,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             218000006,
         ),
@@ -325,7 +327,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "canister_cycle_balance128",
                 Param1(0_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517001006,
         ),
@@ -335,7 +337,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_cycles_available128",
                 Param1(0_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517000006,
         ),
@@ -345,7 +347,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "msg_cycles_accept128",
                 Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             519000006,
         ),
@@ -355,7 +357,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "data_certificate_present",
                 NoParams,
                 Result::I32,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517000006,
         ),
@@ -365,7 +367,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "certified_data_set",
                 Params2(0_i64, 1_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             519000006,
         ),
@@ -375,18 +377,18 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "certified_data_set",
                 Params2(0_i64, 32_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ), // 32B max
             550000006,
         ),
         common::Benchmark(
             "ic0_canister_status()".into(),
-            Module::Test.from_ic0("canister_status", NoParams, Result::I32, Wasm64::Enabled),
+            Module::Test.from_ic0("canister_status", NoParams, Result::I32, wasm64_enabled),
             517000006,
         ),
         common::Benchmark(
             "ic0_mint_cycles()".into(),
-            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Enabled),
+            Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, wasm64_enabled),
             18000006,
         ),
         common::Benchmark(
@@ -395,7 +397,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "is_controller",
                 Params2(0_i64, 29_i64),
                 Result::I32,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             1048000006,
         ),
@@ -405,7 +407,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "in_replicated_execution",
                 NoParams,
                 Result::I32,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             517000006,
         ),
@@ -415,7 +417,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "cycles_burn128",
                 Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
-                Wasm64::Enabled,
+                wasm64_enabled,
             ),
             19000006,
         ),
@@ -490,7 +492,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Enabled,
+        wasm64_enabled,
     );
 }
 
