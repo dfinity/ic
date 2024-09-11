@@ -1566,7 +1566,7 @@ impl XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, _> = Client::builder()
             .pool_idle_timeout(Some(Duration::from_secs(600)))
-            .pool_max_idle_per_host(1)
+            .pool_max_idle_per_host(5)
             .executor(ExecuteOnRuntime(runtime_handle))
             .build(
                 #[cfg(not(test))]
