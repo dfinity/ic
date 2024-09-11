@@ -1990,21 +1990,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
-        self
-    }
-
-    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_schnorr_public_key = status;
-        self
-    }
-
-    pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_sign_with_schnorr = status;
-        self
-    }
-
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
