@@ -460,9 +460,6 @@ impl TestIDkgBlockReader {
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdSigInputsRef)> + '_> {
         Box::new(
-            // False positive `map_identity` warning.
-            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-            #[allow(clippy::map_identity)]
             self.requested_signatures
                 .iter()
                 .map(|(id, sig_inputs)| (id, sig_inputs)),

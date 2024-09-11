@@ -95,13 +95,13 @@ pub(crate) fn check_share_against_context(
 ///
 /// Specifically, what is done is as follows:
 /// - The sets of shares are sorted from largest to smallest, and then the
-/// largest set is removed.
+///   largest set is removed.
 /// - A new set of "diverging signers" is created by collecting every node id
-/// that has signed a share not in the largest group.
+///   that has signed a share not in the largest group.
 /// - Finally any signers appearing in the largest group are
-/// removed from the diverging signers group.
+///   removed from the diverging signers group.
 /// - If the size of this group exceeds the number of faults tolerated, then the
-/// divergence criteria is met.
+///   divergence criteria is met.
 pub(crate) fn grouped_shares_meet_divergence_criteria(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     faults_tolerated: usize,

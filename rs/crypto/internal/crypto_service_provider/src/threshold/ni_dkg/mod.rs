@@ -313,7 +313,7 @@ fn dkg_dealing_encryption_key_id<T: PublicKeyStoreCspVault + ?Sized>(
     Ok(KeyId::from(&pk))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 enum DkgDealingEncryptionKeyIdRetrievalError {
     /// Missing DKG dealing encryption key
     KeyNotFound,
@@ -517,12 +517,6 @@ pub mod specialise {
     //! type specialisations:
     use super::*;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20_internal_types;
-
-    /// An error during specialisation
-    #[derive(Debug)]
-    pub struct SpecialisationError {
-        _unexpected_type_name: &'static str,
-    }
 
     /// Converts a secret key into a forward secure secret key set.
     ///

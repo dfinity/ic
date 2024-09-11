@@ -116,7 +116,7 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
 }
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct EthWithdrawalRequest {
     /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
@@ -139,7 +139,7 @@ pub struct EthWithdrawalRequest {
 }
 
 /// ERC-20 withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct Erc20WithdrawalRequest {
     /// Amount of burn ckETH that can be used to pay for the Ethereum transaction fees.
     #[n(0)]
@@ -173,7 +173,7 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub enum ReimbursementIndex {
     #[n(0)]
     CkEth {
@@ -230,7 +230,7 @@ impl ReimbursementIndex {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
     #[cbor(n(0), with = "crate::cbor::id")]
@@ -249,7 +249,7 @@ pub struct ReimbursementRequest {
     pub transaction_hash: Option<Hash>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
@@ -264,7 +264,7 @@ pub struct Reimbursed {
 
 pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ReimbursedError {
     /// Whether reimbursement was minted or not is unknown,
     /// most likely because there was an unexpected panic in the callback.
@@ -273,7 +273,7 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 #[cbor(transparent)]
 pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
@@ -355,7 +355,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EthTransactions {
     pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
@@ -374,7 +374,7 @@ pub struct EthTransactions {
     pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CreateTransactionError {
     InsufficientTransactionFee {
         cketh_ledger_burn_index: LedgerBurnIndex,
@@ -383,7 +383,7 @@ pub enum CreateTransactionError {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ResubmitTransactionError {
     InsufficientTransactionFee {
         ledger_burn_index: LedgerBurnIndex,
@@ -583,6 +583,7 @@ impl EthTransactions {
     /// with nonces greater than the latest mined transaction nonce:
     /// * the resubmitted transaction will need to be re-signed if its transaction fee was increased
     /// * the resubmitted transaction can be resent as is if its transaction fee was not increased
+    ///
     /// We stop on the first error since if a transaction with nonce n could not be resubmitted
     /// (e.g., the transaction amount does not cover the new fees),
     /// then the next transactions with nonces n+1, n+2, ... are blocked anyway
@@ -1176,7 +1177,7 @@ pub fn create_transaction(
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum TransactionCallData {
     Erc20Transfer { to: Address, value: Erc20Value },
 }

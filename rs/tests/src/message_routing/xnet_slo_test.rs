@@ -52,7 +52,7 @@ const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,
@@ -421,7 +421,7 @@ pub(crate) fn check_success(
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
 /// - On test failure.
-pub(crate) async fn test_async_impl(
+pub async fn test_async_impl(
     env: TestEnv,
     endpoints_runtimes: impl Iterator<Item = Runtime>,
     config: Config,

@@ -166,7 +166,7 @@ pub trait NiDkgCspClient {
     /// # Errors
     /// This method SHALL return an error if:
     /// * the public key is not well formed. (`MalformedPublicKeyError`)
-    /// This method SHALL NOT return an error if:
+    ///   This method SHALL NOT return an error if:
     /// * the forward secure epoch is already higher than the epoch provided in
     ///   the method argument.  In this case the secret key is unchanged.
     fn update_forward_secure_epoch(

@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 
 /// An action for a 'downstream_calls_test' canister, i.e. either call another such
 /// canister or respond to the calling canister.
-#[derive(Serialize, Deserialize, Debug, CandidType)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub enum CallOrResponse {
     Call(CanisterId),
     Response,
@@ -16,7 +16,7 @@ pub enum CallOrResponse {
 /// step the action at the front is popped from the queue and executed, while the rest
 /// is passed on to the next canister. We are using a queue over a vector so that it is
 /// straightforward to execute the list of actions front to back.
-#[derive(Serialize, Deserialize, Debug, CandidType)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct State {
     pub actions: VecDeque<CallOrResponse>,
     pub call_count: u64,

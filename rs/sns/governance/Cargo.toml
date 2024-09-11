@@ -46,6 +46,7 @@ icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/collections/union_multi_map" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -87,6 +88,7 @@ prost-build = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+candid_parser = { workspace = true }
 futures = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
@@ -99,7 +101,7 @@ ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

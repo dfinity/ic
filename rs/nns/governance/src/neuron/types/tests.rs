@@ -450,17 +450,3 @@ fn test_neuron_configure_dissolve_delay() {
     let now = now + 1;
     assert_eq!(neuron.state(now), NeuronState::Dissolved);
 }
-
-#[test]
-fn test_normalize_makes_known_neurons_always_public() {
-    let mut neuron =
-        create_neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
-            when_dissolved_timestamp_seconds: 1721408743,
-        });
-    neuron.known_neuron_data = Some(Default::default());
-    let neuron: std::borrow::Cow<'_, Neuron> = Cow::Owned(neuron);
-
-    let neuron = normalized(neuron);
-
-    assert_eq!(neuron.visibility, Some(Visibility::Public),);
-}

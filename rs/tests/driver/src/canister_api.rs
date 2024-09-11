@@ -2,7 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
 };
 use ic_nns_gtc::pb::v1::AccountState;
@@ -31,9 +31,13 @@ use ic_sns_swap::pb::v1::{
     RefreshBuyerTokensResponse as RefreshBuyerTokensRes,
 };
 use icp_ledger::Subaccount;
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value,
+    icrc1::{
+        account::Account,
+        transfer::{TransferArg, TransferError},
+    },
+};
 
 //nns/gtc/gen/ic_nns_gtc.pb.v1.rs
 use ic_sns_wasm::pb::v1::{
@@ -132,10 +136,10 @@ impl Request<()> for GenericRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpHeader(String, String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpRequest {
     url: String,
     method: String,
@@ -183,7 +187,7 @@ impl CanisterHttpRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct CanisterHttpRequestProvider {
     http_canister: Principal,
 }
@@ -238,7 +242,7 @@ impl GetAccountRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct NnsDappRequestProvider {
     nns_dapp_canister: Principal,
 }
@@ -623,7 +627,7 @@ impl Icrc1BalanceOfRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Icrc1RequestProvider {
     icrc1_canister: Principal,
 }
@@ -953,7 +957,7 @@ impl GetModeRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct SnsRequestProvider {
     pub sns_canisters: SnsCanisterIds,
     pub sns_wasm_canister_id: PrincipalId,
@@ -1134,7 +1138,7 @@ impl SnsRequestProvider {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Copy, Clone, Default)]
 pub struct NnsRequestProvider {}
 
 impl NnsRequestProvider {

@@ -392,7 +392,6 @@ impl Environment for FakeDriver {
                         sns_token_e8s: None,    // TODO[NNS1-2339]
                         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
                         nns_proposal_id: None,  // TODO[NNS1-2339]
-                        neurons_fund_participants: None, // TODO[NNS1-2339]
                         should_auto_finalize: Some(true),
                         neurons_fund_participation_constraints: None,
                         neurons_fund_participation: None,
@@ -545,7 +544,7 @@ pub fn register_vote_assert_success(
 
 /// When testing proposals, three different proposal topics available:
 /// Governance, NetworkEconomics, and ExchangeRate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
@@ -554,7 +553,7 @@ pub enum ProposalTopicBehavior {
 
 /// A struct to help setting up tests concisely thanks to a concise format to
 /// specifies who proposes something and who votes on that proposal.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ProposalNeuronBehavior {
     /// Neuron id of the proposer.
     pub proposer: u64,

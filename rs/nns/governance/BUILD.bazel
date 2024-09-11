@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
@@ -26,9 +26,11 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/temporary",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",
@@ -112,6 +114,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:candid_parser",
     "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
@@ -129,6 +132,14 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/tests/**",
+    ],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -140,10 +151,7 @@ cargo_build_script(
 
 rust_library(
     name = "governance",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -155,10 +163,7 @@ rust_library(
 
 rust_library(
     name = "governance--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
@@ -171,10 +176,7 @@ rust_library(
 
 rust_library(
     name = "governance--canbench_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_nns_governance",
@@ -204,40 +206,17 @@ rust_canbench(
     ],
 )
 
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance",
-    ],
-)
-
-rust_binary(
-    name = "generate_test_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
-        ":build_script",
-        ":governance--test_feature",
-    ],
-)
-
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -247,12 +226,12 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -279,23 +258,29 @@ generated_files_check(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_governance-canister",
-    data = ["canister/governance.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+        "//rs/nervous_system/canisters",
+    ],
 )
 
 rust_test(
     name = "canister_test_unit_test",
-    crate = ":_wasm_governance-canister-test",
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    data = ["canister/governance_test.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance--test_feature",
+        "//rs/nervous_system/canisters",
+    ],
 )
 
 rust_test(

@@ -58,6 +58,9 @@ rust_test(
     name = "consensus_test",
     aliases = ALIASES,
     crate = ":consensus",
+    crate_features = [
+        "proptest",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

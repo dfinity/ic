@@ -348,6 +348,10 @@ pub(crate) fn syscalls<
                     })
             })
             .and_then(|mem| {
+                // False positive clippy lint.
+                // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+                // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
                 f(store.system_api_mut()?, mem)
             })
@@ -676,22 +680,8 @@ pub(crate) fn syscalls<
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     // A valid function index should be much smaller than u32::max
-                    let reply_fun: u32 = reply_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reply function index out of bounds: {}",
-                                reply_fun
-                            ),
-                        }
-                    })?;
-                    let reject_fun: u32 = reject_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reject function index out of bounds: {}",
-                                reject_fun
-                            ),
-                        }
-                    })?;
+                    let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
+                    let reject_fun: u32 = reject_fun.try_into().unwrap_or(u32::MAX);
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -732,14 +722,7 @@ pub(crate) fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
                 with_system_api(&mut caller, |s| {
                     // A valid function index should be much smaller than u32::max
-                    let fun: u32 = fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_on_cleanup: function index out of bounds: {}",
-                                fun
-                            ),
-                        }
-                    })?;
+                    let fun: u32 = fun.try_into().unwrap_or(u32::MAX);
                     s.ic0_call_on_cleanup(fun, env)
                 })
             }
@@ -779,10 +762,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size()).and_then(|s| {
-                    i32::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable_size())
             }
         })
         .unwrap();
@@ -834,10 +814,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable64_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size()).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable64_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable64_size())
             }
         })
         .unwrap();
@@ -945,11 +922,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE)?;
-                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_canister_cycle_balance failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())
             }
         })
         .unwrap();
@@ -975,11 +948,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_available failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available())
             }
         })
         .unwrap();
@@ -1005,11 +974,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_refunded", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_refunded failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded())
             }
         })
         .unwrap();
@@ -1222,10 +1187,7 @@ pub(crate) fn syscalls<
     linker
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount)).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
             }
         })
         .unwrap();
@@ -1251,10 +1213,8 @@ pub(crate) fn syscalls<
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1269,10 +1229,8 @@ pub(crate) fn syscalls<
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }

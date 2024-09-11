@@ -1,5 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
+use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_stable_structures::{
@@ -26,6 +27,9 @@ const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 
+const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
+const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -50,6 +54,8 @@ struct State {
 
     // Neuron indexes stored in stable storage.
     stable_neuron_indexes: neuron_indexes::StableNeuronIndexes<VM>,
+
+    node_provider_rewards_log: StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>,
 }
 
 impl State {
@@ -62,7 +68,7 @@ impl State {
                 memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
                 memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
             )
-            .expect("Failed to initialize stable log")
+            .expect("Failed to initialize stable log for Audit Events")
         });
         let stable_neuron_store = MEMORY_MANAGER.with(|memory_manager| {
             let memory_manager = memory_manager.borrow();
@@ -93,11 +99,21 @@ impl State {
             .build()
         });
 
+        let node_provider_rewards_log = MEMORY_MANAGER.with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
+            StableLog::init(
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID),
+                memory_manager.get(NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID),
+            )
+            .expect("Failed to initialize stable log for NP Rewards")
+        });
+
         Self {
             upgrades_memory,
             audit_events_log,
             stable_neuron_store,
             stable_neuron_indexes,
+            node_provider_rewards_log,
         }
     }
 
@@ -106,6 +122,8 @@ impl State {
     fn validate(&self) {
         self.stable_neuron_store.validate();
         self.stable_neuron_indexes.validate();
+        validate_stable_log(&self.audit_events_log);
+        validate_stable_log(&self.node_provider_rewards_log);
     }
 }
 
@@ -159,6 +177,15 @@ pub(crate) fn with_stable_neuron_indexes_mut<R>(
     })
 }
 
+pub(crate) fn with_node_provider_rewards_log<R>(
+    f: impl FnOnce(&StableLog<ArchivedMonthlyNodeProviderRewards, VM, VM>) -> R,
+) -> R {
+    STATE.with(|state| {
+        let node_provider_rewards_log = &state.borrow().node_provider_rewards_log;
+        f(node_provider_rewards_log)
+    })
+}
+
 /// Validates that some of the data in stable storage can be read, in order to prevent broken
 /// schema. Should only be called in post_upgrade.
 pub fn validate_stable_storage() {
@@ -172,8 +199,18 @@ where
     M: Memory,
 {
     // This is just to verify that any key-value pair can be deserialized without panicking. It is
-    // not guaranteed to catch all deserializations, but should catch a lot of common issues.
+    // guaranteed to catch all deserialization errors, but should help.
     let _ = btree_map.first_key_value();
+}
+
+pub(crate) fn validate_stable_log<Value, M>(log: &StableLog<Value, M, M>)
+where
+    Value: Storable,
+    M: Memory,
+{
+    // This is just to verify that an early value can be deserialized without panicking. It is not
+    // guaranteed to catch all deserialization errors, but should help.
+    let _ = log.get(0);
 }
 
 // Clears and initializes stable memory and stable structures before testing. Typically only needed

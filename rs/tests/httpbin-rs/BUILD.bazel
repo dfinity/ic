@@ -67,6 +67,9 @@ container_image(
     name = "httpbin_image_base",
     base = "@ubuntu_test_runtime//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
     ],
@@ -85,6 +88,9 @@ container_image(
         ":httpbin",
     ],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "httpbin",
     workdir = "/home/httpbin",
 )

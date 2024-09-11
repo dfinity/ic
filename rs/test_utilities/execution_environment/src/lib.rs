@@ -7,7 +7,6 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
@@ -25,11 +24,12 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -690,7 +690,7 @@ impl ExecutionTest {
     pub fn set_log_visibility(
         &mut self,
         canister_id: CanisterId,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
@@ -1626,6 +1626,7 @@ pub struct ExecutionTestBuilder {
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1665,6 +1666,8 @@ impl Default for ExecutionTestBuilder {
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
+            canister_snapshot_baseline_instructions: scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }
@@ -1959,6 +1962,15 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_canister_http_requests_in_flight(
+        mut self,
+        max_canister_http_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config.max_canister_http_requests_in_flight =
+            max_canister_http_requests_in_flight;
+        self
+    }
+
     pub fn with_wasm64(mut self) -> Self {
         self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         self
@@ -2192,6 +2204,7 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
+            self.canister_snapshot_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);

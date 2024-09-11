@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create small --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
 //
 // The --output-dir=./small will store the debug output of the test driver in the specified directory.
@@ -44,10 +44,7 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy,
-        NnsCustomizations,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
 };
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -71,7 +68,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))

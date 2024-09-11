@@ -65,7 +65,7 @@ impl MemoryArea {
 /// Specifies whether the currently running message execution needs to know
 /// which pages were dirtied or not. Dirty page tracking comes with a large
 /// performance overhead.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DirtyPageTracking {
     Ignore,
     Track,
@@ -73,7 +73,7 @@ pub enum DirtyPageTracking {
 
 /// Specifies whether the memory access that caused the signal was a read access
 /// or a write access.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum AccessKind {
     Read,
     Write,
@@ -678,6 +678,7 @@ pub fn sigsegv_fault_handler_new(
 /// Preconditions:
 ///    * The pages in `max_prefetch_range` have not been dirtied before.
 ///    * `min_prefetch_range` ⊆ `max_prefetch_range`
+///
 /// Guarantees:
 ///    * `min_prefetch_range` ⊆ result ⊆ `max_prefetch_range`
 ///    * Any data read from the tracker's memory within the result range will be equal

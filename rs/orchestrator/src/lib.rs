@@ -12,19 +12,19 @@
 //! process. For that, it periodically performs the following operations:
 //!
 //! 1. Ask the registry for the current peers in the subnetwork it is supposed to
-//! run it.
+//!    run it.
 //!
 //! 2. From each peer, fetch the latest catch-up package via a separate CUP
-//! endpoint.
+//!    endpoint.
 //!
 //! 3. Verify each of those CUPs (by means of the subnet signature) and select
-//! the most recent one (based on the block height).
+//!    the most recent one (based on the block height).
 //!
 //! 4. Check the registry version referenced in that CUP and the replica version
-//! associated with that registry version.
+//!    associated with that registry version.
 //!
 //! 5. If the version is different from what we are currently running, apply
-//! upgrade and restart replica with that CUP.
+//!    upgrade and restart replica with that CUP.
 //!
 //! # Registry
 //!

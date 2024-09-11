@@ -1,0 +1,43 @@
+name: Build Minimal Runner Image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/build-minimal-runner-image.yml'
+      - '.github/minimal-runner-image/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-upload-minimal-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine TAG
+        id: tag
+        run: |
+         echo "TAG=$(cat ${{ github.workspace }}/.github/minimal-runner-image/TAG)" >> $GITHUB_ENV
+
+      - name: Build and push image
+        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
+        with:
+          context: ${{ github.workspace}}/.github/minimal-runner-image
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/minimal-runner-image:${{ env.TAG }}
+            ghcr.io/${{ github.repository_owner }}/minimal-runner-image:latest

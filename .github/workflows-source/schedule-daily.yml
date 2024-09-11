@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -15,16 +14,13 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+    image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -43,7 +39,15 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+  docker-login: &docker-login
+    name: Login to Dockerhub
+    shell: bash
+    run: ./ci/scripts/docker-login.sh
+    env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 jobs:
 
@@ -51,13 +55,12 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
           token: ${{ secrets.IDX_PUSH_TO_PR }}
       - name: Cut Release Candidate
         shell: bash
@@ -89,12 +92,11 @@ jobs:
           - "//rs/boundary_node/ic_boundary/..."
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash
         run: |
-          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+          ./ci/scripts/rust-benchmarks.sh
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"
@@ -113,6 +115,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -133,6 +136,36 @@ jobs:
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
+    <<: *dind-large-setup
+    timeout-minutes: 240
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - <<: *docker-login
+      - name: Run FI Tests Nightly
+        id: bazel-test-all
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/rosetta-api/..."
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=7200"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
+
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
@@ -140,6 +173,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -150,6 +184,17 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
@@ -158,11 +203,12 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Set Benchmark Targets
         shell: bash
         run: |
           set -xeuo pipefail
-          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)')" >> $GITHUB_ENV
+          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | tr '\n' ' ')" >> $GITHUB_ENV
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel-test-all/
@@ -171,8 +217,19 @@ jobs:
           BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_EXTRA_ARGS: "--//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
+          BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   dependency-scan-nightly:
     name: Dependency Scan Nightly
@@ -183,12 +240,13 @@ jobs:
     env:
       SHELL_WRAPPER: "/usr/bin/time"
       CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION : "20"
+      DEFAULT_NODE_VERSION: "20"
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      GITHUB_REF: ${{ github.ref }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -207,8 +265,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

@@ -15,21 +15,21 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::{
-    MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES,
-};
-#[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory,
-    page_map::{Shard, StorageLayout, PAGE_SIZE},
+    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
+    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+};
+use ic_replicated_state::{
+    page_map::{StorageLayout, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
-    RwPolicy, StateLayout, TipHandler,
+    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    ExecutionStateBits, FilePermissions, PageMapLayout, ReadOnly, RwPolicy, StateLayout,
+    TipHandler, WasmFile,
 };
 use ic_sys::fs::defrag_file_partially;
-use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
+use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use prometheus::HistogramTimer;
@@ -56,7 +56,7 @@ const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 ///    to checkpoint.
 /// Height(0) is special, it has no corresponding checkpoint to write on top of. That's why the
 /// state of a freshly created TipRequest with empty tip directory is ReadyForPageDeltas(0).
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum TipState {
     Empty,
     ReadyForPageDeltas(Height),
@@ -90,6 +90,7 @@ pub(crate) enum TipRequest {
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
+        snapshot_operations: Vec<SnapshotOperation>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
@@ -97,7 +98,7 @@ pub(crate) enum TipRequest {
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-        pagemaptypes_with_num_pages: Vec<(PageMapType, usize)>,
+        pagemaptypes: Vec<PageMapType>,
         is_initializing_tip: bool,
     },
     /// Run one round of tip defragmentation.
@@ -142,7 +143,7 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum HasDowngrade {
     Yes,
     No,
@@ -201,6 +202,13 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
+                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
+                                        sender
+                                            .send(Err(err))
+                                            .expect("Failed to return TipToCheckpoint error");
+                                        continue;
+                                    }
+
                                     let cp_or_err = state_layout.scratchpad_to_checkpoint(
                                         tip,
                                         height,
@@ -223,7 +231,11 @@ pub(crate) fn spawn_tip_thread(
                             }
                         }
 
-                        TipRequest::FlushPageMapDelta { height, pagemaps } => {
+                        TipRequest::FlushPageMapDelta {
+                            height,
+                            pagemaps,
+                            snapshot_operations,
+                        } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             #[cfg(debug_assertions)]
                             match tip_state {
@@ -239,6 +251,13 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 );
                             });
+
+                            // We flush snapshots to disk first.
+                            flush_snapshot_changes(&log, layout, snapshot_operations)
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to flush snapshot changes: {}", err);
+                                });
+
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
@@ -321,7 +340,7 @@ pub(crate) fn spawn_tip_thread(
                         }
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
-                            pagemaptypes_with_num_pages,
+                            pagemaptypes,
                             is_initializing_tip,
                         } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
@@ -353,7 +372,7 @@ pub(crate) fn spawn_tip_thread(
                             match lsmt_config.lsmt_status {
                                 FlagStatus::Enabled => merge(
                                     &mut tip_handler,
-                                    &pagemaptypes_with_num_pages,
+                                    &pagemaptypes,
                                     height,
                                     &mut thread_pool,
                                     &log,
@@ -364,7 +383,7 @@ pub(crate) fn spawn_tip_thread(
                                     if is_initializing_tip
                                         && merge_to_base(
                                             &mut tip_handler,
-                                            &pagemaptypes_with_num_pages,
+                                            &pagemaptypes,
                                             height,
                                             &mut thread_pool,
                                             &log,
@@ -452,37 +471,175 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
+/// Update the tip directory files with the most recent snapshot operations.
+/// `snapshot_operations` is an ordered list of all created/restores/deleted snapshots since the last flush.
+fn flush_snapshot_changes<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    snapshot_operations: Vec<SnapshotOperation>,
+) -> Result<(), LayoutError> {
+    // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
+    for op in snapshot_operations {
+        match op {
+            SnapshotOperation::Delete(snapshot_id) => {
+                layout.snapshot(&snapshot_id)?.delete_dir()?;
+            }
+            SnapshotOperation::Backup(canister_id, snapshot_id) => {
+                backup(log, layout, canister_id, snapshot_id)?;
+            }
+            SnapshotOperation::Restore(canister_id, snapshot_id) => {
+                restore(log, layout, canister_id, snapshot_id)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Represent a backup operation on disk.
+/// When a backup is triggered, execution creates a `CanisterSnapshot` where all the `PageMaps` as well as the wasm binary
+/// is a copy of the canister's at the time of the backup.
+/// This function will run at an unspecified point afterwards (but before the next checkpoint) and it copies all files the canister had in the tip
+/// to the snapshot directory.
+/// Note that a `PageMap` might have had unflushed deltas at the point of the backup, which we later flush as part of `FlushPageMapDelta` on top of
+/// the files we copy here.
+fn backup<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) -> Result<(), LayoutError> {
+    let canister_layout = layout.canister(&canister_id)?;
+    let snapshot_layout = layout.snapshot(&snapshot_id)?;
+
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.vmemory_0(),
+        &snapshot_layout.vmemory_0(),
+        FilePermissions::ReadOnly,
+    )?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.stable_memory(),
+        &snapshot_layout.stable_memory(),
+        FilePermissions::ReadOnly,
+    )?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.wasm_chunk_store(),
+        &snapshot_layout.wasm_chunk_store(),
+        FilePermissions::ReadOnly,
+    )?;
+
+    WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
+
+    Ok(())
+}
+
+/// Represent a restore operation on disk.
+/// When a restore is triggered, execution creates a `CanisterState` from a `CanisterSnapshot` by copying all its `PageMaps` as well as its wasm binary.
+/// This function will run at an unspecified point afterwards (but before the next checkpoint) and it copies all files the snapshot had in the tip
+/// to the canister directory, deleting what was there before.
+fn restore<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) -> Result<(), LayoutError> {
+    let canister_layout = layout.canister(&canister_id)?;
+    let snapshot_layout = layout.snapshot(&snapshot_id)?;
+
+    canister_layout.vmemory_0().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.vmemory_0(),
+        &canister_layout.vmemory_0(),
+        FilePermissions::ReadOnly,
+    )?;
+    canister_layout.stable_memory().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.stable_memory(),
+        &canister_layout.stable_memory(),
+        FilePermissions::ReadOnly,
+    )?;
+    canister_layout.wasm_chunk_store().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.wasm_chunk_store(),
+        &canister_layout.wasm_chunk_store(),
+        FilePermissions::ReadOnly,
+    )?;
+
+    canister_layout.wasm().try_delete_file()?;
+    WasmFile::hardlink_file(&snapshot_layout.wasm(), &canister_layout.wasm())?;
+
+    Ok(())
+}
+
 struct StorageInfo {
     disk_size: u64,
     mem_size: u64,
 }
 
+impl StorageInfo {
+    fn add(&self, rhs: &StorageInfo) -> StorageInfo {
+        StorageInfo {
+            disk_size: self.disk_size + rhs.disk_size,
+            mem_size: self.mem_size + rhs.mem_size,
+        }
+    }
+}
+
 fn merge_candidates_and_storage_info(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
+    thread_pool: &mut scoped_threadpool::Pool,
     lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
-    let layout = &tip_handler.tip(height)?;
+    let _timer = request_timer(metrics, "merge_candidates_and_storage_info");
+    let layout = &tip_handler
+        .tip(height)
+        .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+    let merge_candidates_with_storage_info: Vec<StorageResult<(Vec<MergeCandidate>, StorageInfo)>> =
+        parallel_map(
+            thread_pool,
+            pagemaptypes.iter(),
+            |page_map_type| -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
+                let mut storage_info = StorageInfo {
+                    disk_size: 0,
+                    mem_size: 0,
+                };
+                let pm_layout = page_map_type
+                    .layout(layout)
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?;
+                storage_info.disk_size +=
+                    (&pm_layout as &dyn StorageLayout).storage_size_bytes()?;
+                let num_pages = (&pm_layout as &dyn StorageLayout).memory_size_pages()?;
+                storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
+                Ok((
+                    MergeCandidate::new(
+                        &pm_layout,
+                        height,
+                        num_pages as u64,
+                        lsmt_config,
+                        &metrics.storage_metrics,
+                    )?,
+                    storage_info,
+                ))
+            },
+        );
     let mut merge_candidates = Vec::new();
     let mut storage_info = StorageInfo {
         disk_size: 0,
         mem_size: 0,
     };
-    for (page_map_type, num_pages) in pagemaptypes_with_num_pages {
-        let pm_layout = page_map_type.layout(layout)?;
-        storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
-        storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
-        for m in MergeCandidate::new(
-            &pm_layout,
-            height,
-            *num_pages as u64,
-            lsmt_config,
-            &metrics.storage_metrics,
-        )? {
-            merge_candidates.push(m)
-        }
+    for merge_candidate_with_storage_info in merge_candidates_with_storage_info.into_iter() {
+        let mut merge_candidate_with_storage_info = merge_candidate_with_storage_info?;
+        merge_candidates.append(&mut merge_candidate_with_storage_info.0);
+        storage_info = storage_info.add(&merge_candidate_with_storage_info.1);
     }
     Ok((merge_candidates, storage_info))
 }
@@ -540,7 +697,7 @@ fn merge_candidates_and_storage_info(
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
@@ -553,8 +710,9 @@ fn merge(
     //   2) number of files is <= MAX_NUMBER_OF_FILES
     let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
         tip_handler,
-        pagemaptypes_with_num_pages,
+        pagemaptypes,
         height,
+        thread_pool,
         lsmt_config,
         metrics,
     )
@@ -623,7 +781,7 @@ fn merge(
         log,
         "Merging {} PageMaps out of {}; mem_size: {}; disk_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
         scheduled_merges.len(),
-        pagemaptypes_with_num_pages.len(),
+        pagemaptypes.len(),
         storage_info.mem_size,
         storage_info.disk_size,
         max_storage,
@@ -663,7 +821,7 @@ fn merge(
 /// Return true if any merge was done.
 fn merge_to_base(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    pagemaptypes: &[PageMapType],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
@@ -672,23 +830,22 @@ fn merge_to_base(
     let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
         fatal!(log, "Failed to get layout for {}: {}", height, err);
     });
-    let rewritten = parallel_map(
-        thread_pool,
-        pagemaptypes_with_num_pages.iter(),
-        |(page_map_type, num_pages)| {
-            let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
-                fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+    let rewritten = parallel_map(thread_pool, pagemaptypes.iter(), |page_map_type| {
+        let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
+            fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+        });
+        let num_pages = (&pm_layout as &dyn StorageLayout)
+            .memory_size_pages()
+            .unwrap_or_else(|err| fatal!(log, "Failed to get num storage host pages: {}", err));
+        let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, num_pages as u64)
+            .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
+        if let Some(m) = merge_candidate.as_ref() {
+            m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
+                fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
             });
-            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, *num_pages as u64)
-                .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
-            if let Some(m) = merge_candidate.as_ref() {
-                m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
-                });
-            }
-            merge_candidate.is_some()
-        },
-    );
+        }
+        merge_candidate.is_some()
+    });
 
     return rewritten.iter().any(|b| *b);
 }
@@ -701,7 +858,7 @@ fn serialize_to_tip(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    //TODO(MR-530): Implement serializing canister snapshots.
+    // Snapshots should have been handled earlier in `flush_page_delta`.
     debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
@@ -740,6 +897,24 @@ fn serialize_to_tip(
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
         serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
     });
+
+    for result in results.into_iter() {
+        result?;
+    }
+
+    let results = parallel_map(
+        thread_pool,
+        state.canister_snapshots.iter(),
+        |canister_snapshot| {
+            serialize_snapshot_to_tip(
+                canister_snapshot.0,
+                canister_snapshot.1,
+                tip,
+                metrics,
+                lsmt_config,
+            )
+        },
+    );
 
     for result in results.into_iter() {
         result?;
@@ -897,13 +1072,81 @@ fn serialize_canister_to_tip(
                 .metadata()
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
-            log_visibility: canister_state.system_state.log_visibility,
+            log_visibility: canister_state.system_state.log_visibility.clone(),
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
+            snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
         }
         .into(),
     )?;
+    Ok(())
+}
+
+/// Serialize a single snapshot to disk at checkpoint time.
+fn serialize_snapshot_to_tip(
+    snapshot_id: &SnapshotId,
+    canister_snapshot: &CanisterSnapshot,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let snapshot_layout = tip.snapshot(snapshot_id)?;
+
+    // The protobuf is written at each checkpoint.
+    snapshot_layout.snapshot().serialize(
+        CanisterSnapshotBits {
+            snapshot_id: *snapshot_id,
+            canister_id: canister_snapshot.canister_id(),
+            taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
+            canister_version: canister_snapshot.canister_version(),
+            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            certified_data: canister_snapshot.certified_data().clone(),
+            wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
+            stable_memory_size: canister_snapshot.stable_memory().size,
+            wasm_memory_size: canister_snapshot.wasm_memory().size,
+            total_size: canister_snapshot.size(),
+            exported_globals: canister_snapshot.exported_globals().clone(),
+        }
+        .into(),
+    )?;
+
+    // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
+    let wasm_binary = canister_snapshot.canister_module();
+    if wasm_binary.file().is_none() {
+        snapshot_layout.wasm().serialize(wasm_binary)?;
+    } else {
+        // During `flush_page_maps` we created copied this file from the canister directory.
+        debug_assert!(snapshot_layout.wasm().raw_path().exists());
+    }
+
+    canister_snapshot
+        .execution_snapshot()
+        .wasm_memory
+        .page_map
+        .persist_delta(
+            &snapshot_layout.vmemory_0(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
+    canister_snapshot
+        .execution_snapshot()
+        .stable_memory
+        .page_map
+        .persist_delta(
+            &snapshot_layout.stable_memory(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
+    canister_snapshot.chunk_store().page_map().persist_delta(
+        &snapshot_layout.wasm_chunk_store(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+
     Ok(())
 }
 
@@ -1004,6 +1247,21 @@ fn handle_compute_manifest_request(
         state_sync_version,
         MAX_SUPPORTED_STATE_SYNC_VERSION
     );
+
+    // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.
+    // Proceeding with manifest computation in such a scenario is risky because replicas might publish the root hash and create a CUP
+    // for an unverified checkpoint, which could then be lost.
+    // Therefore, crashing the replica is the safest option in this case.
+    //
+    // Note: In the future, if we decide to allow manifest computation before removing the unverified marker and introduce a mechanism
+    // to hide the manifest until the checkpoint is verified, this crash behavior should be re-evaluated accordingly.
+    if !checkpoint_layout.is_checkpoint_verified() {
+        fatal!(
+            log,
+            "Trying to compute manifest for unverified checkpoint @{}",
+            checkpoint_layout.height()
+        );
+    }
 
     let start = Instant::now();
     let manifest = crate::manifest::compute_manifest(
@@ -1213,6 +1471,51 @@ mod test {
                     check_files();
                 }
             }
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "compute manifest for unverified checkpoint")]
+    fn should_crash_handle_compute_manifest_request() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout =
+                StateLayout::try_new(log.clone(), root_path, &metrics_registry).unwrap();
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+
+            let height = Height::new(42);
+            let mut tip_handler = state_layout.capture_tip_handler();
+            let tip = tip_handler.tip(height).unwrap();
+
+            // Create a marker in the tip and promote it to a checkpoint.
+            tip.create_unverified_checkpoint_marker().unwrap();
+            let checkpoint_layout = state_layout
+                .scratchpad_to_checkpoint(tip, height, None)
+                .unwrap();
+
+            let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
+                certifications_metadata: Default::default(),
+                states_metadata: Default::default(),
+                snapshots: Default::default(),
+                last_advertised: Height::new(0),
+                fetch_state: None,
+                tip: None,
+            }));
+
+            // Trying to compute manifest for an unverified checkpoint should crash.
+            handle_compute_manifest_request(
+                &mut scoped_threadpool::Pool::new(1),
+                &metrics,
+                &log,
+                &dummy_states,
+                &state_layout,
+                &checkpoint_layout,
+                None,
+                &Default::default(),
+                &Default::default(),
+            );
         });
     }
 }

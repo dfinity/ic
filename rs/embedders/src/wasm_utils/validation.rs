@@ -905,11 +905,9 @@ fn validate_export_section(
                     func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
-                        return Err(WasmValidationError::UserInvalidExportSection(format!(
-                            "Duplicate function '{}' exported multiple times \
-                             with different call types: update, query, or composite_query.",
-                            unmangled_func_name
-                        )));
+                        return Err(WasmValidationError::DuplicateExport {
+                            name: unmangled_func_name.to_string(),
+                        });
                     }
                     seen_funcs.insert(unmangled_func_name);
                     number_exported_functions += 1;
@@ -947,13 +945,19 @@ fn validate_export_section(
                 }
             }
         }
+
         if number_exported_functions > max_number_exported_functions {
-            let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::TooManyExports {
+                defined: number_exported_functions,
+                allowed: max_number_exported_functions,
+            });
         }
+
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
-            let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::ExportedNamesTooLong {
+                total_length: sum_exported_function_name_lengths,
+                allowed: max_sum_exported_function_name_lengths,
+            });
         }
     }
     Ok(())
@@ -1131,9 +1135,9 @@ fn test_extract_section_name() {
 ///      * `icp:public`
 ///      * `icp:private`
 /// * Checks that no more than `max_custom_sections` are defined in the
-/// module.
+///   module.
 /// * Checks that the size of a custom section does not exceed
-/// `max_custom_section_size`.
+///   `max_custom_section_size`.
 ///
 /// Returns the validated custom sections.
 fn validate_custom_section(
@@ -1505,7 +1509,6 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_data_section(&module)?;
-    let num_tables = module.tables.len();
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
@@ -1513,7 +1516,6 @@ pub(super) fn validate_wasm_binary<'a>(
     Ok((
         WasmValidationDetails {
             imports_details,
-            num_tables,
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,

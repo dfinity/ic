@@ -34,10 +34,11 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-icrc1-ledger-sm-tests = { path = "../ledger/sm-tests" }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 num-traits = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_json = { workspace = true }
 
 [[bin]]

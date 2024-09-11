@@ -12,28 +12,27 @@ canister-test = { path = "../../../rust_canisters/canister_test" }
 chrono = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
-ic_consensus_system_test_utils = { path = "../utils" }
-ic_consensus_threshold_sig_system_test_utils = { path = "./utils" }
-ic-config = { path = "../../../config" }
-ic-constants = { path = "../../../constants" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-config = { path = "../../../config" }
+ic-limits = { path = "../../../limits" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-nns-governance = { path = "../../../nns/governance" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-sys = { path = "../../../sys" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./utils" }
 itertools = { workspace = true }
-registry-canister = { path = "../../../registry/canister" }
-reqwest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+registry-canister = { path = "../../../registry/canister" }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tests = { path = "../.." }
 tokio = { workspace = true }
 url = { workspace = true }
 
@@ -88,3 +87,6 @@ path = "tecdsa_two_signing_subnets_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
 path = "tecdsa_complaint_test.rs"
+
+[features]
+upload_perf_systest_results = []

@@ -25,6 +25,7 @@ component_files = {
     Label("early-boot/initramfs-tools/setupos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
 
     # misc
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
@@ -36,16 +37,6 @@ component_files = {
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/hosts"): "/etc/hosts",
-
-    # prep
-    Label("prep/setupos/fscontext-fixes/fscontext-fixes.fc"): "/prep/fscontext-fixes/fscontext-fixes.fc",
-    Label("prep/setupos/fscontext-fixes/fscontext-fixes.if"): "/prep/fscontext-fixes/fscontext-fixes.if",
-    Label("prep/setupos/fscontext-fixes/fscontext-fixes.te"): "/prep/fscontext-fixes/fscontext-fixes.te",
-    Label("prep/setupos/misc-fixes/misc-fixes.if"): "/prep/misc-fixes/misc-fixes.if",
-    Label("prep/setupos/misc-fixes/misc-fixes.te"): "/prep/misc-fixes/misc-fixes.te",
-    Label("prep/setupos/prep.sh"): "/prep/prep.sh",
-    Label("prep/setupos/systemd-fixes/systemd-fixes.if"): "/prep/systemd-fixes/systemd-fixes.if",
-    Label("prep/setupos/systemd-fixes/systemd-fixes.te"): "/prep/systemd-fixes/systemd-fixes.te",
 
     # upgrade
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",

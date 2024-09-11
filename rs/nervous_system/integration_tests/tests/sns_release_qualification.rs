@@ -159,7 +159,7 @@ pub fn test_sns_deployment(
         ..
     } = deployed_sns
     else {
-        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
+        panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
     };
 
     sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();

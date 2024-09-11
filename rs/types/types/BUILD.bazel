@@ -6,16 +6,17 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/replica_types",
-    "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
+    "//rs/utils/validate_eq",
     "@crate_index//:base64",
     "@crate_index//:bincode",
     "@crate_index//:candid",
@@ -59,6 +60,7 @@ rust_library(
     crate_name = "ic_types",
     proc_macro_deps = [
         # Keep sorted.
+        "//rs/utils/validate_eq_derive",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({

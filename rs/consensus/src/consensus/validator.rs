@@ -1,4 +1,3 @@
-#![allow(clippy::try_err)]
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
 
@@ -12,9 +11,9 @@ use crate::{
     dkg, idkg,
 };
 use ic_consensus_utils::{
-    active_high_threshold_transcript, active_low_threshold_transcript,
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_oldest_idkg_state_registry_version, is_time_to_make_block,
+    get_oldest_idkg_state_registry_version, is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -38,15 +37,15 @@ use ic_types::{
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        EquivocationProof, FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion,
-        Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
+        EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
+        HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
-    signature::{MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, RegistryVersion,
+    signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, HashSet},
@@ -185,7 +184,7 @@ impl SignatureVerify for BlockProposal {
             ));
         }
         let registry_version = get_registry_version(pool, height)?;
-        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg);
+        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg.subnet_id);
         crypto.verify(&signed_metadata, registry_version)?;
         Ok(())
     }
@@ -199,9 +198,9 @@ impl SignatureVerify for RandomTape {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == transcript.dkg_id {
+        if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
@@ -219,7 +218,7 @@ impl SignatureVerify for RandomTapeShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_low_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -227,7 +226,7 @@ impl SignatureVerify for RandomTapeShare {
             height,
             RandomTape::committee(),
         )?;
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }
@@ -240,9 +239,9 @@ impl SignatureVerify for RandomBeacon {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == transcript.dkg_id {
+        if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
@@ -260,7 +259,7 @@ impl SignatureVerify for RandomBeaconShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_low_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -269,7 +268,7 @@ impl SignatureVerify for RandomBeaconShare {
             RandomBeacon::committee(),
         )?;
 
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }
@@ -283,7 +282,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let transcript = active_high_threshold_transcript(pool.as_cache(), height)
+        let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
@@ -291,7 +290,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
             height,
             CatchUpPackage::committee(),
         )?;
-        crypto.verify(self, transcript.dkg_id)?;
+        crypto.verify(self, dkg_id)?;
         Ok(())
     }
 }
@@ -594,22 +593,80 @@ fn get_notarized_parent(
         .map_err(|_| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
-/// Collect the min of validated block proposal ranks in the range.
-fn get_min_validated_ranks(
+/// Returns rank map of disqualified ranks in the given range. A rank is
+/// considered disqualified at height h, if there exists an equivocation
+/// proof for it at that height.
+fn get_disqualified_ranks(
     pool: &PoolReader<'_>,
-    range: &HeightRange,
-) -> BTreeMap<Height, Option<Rank>> {
-    (range.min.get()..=range.max.get())
-        .map(|h| {
-            let height = Height::from(h);
-            (
-                height,
-                find_lowest_ranked_proposals(pool, height)
-                    .first()
-                    .map(|block| block.rank()),
-            )
-        })
-        .collect()
+    membership: &Membership,
+    cfg: ReplicaConfig,
+    range: HeightRange,
+) -> RankMap {
+    let mut rank_map = RankMap::new(cfg.subnet_id);
+    for proof in pool
+        .pool()
+        .validated()
+        .equivocation_proof()
+        .get_by_height_range(range)
+    {
+        let Ok(previous_beacon) = get_previous_beacon(pool, proof.height) else {
+            continue;
+        };
+        let Ok(Some(rank)) =
+            membership.get_block_maker_rank(proof.height, &previous_beacon, proof.signer)
+        else {
+            continue;
+        };
+        let (first_metadata, _) = proof.into_signed_metadata();
+        rank_map.add_from_parts(rank, first_metadata);
+    }
+    rank_map
+}
+
+/// A data structure for storing ranks and proposal metadata.
+struct RankMap {
+    map: BTreeMap<Height, BTreeMap<Rank, BasicSigned<BlockMetadata>>>,
+    subnet_id: SubnetId,
+}
+
+impl RankMap {
+    /// Pass our node's subnet id.
+    fn new(subnet_id: SubnetId) -> Self {
+        Self {
+            map: BTreeMap::default(),
+            subnet_id,
+        }
+    }
+
+    /// Add a new rank & metadata to the map, by passing the corresponding
+    /// block proposal.
+    fn add(&mut self, proposal: &BlockProposal) {
+        let signed_metadata = BlockMetadata::signed_from_proposal(proposal, self.subnet_id);
+        self.add_from_parts(proposal.rank(), signed_metadata);
+    }
+
+    fn add_from_parts(&mut self, rank: Rank, signed_metadata: BasicSigned<BlockMetadata>) {
+        self.map
+            .entry(signed_metadata.height())
+            .or_default()
+            .insert(rank, signed_metadata);
+    }
+
+    fn remove(&mut self, height: Height, rank: Rank) {
+        self.map.get_mut(&height).and_then(|map| map.remove(&rank));
+    }
+
+    fn get_block_metadata(
+        &self,
+        height: Height,
+        rank: Rank,
+    ) -> Option<&BasicSigned<BlockMetadata>> {
+        self.map.get(&height)?.get(&rank)
+    }
+
+    fn get_lowest_rank(&self, height: Height) -> Option<Rank> {
+        self.map.get(&height)?.keys().next().copied()
+    }
 }
 
 /// Validator holds references to components required for artifact validation.
@@ -881,9 +938,28 @@ impl Validator {
         let finalized_height = pool_reader.get_finalized_height();
         let max_height = notarization_height.increment();
         let range = HeightRange::new(finalized_height.increment(), max_height);
-        // Collect the min of validated block proposal ranks in the range.
-        let mut known_ranks: BTreeMap<Height, Option<Rank>> =
-            get_min_validated_ranks(pool_reader, &range);
+
+        let mut disqualified_ranks = get_disqualified_ranks(
+            pool_reader,
+            &self.membership,
+            self.replica_config.clone(),
+            range,
+        );
+
+        // Contains ranks of validated block proposals that don't have an
+        // equivocation proof. Disqualified and valid ranks are disjoint.
+        let mut valid_ranks = RankMap::new(self.replica_config.subnet_id);
+        pool_reader
+            .pool()
+            .validated()
+            .block_proposal()
+            .get_by_height_range(range)
+            .filter(|proposal| {
+                disqualified_ranks
+                    .get_block_metadata(proposal.height(), proposal.rank())
+                    .is_none()
+            })
+            .for_each(|proposal| valid_ranks.add(&proposal));
 
         // It is necessary to traverse all the proposals and not only the ones with min
         // rank per height; because proposals for which there is an unvalidated
@@ -937,11 +1013,19 @@ impl Validator {
                     ));
                 } else if verification.is_ok() {
                     if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
                         // A successful verification is enough to validate this block,
                         // because from the notarization we know that the block validity
                         // was already checked.
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
+
+                        // Only add proposal's rank to the set of valid ranks if
+                        // it's not already disqualified.
+                        if disqualified_ranks
+                            .get_block_metadata(proposal.height(), proposal.rank())
+                            .is_none()
+                        {
+                            valid_ranks.add(&proposal);
+                        }
+                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
                     }
                     // If the parent is notarized, this block and its notarization are
@@ -954,14 +1038,14 @@ impl Validator {
                 // proposals proceed to be checked normally.
             }
 
-            // Skip validation and drop the block if it has a higher rank than a known valid
-            // block. Note that this must happen after we first allow "block with
-            // notarization" validation (see above). Otherwise we may get stuck when a block
-            // maker equivocates.
-            if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
-                if proposal.rank() > *min_rank {
-                    // Skip them instead of removal because we don't want to end up
-                    // requesting these artifacts again.
+            // Skip validation if proposal has a higher rank than a known
+            // valid block. Note that we don't consider *any* disqualified
+            // rank in this check, including equivocating blocks that were
+            // validated through a notarization. We skip the block instead
+            // of removing it because a higher-rank proposal might still
+            // be notarized in the future.
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
+                if proposal.rank() > min_rank {
                     let id = proposal.get_id();
                     if self.unvalidated_for_too_long(pool_reader, &id) {
                         warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
@@ -990,6 +1074,45 @@ impl Validator {
                 continue;
             }
 
+            // Skip block proposals with a disqualified rank. We do this after
+            // checking for a fast-path validation, to avoid getting stuck.
+            if disqualified_ranks
+                .get_block_metadata(proposal.height(), proposal.rank())
+                .is_some()
+            {
+                continue;
+            }
+
+            // Disqualify rank if equivocation was found. If there already
+            // exists a validated block of the same rank as the current
+            // proposal, we must generate an equivocation proof.
+            if let Some(existing_metadata) = valid_ranks
+                .get_block_metadata(proposal.height(), proposal.rank())
+                .cloned()
+            {
+                // Ensure the proposal has a different hash from the validated
+                // block of same rank. Then we can construct the proof.
+                if proposal.content.get_hash().get_ref() != existing_metadata.content.hash() {
+                    change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
+                        msg: ConsensusMessage::EquivocationProof(EquivocationProof {
+                            signer: proposal.signature.signer,
+                            version: proposal.content.version().clone(),
+                            height: proposal.height(),
+                            subnet_id: self.replica_config.subnet_id,
+                            hash1: proposal.content.get_hash().clone(),
+                            signature1: proposal.signature.signature.clone(),
+                            hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
+                            signature2: existing_metadata.signature.signature,
+                        }),
+                        timestamp: self.time_source.get_relative_time(),
+                    }));
+                    valid_ranks.remove(proposal.height(), proposal.rank());
+                    disqualified_ranks.add(&proposal);
+                    // Blocks from disqualified ranks can be ignored at this point
+                    continue;
+                }
+            }
+
             // The artifact was already verified at this point, so we can do
             // all the remaining block validity checks.
             let check = self.check_block_validity(pool_reader, &proposal);
@@ -1001,7 +1124,7 @@ impl Validator {
                 if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
                     &action
                 {
-                    known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                    valid_ranks.add(proposal);
                 }
                 change_set.push(action);
             }
@@ -1583,7 +1706,7 @@ impl Validator {
                 .pool()
                 .validated()
                 .equivocation_proof()
-                .get_by_height_range(range_to_validate.clone())
+                .get_by_height_range(range_to_validate)
                 .map(|proof| (proof.signer, proof.height)),
         );
 
@@ -3521,6 +3644,228 @@ pub mod test {
                     ConsensusMessage::BlockProposal(_),
                     _
                 )]
+            );
+        });
+    }
+
+    #[test]
+    fn test_create_equivocation_proof() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                time_source,
+                payload_builder,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+
+            // Ensure that we don't create an equivocation proof if we have
+            // two identical blocks (one validated, one unvalidated)
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.insert_unvalidated(block.clone());
+            time_source
+                .set_time(block.content.as_ref().context.time)
+                .ok();
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(_)
+                )]
+            );
+            pool.apply_changes(changeset);
+
+            let mut second_block = block.clone();
+            second_block.content.as_mut().context.time += Duration::from_nanos(1);
+            second_block.update_content();
+            assert_ne!(block.content.get_hash(), second_block.content.get_hash());
+            pool.insert_unvalidated(second_block.clone());
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::AddToValidated(ValidatedArtifact {
+                    msg: ConsensusMessage::EquivocationProof(ref e),
+                    timestamp: _,
+                })] if &e.hash1 == second_block.content.get_hash() && &e.hash2 == block.content.get_hash()
+            );
+            pool.apply_changes(changeset);
+
+            // Make sure we create exactly one equivocation proof for a
+            // combination of height and rank.
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(&changeset, &[]);
+        });
+    }
+
+    /// A proposal with a rank that doesn't match the signer must fail
+    /// verification, and not be able to create an equivocation proof.
+    #[test]
+    fn test_cannot_disqualify_with_incorrect_rank() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            let block = pool.make_next_block();
+            let mut block_with_malicious_signer = block.clone();
+            block_with_malicious_signer.content.as_mut().context.time += Duration::from_nanos(1);
+            block_with_malicious_signer.update_content();
+            block_with_malicious_signer.signature.signer =
+                pool.get_block_maker_by_rank(block.height(), Rank(1));
+
+            pool.insert_validated(block.clone());
+            pool.insert_unvalidated(block_with_malicious_signer.clone());
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::BlockProposal(_),
+                    _
+                )]
+            );
+        });
+    }
+
+    /// A node might see two different, legitimate proposals of another node,
+    /// that were created from a different replica version during an upgrade.
+    /// In this case, we should not create an equivocation proof.
+    #[test]
+    fn test_cannot_disqualify_with_proposal_from_different_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let dkg_interval = 9;
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                replica_config,
+                ..
+            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(9)
+                            .build(),
+                    ),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(9)
+                            .with_replica_version("new_version")
+                            .build(),
+                    ),
+                ],
+            ));
+
+            // Move to the end of the DKG interval where we switch versions
+            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            assert!(pool.get_cache().finalized_block().payload.is_summary());
+
+            // An empty block created before the update
+            let block = pool.make_next_block();
+            assert!(block.signature.signer != replica_config.node_id);
+            pool.insert_validated(block.clone());
+
+            // A post-upgrade block
+            let mut block_with_new_version = block;
+            block_with_new_version.content.as_mut().version =
+                ReplicaVersion::try_from("new_version").unwrap();
+            block_with_new_version.update_content();
+
+            // Block proposals with replica version mismatches are simply removed
+            // No equivocation proof is generated.
+            pool.insert_unvalidated(block_with_new_version);
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::RemoveFromUnvalidated(
+                    ConsensusMessage::BlockProposal(_)
+                )]
+            );
+        });
+    }
+
+    #[test]
+    fn test_ignore_disqualified_ranks() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..7).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                time_source,
+                payload_builder,
+                state_manager,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+
+            let block = pool.make_next_block_with_rank(Rank(1));
+            let mut second_block = block.clone();
+            second_block.content.as_mut().context.time += Duration::from_nanos(1);
+            second_block.update_content();
+            let mut third_block = block.clone();
+            third_block.content.as_mut().context.time += Duration::from_nanos(2);
+            third_block.update_content();
+            time_source
+                .set_time(third_block.content.as_ref().context.time)
+                .ok();
+
+            pool.insert_validated(block.clone());
+            pool.insert_unvalidated(second_block.clone());
+            pool.insert_unvalidated(third_block.clone());
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::AddToValidated(ValidatedArtifact {
+                    msg: ConsensusMessage::EquivocationProof(_),
+                    timestamp: _,
+                })]
+            );
+            pool.apply_changes(changeset);
+
+            // Now that rank 1 is disqualified, we should be able to validate
+            // a rank 2 block.
+            let block = pool.make_next_block_with_rank(Rank(2));
+            pool.insert_unvalidated(block.clone());
+            time_source
+                .set_time(block.content.as_ref().context.time)
+                .ok();
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(ref proposal)
+                )] if proposal.rank() == block.rank()
             );
         });
     }

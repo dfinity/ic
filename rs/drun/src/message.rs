@@ -19,7 +19,7 @@ use std::{
     string::FromUtf8Error,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum Message {
     Ingress(SignedIngress),
     Query(Query),

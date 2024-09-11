@@ -11,6 +11,11 @@ jq_dep(
     target = "mainnet_nns_revision.txt",
 )
 
+filegroup(
+    name = "mainnet_revisions",
+    srcs = ["mainnet_revisions.json"],
+)
+
 py_binary(
     name = "inventory",
     srcs = ["ansible/inventory/inventory.py"],

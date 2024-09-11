@@ -3,9 +3,10 @@
 use crate::commands::utils;
 use std::path::PathBuf;
 
-/// Types of persisted state: checkpoints, diverged checkpoints and backups.
+/// Types of persisted state: verified checkpoints, unverified checkpoints, diverged checkpoints and backups.
 enum CheckpointStatus {
-    Ok,
+    Verified,
+    Unverified,
     Diverged,
     Backup,
 }
@@ -14,11 +15,20 @@ enum CheckpointStatus {
 /// root location indicated in the given configuration file.
 pub fn do_list(config: PathBuf) -> Result<(), String> {
     let state_layout = utils::locate_state_root(config)?;
-    let heights = state_layout
+    let verified_heights = state_layout
         .checkpoint_heights()
         .map_err(|e| format!("failed to enumerate checkpoints: {}", e))?
         .into_iter()
-        .map(|h| (h, CheckpointStatus::Ok));
+        .map(|h| (h, CheckpointStatus::Verified));
+
+    let unverified_heights = state_layout
+        .unfiltered_checkpoint_heights()
+        .map_err(|e| format!("failed to enumerate unverified checkpoints: {}", e))?
+        .into_iter()
+        .filter_map(|h| match state_layout.checkpoint_verification_status(h) {
+            Ok(false) => Some((h, CheckpointStatus::Unverified)),
+            _ => None,
+        });
 
     let diverged_heights = state_layout
         .diverged_checkpoint_heights()
@@ -32,7 +42,11 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
         .into_iter()
         .map(|h| (h, CheckpointStatus::Backup));
 
-    let mut heights: Vec<_> = heights.chain(diverged_heights).chain(backups).collect();
+    let mut heights: Vec<_> = verified_heights
+        .chain(unverified_heights)
+        .chain(diverged_heights)
+        .chain(backups)
+        .collect();
     heights.sort_by_key(|(h, _)| *h);
 
     if heights.is_empty() {
@@ -44,11 +58,17 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
 
     for (h, status) in heights {
         let (status_str, path) = match status {
-            CheckpointStatus::Ok => {
+            CheckpointStatus::Verified => {
                 let cp_layout = state_layout
-                    .checkpoint(h)
-                    .map_err(|e| format!("failed to access checkpoint @{}: {}", h, e))?;
-                ("ok", cp_layout.raw_path().to_path_buf())
+                    .checkpoint_verified(h)
+                    .map_err(|e| format!("failed to access verified checkpoint @{}: {}", h, e))?;
+                ("verified", cp_layout.raw_path().to_path_buf())
+            }
+            CheckpointStatus::Unverified => {
+                let cp_layout = state_layout
+                    .checkpoint_in_verification(h)
+                    .map_err(|e| format!("failed to access unverified checkpoint @{}: {}", h, e))?;
+                ("unverified", cp_layout.raw_path().to_path_buf())
             }
             CheckpointStatus::Diverged => ("diverged", state_layout.diverged_checkpoint_path(h)),
             CheckpointStatus::Backup => ("backup", state_layout.backup_checkpoint_path(h)),

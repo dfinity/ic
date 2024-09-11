@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, LogVisibility, Method, Payload, UpdateSettingsArgs, IC_00,
+    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -712,14 +713,14 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                LogVisibility::default(),
+                Default::default(),
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
-                Some(0),
+                Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
             )
         );
 
@@ -770,14 +771,14 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
-                    LogVisibility::default(),
+                    Default::default(),
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
-                    Some(0)
+                    Some(DEFAULT_WASM_MEMORY_LIMIT.get())
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,

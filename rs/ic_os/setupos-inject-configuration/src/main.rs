@@ -58,9 +58,6 @@ struct ConfigIni {
 
     #[arg(long)]
     verbose: Option<String>,
-
-    #[arg(long)]
-    mgmt_mac: Option<String>,
 }
 
 #[derive(Args)]
@@ -74,8 +71,12 @@ struct DeploymentConfig {
     #[arg(long)]
     memory_gb: Option<u32>,
 
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     #[arg(long)]
-    cpu_mode: Option<String>,
+    cpu: Option<String>,
+
+    #[arg(long)]
+    mgmt_mac: Option<String>,
 }
 
 #[tokio::main]
@@ -183,7 +184,6 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let ConfigIni {
         ipv6_prefix,
         ipv6_gateway,
-        mgmt_mac,
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
@@ -205,10 +205,6 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
         writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
         writeln!(&mut f, "domain={}", domain)?;
-    }
-
-    if let Some(mgmt_mac) = mgmt_mac {
-        writeln!(&mut f, "mgmt_mac={}", mgmt_mac)?;
     }
 
     if let Some(verbose) = verbose {
@@ -236,6 +232,10 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
         deployment_json
     };
 
+    if let Some(mgmt_mac) = &cfg.mgmt_mac {
+        deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
+    }
+
     if let Some(nns_url) = &cfg.nns_url {
         deployment_json.nns.url = vec![nns_url.clone()];
     }
@@ -244,8 +244,8 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
         deployment_json.resources.memory = memory;
     }
 
-    if let Some(cpu_mode) = &cfg.cpu_mode {
-        deployment_json.resources.cpu = Some(cpu_mode.to_owned());
+    if let Some(cpu) = &cfg.cpu {
+        deployment_json.resources.cpu = Some(cpu.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;
