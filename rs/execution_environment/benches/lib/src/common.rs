@@ -2,11 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-<<<<<<< HEAD
-use ic_config::embedders::Config as EmbeddersConfig;
-=======
 use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
->>>>>>> master
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -276,7 +272,13 @@ pub fn run_benchmarks<G, R>(
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let mut embedders_config = EmbeddersConfig::default();
+    let mut embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            best_effort_responses: FlagStatus::Enabled,
+            ..FeatureFlags::default()
+        },
+        ..EmbeddersConfig::default()
+    };
     if wasm64_enabled == Wasm64::Enabled {
         embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         // Set up larger heap, of 8GB.
