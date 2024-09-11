@@ -12,8 +12,7 @@ use ic_rosetta_api::models::{
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use ic_sender_canister_lib::{SendArg, SendResult};
 use icp_ledger::{
-    AccountIdentifier, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo, Operation,
-    TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Memo, Operation, TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
 };
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
