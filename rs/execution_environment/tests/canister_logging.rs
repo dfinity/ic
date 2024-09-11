@@ -187,10 +187,10 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
             env.metrics_registry(),
             "execution_subnet_query_message_duration_seconds",
         )
-        .get(&labels(&[(
-            "method_name",
-            "query_ic00_fetch_canister_logs",
-        )]))
+        .get(&labels(&[
+            ("method_name", "query_ic00_fetch_canister_logs"),
+            ("status", "success"),
+        ]))
         .map_or(0, |stats| stats.count)
     }
     let (env, canister_id, controller) = setup_with_controller(wat_canister().build_wasm());
