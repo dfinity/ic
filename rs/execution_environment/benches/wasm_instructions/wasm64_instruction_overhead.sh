@@ -13,12 +13,16 @@ WASM64_FILE="WASM64_BENCHMARKS.md"
 # The opcodes that are of most interest for computing the overhead.
 # One can add other operations, like `memop`, `ibinop`, `fbinop`, etc.
 # Check the `WASM_BENCHMARKS.md` file for the complete list of operations.
-OP_TYPES="memop"
+OP_TYPES="memop vmem"
+
+forty_dashes="----------------------------------------"
+eighteen_dashes="----------------"
+
 
 # Print the header using printf to have a better formatting for the length of the columns.
-printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "------------------" "------------------" "------------------"
-printf "| %-20s | %-18s | %-18s | %-18s |\n" "Instruction" "Wasm32 Time (ns)" "Wasm64 Time (ns)" "Overhead (%)"
-printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "------------------" "------------------" "------------------"
+printf "| %-40s | %-18s | %-18s | %-18s |\n" $forty_dashes $eighteen_dashes $eighteen_dashes $eighteen_dashes
+printf "| %-40s | %-18s | %-18s | %-18s |\n" "Instruction" "Wasm32 Time (ns)" "Wasm64 Time (ns)" "Overhead (%)"
+printf "| %-40s | %-18s | %-18s | %-18s |\n" $forty_dashes $eighteen_dashes $eighteen_dashes $eighteen_dashes
 
 for op in $OP_TYPES; do
     cat "${WASM64_FILE}" | grep $op | while read -r line; do
@@ -32,8 +36,8 @@ for op in $OP_TYPES; do
         # Compute the overhead
         overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc)
         # Print the results
-        printf "| %-20s | %-18s | %-18s | %-18s |\n" "$opcode" "$wasm32_time" "$wasm64_time" "$overhead"
+        printf "| %-40s | %-18s | %-18s | %-18s |\n" "$opcode" "$wasm32_time" "$wasm64_time" "$overhead"
     done
 done
 
-printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "------------------" "------------------" "------------------"
+printf "| %-40s | %-18s | %-18s | %-18s |\n" $forty_dashes $eighteen_dashes $eighteen_dashes $eighteen_dashes

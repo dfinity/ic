@@ -25,7 +25,7 @@ chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
-deterministic_ips = { path = "../ic_os/deterministic_ips" }
+deterministic_ips = { path = "../ic_os/dev_test_tools/deterministic_ips" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }

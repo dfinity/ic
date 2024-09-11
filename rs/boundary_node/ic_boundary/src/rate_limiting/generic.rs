@@ -252,7 +252,7 @@ pub async fn middleware(
     Extension(subnet): Extension<Arc<RouteSubnet>>,
     canister_id: Option<Extension<CanisterId>>,
     request: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
     if !state.acquire_token(
         subnet.id,

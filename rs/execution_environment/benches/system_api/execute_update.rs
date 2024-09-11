@@ -163,6 +163,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
             6558000006,
         ),
         common::Benchmark(
+            "call_new+ic0_call_with_best_effort_response()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_with_best_effort_response",
+                Param1(1_i32),
+                Result::No,
+            ),
+            2058000006,
+        ),
+        common::Benchmark(
             "ic0_stable_size()".into(),
             Module::Test.from_ic0("stable_size", NoParams, Result::I32),
             17000006,
@@ -318,15 +327,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "ic0_cycles_burn128()".into(),
             Module::Test.from_ic0("cycles_burn128", Params3(1_i64, 2_i64, 3_i32), Result::No),
             19000006,
-        ),
-        common::Benchmark(
-            "ic0_call_with_best_effort_response()".into(),
-            Module::CallNewLoop.from_ic0(
-                "call_with_best_effort_response",
-                Param1(1_i32),
-                Result::No,
-            ),
-            2058000006,
         ),
         common::Benchmark(
             "ic0_msg_deadline()".into(),

@@ -2,7 +2,11 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
+<<<<<<< HEAD
 use ic_config::embedders::Config as EmbeddersConfig;
+=======
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+>>>>>>> master
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};

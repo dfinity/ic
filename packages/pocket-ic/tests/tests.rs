@@ -1,5 +1,6 @@
 use candid::{decode_one, encode_one, CandidType, Principal};
 use ic_base_types::PrincipalId;
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
@@ -1315,6 +1316,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
+        additional_responses: None,
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1323,8 +1325,9 @@ fn test_canister_http() {
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: HttpResponse = decode_one(&data).unwrap();
-            assert_eq!(http_response.body, body);
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            assert_eq!(http_response.unwrap().body, body);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
@@ -1332,6 +1335,19 @@ fn test_canister_http() {
     // There should be no more pending canister http outcalls.
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+fn test_canister_http_with_transform() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // with a transform function (clearing http response headers and setting
@@ -1353,6 +1369,7 @@ fn test_canister_http() {
     assert_eq!(canister_http_requests.len(), 1);
     let canister_http_request = &canister_http_requests[0];
 
+    let body = b"hello".to_vec();
     let mock_canister_http_response = MockCanisterHttpResponse {
         subnet_id: canister_http_request.subnet_id,
         request_id: canister_http_request.request_id,
@@ -1361,6 +1378,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
+        additional_responses: None,
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1382,4 +1400,121 @@ fn test_canister_http() {
     // There should be no more pending canister http outcalls.
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+fn test_canister_http_with_diverging_responses() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock diverging canister http outcall responses.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let response = |i: u64| {
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: format!("hello{}", i / 2).as_bytes().to_vec(),
+        })
+    };
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: response(0),
+        additional_responses: Some((1..13).map(response).collect()),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            let (reject_code, err) = http_response.unwrap_err();
+            assert_eq!(reject_code, RejectionCode::SysTransient);
+            let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
+            assert_eq!(err, expected);
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+#[should_panic(expected = "InvalidMockCanisterHttpResponses((2, 13))")]
+fn test_canister_http_with_one_additional_response() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock diverging canister http outcall responses.
+    pic.submit_call(
+        can_id,
+        Principal::anonymous(),
+        "canister_http",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let body = b"hello".to_vec();
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        }),
+        additional_responses: Some(vec![CanisterHttpResponse::CanisterHttpReply(
+            CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body: body.clone(),
+            },
+        )]),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
 }

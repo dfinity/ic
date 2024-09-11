@@ -28,7 +28,7 @@ DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
-    "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/dev_test_tools/deterministic_ips",
     "//rs/ic_os/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",

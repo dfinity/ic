@@ -88,6 +88,21 @@ rust_test_suite(
 )
 
 rust_test_suite(
+    name = "restart",
+    size = "medium",
+    srcs = ["tests/restart.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
     name = "slow",
     size = "medium",
     srcs = ["tests/slow.rs"],
