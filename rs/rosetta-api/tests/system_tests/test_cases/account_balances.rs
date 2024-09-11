@@ -177,14 +177,14 @@ fn test_account_balances() {
                                     .await
                                     .unwrap()
                                     .balances[0]
-                                    .clone()
                                     .value
+                                    .clone()
                             );
                         }
                     }
 
                     // Check that the current balances of the ledger and rosetta storage match up
-                    for account in involved_accounts.clone().into_iter() {
+                    for account in involved_accounts.into_iter() {
                         let balance_ledger = agent
                             .balance_of(account, CallMode::Query)
                             .await
@@ -206,8 +206,8 @@ fn test_account_balances() {
                             .await
                             .unwrap()
                             .balances[0]
-                            .clone()
-                            .value;
+                            .value
+                            .clone();
                         assert_eq!(balance_ledger, balance_rosetta);
                     }
                 });
