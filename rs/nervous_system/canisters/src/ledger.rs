@@ -104,7 +104,7 @@ impl IcpLedger for IcpLedgerCanister {
         let result: Result<Tokens, (Option<i32>, String)> =
             call(self.id, "icrc1_total_supply", candid_one, ())
                 .await
-                .map(|e8s| Tokens::from_e8s(e8s));
+                .map(Tokens::from_e8s);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
