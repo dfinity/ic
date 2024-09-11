@@ -53,6 +53,8 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
         .collect())
 }
 
+// Prefix should have a max length of 19 ("1234:6789:1234:6789")
+// It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
 fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
 }
@@ -63,8 +65,6 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
     let ipv6_prefix = config_map
         .get("ipv6_prefix")
         .map(|prefix| {
-            // Prefix should have a max length of 19 ("1234:6789:1234:6789")
-            // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
             if !is_valid_ipv6_prefix(prefix) {
                 bail!("Invalid ipv6 prefix: {}", prefix);
             }
