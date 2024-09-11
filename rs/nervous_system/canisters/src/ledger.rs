@@ -128,8 +128,7 @@ impl IcpLedger for IcpLedgerCanister {
                 account: account.to_address(),
             },
         )
-        .await
-        .map(|e8s| Tokens::from_e8s(e8s));
+        .await;
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
