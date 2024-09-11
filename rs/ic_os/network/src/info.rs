@@ -2,7 +2,6 @@ use std::net::Ipv6Addr;
 
 use anyhow::{bail, Context, Result};
 
-use crate::mac_address::FormattedMacAddress;
 use config::ConfigMap;
 
 #[derive(Debug)]
@@ -14,7 +13,6 @@ pub struct NetworkInfo {
     pub ipv6_address: Option<Ipv6Addr>,
     pub ipv6_subnet: u8,
     pub ipv6_gateway: Ipv6Addr,
-    pub bmc_mac: Option<FormattedMacAddress>,
 }
 
 fn is_valid_prefix(ipv6_prefix: &str) -> bool {
@@ -63,17 +61,11 @@ impl NetworkInfo {
             .parse::<Ipv6Addr>()
             .context(format!("Invalid ipv6 address: {}", ipv6_gateway))?;
 
-        let bmc_mac = match config_map.get("mgmt_mac") {
-            Some(bmc_mac) => Some(FormattedMacAddress::try_from(bmc_mac.as_str())?),
-            None => None,
-        };
-
         Ok(NetworkInfo {
             ipv6_prefix,
             ipv6_subnet,
             ipv6_gateway,
             ipv6_address,
-            bmc_mac,
         })
     }
 }

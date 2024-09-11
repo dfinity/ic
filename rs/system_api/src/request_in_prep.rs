@@ -34,7 +34,7 @@ const PAYLOAD_SIZE_LINK: &str = "canister-made-a-call-with-too-large-payload";
 /// does not make much sense, actually -- it never needs to be transferred
 /// across processes. It should probably be moved out of ApiType (such that
 /// "mutable" bits are not part of it).
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RequestInPrep {
     sender: CanisterId,
     callee: PrincipalId,
@@ -189,10 +189,6 @@ impl RequestInPrep {
 
     pub(crate) fn add_cycles(&mut self, cycles: Cycles) {
         self.cycles += cycles;
-    }
-
-    pub(crate) fn current_payload_size(&self) -> NumBytes {
-        ((self.method_payload.len() + self.method_name.len()) as u64).into()
     }
 }
 

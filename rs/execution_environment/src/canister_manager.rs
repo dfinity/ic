@@ -56,14 +56,15 @@ use ic_types::{
     InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, SubnetId, Time,
 };
-use ic_wasm_types::{AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
+use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
 use num_traits::cast::ToPrimitive;
+use num_traits::SaturatingAdd;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
     pub old_wasm_hash: Option<[u8; 32]>,
@@ -95,7 +96,7 @@ pub(crate) enum DtsInstallCodeResult {
 }
 
 /// The different return types from `stop_canister()` function below.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum StopCanisterResult {
     /// The call failed.  The error and the unconsumed cycles are returned.
     Failure {
@@ -109,7 +110,7 @@ pub(crate) enum StopCanisterResult {
     RequestAccepted,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub(crate) struct CanisterMgrConfig {
     pub(crate) subnet_memory_capacity: NumBytes,
     pub(crate) default_provisional_cycles_balance: Cycles,
@@ -1830,7 +1831,7 @@ impl CanisterManager {
             None => {
                 if state
                     .canister_snapshots
-                    .snapshots_count(&canister.canister_id())
+                    .count_by_canister(&canister.canister_id())
                     >= MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER
                 {
                     return (
@@ -1912,10 +1913,10 @@ impl CanisterManager {
             // Verify that the subnet has enough memory for a new snapshot.
             if let Err(err) = round_limits
                 .subnet_available_memory
-                .check_available_memory(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+                .check_available_memory(new_snapshot_increase, NumBytes::from(0), NumBytes::from(0))
                 .map_err(
                     |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                        requested: new_snapshot_size,
+                        requested: new_snapshot_increase,
                         available: NumBytes::from(
                             round_limits
                                 .subnet_available_memory
@@ -1951,16 +1952,13 @@ impl CanisterManager {
             {
                 return (Err(err), NumInstructions::new(0));
             };
-            // Actually deduct memory from the subnet. It's safe to unwrap
-            // here because we already checked the available memory above.
-            round_limits.subnet_available_memory
-                        .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
-                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
         // Charge for taking a snapshot of the canister.
-        let instructions = self.config.canister_snapshot_baseline_instructions
-            + NumInstructions::new(new_snapshot_size.get());
+        let instructions = self
+            .config
+            .canister_snapshot_baseline_instructions
+            .saturating_add(&new_snapshot_size.get().into());
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
@@ -1997,19 +1995,39 @@ impl CanisterManager {
                     .canister_snapshots
                     .compute_memory_usage_by_canister(canister.canister_id()),
             );
+            round_limits.subnet_available_memory.increment(
+                replace_snapshot_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
         }
 
+        // Actually deduct memory from the subnet. It's safe to unwrap
+        // here because we already checked the available memory above.
+        round_limits.subnet_available_memory
+            .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
+            .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += new_snapshot.heap_delta();
+            canister.scheduler_state.heap_delta_debit = canister
+                .scheduler_state
+                .heap_delta_debit
+                .saturating_add(&new_snapshot.heap_delta());
         }
-        state.metadata.heap_delta_estimate += new_snapshot.heap_delta();
+        state.metadata.heap_delta_estimate = state
+            .metadata
+            .heap_delta_estimate
+            .saturating_add(&new_snapshot.heap_delta());
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        canister.system_state.snapshots_memory_usage += new_snapshot_size;
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .saturating_add(&new_snapshot_size);
         (
             Ok(CanisterSnapshotResponse::new(
                 &snapshot_id,
@@ -2140,6 +2158,7 @@ impl CanisterManager {
                 }
             };
 
+            new_execution_state.exported_globals = execution_snapshot.exported_globals.clone();
             new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
             new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
             (instructions_used, Some(new_execution_state))
@@ -2168,7 +2187,7 @@ impl CanisterManager {
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             &mut new_canister,
-            instructions_used + NumInstructions::new(snapshot.size().get()),
+            instructions_used.saturating_add(&snapshot.size().get().into()),
             subnet_size,
         ) {
             return (
@@ -2193,9 +2212,15 @@ impl CanisterManager {
             .add_restore_operation(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit += new_canister.heap_delta();
+            new_canister.scheduler_state.heap_delta_debit = new_canister
+                .scheduler_state
+                .heap_delta_debit
+                .saturating_add(&new_canister.heap_delta());
         }
-        state.metadata.heap_delta_estimate += new_canister.heap_delta();
+        state.metadata.heap_delta_estimate = state
+            .metadata
+            .heap_delta_estimate
+            .saturating_add(&new_canister.heap_delta());
 
         (Ok(new_canister), instructions_used)
     }
@@ -2239,6 +2264,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         delete_snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2262,7 +2288,7 @@ impl CanisterManager {
             }
         }
         let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
-        // Already confirmed that `replace_snapshot` exists.
+        // Already confirmed that `old_snapshot` exists.
         let old_snapshot_size = old_snapshot.unwrap().size();
         canister.system_state.snapshots_memory_usage = canister
             .system_state
@@ -2277,11 +2303,16 @@ impl CanisterManager {
                 .canister_snapshots
                 .compute_memory_usage_by_canister(canister.canister_id()),
         );
+        round_limits.subnet_available_memory.increment(
+            old_snapshot_size,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
         Ok(())
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
     CanisterInvalidController {
         canister_id: CanisterId,
@@ -2404,40 +2435,170 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::InvalidSenderSubnet(_)
             | CanisterManagerError::SenderNotInWhitelist(_)
             | CanisterManagerError::CanisterNotHostedBySubnet { .. } => ErrorHelp::InternalError,
-            CanisterManagerError::CanisterInvalidController { .. }
-            | CanisterManagerError::CanisterNotFound(_)
-            | CanisterManagerError::CanisterNonEmpty(_)
-            | CanisterManagerError::SubnetComputeCapacityOverSubscribed { .. }
-            | CanisterManagerError::SubnetMemoryCapacityOverSubscribed { .. }
-            | CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed { .. }
-            | CanisterManagerError::DeleteCanisterNotStopped(_)
-            | CanisterManagerError::DeleteCanisterSelf(_)
-            | CanisterManagerError::DeleteCanisterQueueNotEmpty(_)
-            | CanisterManagerError::NotEnoughMemoryAllocationGiven { .. }
-            | CanisterManagerError::CreateCanisterNotEnoughCycles { .. }
-            | CanisterManagerError::InstallCodeNotEnoughCycles(_)
-            | CanisterManagerError::InstallCodeRateLimited(_)
-            | CanisterManagerError::SubnetOutOfCanisterIds
-            | CanisterManagerError::InvalidSettings { .. }
-            | CanisterManagerError::MaxNumberOfCanistersReached { .. }
-            | CanisterManagerError::InsufficientCyclesInComputeAllocation { .. }
-            | CanisterManagerError::InsufficientCyclesInMemoryAllocation { .. }
-            | CanisterManagerError::InsufficientCyclesInMemoryGrow { .. }
-            | CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. }
-            | CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow { .. }
-            | CanisterManagerError::ReservedCyclesLimitIsTooLow { .. }
-            | CanisterManagerError::WasmChunkStoreError { .. }
-            | CanisterManagerError::CanisterSnapshotNotFound { .. }
-            | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
-            | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
-            | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
-            | CanisterManagerError::CanisterSnapshotLimitExceeded { .. }
-            | CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. }
-            | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
-            | CanisterManagerError::MissingUpgradeOptionError { .. }
-            | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
+            CanisterManagerError::CanisterInvalidController { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a controller of the target canister or \
+                add the current caller as a controller."
+                    .to_string(),
+                doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::CanisterNotFound(_) => ErrorHelp::UserError {
+                suggestion: "Check the ICP dashboard to ensure the canister exists.".to_string(),
+                doc_link: doc_ref("canister-not-found"),
+            },
+            CanisterManagerError::CanisterNonEmpty(_) => ErrorHelp::UserError {
+                suggestion: "Check that you want to overwrite the canister and, if so, \
+                use mode='reinstall'."
+                    .to_string(),
+                doc_link: doc_ref("canister-not-empty"),
+            },
+            CanisterManagerError::SubnetComputeCapacityOverSubscribed { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Try moving to another subnet.".to_string(),
+                    doc_link: doc_ref("subnet-compute-capacity-oversubscribed"),
+                }
+            }
+            CanisterManagerError::SubnetMemoryCapacityOverSubscribed { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Try moving to another subnet.".to_string(),
+                    doc_link: doc_ref("subnet-memory-capacity-oversubscribed"),
+                }
+            }
+            CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Try removing custom sections using a tool like `wasm-strip` \
+                    or moving to another subnet."
+                        .to_string(),
+                    doc_link: doc_ref("subnet-custom-section-memory-capacity-oversubscribed"),
+                }
+            }
+            CanisterManagerError::DeleteCanisterNotStopped(_) => ErrorHelp::UserError {
+                suggestion: "Stop the canister before deleting it.".to_string(),
+                doc_link: doc_ref("delete-canister-not-stopped"),
+            },
+            CanisterManagerError::DeleteCanisterSelf(_) => ErrorHelp::UserError {
+                suggestion: "Delete the canister from one of its other controllers.".to_string(),
+                doc_link: doc_ref("delete-canister-self"),
+            },
+            CanisterManagerError::DeleteCanisterQueueNotEmpty(_) => ErrorHelp::UserError {
+                suggestion: "Wait until the queues have been cleared to delete the canister and \
+                in the meantime stop the canister."
+                    .to_string(),
+                doc_link: doc_ref("delete-canister-queue-not-empty"),
+            },
+            CanisterManagerError::NotEnoughMemoryAllocationGiven { .. } => ErrorHelp::UserError {
+                suggestion: "Try increasing the canister's memory allocation.".to_string(),
+                doc_link: doc_ref("not-enough-memory-allocation-given"),
+            },
+            CanisterManagerError::CreateCanisterNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "Try sending more cycles with the request.".to_string(),
+                doc_link: doc_ref("create-canister-not-enough-cycles"),
+            },
+            CanisterManagerError::InstallCodeNotEnoughCycles(_) => ErrorHelp::UserError {
+                suggestion: "Top up the canister with more cycles.".to_string(),
+                doc_link: doc_ref("install-code-not-enough-cycles"),
+            },
+            CanisterManagerError::InstallCodeRateLimited(_) => ErrorHelp::UserError {
+                suggestion: "Retry the installation at a later time.".to_string(),
+                doc_link: doc_ref("install-code-rate-limited"),
+            },
+            CanisterManagerError::SubnetOutOfCanisterIds => ErrorHelp::UserError {
+                suggestion: "Try creating the canister on another subnet.".to_string(),
+                doc_link: doc_ref("subnet-out-of-canister-ids"),
+            },
+            CanisterManagerError::InvalidSettings { .. } => ErrorHelp::UserError {
+                suggestion: "Apply the described changes to make the settings valid.".to_string(),
+                doc_link: doc_ref("invalid-settings"),
+            },
+            CanisterManagerError::MaxNumberOfCanistersReached { .. } => ErrorHelp::UserError {
+                suggestion: "Try creating the canister on another subnet.".to_string(),
+                doc_link: doc_ref("maximum-number-of-canisters-reached"),
+            },
+            CanisterManagerError::InsufficientCyclesInComputeAllocation { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Top up the canister with more cycles.".to_string(),
+                    doc_link: doc_ref("insufficient-cycles-in-compute-allocation"),
+                }
+            }
+            CanisterManagerError::InsufficientCyclesInMemoryAllocation { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Top up the canister with more cycles.".to_string(),
+                    doc_link: doc_ref("insufficient-cycles-in-memory-allocation"),
+                }
+            }
+            CanisterManagerError::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Top up the canister with more cycles.".to_string(),
+                doc_link: doc_ref("insufficient-cycles-in-memory-grow-1"),
+            },
+            CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Try increasing this canister's reserved cycles limit or moving \
+                    it to a subnet with lower memory usage."
+                        .to_string(),
+                    doc_link: doc_ref("reserved-cycles-limit-exceeded-in-memory-allocation"),
+                }
+            }
+            CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Try increasing this canister's reserved cycles limit or moving \
+                    it to a subnet with lower memory usage."
+                        .to_string(),
+                    doc_link: doc_ref("reserved-cycles-limit-exceeded-in-memory-grow"),
+                }
+            }
+            CanisterManagerError::ReservedCyclesLimitIsTooLow { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
+            },
+            CanisterManagerError::WasmChunkStoreError { .. } => ErrorHelp::UserError {
+                suggestion: "Use the `stored_chunks` API to check which hashes are present \
+                or top up the canister if it is low on cycles."
+                    .to_string(),
+                doc_link: doc_ref("wasm-chunk-store-error"),
+            },
+            CanisterManagerError::CanisterSnapshotNotFound { .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Use the `list_canister_snapshot` API to see which snapshots are present."
+                        .to_string(),
+                doc_link: doc_ref("canister-snapshot-not-found"),
+            },
+            CanisterManagerError::CanisterHeapDeltaRateLimited { .. } => ErrorHelp::UserError {
+                suggestion: "Try waiting a few seconds before retrying the operation.".to_string(),
+                doc_link: doc_ref("canister-heap-delta-rate-limited"),
+            },
+            CanisterManagerError::CanisterSnapshotInvalidOwnership { .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Use the `list_canister_snapshot` API to see which snapshots are present."
+                        .to_string(),
+                doc_link: doc_ref("canister-snapshot-invalid-ownership"),
+            },
+            CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }
+            }
+            CanisterManagerError::CanisterSnapshotLimitExceeded { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::LongExecutionAlreadyInProgress { .. } => ErrorHelp::UserError {
+                suggestion: "Try waiting for the long execution to complete.".to_string(),
+                doc_link: doc_ref("long-execution-already-in-progress"),
+            },
+            CanisterManagerError::MissingUpgradeOptionError { .. } => ErrorHelp::UserError {
+                suggestion: "Try resending the message with the required fields included."
+                    .to_string(),
+                doc_link: doc_ref("missing-upgrade-option"),
+            },
+            CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
+                suggestion:
+                    "Try resending the message after omitting or modifying the invalid options."
+                        .to_string(),
+                doc_link: doc_ref("invalid-upgrade-option"),
             },
         }
     }
@@ -2513,7 +2674,7 @@ impl From<CanisterManagerError> for UserError {
                 canister_id,
                 controllers_expected,
                 controller_provided } => {
-                let controllers_expected = controllers_expected.iter().map(|id| format!("{}{additional_help}", id)).collect::<Vec<String>>().join(" ");
+                let controllers_expected = controllers_expected.iter().map(|id| format!("{}", id)).collect::<Vec<String>>().join(" ");
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(

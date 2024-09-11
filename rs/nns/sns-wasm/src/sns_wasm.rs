@@ -1764,44 +1764,6 @@ where
                 )
             })
     }
-
-    // TODO[NNS1-2997]: Remove this function once the migration is completed.
-    pub fn populate_wasm_metadata(&mut self) {
-        let all_wasm_hashes = self.wasm_indexes.keys().cloned().collect::<Vec<_>>();
-        for hash in all_wasm_hashes {
-            if let Some(index) = self.wasm_indexes.get(&hash) {
-                if index.metadata != vec![] {
-                    // No need to recompute metadata if it's already set. This code is unlikely to
-                    // actually be executed as this is a synchronous migration.
-                    continue;
-                }
-            }
-            let metadata = {
-                let Some(wasm) = self.read_wasm(&hash) else {
-                    panic!("Cannot find WASM stored under key `{:?}`.", hash);
-                };
-                Self::read_wasm_metadata_or_err(&wasm).unwrap_or_else(|err| {
-                    panic!(
-                        "Cannot obtain metadata for WASM with hash `{:?}`: {}",
-                        hash, err
-                    );
-                })
-            };
-
-            let metadata = metadata
-                .into_iter()
-                .map(|metadata| {
-                    metadata
-                        .validate()
-                        .expect("Existing WASMs should have valid metadata.");
-                    MetadataSectionPb::from(metadata)
-                })
-                .collect::<Vec<_>>();
-            self.wasm_indexes.entry(hash).and_modify(|index| {
-                index.metadata = metadata;
-            });
-        }
-    }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
@@ -1822,7 +1784,7 @@ pub fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
 }
 
 /// Specifies the upgrade path for SNS instances
-#[derive(Clone, Default, Debug, candid::CandidType, candid::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct UpgradePath {
     /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
     /// this version.

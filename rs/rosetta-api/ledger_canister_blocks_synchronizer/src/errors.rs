@@ -2,7 +2,7 @@ use icp_ledger::{Block, BlockIndex};
 
 use crate::blocks::BlockStoreError;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Error {
     InvalidBlockId(String),
     InvalidTipOfChain(String),

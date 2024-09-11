@@ -55,9 +55,8 @@ impl RosettaRequestHandler {
         let transactions =
             convert::operations_to_requests(&ops, false, self.ledger.token_symbol())?;
 
-        let interval = ic_constants::MAX_INGRESS_TTL
-            - ic_constants::PERMITTED_DRIFT
-            - Duration::from_secs(120);
+        let interval =
+            ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT - Duration::from_secs(120);
 
         let meta: Option<ConstructionPayloadsRequestMetadata> = msg
             .metadata
@@ -94,7 +93,7 @@ impl RosettaRequestHandler {
         let mut now = ingress_start;
         while now < ingress_end {
             let ingress_expiry = (now
-                + ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT))
+                + ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT))
             .as_nanos_since_unix_epoch();
             ingress_expiries.push(ingress_expiry);
             now += interval;

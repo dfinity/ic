@@ -65,7 +65,7 @@ impl MemoryArea {
 /// Specifies whether the currently running message execution needs to know
 /// which pages were dirtied or not. Dirty page tracking comes with a large
 /// performance overhead.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DirtyPageTracking {
     Ignore,
     Track,
@@ -73,7 +73,7 @@ pub enum DirtyPageTracking {
 
 /// Specifies whether the memory access that caused the signal was a read access
 /// or a write access.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum AccessKind {
     Read,
     Write,

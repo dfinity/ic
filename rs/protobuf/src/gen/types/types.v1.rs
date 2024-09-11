@@ -381,6 +381,129 @@ pub struct ThresholdSignatureShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HttpHeader {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpRequest {
+    #[prost(string, tag = "1")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub body: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponse {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(uint64, tag = "2")]
+    pub timeout: u64,
+    #[prost(message, optional, tag = "4")]
+    pub canister_id: ::core::option::Option<CanisterId>,
+    #[prost(message, optional, tag = "3")]
+    pub content: ::core::option::Option<CanisterHttpResponseContent>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMetadata {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(uint64, tag = "2")]
+    pub timeout: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "4")]
+    pub registry_version: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseContent {
+    #[prost(oneof = "canister_http_response_content::Status", tags = "2, 3")]
+    pub status: ::core::option::Option<canister_http_response_content::Status>,
+}
+/// Nested message and enum types in `CanisterHttpResponseContent`.
+pub mod canister_http_response_content {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Status {
+        #[prost(message, tag = "2")]
+        Reject(super::CanisterHttpReject),
+        #[prost(bytes, tag = "3")]
+        Success(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpReject {
+    #[prost(enumeration = "RejectCode", tag = "3")]
+    pub reject_code: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseSignature {
+    #[prost(bytes = "vec", tag = "1")]
+    pub signer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseWithConsensus {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "3")]
+    pub registry_version: u64,
+    #[prost(message, repeated, tag = "7")]
+    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpShare {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseDivergence {
+    #[prost(message, repeated, tag = "1")]
+    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMessage {
+    #[prost(
+        oneof = "canister_http_response_message::MessageType",
+        tags = "1, 2, 3"
+    )]
+    pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
+}
+/// Nested message and enum types in `CanisterHttpResponseMessage`.
+pub mod canister_http_response_message {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageType {
+        #[prost(message, tag = "1")]
+        Response(super::CanisterHttpResponseWithConsensus),
+        #[prost(uint64, tag = "2")]
+        Timeout(u64),
+        #[prost(message, tag = "3")]
+        DivergenceResponse(super::CanisterHttpResponseDivergence),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
@@ -911,6 +1034,95 @@ impl KeyTranscriptCreationState {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DkgMessageId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<ConsensusMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessageHash {
+    #[prost(
+        oneof = "consensus_message_hash::Kind",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+    )]
+    pub kind: ::core::option::Option<consensus_message_hash::Kind>,
+}
+/// Nested message and enum types in `ConsensusMessageHash`.
+pub mod consensus_message_hash {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        RandomBeacon(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        Finalization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "3")]
+        Notarization(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        BlockProposal(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "5")]
+        RandomBeaconShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "6")]
+        NotarizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "7")]
+        FinalizationShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "8")]
+        RandomTape(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "9")]
+        RandomTapeShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "10")]
+        CatchUpPackage(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "11")]
+        CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "12")]
+        EquivocationProof(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessageId {
+    #[prost(uint64, tag = "1")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageId {
+    #[prost(message, optional, tag = "1")]
+    pub hash: ::core::option::Option<CertificationMessageHash>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessageHash {
+    #[prost(oneof = "certification_message_hash::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<certification_message_hash::Kind>,
+}
+/// Nested message and enum types in `CertificationMessageHash`.
+pub mod certification_message_hash {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(bytes, tag = "1")]
+        Certification(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "2")]
+        CertificationShare(::prost::alloc::vec::Vec<u8>),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationMessage {
     #[prost(oneof = "certification_message::Msg", tags = "1, 2")]
     pub msg: ::core::option::Option<certification_message::Msg>,
@@ -1262,215 +1474,46 @@ pub struct IngressPayload {
     #[prost(bytes = "vec", tag = "2")]
     pub buffer: ::prost::alloc::vec::Vec<u8>,
 }
+/// Stripped consensus artifacts messages below
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct HttpHeader {
-    #[prost(string, tag = "1")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
-    pub value: ::prost::alloc::vec::Vec<u8>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpRequest {
-    #[prost(string, tag = "1")]
-    pub url: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
-    pub body: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, repeated, tag = "3")]
-    pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponse {
-    #[prost(uint64, tag = "1")]
-    pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
-    #[prost(message, optional, tag = "4")]
-    pub canister_id: ::core::option::Option<CanisterId>,
-    #[prost(message, optional, tag = "3")]
-    pub content: ::core::option::Option<CanisterHttpResponseContent>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseMetadata {
-    #[prost(uint64, tag = "1")]
-    pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
-    #[prost(bytes = "vec", tag = "3")]
-    pub content_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "4")]
-    pub registry_version: u64,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseContent {
-    #[prost(oneof = "canister_http_response_content::Status", tags = "2, 3")]
-    pub status: ::core::option::Option<canister_http_response_content::Status>,
-}
-/// Nested message and enum types in `CanisterHttpResponseContent`.
-pub mod canister_http_response_content {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Status {
-        #[prost(message, tag = "2")]
-        Reject(super::CanisterHttpReject),
-        #[prost(bytes, tag = "3")]
-        Success(::prost::alloc::vec::Vec<u8>),
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpReject {
-    #[prost(enumeration = "RejectCode", tag = "3")]
-    pub reject_code: i32,
-    #[prost(string, tag = "2")]
-    pub message: ::prost::alloc::string::String,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseSignature {
-    #[prost(bytes = "vec", tag = "1")]
-    pub signer: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseWithConsensus {
+pub struct GetIngressMessageInBlockRequest {
     #[prost(message, optional, tag = "1")]
-    pub response: ::core::option::Option<CanisterHttpResponse>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "3")]
-    pub registry_version: u64,
-    #[prost(message, repeated, tag = "7")]
-    pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpShare {
-    #[prost(message, optional, tag = "1")]
-    pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
+    pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
-    pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseDivergence {
-    #[prost(message, repeated, tag = "1")]
-    pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponseMessage {
-    #[prost(
-        oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3"
-    )]
-    pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
-}
-/// Nested message and enum types in `CanisterHttpResponseMessage`.
-pub mod canister_http_response_message {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum MessageType {
-        #[prost(message, tag = "1")]
-        Response(super::CanisterHttpResponseWithConsensus),
-        #[prost(uint64, tag = "2")]
-        Timeout(u64),
-        #[prost(message, tag = "3")]
-        DivergenceResponse(super::CanisterHttpResponseDivergence),
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DkgMessageId {
+pub struct GetIngressMessageInBlockResponse {
     #[prost(bytes = "vec", tag = "1")]
-    pub hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
+    pub ingress_message: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageId {
-    #[prost(message, optional, tag = "1")]
-    pub hash: ::core::option::Option<ConsensusMessageHash>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
+pub struct StrippedBlockProposal {}
+#[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageHash {
-    #[prost(
-        oneof = "consensus_message_hash::Kind",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
-    )]
-    pub kind: ::core::option::Option<consensus_message_hash::Kind>,
+pub struct StrippedConsensusMessage {
+    #[prost(oneof = "stripped_consensus_message::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<stripped_consensus_message::Msg>,
 }
-/// Nested message and enum types in `ConsensusMessageHash`.
-pub mod consensus_message_hash {
+/// Nested message and enum types in `StrippedConsensusMessage`.
+pub mod stripped_consensus_message {
+    #[allow(clippy::large_enum_variant)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(bytes, tag = "1")]
-        RandomBeacon(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "2")]
-        Finalization(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "3")]
-        Notarization(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "4")]
-        BlockProposal(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "5")]
-        RandomBeaconShare(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "6")]
-        NotarizationShare(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "7")]
-        FinalizationShare(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "8")]
-        RandomTape(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "9")]
-        RandomTapeShare(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "10")]
-        CatchUpPackage(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "11")]
-        CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "12")]
-        EquivocationProof(::prost::alloc::vec::Vec<u8>),
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        StrippedBlockProposal(super::StrippedBlockProposal),
+        #[prost(message, tag = "2")]
+        Unstripped(super::ConsensusMessage),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IngressMessageId {
-    #[prost(uint64, tag = "1")]
-    pub expiry: u64,
-    #[prost(bytes = "vec", tag = "2")]
-    pub message_id: ::prost::alloc::vec::Vec<u8>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CertificationMessageId {
+pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
-    pub hash: ::core::option::Option<CertificationMessageHash>,
-    #[prost(uint64, tag = "2")]
-    pub height: u64,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CertificationMessageHash {
-    #[prost(oneof = "certification_message_hash::Kind", tags = "1, 2")]
-    pub kind: ::core::option::Option<certification_message_hash::Kind>,
-}
-/// Nested message and enum types in `CertificationMessageHash`.
-pub mod certification_message_hash {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(bytes, tag = "1")]
-        Certification(::prost::alloc::vec::Vec<u8>),
-        #[prost(bytes, tag = "2")]
-        CertificationShare(::prost::alloc::vec::Vec<u8>),
-    }
+    pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
 }
