@@ -23,7 +23,7 @@ if [ "${tools}" != "" ]; then
 fi
 
 # Run benchmarking
->&2 echo "Benchmarking node..."
+echo >&2 "Benchmarking node..."
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${key_component[@]}" "admin@${ip_address}" "sudo ./benchmark_runner.sh"
 
 # Collect results

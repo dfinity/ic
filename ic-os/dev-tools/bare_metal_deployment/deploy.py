@@ -120,7 +120,7 @@ class Args:
     benchmark_runner_script: Optional[str] = "./benchmark_runner.sh"
 
     # Paths to any benchmark tool scripts.
-    benchmark_tools: Optional[List[str]] = list["../hw_validation/stress.sh", "../hw_validation/benchmark.sh"]
+    benchmark_tools: Optional[List[str]] = field(default_factory=lambda: ["../hw_validation/stress.sh", "../hw_validation/benchmark.sh"])
 
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
@@ -456,7 +456,7 @@ def boot_images(bmc_infos: List[BMCInfo],
 
 
 def benchmark_node(bmc_info: BMCInfo, benchmark_driver_script: str, benchmark_runner_script: str, benchmark_tools: List[str], file_share_ssh_key: Optional[str] = None):
-    log.info(f"Benchmarking machine.")
+    log.info("Benchmarking machine.")
 
     ip_address = bmc_info.guestos_ipv6_address
 
