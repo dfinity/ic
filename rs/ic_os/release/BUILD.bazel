@@ -4,10 +4,10 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 OBJECTS = {
     "fstrim_tool": "//rs/ic_os/fstrim_tool:fstrim_tool_bin",
-    "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
-    "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
+    "guestos_tool": "//rs/ic_os/os_tools/guestos_tool:guestos_tool",
+    "hostos_tool": "//rs/ic_os/os_tools/hostos_tool:hostos_tool",
     "nft-exporter": "//rs/ic_os/nft_exporter:nft-exporter",
-    "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
+    "setupos_tool": "//rs/ic_os/os_tools/setupos_tool:setupos_tool",
     "config": "//rs/ic_os/config:config",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",

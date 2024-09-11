@@ -130,6 +130,7 @@ fn test_get_inputs() {
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
                 .to_vec(),
         }),
+        additional_responses: None,
     });
 
     let canister_http_requests = tick_until_next_request(&env);
@@ -152,6 +153,7 @@ fn test_get_inputs() {
 \x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
                 .to_vec(),
         }),
+        additional_responses: None,
     });
 
     let result = env
