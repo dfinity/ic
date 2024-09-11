@@ -250,6 +250,21 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_stable64_size()".into(),
             Module::Test.from_ic0("stable64_size", NoParams, Result::I64, wasm64_disabled),
+            2058000006,
+        ),
+        common::Benchmark(
+            "call_new+ic0_call_with_best_effort_response()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_with_best_effort_response",
+                Param1(1_i32),
+                Result::No,
+                wasm64_disabled,
+            ),
+            2058000006,
+        ),
+        common::Benchmark(
+            "ic0_stable_size()".into(),
+            Module::Test.from_ic0("stable_size", NoParams, Result::I32, wasm64_disabled),
             17000006,
         ),
         common::Benchmark(
@@ -497,20 +512,11 @@ pub fn execute_update_bench(c: &mut Criterion) {
             ),
             19000006,
         ),
-        // common::Benchmark(
-        //     "ic0_call_with_best_effort_response()".into(),
-        //     Module::CallNewLoop.from_ic0(
-        //         "call_with_best_effort_response",
-        //         Param1(1_i32),
-        //         Result::No,
-        //     ),
-        //     2058000006,
-        // ),
-        // common::Benchmark(
-        //     "ic0_msg_deadline()".into(),
-        //     Module::Test.from_ic0("msg_deadline", NoParams, Result::I64),
-        //     517000006,
-        // ),
+        common::Benchmark(
+            "ic0_msg_deadline()".into(),
+            Module::Test.from_ic0("msg_deadline", NoParams, Result::I64, wasm64_disabled),
+            517000006,
+        ),
     ];
 
     common::run_benchmarks(

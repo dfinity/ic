@@ -1,6 +1,5 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    enable_new_canister_management_topics,
     pb::v1::{
         update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
     },
@@ -17,12 +16,6 @@ use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
 
 impl UpdateCanisterSettings {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !enable_new_canister_management_topics() {
-            return Err(invalid_proposal_error(
-                "UpdateCanisterSettings proposal is not yet supported",
-            ));
-        }
-
         let _ = self.valid_canister_id()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;

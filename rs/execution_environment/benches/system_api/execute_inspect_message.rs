@@ -37,7 +37,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
             520000511,
         ),
         common::Benchmark(
-            "ic0_msg_method_name_copy()/30B".into(),
+            "ic0_msg_method_name_copy()/20B".into(),
             Module::InspectMessage.from_ic0(
                 "msg_method_name_copy",
                 Params3(0, 0, 20),
