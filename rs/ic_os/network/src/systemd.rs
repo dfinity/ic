@@ -163,8 +163,12 @@ pub fn generate_systemd_config_files(
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_settings.ipv6_prefix_length, &ping_target)
-            {
+            match has_ipv6_connectivity(
+                i,
+                ipv6_address,
+                network_settings.ipv6_prefix_length,
+                &ping_target,
+            ) {
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("Error testing connectivity on {}: {}", &i.name, e);
