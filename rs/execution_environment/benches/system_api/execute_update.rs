@@ -3,12 +3,12 @@
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -33,7 +33,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "",
                 Module::render_loop(
                     LoopIterations::Mi,
-                    "(set_local $s (i32.add (get_local $s) (i32.load (i32.const 0))))",
+                    "(local.set $s (i32.add (local.get $s) (i32.load (i32.const 0))))",
                 ),
             )),
             16000006,

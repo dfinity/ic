@@ -116,7 +116,7 @@ fn maliciously_propose_blocks(
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
                             let metadata = BlockMetadata::from_block(
                                 &hashed_block,
-                                &block_maker.replica_config,
+                                block_maker.replica_config.subnet_id,
                             );
                             if let Ok(signature) = block_maker.crypto.sign(
                                 &metadata,

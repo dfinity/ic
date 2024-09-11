@@ -201,8 +201,8 @@ where
                 pool.get_all().count()
             }
 
-            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: &HeightRange) -> usize {
-                pool.get_by_height_range(range.clone()).count()
+            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: HeightRange) -> usize {
+                pool.get_by_height_range(range).count()
             }
 
             let mut pool = T::new_consensus_pool(config, log);
@@ -214,28 +214,28 @@ where
             let expected_count = [
                 count_total(pool.random_beacon_share()),
                 count_total(pool.notarization_share())
-                    - count(pool.notarization_share(), &range_to_delete),
+                    - count(pool.notarization_share(), range_to_delete),
                 count_total(pool.finalization_share())
-                    - count(pool.finalization_share(), &range_to_delete),
+                    - count(pool.finalization_share(), range_to_delete),
                 count_total(pool.random_tape_share()),
                 count_total(pool.equivocation_proof())
-                    - count(pool.equivocation_proof(), &range_to_delete),
+                    - count(pool.equivocation_proof(), range_to_delete),
             ];
 
             let mut expected_to_be_purged = Vec::new();
             expected_to_be_purged.extend(
                 pool.notarization_share()
-                    .get_by_height_range(range_to_delete.clone())
+                    .get_by_height_range(range_to_delete)
                     .map(|n| n.get_id()),
             );
             expected_to_be_purged.extend(
                 pool.finalization_share()
-                    .get_by_height_range(range_to_delete.clone())
+                    .get_by_height_range(range_to_delete)
                     .map(|n| n.get_id()),
             );
             expected_to_be_purged.extend(
                 pool.equivocation_proof()
-                    .get_by_height_range(range_to_delete.clone())
+                    .get_by_height_range(range_to_delete)
                     .map(|n| n.get_id()),
             );
 
@@ -250,15 +250,15 @@ where
             let purged_set = HashSet::<_>::from_iter(purged);
             assert_eq!(expected_set, purged_set);
 
-            assert!(count(pool.random_beacon_share(), &range_to_delete) > 0);
+            assert!(count(pool.random_beacon_share(), range_to_delete) > 0);
             assert_eq!(count_total(pool.random_beacon_share()), expected_count[0]);
-            assert_eq!(count(pool.notarization_share(), &range_to_delete), 0);
+            assert_eq!(count(pool.notarization_share(), range_to_delete), 0);
             assert_eq!(count_total(pool.notarization_share()), expected_count[1]);
-            assert_eq!(count(pool.finalization_share(), &range_to_delete), 0);
+            assert_eq!(count(pool.finalization_share(), range_to_delete), 0);
             assert_eq!(count_total(pool.finalization_share()), expected_count[2]);
-            assert!(count(pool.random_tape_share(), &range_to_delete) > 0);
+            assert!(count(pool.random_tape_share(), range_to_delete) > 0);
             assert_eq!(count_total(pool.random_tape_share()), expected_count[3]);
-            assert_eq!(count(pool.equivocation_proof(), &range_to_delete), 0);
+            assert_eq!(count(pool.equivocation_proof(), range_to_delete), 0);
             assert_eq!(count_total(pool.equivocation_proof()), expected_count[4]);
 
             let expected_to_be_purged = pool

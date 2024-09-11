@@ -13,9 +13,11 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{
+        idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank, Threshold,
+    },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
     },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
@@ -185,7 +187,7 @@ pub fn get_adjusted_notary_delay(
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum NotaryDelay {
     /// Notary can notarize after this delay.
     CanNotarizeAfter(Duration),
@@ -467,22 +469,56 @@ pub fn registry_version_at_height(
 }
 
 /// Return the current low transcript for the given height if it was found.
-pub fn active_low_threshold_transcript(
+pub fn active_low_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            transcript.dkg_id
+        })
     })
 }
 
 /// Return the current high transcript for the given height if it was found.
-pub fn active_high_threshold_transcript(
+pub fn active_high_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            transcript.dkg_id
+        })
+    })
+}
+
+/// Return the current low transcript for the given height if it was found.
+pub fn active_low_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
+    })
+}
+
+/// Return the current high transcript for the given height if it was found.
+pub fn active_high_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
     })
 }
 
@@ -529,21 +565,20 @@ fn get_registry_version_at_given_summary(
     }
 }
 
-fn get_transcript_at_given_summary(
+fn get_transcript_data_at_given_summary<T>(
     summary_block: &Block,
     height: Height,
     tag: NiDkgTag,
-) -> Option<NiDkgTranscript> {
+    getter: impl Fn(&NiDkgTranscript) -> T,
+) -> Option<T> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(dkg_summary.current_transcript(&tag).clone())
+        Some(getter(dkg_summary.current_transcript(&tag)))
     } else if dkg_summary.next_interval_includes(height) {
-        Some(
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone(),
-        )
+        let transcript = dkg_summary
+            .next_transcript(&tag)
+            .unwrap_or_else(|| dkg_summary.current_transcript(&tag));
+        Some(getter(transcript))
     } else {
         None
     }

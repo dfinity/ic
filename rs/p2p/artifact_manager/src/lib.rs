@@ -1,9 +1,9 @@
 use ic_interfaces::{
     p2p::{
-        artifact_manager::{ArtifactProcessorEvent, JoinGuard},
+        artifact_manager::JoinGuard,
         consensus::{
-            ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact,
-            ValidatedPoolReader,
+            ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool,
+            UnvalidatedArtifact, ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
@@ -83,7 +83,7 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-/// An abstraction of processing changes for each artifact client.
+// TODO: make it private, it is used only for tests outside of this crate
 pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     /// Process changes to the client's state, which includes but not
     /// limited to:
@@ -105,7 +105,7 @@ pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
     ) -> ChangeResult<A>;
 }
 
-/// Manages the life cycle of the client specific artifact processor thread.
+// TODO: remove in favour of the Shutdown struct instead
 pub struct ArtifactProcessorJoinGuard {
     handle: Option<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
@@ -131,11 +131,12 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
+// TODO: make it private, it is used only for tests outside of this crate
 pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    send_advert: Sender<ArtifactMutation<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
     // Making this channel bounded can be problematic since we don't have true multiplexing
@@ -154,11 +155,10 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
             for artifact in initial_artifacts {
-                let _ =
-                    send_advert.blocking_send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-                        artifact,
-                        is_latency_sensitive: false,
-                    }));
+                let _ = send_advert.blocking_send(ArtifactMutation::Insert(ArtifactWithOpt {
+                    artifact,
+                    is_latency_sensitive: false,
+                }));
             }
             process_messages(
                 time_source,
@@ -181,7 +181,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
 fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    send_advert: Sender<ArtifactMutation<Artifact>>,
     mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
@@ -224,17 +224,14 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
             }
         };
         let ChangeResult {
-            artifacts_with_opt,
-            purged,
+            mutations,
             poll_immediately,
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
-        for artifact_with_opt in artifacts_with_opt {
-            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Artifact(artifact_with_opt));
-        }
 
-        for advert in purged {
-            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Purge(advert));
+        // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
+        for mutation in mutations {
+            let _ = send_advert.blocking_send(mutation);
         }
         last_on_state_change_result = poll_immediately;
     }
@@ -246,7 +243,7 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    send_advert: Sender<ArtifactProcessorEvent<SignedIngress>>,
+    send_advert: Sender<ArtifactMutation<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
@@ -272,12 +269,13 @@ pub fn create_ingress_handlers<
     (sender, jh)
 }
 
+/// Starts the event loop that pools consensus for updates on what needs to be replicated.
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
     C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
 >(
-    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    send_advert: Sender<ArtifactMutation<Artifact>>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
@@ -298,6 +296,7 @@ pub fn create_artifact_handler<
     (sender, jh)
 }
 
+// TODO: make it private, it is used only for tests outside of this crate
 pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
     pool: Arc<RwLock<P>>,
     change_set_producer: C,
@@ -429,7 +428,7 @@ mod tests {
 
     #[test]
     fn send_initial_artifacts() {
-        #[derive(Debug, PartialEq, Eq)]
+        #[derive(Eq, PartialEq, Debug)]
         struct DummyArtifact(u64);
 
         impl From<u64> for DummyArtifact {
@@ -447,9 +446,7 @@ mod tests {
         impl IdentifiableArtifact for DummyArtifact {
             const NAME: &'static str = "dummy";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
 
         impl PbArtifact for DummyArtifact {
@@ -457,8 +454,6 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessage = u64;
             type PbMessageError = Infallible;
-            type PbAttribute = ();
-            type PbAttributeError = Infallible;
         }
 
         struct DummyProcessor;
@@ -469,8 +464,7 @@ mod tests {
                 _: Vec<UnvalidatedArtifactMutation<DummyArtifact>>,
             ) -> ChangeResult<DummyArtifact> {
                 ChangeResult {
-                    purged: Vec::new(),
-                    artifacts_with_opt: Vec::new(),
+                    mutations: vec![],
                     poll_immediately: false,
                 }
             }
@@ -488,7 +482,7 @@ mod tests {
 
         for i in 0..10 {
             match send_rx.blocking_recv().unwrap() {
-                ArtifactProcessorEvent::Artifact(a) => {
+                ArtifactMutation::Insert(a) => {
                     assert_eq!(a.artifact.0, i);
                 }
                 _ => panic!("initial events are not purge"),

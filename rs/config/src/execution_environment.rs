@@ -140,7 +140,14 @@ pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
 /// The worst case request latency used here should be equivalent to the request timeout in the adapter.
 pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+/// The default value of `wasm_memory_limit` in the canister settings:
+/// - this value is used directly for newly created canisters.
+/// - existing canisters will get their field initialized as follows:
+///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
+///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
+pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     pub embedders_config: EmbeddersConfig,
@@ -282,6 +289,13 @@ pub struct Config {
     pub ic00_sign_with_schnorr: FlagStatus,
 
     pub max_canister_http_requests_in_flight: usize,
+
+    /// The default value of `wasm_memory_limit` in the canister settings:
+    /// - this value is used directly for newly created canisters.
+    /// - existing canisters will get their field initialized as follows:
+    ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
+    ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
+    pub default_wasm_memory_limit: NumBytes,
 }
 
 impl Default for Config {
@@ -356,11 +370,12 @@ impl Default for Config {
             ic00_schnorr_public_key: FlagStatus::Enabled,
             ic00_sign_with_schnorr: FlagStatus::Enabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
+            default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BitcoinConfig {
     /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
     /// This list is intentionally separate from the bitcoin canister IDs below because it

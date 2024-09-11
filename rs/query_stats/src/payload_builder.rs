@@ -163,7 +163,7 @@ impl QueryStatsPayloadBuilderImpl {
                     warn!(
                         every_n_seconds => 30,
                         self.log,
-                        "Current stats are uninitalized. This warning should go away after some minutes"
+                        "Current stats are uninitalized. This warning should go away after some minutes if the replica is processing query calls."
                     );
                     vec![]
                 }

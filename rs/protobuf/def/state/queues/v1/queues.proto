@@ -41,13 +41,11 @@ message StreamFlags {
 message Stream {
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
-  reserved 3, 4;
-  reserved "signals_begin", "signals";
   uint64 signals_end = 5;
-  // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-  repeated uint64 deprecated_reject_signals = 6;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
+  reserved 3, 4, 6;
+  reserved "signals_begin", "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {
@@ -203,10 +201,10 @@ message CanisterQueues {
     NEXT_INPUT_QUEUE_INGRESS = 2;
     NEXT_INPUT_QUEUE_REMOTE_SUBNET = 3;
   }
-  NextInputQueue next_input_queue = 6;
+  NextInputQueue next_input_source = 6;
 
-  repeated types.v1.CanisterId local_subnet_input_schedule = 7;
-  repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
+  repeated types.v1.CanisterId local_sender_schedule = 7;
+  repeated types.v1.CanisterId remote_sender_schedule = 8;
 
   uint64 guaranteed_response_memory_reservations = 11;
 }

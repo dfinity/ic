@@ -149,7 +149,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "Cannot enqueue management message because fetch_canister_logs method is not allowed to be called via ingress messages.",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         ))
     );
 }
@@ -1203,7 +1203,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
 #[test]
 fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes";
+    let metric = "canister_log_memory_usage_bytes_v2";
     const PAYLOAD_SIZE: usize = 1_000;
     let (env, canister_id, _controller) = setup_with_controller(
         wat_canister()

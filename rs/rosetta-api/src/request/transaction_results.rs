@@ -8,7 +8,7 @@ use serde_json::Value;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionResults {
     pub operations: Vec<RequestResult>,
 }

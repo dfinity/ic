@@ -30,7 +30,7 @@ pub trait Runtime {
         Out: CandidType + DeserializeOwned + 'static;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EvmRpcClient<R: Runtime, L: Sink> {
     runtime: R,
     logger: L,
@@ -41,7 +41,7 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
     max_num_retries: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct OverrideRpcConfig {
     pub eth_get_block_by_number: Option<RpcConfig>,
     pub eth_get_logs: Option<RpcConfig>,
@@ -291,7 +291,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
     }
 }
 
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct IcRuntime {}
 
 #[async_trait]

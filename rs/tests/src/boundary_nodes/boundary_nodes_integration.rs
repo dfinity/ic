@@ -2903,7 +2903,7 @@ pub fn canister_routing_test(env: TestEnv) {
 
         block_on(agent_using_call_v2_endpoint(
             boundary_node.get_public_url().as_ref(),
-            Some(boundary_node.ipv6().into()),
+            boundary_node.ipv6().into(),
         ))
         .expect("Agent can be created")
     };

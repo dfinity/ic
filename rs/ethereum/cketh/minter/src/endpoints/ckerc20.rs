@@ -9,7 +9,7 @@ pub struct WithdrawErc20Arg {
     pub recipient: String,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RetrieveErc20Request {
     pub cketh_block_index: Nat,
     pub ckerc20_block_index: Nat,
@@ -24,7 +24,7 @@ impl From<Erc20WithdrawalRequest> for RetrieveErc20Request {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawErc20Error {
     TokenNotSupported {
         supported_tokens: Vec<crate::endpoints::CkErc20Token>,
@@ -42,7 +42,7 @@ pub enum WithdrawErc20Error {
     TemporarilyUnavailable(String),
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub enum LedgerError {
     InsufficientFunds {
         balance: Nat,

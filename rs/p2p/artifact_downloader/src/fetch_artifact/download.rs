@@ -13,7 +13,7 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, Peers, Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+    Aborted, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -33,7 +33,6 @@ use super::metrics::FetchArtifactMetrics;
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
-const PRIORITY_FUNCTION_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
@@ -75,7 +74,7 @@ async fn rpc_handler<Artifact: PbArtifact>(
 pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
-    priority_fn: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+    bouncer_rx: watch::Receiver<Bouncer<Artifact::Id>>,
     metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
@@ -85,7 +84,7 @@ impl<Artifact: PbArtifact> Clone for FetchArtifact<Artifact> {
         Self {
             log: self.log.clone(),
             transport: self.transport.clone(),
-            priority_fn: self.priority_fn.clone(),
+            bouncer_rx: self.bouncer_rx.clone(),
             metrics: self.metrics.clone(),
             jh: self.jh.clone(),
         }
@@ -99,17 +98,15 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
     async fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <Artifact as IdentifiableArtifact>::Id,
-        attr: <Artifact as IdentifiableArtifact>::Attribute,
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
     ) -> Result<(Artifact, NodeId), Aborted> {
         Self::download_artifact(
             self.log.clone(),
             id,
-            attr,
             artifact,
             peers,
-            self.priority_fn.clone(),
+            self.bouncer_rx.clone(),
             self.transport.clone(),
             self.metrics.clone(),
         )
@@ -122,7 +119,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        pfn_producer: Arc<dyn PriorityFnFactory<Artifact, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
@@ -131,31 +128,31 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         let pool_clone = pool.clone();
         (
             move |transport: Arc<dyn Transport>| {
-                let pfn = {
+                let bouncer = {
                     let p = pool.read().unwrap();
-                    pfn_producer.get_priority_function(&p)
+                    bouncer_factory.new_bouncer(&p)
                 };
-                let (pfn_tx, pfn_rx) = watch::channel(pfn);
+                let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
                 let pool_clone = pool.clone();
-                let pfn_producer_clone = pfn_producer.clone();
+                let bouncer_factory_clone = bouncer_factory.clone();
                 let log_clone = log.clone();
                 let jh = rt.spawn(async move {
                     loop {
-                        let pfn = {
+                        let bouncer = {
                             let p = pool_clone.read().unwrap();
-                            pfn_producer_clone.get_priority_function(&p)
+                            bouncer_factory_clone.new_bouncer(&p)
                         };
-                        if pfn_tx.send(pfn).is_err() {
+                        if bouncer_tx.send(bouncer).is_err() {
                             break;
                         }
 
-                        tokio::time::sleep(PRIORITY_FUNCTION_UPDATE_INTERVAL).await
+                        tokio::time::sleep(bouncer_factory_clone.refresh_period()).await
                     }
                 });
                 Self {
                     log: log_clone,
                     transport,
-                    priority_fn: pfn_rx,
+                    bouncer_rx,
                     metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
                     jh: Arc::new(jh),
                 }
@@ -163,29 +160,28 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
-    /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `Aborted` is returned.
+    /// Waits until advert resolves to fetch. If all peers are removed or bouncer value becomes Unwanted `Aborted` is returned.
     #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,
-        attr: &Artifact::Attribute,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
-        priority_fn_watcher: &mut watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        bouncer_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
     ) -> Result<(), Aborted> {
-        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
+        let mut bouncer_value = bouncer_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
-        if let Priority::Stash = priority {
+        if let BouncerValue::MaybeWantsLater = bouncer_value {
             artifact.take();
             metrics.download_task_stashed_total.inc();
         }
 
-        while let Priority::Stash = priority {
-            let _ = priority_fn_watcher.changed().await;
-            priority = priority_fn_watcher.borrow_and_update()(id, attr);
+        while let BouncerValue::MaybeWantsLater = bouncer_value {
+            let _ = bouncer_watcher.changed().await;
+            bouncer_value = bouncer_watcher.borrow_and_update()(id);
         }
 
-        if let Priority::Drop = priority {
+        if let BouncerValue::Unwanted = bouncer_value {
             return Err(Aborted);
         }
         Ok(())
@@ -193,33 +189,25 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
     /// Downloads a given artifact.
     ///
-    /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
+    /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
     ///
     /// The download fails iff:
-    /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
+    /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
     /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
     /// and the failure condition is reported in the error variant of the returned result.
     #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
         id: Artifact::Id,
-        attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         peer_rx: impl Peers + Send + 'static,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
     ) -> Result<(Artifact, NodeId), Aborted> {
-        // Evaluate priority and wait until we should fetch.
-        Self::wait_fetch(
-            &id,
-            &attr,
-            &mut artifact,
-            &metrics,
-            &mut priority_fn_watcher,
-        )
-        .await?;
+        // Evaluate bouncer and wait until we should fetch.
+        Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
 
         let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
@@ -272,16 +260,9 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                         }
                     }
 
-                    // Wait before checking the priority so we might be able to avoid an unnecessary download.
+                    // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    Self::wait_fetch(
-                        &id,
-                        &attr,
-                        &mut artifact,
-                        &metrics,
-                        &mut priority_fn_watcher,
-                    )
-                    .await?;
+                    Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
                 };
 
                 timer.stop_and_record();
