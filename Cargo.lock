@@ -17211,12 +17211,9 @@ name = "rate-limiting"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_candid",
- "dfn_core",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
- "registry-canister",
  "serde",
 ]
 
