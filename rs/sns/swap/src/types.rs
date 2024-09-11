@@ -140,8 +140,8 @@ impl Init {
     }
 
     pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
-        use ic_nervous_system_common::ledger::IcpLedgerCanister;
 
         let sns_root = {
             let sns_root_canister_id = self

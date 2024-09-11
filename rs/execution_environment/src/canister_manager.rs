@@ -57,6 +57,7 @@ use ic_types::{
 };
 use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
 use num_traits::cast::ToPrimitive;
+use num_traits::SaturatingAdd;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -1954,8 +1955,10 @@ impl CanisterManager {
         }
 
         // Charge for taking a snapshot of the canister.
-        let instructions = self.config.canister_snapshot_baseline_instructions
-            + NumInstructions::new(new_snapshot_size.get());
+        let instructions = self
+            .config
+            .canister_snapshot_baseline_instructions
+            .saturating_add(&new_snapshot_size.get().into());
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
@@ -2006,16 +2009,25 @@ impl CanisterManager {
             .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            canister.scheduler_state.heap_delta_debit += new_snapshot.heap_delta();
+            canister.scheduler_state.heap_delta_debit = canister
+                .scheduler_state
+                .heap_delta_debit
+                .saturating_add(&new_snapshot.heap_delta());
         }
-        state.metadata.heap_delta_estimate += new_snapshot.heap_delta();
+        state.metadata.heap_delta_estimate = state
+            .metadata
+            .heap_delta_estimate
+            .saturating_add(&new_snapshot.heap_delta());
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        canister.system_state.snapshots_memory_usage += new_snapshot_size;
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .saturating_add(&new_snapshot_size);
         (
             Ok(CanisterSnapshotResponse::new(
                 &snapshot_id,
@@ -2175,7 +2187,7 @@ impl CanisterManager {
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             &mut new_canister,
-            instructions_used + NumInstructions::new(snapshot.size().get()),
+            instructions_used.saturating_add(&snapshot.size().get().into()),
             subnet_size,
         ) {
             return (
@@ -2200,9 +2212,15 @@ impl CanisterManager {
             .add_restore_operation(canister_id, snapshot_id);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit += new_canister.heap_delta();
+            new_canister.scheduler_state.heap_delta_debit = new_canister
+                .scheduler_state
+                .heap_delta_debit
+                .saturating_add(&new_canister.heap_delta());
         }
-        state.metadata.heap_delta_estimate += new_canister.heap_delta();
+        state.metadata.heap_delta_estimate = state
+            .metadata
+            .heap_delta_estimate
+            .saturating_add(&new_canister.heap_delta());
 
         (Ok(new_canister), instructions_used)
     }
