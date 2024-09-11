@@ -4,10 +4,9 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 use config::{
-    config_map_from_path, DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
+    get_config_ini_settings, DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
 };
 use network::generate_network_config;
-use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
 use network::mac_address::{generate_mac_address, FormattedMacAddress};
 use network::node_type::NodeType;
@@ -57,71 +56,69 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
+            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-
-            let mut network_settings = network_info.to_network_settings();
-            eprintln!("Network settings config: {:?}", &network_settings);
-
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file))?;
+            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
             // and we won't need to read mgmt_mac from deployment.json directly.
-            network_settings.mgmt_mac = deployment.deployment.mgmt_mac;
+            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
+
+            eprintln!("Network settings config: {:?}", &network_settings);
 
             generate_network_config(
                 &network_settings,
-                deployment.deployment.name.as_str(),
+                deployment_json.deployment.name.as_str(),
                 NodeType::HostOS,
                 Path::new(&output_directory),
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
-            eprintln!("Deployment config: {:?}", deployment);
+            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
+            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json);
 
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
+            // Once HostOS is using the config struct, all config will be contained there
+            // and we won't need to read mgmt_mac from deployment.json directly.
+            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac.clone();
+
+            eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(
-                &deployment.deployment.name,
+                &deployment_json.deployment.name,
                 &node_type,
-                deployment.deployment.mgmt_mac.as_deref(),
+                deployment_json.deployment.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = network_info
+            let ipv6_prefix = network_settings
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
-            println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
+            println!("{}", to_cidr(ipv6_address, network_settings.ipv6_subnet));
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
+            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
+            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json);
 
-            let deployment = read_deployment_file(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
-            eprintln!("Deployment config: {:?}", deployment);
+            // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
+            // Once HostOS is using the config struct, all config will be contained there
+            // and we won't need to read mgmt_mac from deployment.json directly.
+            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac.clone();
+
+            eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(
-                &deployment.deployment.name,
+                &deployment_json.deployment.name,
                 &node_type,
-                deployment.deployment.mgmt_mac.as_deref(),
+                deployment_json.deployment.mgmt_mac.as_deref(),
             )?;
             let mac = FormattedMacAddress::from(&mac);
             println!("{}", mac.get());

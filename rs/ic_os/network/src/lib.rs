@@ -9,7 +9,6 @@ use config::types::NetworkSettings;
 use ipv6::generate_ipv6_address;
 use mac_address::FormattedMacAddress;
 
-pub mod info;
 pub mod interfaces;
 pub mod ipv6;
 pub mod mac_address;
