@@ -32,38 +32,18 @@ proptest! {
     fn check_guaranteed_response_message_memory_limits_are_respected(
         seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
         max_payload_bytes in (MAX_PAYLOAD_BYTES / 4)..=MAX_PAYLOAD_BYTES,
-        calls_per_round in 3..=10,
+        calls_per_round in 1..=10,
+        reply_weight in 0..=2,
+        call_weight in 0..=2,
+        // Note: both weights zero defaults to only replies.
     ) {
         prop_assert!(check_guaranteed_response_message_memory_limits_are_respected_impl(
             seeds.as_slice(),
             max_payload_bytes,
             calls_per_round as u32,
+            reply_weight as u32,
+            call_weight as u32,
         ).is_ok());
-    }
-}
-
-#[test]
-fn check_guaranteed_response_message_memory_limits_are_respected_manual() {
-    if let Err((reason, info)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-        &[
-            13766374379982621544,
-            16665635548866569114,
-            7558492387011045915,
-        ],
-        1417391,
-        3,
-    ) {
-        let (canister_id, canister_state) = info
-            .latest_local_state
-            .canister_states
-            .first_key_value()
-            .unwrap();
-        let records = info.records.get(canister_id).unwrap();
-
-        unreachable!(
-            "REASON: {},\n{:#?}\n\n{:#?}",
-            reason, records, canister_state.system_state.status
-        );
     }
 }
 
@@ -83,12 +63,14 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     seeds: &[u64],
     max_payload_bytes: u32,
     calls_per_round: u32,
+    reply_weight: u32,
+    call_weight: u32,
 ) -> Result<(), (String, DebugInfo)> {
     // The number of rounds to execute while chatter is on.
     const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
     // this number of rounds until there are no more hanging calls, the test fails.
-    const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 1000;
+    const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
     // The amount of memory available for guaranteed response message memory on `local_env`.
     const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
     // The amount of memory available for guaranteed response message memory on `remote_env`.
@@ -111,9 +93,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     )
     .unwrap();
 
-    let reply_weight = 1_u32;
-    let call_weight = 0_u32;
-
     // Send configs to canisters, seed the rng.
     for (index, canister) in fixture.canisters().into_iter().enumerate() {
         fixture.replace_config(canister, config.clone()).unwrap();
@@ -134,14 +113,14 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         // Check message memory limits are respected.
         let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
         if local_memory > LOCAL_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("local memory exceeds limit");
+            return fixture.debug_info("Chatter: local memory exceeds limit");
         }
         if remote_memory > REMOTE_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("remote memory exceeds limit");
+            return fixture.debug_info("Chatter: remote memory exceeds limit");
         }
     }
 
-    // Stop chatter on all canisters.
+    // Stop chatter on all canisters; stop additional downstream calls.
     fixture.stop_chatter().unwrap();
     for canister in fixture.canisters() {
         fixture.replace_call_weight(canister, 0).unwrap();
@@ -154,10 +133,10 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         // Check message memory limits are respected.
         let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
         if local_memory > LOCAL_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("local memory exceeds limit");
+            return fixture.debug_info("Shutdown: local memory exceeds limit");
         }
         if remote_memory > REMOTE_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("remote memory exceeds limit");
+            return fixture.debug_info("Shutdown: remote memory exceeds limit");
         }
 
         if fixture
@@ -177,23 +156,8 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     fixture.tick();
 
     // Check the system agrees on 'no hanging calls'.
-    for (canisters, env) in [
-        (&fixture.local_canisters, &fixture.local_env),
-        (&fixture.remote_canisters, &fixture.remote_env),
-    ] {
-        for canister in canisters.iter() {
-            let state = env.get_latest_state();
-            let call_context_manager = state
-                .canister_states
-                .get(canister)
-                .unwrap()
-                .system_state
-                .call_context_manager()
-                .unwrap();
-            if !call_context_manager.call_contexts().is_empty() {
-                return fixture.debug_info("found call contexts after shutdown phase");
-            }
-        }
+    if fixture.open_call_contexts_count().values().sum::<usize>() != 0 {
+        return fixture.debug_info("found call contexts after shutdown phase");
     }
 
     // All memory is freed without hanging calls.
@@ -441,7 +405,7 @@ impl Fixture {
             .collect()
     }
 
-    /// Return the number of bytes take by guaranteed response memory (`local_env`, `remote_env`).
+    /// Return the number of bytes taken by guaranteed response memory (`local_env`, `remote_env`).
     pub fn guaranteed_response_message_memory_taken(&self) -> (NumBytes, NumBytes) {
         (
             self.local_env
@@ -453,8 +417,30 @@ impl Fixture {
         )
     }
 
+    /// Returns the number of open call contexts for each `canister` installed on `self`.
+    ///
+    /// Panics if no such canister exists.
+    pub fn open_call_contexts_count(&self) -> BTreeMap<CanisterId, usize> {
+        self.canisters()
+            .into_iter()
+            .map(|canister| {
+                let count = self
+                    .get_env(&canister)
+                    .get_latest_state()
+                    .canister_states
+                    .get(&canister)
+                    .unwrap()
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |manager| manager.call_contexts().len());
+                (canister, count)
+            })
+            .collect()
+    }
+
     /// Executes one round on both the `local_env` and the `remote_env` by generating a XNet
-    /// payload on one and inducting it into the other, and vice versa.
+    /// payload on one and inducting it into the other, and vice versa; if there are no XNet
+    /// messages either way, performs a normal `tick()` on the receiving subnet.
     pub fn tick(&self) {
         if let Ok(xnet_payload) = self.local_env.generate_xnet_payload(
             self.remote_env.get_subnet_id(),

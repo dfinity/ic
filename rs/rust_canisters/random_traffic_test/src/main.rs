@@ -143,7 +143,7 @@ fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
     };
 
     let error_code = api::call_with_callbacks(
-        api::CanisterId::try_from(receiver).unwrap(),
+        receiver,
         "handle_call",
         &vec![0_u8; payload_bytes as usize][..],
         move || {
