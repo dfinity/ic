@@ -258,7 +258,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
-/rs/tla_instrumentation/                                @dfinity/research
+/rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners

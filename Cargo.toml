@@ -481,7 +481,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
+cloudflare = { git = "https://github.com/cloudflare/cloudflare-rs.git", rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae", default-features = false, feature = [
     "rustls-tls",
 ] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
@@ -608,7 +608,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.10.6"
-reqwest = { version = "0.12.5", default-features = false, features = [
+reqwest = { version = "0.12.7", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -622,6 +622,7 @@ rstest = "0.19.0"
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",
+    "brotli",
 ] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
