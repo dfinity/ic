@@ -1,25 +1,16 @@
-use std::{
-    net::SocketAddr,
-    pin::Pin,
-    sync::{atomic::AtomicBool, Arc},
-    time::Instant,
-};
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    body::Body,
-    extract::{ConnectInfo, State},
-    http::Request,
+    extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
-use bytes::Buf;
-use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
-use http_body::Body as HttpBody;
+use http::header::CONTENT_TYPE;
+use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
@@ -36,12 +27,10 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     geoip,
-    http::http_version,
     persist::RouteSubnet,
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
-    socket::TcpConnectInfo,
 };
 
 const KB: f64 = 1024.0;
@@ -56,7 +45,6 @@ const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
 const SUBNET_ID_UNKNOWN: &str = "unknown";
-
 pub struct MetricsCache {
     buffer: Vec<u8>,
 }
@@ -235,139 +223,10 @@ impl Run for MetricsRunner {
     }
 }
 
-// A wrapper for http::Body implementations that tracks the number of bytes sent
-pub struct MetricsBody<D, E> {
-    inner: Pin<Box<dyn HttpBody<Data = D, Error = E> + Send + 'static>>,
-    // TODO see if we can make this FnOnce somehow
-    callback: Box<dyn Fn(u64, Result<(), String>) + Send + 'static>,
-    callback_done: AtomicBool,
-    expected_size: Option<u64>,
-    bytes_sent: u64,
-}
-
-impl<D, E> MetricsBody<D, E> {
-    pub fn new<B>(
-        body: B,
-        content_length: Option<HeaderValue>,
-        callback: impl Fn(u64, Result<(), String>) + Send + 'static,
-    ) -> Self
-    where
-        B: HttpBody<Data = D, Error = E> + Send + 'static,
-        D: Buf,
-    {
-        // Body can sometimes provide an exact size in the hint, use that
-        let expected_size = body.size_hint().exact().or_else(|| {
-            // Try to parse header if provided otherwise
-            content_length.and_then(|x| x.to_str().ok().and_then(|x| x.parse::<u64>().ok()))
-        });
-
-        let mut body = Self {
-            inner: Box::pin(body),
-            callback: Box::new(callback),
-            callback_done: AtomicBool::new(false),
-            expected_size,
-            bytes_sent: 0,
-        };
-
-        // If the size is known and zero - just execute the callback now, it won't be called anywhere else
-        if expected_size == Some(0) {
-            body.do_callback(Ok(()));
-        }
-
-        body
-    }
-
-    // In certain cases the users of HttpBody trait can cause us to run callbacks more than once
-    // Use AtomicBool to prevent that and run it at most once
-    pub fn do_callback(&mut self, res: Result<(), String>) {
-        // Make locking scope shorter
-        {
-            let done = self.callback_done.get_mut();
-            if *done {
-                return;
-            }
-            *done = true;
-        }
-
-        (self.callback)(self.bytes_sent, res);
-    }
-}
-
-// According to the research, the users of HttpBody can determine the time when
-// there's no more data to fetch in several ways:
-//
-// 1) When there's no Content-Length header they just call poll_data() until it yields Poll::Ready(None)
-// 2) When there's such header - they call poll_data() until they get advertised in the header number of bytes
-//    and don't call poll_data() anymore so Poll::Ready(None) variant is never reached
-// 3) They call is_end_stream() and if it returns true then they don't call poll_data() anymore
-// 4) By using size_hint() if it yields an exact number
-//
-// So we have to cover all these:
-// * We don't implement is_end_stream() (default impl in Trait just returns false) so that
-//   the caller will have to use poll_data()
-// * We have to have a Content-Length stored to check if we got already that much data
-// * We check size_hint() for an exact value
-
-impl<D, E> HttpBody for MetricsBody<D, E>
-where
-    D: Buf,
-    E: std::string::ToString,
-{
-    type Data = D;
-    type Error = E;
-
-    fn poll_data(
-        mut self: Pin<&mut Self>,
-        cx: &mut FutContext<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let poll = self.inner.as_mut().poll_data(cx);
-
-        match &poll {
-            // There is still some data available
-            Poll::Ready(Some(v)) => match v {
-                Ok(buf) => {
-                    self.bytes_sent += buf.remaining() as u64;
-
-                    // Check if we already got what was expected
-                    if Some(self.bytes_sent) >= self.expected_size {
-                        self.do_callback(Ok(()));
-                    }
-                }
-
-                // Error occured, execute callback
-                Err(e) => {
-                    // Error is not Copy/Clone so use string instead
-                    self.do_callback(Err(e.to_string()));
-                }
-            },
-
-            // Nothing left, execute callback
-            Poll::Ready(None) => {
-                self.do_callback(Ok(()));
-            }
-
-            // Do nothing
-            Poll::Pending => {}
-        }
-
-        poll
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut FutContext<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-        self.inner.as_mut().poll_trailers(cx)
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
-    }
-}
-
+#[derive(Clone, Debug)]
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MetricParams {
     pub action: String,
     pub counter: IntCounterVec,
@@ -600,8 +459,8 @@ impl HttpMetricParamsStatus {
 
 pub async fn metrics_middleware_status(
     State(metric_params): State<HttpMetricParamsStatus>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> impl IntoResponse {
     let response = next.run(request).await;
     let health = response
@@ -620,20 +479,15 @@ pub async fn metrics_middleware_status(
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> impl IntoResponse {
     let request_id = request_id.header_value().to_str().unwrap_or("").to_string();
 
     let ip_family = request
         .extensions()
-        .get::<ConnectInfo<TcpConnectInfo>>()
-        .map(|x| (x.0).0)
-        .or(request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|x| x.0))
-        .map(|x| if x.is_ipv4() { "4" } else { "6" })
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.family())
         .unwrap_or("0");
 
     let request_type = &request
@@ -707,8 +561,13 @@ pub async fn metrics_middleware(
         response_sizer,
     } = metric_params;
 
-    // Closure that gets called when the response body is fully read (or an error occurs)
-    let record_metrics = move |response_size: u64, _body_result: Result<(), String>| {
+    let (parts, body) = response.into_parts();
+    let (body, rx) = CountingBody::new(body);
+
+    tokio::spawn(async move {
+        // Wait for the streaming to finish
+        let response_size = rx.await.unwrap_or(Ok(0)).unwrap_or(0);
+
         let full_duration = start_time.elapsed().as_secs_f64();
         let failed = error_cause.is_some() || !status_code.is_success();
 
@@ -790,11 +649,7 @@ pub async fn metrics_middleware(
                 client_ip_family = ip_family,
             );
         }
-    };
-
-    let (parts, body) = response.into_parts();
-    let content_length = parts.headers.get(CONTENT_LENGTH).cloned();
-    let body = MetricsBody::new(body, content_length, record_metrics);
+    });
 
     Response::from_parts(parts, body)
 }
