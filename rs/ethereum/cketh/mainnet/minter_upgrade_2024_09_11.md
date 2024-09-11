@@ -13,7 +13,7 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 ## Motivation
 The Ethereum JSON-RPC provider Ankr (`rpc.ankr.com`) recently dropped its IPv6 connectivity and will need according to its support team a month to fix it.
 This resulted in the ckETH minter being stuck and unable to process deposits nor withdrawals.
-As an emergency fix, this proposal replaces Ankr by another provider: `eth-pokt.nodies.app` from [Pocket Network](https://www.pokt.network/).
+As a temporary fix, this proposal replaces Ankr by another provider: `eth-pokt.nodies.app` from [Pocket Network](https://www.pokt.network/).
 The long term solution is to use a more robust strategy (e.g., agreement among 3 providers, when 4 were queried) using the EVM-RPC canister.
 
 
