@@ -139,7 +139,7 @@ use std::convert::TryFrom;
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum WasmMemoryType {
+pub enum WasmMemoryType {
     Wasm32,
     Wasm64,
 }
@@ -173,8 +173,74 @@ impl InjectedImports {
     }
 }
 
-// Gets the cost of an instruction.
-pub fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
+    match mem_type {
+        WasmMemoryType::Wasm32 => instruction_to_cost_wasm32(i),
+        WasmMemoryType::Wasm64 => instruction_to_cost_wasm64(i),
+    }
+}
+
+// Gets the cost of an instruction in 64-bit mode.
+pub fn instruction_to_cost_wasm64(i: &Operator) -> u64 {
+    // There are only a subset of instructions that are more expensive in 64-bit mode.
+    // The rest of the instructions are the same as in 32-bit mode.
+    match i {
+        // Load/store are more expensive in 64-bit mode.
+        Operator::I32Load { .. }
+        | Operator::I64Load { .. }
+        | Operator::F32Load { .. }
+        | Operator::F64Load { .. }
+        | Operator::I32Load8S { .. }
+        | Operator::I32Load8U { .. }
+        | Operator::I32Load16S { .. }
+        | Operator::I32Load16U { .. }
+        | Operator::I64Load8S { .. }
+        | Operator::I64Load8U { .. }
+        | Operator::I64Load16S { .. }
+        | Operator::I64Load16U { .. }
+        | Operator::I64Load32S { .. }
+        | Operator::I64Load32U { .. }
+        | Operator::I32Store { .. }
+        | Operator::I64Store { .. }
+        | Operator::F32Store { .. }
+        | Operator::F64Store { .. }
+        | Operator::I32Store8 { .. }
+        | Operator::I32Store16 { .. }
+        | Operator::I64Store8 { .. }
+        | Operator::I64Store16 { .. }
+        | Operator::I64Store32 { .. } => 2,
+
+        // Load/store for SIMD are more expensive in 64-bit mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => 2,
+
+        // The rest of the instructions are the same as in 32-bit mode.
+        _ => instruction_to_cost_wasm32(i),
+    }
+}
+
+// Gets the cost of an instruction in 32-bit mode.
+pub fn instruction_to_cost_wasm32(i: &Operator) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
     // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
@@ -358,9 +424,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 2.
+        // All load/store instructions are of cost 1.
         // Validated in benchmarks.
-        // The cost is adjusted to 1 after benchmarking with real canisters.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
         | Operator::F32Load { .. }
@@ -1811,7 +1876,8 @@ fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail
+            .increment_cost(instruction_to_cost(i, mem_type));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {

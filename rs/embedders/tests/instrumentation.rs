@@ -14,6 +14,7 @@ use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
@@ -316,10 +317,18 @@ fn add_one() -> String {
 
 // cost of the addition group (get glob, do adds, set glob)
 fn cost_a(n: u64) -> u64 {
-    let ca = instruction_to_cost(&wasmparser::Operator::I64Add);
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 })
-        + instruction_to_cost(&wasmparser::Operator::GlobalGet { global_index: 0 });
+    let ca = instruction_to_cost(&wasmparser::Operator::I64Add, WasmMemoryType::Wasm32);
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cg = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    ) + instruction_to_cost(
+        &wasmparser::Operator::GlobalGet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     (ca + cc) * n + cg
 }
@@ -381,7 +390,7 @@ fn metering_plain() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return, WasmMemoryType::Wasm32);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(10) + cret);
 
@@ -415,7 +424,7 @@ fn metering_plain() {
     instance.run(func_ref("test")).unwrap_err();
 
     let instructions_used = instr_used(&mut instance);
-    let ctrap = instruction_to_cost(&wasmparser::Operator::Unreachable);
+    let ctrap = instruction_to_cost(&wasmparser::Operator::Unreachable, WasmMemoryType::Wasm32);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(10) + ctrap);
 }
@@ -487,7 +496,10 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(120));
 
     let instructions_used = instr_used(&mut instance);
-    let cbr = instruction_to_cost(&wasmparser::Operator::Br { relative_depth: 1 });
+    let cbr = instruction_to_cost(
+        &wasmparser::Operator::Br { relative_depth: 1 },
+        WasmMemoryType::Wasm32,
+    );
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) * 2 + cbr);
 
@@ -531,7 +543,7 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(110));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return, WasmMemoryType::Wasm32);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) + cret);
 }
@@ -576,10 +588,16 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(55));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cif = instruction_to_cost(&wasmparser::Operator::If {
-        blockty: wasmparser::BlockType::Empty,
-    });
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cif = instruction_to_cost(
+        &wasmparser::Operator::If {
+            blockty: wasmparser::BlockType::Empty,
+        },
+        WasmMemoryType::Wasm32,
+    );
 
     let instructions_used = instr_used(&mut instance);
     assert_eq!(
@@ -627,7 +645,7 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(15));
 
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return, WasmMemoryType::Wasm32);
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
@@ -684,13 +702,25 @@ fn metering_loop() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(105));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let cbrif = instruction_to_cost(&wasmparser::Operator::BrIf { relative_depth: 0 });
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cbrif = instruction_to_cost(
+        &wasmparser::Operator::BrIf { relative_depth: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
-    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
-    let clts = instruction_to_cost(&wasmparser::Operator::I32LtS);
-    let cset = instruction_to_cost(&wasmparser::Operator::LocalSet { local_index: 0 });
-    let cget = instruction_to_cost(&wasmparser::Operator::LocalGet { local_index: 0 });
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
+    let clts = instruction_to_cost(&wasmparser::Operator::I32LtS, WasmMemoryType::Wasm32);
+    let cset = instruction_to_cost(
+        &wasmparser::Operator::LocalSet { local_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let cget = instruction_to_cost(
+        &wasmparser::Operator::LocalGet { local_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     let c_loop = cost_a(10) + cc * 2 + ca + cget + cset * 2 + clts + cbrif;
 
@@ -721,24 +751,36 @@ fn charge_for_dirty_heap() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cg = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let cs = instruction_to_cost(
+        &wasmparser::Operator::I64Store {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
-    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+        WasmMemoryType::Wasm32,
+    );
+    let cl = instruction_to_cost(
+        &wasmparser::Operator::I64Load {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
+        WasmMemoryType::Wasm32,
+    );
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
@@ -783,27 +825,42 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop);
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cg = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let ccall = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32);
 
-    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+    let cs = instruction_to_cost(
+        &wasmparser::Operator::I64Store {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
-    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+        WasmMemoryType::Wasm32,
+    );
+    let cl = instruction_to_cost(
+        &wasmparser::Operator::I64Load {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
+        WasmMemoryType::Wasm32,
+    );
 
     let system_api = instance.store_data().system_api().unwrap();
 
@@ -894,27 +951,42 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I32(17));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop);
+    let cc = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let cg = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let ccall = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32);
 
-    let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+    let cs = instruction_to_cost(
+        &wasmparser::Operator::I32Store {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
-    let cl = instruction_to_cost(&wasmparser::Operator::I32Load {
-        memarg: wasmparser::MemArg {
-            align: 0,
-            max_align: 0,
-            offset: 0,
-            memory: 0,
+        WasmMemoryType::Wasm32,
+    );
+    let cl = instruction_to_cost(
+        &wasmparser::Operator::I32Load {
+            memarg: wasmparser::MemArg {
+                align: 0,
+                max_align: 0,
+                offset: 0,
+                memory: 0,
+            },
         },
-    });
+        WasmMemoryType::Wasm32,
+    );
 
     let system_api = instance.store_data().system_api().unwrap();
 
@@ -1009,4 +1081,145 @@ fn table_modifications_are_unsupported() {
 
     let err = test("(table.init 0 (i32.const 0) (i32.const 0) (i32.const 0))");
     assert!(err.contains("unsupported instruction table.init"));
+}
+
+#[test]
+fn metering_wasm64_load_store_canister() {
+    let wat = r#"
+        (module
+            (func $test (export "canister_update test")
+                (i64.store (i64.const 0) (i64.const 17))
+                (i64.store (i64.const 4096) (i64.const 117))
+                (i64.load (i64.const 0))
+                (drop)
+            )
+            (memory i64 1000)
+        )"#;
+
+    let mut embedder_config = EmbeddersConfig::default();
+    embedder_config.feature_flags.wasm64 = FlagStatus::Enabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(embedder_config)
+        .with_wat(wat)
+        .with_num_instructions(NumInstructions::new(10000))
+        .build();
+
+    instance.run(func_ref("test")).unwrap();
+
+    let instr_used_wasm64 = instr_used(&mut instance);
+
+    let const_0 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 0 },
+        WasmMemoryType::Wasm64,
+    );
+    let const_17 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 17 },
+        WasmMemoryType::Wasm64,
+    );
+    let const_117 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 117 },
+        WasmMemoryType::Wasm64,
+    );
+    let const_4096 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 4096 },
+        WasmMemoryType::Wasm64,
+    );
+    let store = instruction_to_cost(
+        &wasmparser::Operator::I64Store {
+            memarg: wasmparser::MemArg {
+                align: 3,
+                max_align: 3,
+                offset: 0,
+                memory: 0,
+            },
+        },
+        WasmMemoryType::Wasm64,
+    );
+    let load = instruction_to_cost(
+        &wasmparser::Operator::I64Load {
+            memarg: wasmparser::MemArg {
+                align: 3,
+                max_align: 3,
+                offset: 0,
+                memory: 0,
+            },
+        },
+        WasmMemoryType::Wasm64,
+    );
+    let drop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm64);
+    let total_cost = 1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop;
+    assert_eq!(instr_used_wasm64, total_cost);
+
+    // Compute cost in Wasm32 mode and compare.
+    let wat_wasm32 = r#"
+        (module
+            (func $test (export "canister_update test")
+                (i64.store (i32.const 0) (i64.const 17))
+                (i64.store (i32.const 4096) (i64.const 117))
+                (i64.load (i32.const 0))
+                (drop)
+            )
+            (memory 1000)
+        )"#;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(EmbeddersConfig::default())
+        .with_wat(wat_wasm32)
+        .with_num_instructions(NumInstructions::new(10000))
+        .build();
+
+    instance.run(func_ref("test")).unwrap();
+    let wasm_32_instructions = instr_used(&mut instance);
+
+    let const_0_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let const_17_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 17 },
+        WasmMemoryType::Wasm32,
+    );
+    let const_117_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 117 },
+        WasmMemoryType::Wasm32,
+    );
+    let const_4096_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 4096 },
+        WasmMemoryType::Wasm32,
+    );
+    let store_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Store {
+            memarg: wasmparser::MemArg {
+                align: 3,
+                max_align: 3,
+                offset: 0,
+                memory: 0,
+            },
+        },
+        WasmMemoryType::Wasm32,
+    );
+    let load_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Load {
+            memarg: wasmparser::MemArg {
+                align: 3,
+                max_align: 3,
+                offset: 0,
+                memory: 0,
+            },
+        },
+        WasmMemoryType::Wasm32,
+    );
+    let drop_wasm32 = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32);
+    let total_cost_wasm32 = 1
+        + 2 * const_0_wasm32
+        + const_17_wasm32
+        + const_117_wasm32
+        + const_4096_wasm32
+        + 2 * store_wasm32
+        + load_wasm32
+        + drop_wasm32;
+    assert_eq!(wasm_32_instructions, total_cost_wasm32);
+
+    // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
+    assert!(total_cost > total_cost_wasm32);
 }
