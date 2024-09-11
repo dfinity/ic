@@ -177,8 +177,8 @@ fn test_account_balances() {
                                     .await
                                     .unwrap()
                                     .balances[0]
-                                    .clone()
                                     .value
+                                    .clone()
                             );
                         }
                     }
