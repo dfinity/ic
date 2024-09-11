@@ -1303,6 +1303,7 @@ impl PoolRefillTask {
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
+            let rt_handle = self.runtime_handle.clone();
             self.runtime_handle.spawn(async move {
                 let since = Instant::now();
                 metrics.outstanding_queries.inc();
@@ -1314,14 +1315,30 @@ impl PoolRefillTask {
                     Ok(slice) => {
                         let res = if witness_begin != msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
+                            rt_handle
+                                .spawn_blocking(move || {
+                                    pool.lock().unwrap().append(
+                                        subnet_id,
+                                        slice,
+                                        registry_version,
+                                        log,
+                                    )
+                                })
+                                .await
                                 .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
                         } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
+                            rt_handle
+                                .spawn_blocking(move || {
+                                    // Pulled a complete stream, replace pooled slice (if any).
+                                    pool.lock().unwrap().put(
+                                        subnet_id,
+                                        slice,
+                                        registry_version,
+                                        log,
+                                    )
+                                })
+                                .await
                                 .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
                         };
                         let status = match res {
                             Ok(()) => STATUS_SUCCESS,
@@ -1566,7 +1583,7 @@ impl XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, _> = Client::builder()
             .pool_idle_timeout(Some(Duration::from_secs(600)))
-            .pool_max_idle_per_host(1)
+            .pool_max_idle_per_host(5)
             .executor(ExecuteOnRuntime(runtime_handle))
             .build(
                 #[cfg(not(test))]
