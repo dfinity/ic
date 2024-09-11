@@ -97,6 +97,8 @@ jobs:
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+
+          # Deploy the bare metal machine with SetupOS
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
@@ -106,6 +108,8 @@ jobs:
               --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
               --file_share_username ci_interim \
               --ci_mode
+
+          # Run node performance benchmarks
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
