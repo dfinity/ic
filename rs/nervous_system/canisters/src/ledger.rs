@@ -83,19 +83,20 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         // this method, make sure that the staked amount
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
-        let result: Result<Result<u64, TransferError>, (i32, String)> = Rt::call_without_cleanup(
-            self.id,
-            "transfer",
-            TransferArgs {
-                memo: Memo(memo),
-                amount: Tokens::from_e8s(amount_e8s),
-                fee: Tokens::from_e8s(fee_e8s),
-                from_subaccount,
-                to: to.to_address(),
-                created_at_time: None,
-            },
-        )
-        .await;
+        let result: Result<(Result<u64, TransferError>,), (i32, String)> =
+            Rt::call_without_cleanup(
+                self.canister_id,
+                "transfer",
+                (TransferArgs {
+                    memo: Memo(memo),
+                    amount: Tokens::from_e8s(amount_e8s),
+                    fee: Tokens::from_e8s(fee_e8s),
+                    from_subaccount,
+                    to: to.to_address(),
+                    created_at_time: None,
+                },),
+            )
+            .await;
 
         result
             .map_err(|(code, msg)| {
@@ -104,8 +105,8 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
                     code, msg
                 ))
             })
-            .and_then(|inner_result| {
-                inner_result.map_err(|e: TransferError| {
+            .and_then(|inner_result: (Result<u64, TransferError>,)| {
+                inner_result.0.map_err(|e: TransferError| {
                     NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
                 })
             })
@@ -113,7 +114,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (i32, String)> =
-            Rt::call_without_cleanup(self.id, "icrc1_total_supply", ())
+            Rt::call_without_cleanup(self.canister_id, "icrc1_total_supply", ((),))
                 .await
                 .map(|e8s: (Nat,)| {
                     Tokens::try_from(e8s.0)
@@ -135,13 +136,14 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (i32, String)> = Rt::call_without_cleanup(
-            self.id,
+            self.canister_id,
             "account_balance",
-            BinaryAccountBalanceArgs {
+            (BinaryAccountBalanceArgs {
                 account: account.to_address(),
-            },
+            },),
         )
-        .await;
+        .await
+        .map(|tokens: (Tokens,)| tokens.0);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(

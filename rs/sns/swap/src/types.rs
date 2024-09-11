@@ -19,7 +19,7 @@ use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
 use ic_nervous_system_proto::pb::v1::Principals;
-use ic_nervous_system_runtime::{DfnRuntime, Runtime};
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
