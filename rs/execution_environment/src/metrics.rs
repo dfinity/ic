@@ -283,7 +283,7 @@ impl QueryHandlerMetrics {
     pub fn observe_subnet_query_message(&self, method: &str, duration: f64) {
         // Determine the label based on whether the method is a subnet (management canister) query.
         let label = match QueryMethod::from_str(method) {
-            Ok(q) if q.is_ic00_query() => format!("query_ic00_{method}"),
+            Ok(q) if q.is_management_canister_query() => format!("query_ic00_{method}"),
             Ok(_) => format!("query_{method}"),
             Err(_) => "unknown_query".to_string(),
         };

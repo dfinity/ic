@@ -2588,7 +2588,7 @@ pub enum QueryMethod {
 
 impl QueryMethod {
     /// Returns `true` if the query is directed to the management canister (subnet query).
-    pub fn is_ic00_query(&self) -> bool {
+    pub fn is_management_canister_query(&self) -> bool {
         matches!(self, QueryMethod::FetchCanisterLogs)
     }
 }
