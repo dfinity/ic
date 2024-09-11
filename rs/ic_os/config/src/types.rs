@@ -54,14 +54,18 @@ pub struct NetworkSettings {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ICOSSettings {
+    pub logging: Logging,
     pub nns_public_key_path: PathBuf,
     pub nns_urls: Vec<Url>,
-    pub elasticsearch_hosts: String,
-    // help: elasticsearch_tags is a dev field?
-    pub elasticsearch_tags: Option<String>,
     pub hostname: String,
     pub node_operator_private_key_path: Option<PathBuf>,
     pub ssh_authorized_keys_path: Option<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Logging {
+    pub elasticsearch_hosts: String,
+    pub elasticsearch_tags: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]

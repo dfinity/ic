@@ -182,7 +182,7 @@ mod tests {
     use tempfile::{tempdir, NamedTempFile};
     use types::{
         GuestOSConfig, GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings,
-        ICOSSettings, SetupOSConfig, SetupOSSettings,
+        ICOSSettings, Logging, SetupOSConfig, SetupOSSettings,
     };
 
     #[test]
@@ -198,9 +198,7 @@ mod tests {
             domain: None,
             mgmt_mac: None,
         };
-        let icos_settings = ICOSSettings {
-            nns_public_key_path: PathBuf::from("/path/to/key"),
-            nns_urls: vec!["http://localhost".parse().unwrap()],
+        let logging = Logging {
             elasticsearch_hosts: [
                 "elasticsearch-node-0.mercury.dfinity.systems:443",
                 "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -209,6 +207,11 @@ mod tests {
             ]
             .join(" "),
             elasticsearch_tags: None,
+        };
+        let icos_settings = ICOSSettings {
+            logging,
+            nns_public_key_path: PathBuf::from("/path/to/key"),
+            nns_urls: vec!["http://localhost".parse().unwrap()],
             hostname: "mainnet".to_string(),
             node_operator_private_key_path: None,
             ssh_authorized_keys_path: None,

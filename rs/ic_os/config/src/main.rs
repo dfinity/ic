@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use utils::deployment::read_deployment_file;
 
 use config::types::{
-    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, SetupOSConfig, SetupOSSettings,
+    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, SetupOSConfig,
+    SetupOSSettings,
 };
 
 #[derive(Subcommand)]
@@ -81,11 +82,15 @@ pub fn main() -> Result<()> {
             let elasticsearch_hosts = deployment_json.logging.hosts.to_string();
             network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
 
-            let icos_settings = ICOSSettings {
-                nns_public_key_path: nns_public_key_path.to_path_buf(),
-                nns_urls,
+            let logging = Logging {
                 elasticsearch_hosts,
                 elasticsearch_tags: None,
+            };
+
+            let icos_settings = ICOSSettings {
+                logging,
+                nns_public_key_path: nns_public_key_path.to_path_buf(),
+                nns_urls,
                 hostname,
                 node_operator_private_key_path,
                 ssh_authorized_keys_path,
