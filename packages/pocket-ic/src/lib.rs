@@ -57,7 +57,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tracing::{instrument, warn};
 
@@ -1317,7 +1317,6 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
     cmd.spawn().expect("Failed to start PocketIC binary");
 
-    let start = Instant::now();
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
             if port_string.contains("\n") {
@@ -1327,9 +1326,6 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
                     .expect("Failed to parse port to number");
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
-        }
-        if start.elapsed() > Duration::from_secs(10) {
-            panic!("Failed to start PocketIC service in time");
         }
         std::thread::sleep(Duration::from_millis(20));
     }

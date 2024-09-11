@@ -1,7 +1,7 @@
 use crate::{
-    canister_state::execution_state::Memory,
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
-    PageMap,
+    canister_state::execution_state::{Global, Memory},
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore,
+    CanisterState, NumWasmPages, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
@@ -156,11 +156,16 @@ impl CanisterSnapshots {
     }
 
     /// Returns the number of snapshots stored for the given canister id.
-    pub fn snapshots_count(&self, canister_id: &CanisterId) -> usize {
+    pub fn count_by_canister(&self, canister_id: &CanisterId) -> usize {
         match self.snapshot_ids.get(canister_id) {
             Some(snapshot_ids) => snapshot_ids.len(),
             None => 0,
         }
+    }
+
+    /// Returns the total number of snapshots stored in the replicated state.
+    pub fn count(&self) -> usize {
+        self.snapshots.len()
     }
 
     /// Computes the total memory usage of all of the specified canister's snapshots.
@@ -237,7 +242,7 @@ impl CanisterSnapshots {
 
     /// Returns the amount of memory taken by all canister snapshots on
     /// this subnet.
-    pub(crate) fn memory_taken(&self) -> NumBytes {
+    pub fn memory_taken(&self) -> NumBytes {
         // The running sum of the memory usage of all canister snapshots should
         // be the same as the one computed by iterating over all snapshots.
         debug_assert_eq!(
@@ -284,6 +289,11 @@ pub struct ExecutionStateSnapshot {
     /// The raw canister module.
     #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModule,
+    /// The Wasm global variables.
+    /// Note: The hypervisor instrumentations exports all global variables,
+    /// including originally internal global variables.
+    #[validate_eq(Ignore)]
+    pub exported_globals: Vec<Global>,
     /// Snapshot of stable memory.
     #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: PageMemory,
@@ -345,6 +355,7 @@ impl CanisterSnapshot {
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
+            exported_globals: execution_state.exported_globals.clone(),
             stable_memory: PageMemory::from(&execution_state.stable_memory),
             wasm_memory: PageMemory::from(&execution_state.wasm_memory),
         };
@@ -390,6 +401,10 @@ impl CanisterSnapshot {
 
     pub fn canister_module(&self) -> &CanisterModule {
         &self.execution_snapshot.wasm_binary
+    }
+
+    pub fn exported_globals(&self) -> &Vec<Global> {
+        &self.execution_snapshot.exported_globals
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
@@ -457,6 +472,7 @@ mod tests {
     ) -> (SnapshotId, CanisterSnapshot) {
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: CanisterModule::new(vec![1, 2, 3]),
+            exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
             stable_memory: PageMemory {
                 page_map: PageMap::new_for_testing(),
                 size: NumWasmPages::new(10),

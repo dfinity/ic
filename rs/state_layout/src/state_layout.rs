@@ -19,7 +19,7 @@ use ic_replicated_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
-    page_map::{Shard, StorageLayout},
+    page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
@@ -201,6 +201,8 @@ pub struct CanisterSnapshotBits {
     pub wasm_memory_size: NumWasmPages,
     /// The total size of the snapshot in bytes.
     pub total_size: NumBytes,
+    /// State of the exported Wasm globals.
+    pub exported_globals: Vec<Global>,
 }
 
 #[derive(Clone)]
@@ -1732,67 +1734,66 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     }
 
     /// List of overlay files on disk.
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(self.existing_overlays()?)
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
     }
 
     /// Get overlay height as encoded in the file name.
-    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .next()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16)
             .map(Height::new)
             .map_err(|err| {
-                LayoutError::CorruptedLayout {
+                Box::new(LayoutError::CorruptedLayout {
                     path: overlay.to_path_buf(),
                     message: format!("failed to get height for overlay {}: {}", hex, err),
-                }
-                .into()
+                }) as Box<dyn std::error::Error + Send>
             })
     }
 
     /// Get overlay shard as encoded in the file name.
-    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard> {
         let file_name = overlay
             .file_name()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "No file name".to_owned(),
-            })?
+            }) as Box<dyn std::error::Error + Send>)?
             .to_str()
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot convert file name to string".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         let hex = file_name
             .split('_')
             .nth(1)
-            .ok_or(LayoutError::CorruptedLayout {
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: "Cannot parse file name".to_owned(),
-            })?;
+            }) as Box<dyn std::error::Error + Send>)?;
         u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
-            LayoutError::CorruptedLayout {
+            Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
                 message: format!("failed to get shard for overlay {}: {}", hex, err),
-            }
-            .into()
+            }) as Box<dyn std::error::Error + Send>
         })
     }
 }
@@ -2513,6 +2514,11 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
             stable_memory_size: item.stable_memory_size.get() as u64,
             wasm_memory_size: item.wasm_memory_size.get() as u64,
             total_size: item.total_size.get(),
+            exported_globals: item
+                .exported_globals
+                .iter()
+                .map(|global| global.into())
+                .collect(),
         }
     }
 }
@@ -2537,6 +2543,12 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             }
             None => None,
         };
+
+        let mut exported_globals = Vec::with_capacity(item.exported_globals.len());
+        for global in item.exported_globals.into_iter() {
+            exported_globals.push(global.try_into()?);
+        }
+
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
@@ -2552,6 +2564,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             stable_memory_size: NumWasmPages::from(item.stable_memory_size as usize),
             wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
             total_size: NumBytes::from(item.total_size),
+            exported_globals,
         })
     }
 }
