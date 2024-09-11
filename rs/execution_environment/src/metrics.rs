@@ -298,12 +298,14 @@ impl QueryHandlerMetrics {
             } else {
                 ""
             },
-            query_method.to_string()
+            query_method
         );
-        let outcome_label = match res {
-            Ok(_) => FINISHED_OUTCOME_LABEL.into(),
-            Err(_) => ERROR_OUTCOME_LABEL.into(),
+        let outcome_label = if res.is_ok() {
+            FINISHED_OUTCOME_LABEL
+        } else {
+            ERROR_OUTCOME_LABEL
         };
+
         self.subnet_query_messages
             .with_label_values(&[&method_name_label, outcome_label])
             .observe(duration);
