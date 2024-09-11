@@ -54,7 +54,7 @@ use tokio::{
 };
 use tonic::Request;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{error, info, trace};
+use tracing::{debug, error, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -997,7 +997,7 @@ impl ApiState {
                     .unwrap();
             }
 
-            info!("Terminating HTTP gateway.");
+            debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
