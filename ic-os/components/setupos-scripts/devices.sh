@@ -39,7 +39,7 @@ function copy_config_files() {
             log_and_halt_installation_on_error "1" "Directory '${ssh_authorized_keys}' does not exist."
         fi
     else
-        echo "SSH authorized keys path is not configured."
+        echo >&2 "Warning: SSH authorized keys path is not configured."
     fi
 
     echo "* Copying node operator private key..."
@@ -48,9 +48,9 @@ function copy_config_files() {
         cp "${node_operator_private_key_path}" /media/
         log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
     elif [ "${node_operator_private_key_path}" = "null" ]; then
-        echo "Node operator private key path is not configured."
+        echo >&2 "Warning: Node operator private key path is not configured."
     else
-        echo "node_operator_private_key.pem does not exist, requiring HSM."
+        echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
     fi
 
     echo "* Copying deployment.json to config partition..."
