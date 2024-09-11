@@ -142,7 +142,7 @@ fn test_account_balances() {
                     .await
                     .unwrap();
 
-                    // Iterate over every account at every block index and make sure the balances of the balances of the ledger match the balances of the rosetta storage
+                    // Iterate over every account at every block index and make sure the balances of the ledger match the balances of the rosetta storage
                     for idx in block_indices_iter.into_iter() {
                         for account in involved_accounts.clone().into_iter() {
                             account_balance_at_block_idx
