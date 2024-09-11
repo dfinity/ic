@@ -94,7 +94,7 @@ impl IcpLedger for IcpLedgerCanister {
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(
-                "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
+                "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
                 code, msg
             ))
         })
@@ -109,7 +109,7 @@ impl IcpLedger for IcpLedgerCanister {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'total_supply' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )
@@ -133,7 +133,7 @@ impl IcpLedger for IcpLedgerCanister {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance_pb' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )
