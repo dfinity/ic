@@ -10,15 +10,11 @@ use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::{
-    pb::v1::{
-        manage_neuron::{self, NeuronIdOrSubaccount},
-        manage_neuron_response::{self, MakeProposalResponse},
-        ManageNeuron, ManageNeuronResponse, Proposal,
-    },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{self, NeuronIdOrSubaccount},
+    manage_neuron_response::{self, MakeProposalResponse},
+    ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
@@ -30,7 +26,6 @@ use std::{
     process::{Command, Output},
     str::FromStr,
     sync::Once,
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
 
@@ -201,35 +196,12 @@ impl DeployTestflightArgs {
                         .neurons_fund_participation = Some(false);
                 }
 
-                // convert to ExecutedCreateServiceNervousSystemProposal
-                let executed_create_service_nervous_system =
-                    ExecutedCreateServiceNervousSystemProposal {
-                        current_timestamp_seconds: SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        create_service_nervous_system,
-                        random_swap_start_time: GlobalTimeOfDay {
-                            seconds_after_utc_midnight: Some(0),
-                        },
-                        neurons_fund_participation_constraints: None,
-                        // `proposal_id` only exists to be exposed to the user for audit purposes, which don't apply here.
-                        // But it's required, so we can just use any arbitrary value.
-                        proposal_id: 10,
-                    };
-
-                // Last step: more conversion (this time, to the desired type: SnsInitPayload).
-                SnsInitPayload::try_from(executed_create_service_nervous_system)
-                    // This shouldn't be possible -> we could just unwrap here, and there
-                    // should be no danger of panic, but we handle Err anyway, because if
-                    // err is returned, it still makes sense to just return that.
-                    //
-                    // The reason Err should be impossible is
-                    // try_convert_to_create_service_nervous_system itself call
-                    // SnsInitPayload::try_from as part of its validation.
-                    .map_err(|err| {
-                        anyhow!("Invalid configuration in {:?}: {}", init_config_file, err)
-                    })
+                match SnsInitPayload::try_from(create_service_nervous_system) {
+                    Err(err) => {
+                        bail!("Invalid configuration in {:?}: {}", init_config_file, err);
+                    }
+                    Ok(sns_init_payload) => Ok(sns_init_payload),
+                }
             }
             None => {
                 panic!("The init_config_file is required for the DeployTestflightArgs.");

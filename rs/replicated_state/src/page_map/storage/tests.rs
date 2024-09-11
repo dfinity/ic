@@ -357,12 +357,12 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage_layout = ShardedTestStorageLayout {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
-    .unwrap();
+    };
+    let storage = Storage::load(&storage_layout).unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -373,6 +373,12 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
 
     // Verify `num_logical_pages`.
     assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
+    assert_eq!(
+        expected_num_pages as usize,
+        (&storage_layout as &dyn StorageLayout)
+            .memory_size_pages()
+            .unwrap()
+    );
 
     // Verify every single page in the range.
     for index in 0..storage.num_logical_pages() as u64 {
