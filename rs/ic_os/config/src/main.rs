@@ -61,7 +61,6 @@ pub fn main() -> Result<()> {
             // get config.ini variables
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
             let mut network_settings = config_ini_settings.network_settings;
-            let verbose = config_ini_settings.verbose;
 
             // get deployment.json variables
             let deployment_json = read_deployment_file(&deployment_json_path)?;
@@ -94,7 +93,7 @@ pub fn main() -> Result<()> {
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
-                verbose,
+                verbose: config_ini_settings.verbose,
             };
 
             let guestos_settings = GuestOSSettings::default();
