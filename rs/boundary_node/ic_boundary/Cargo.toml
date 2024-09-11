@@ -16,15 +16,15 @@ tls = []
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = "1"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
+arc-swap = "1.7.1"
+async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = "0.9.3"
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-dashmap = "5.3.4"
+dashmap = "6.1.0"
 ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -57,7 +57,7 @@ lazy_static = { workspace = true }
 little-loadshedder = "0.2.0"
 maxminddb = "0.24"
 mockall = { workspace = true }
-moka = { version = "0.12", features = ["sync", "future"] }
+moka = { version = "0.12.8", features = ["sync", "future"] }
 nftables = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }

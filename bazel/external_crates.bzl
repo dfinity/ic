@@ -145,7 +145,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.2",
             ),
             "arc-swap": crate.spec(
-                version = "^1",
+                version = "^1.7.1",
             ),
             "anyhow": crate.spec(
                 version = "^1",
@@ -794,7 +794,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "moka": crate.spec(
-                version = "^0.12",
+                version = "^0.12.8",
                 features = [
                     "future",
                     "sync",
