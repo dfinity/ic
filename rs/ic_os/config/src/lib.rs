@@ -359,7 +359,7 @@ mod tests {
 
         let temp_file_path = temp_file.path();
 
-        let config_ini_settings = get_config_ini_settings(&temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(temp_file_path)?;
 
         assert_eq!(
             config_ini_settings.network_settings.ipv6_prefix.unwrap(),
@@ -401,7 +401,7 @@ mod tests {
             temp_file_ipv6_address_subnet_length,
             "ipv6_address=2a00:fb01:400:200::"
         )?;
-        let config_ini_settings = get_config_ini_settings(&temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(temp_file_path)?;
         assert_eq!(
             config_ini_settings.network_settings.ipv6_address.unwrap(),
             "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
@@ -415,7 +415,7 @@ mod tests {
         writeln!(temp_file_missing, "ipv4_prefix_length=28")?;
 
         let temp_file_path_missing = temp_file_missing.path();
-        let result = get_config_ini_settings(&temp_file_path_missing);
+        let result = get_config_ini_settings(temp_file_path_missing);
         assert!(result.is_err());
 
         // Test invalid IPv6 address
@@ -427,7 +427,7 @@ mod tests {
         writeln!(temp_file_invalid_ipv6, "ipv4_prefix_length=24")?;
 
         let temp_file_path_invalid_ipv6 = temp_file_invalid_ipv6.path();
-        let result_invalid_ipv6 = get_config_ini_settings(&temp_file_path_invalid_ipv6);
+        let result_invalid_ipv6 = get_config_ini_settings(temp_file_path_invalid_ipv6);
         assert!(result_invalid_ipv6.is_err());
 
         // Test missing prefix and address
@@ -437,7 +437,7 @@ mod tests {
             "ipv6_gateway=2001:db8:85a3:0000::1"
         )?;
         let result_missing_prefix_and_address =
-            get_config_ini_settings(&temp_file_path_invalid_ipv6);
+            get_config_ini_settings(temp_file_path_invalid_ipv6);
         assert!(result_missing_prefix_and_address.is_err());
 
         Ok(())
