@@ -463,14 +463,6 @@ impl OnLowWasmMemoryHookStatus {
             *self = OnLowWasmMemoryHookStatus::Ready;
         }
     }
-
-    fn _should_schedule_hook(&self) -> bool {
-        *self == OnLowWasmMemoryHookStatus::Ready
-    }
-
-    fn _execute_hook(&mut self) {
-        *self = OnLowWasmMemoryHookStatus::Executed;
-    }
 }
 
 /// A wrapper around the different canister statuses.
