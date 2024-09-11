@@ -206,8 +206,8 @@ fn test_account_balances() {
                             .await
                             .unwrap()
                             .balances[0]
-                            .clone()
-                            .value;
+                            .value
+                            .clone();
                         assert_eq!(balance_ledger, balance_rosetta);
                     }
                 });
