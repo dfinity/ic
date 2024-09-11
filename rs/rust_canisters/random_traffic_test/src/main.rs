@@ -31,7 +31,7 @@ thread_local! {
     static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
 }
 
-/// Replaces the canister state according to `f` by parsing `arg_data` of type `T`; returns the old
+/// Replaces the canister state according to `f` by parsing `arg_data` of type `T`; replies the old
 /// state.
 fn replace_state<T, F>(f: F)
 where
@@ -83,28 +83,6 @@ fn seed_rng() {
     api::reply(&[]);
 }
 
-/// Probes a weighted binomial distribution to decide whether to make a reply (true) or a
-/// downstream call (false). Defaults to `true` for bad weights (i.e. both 0).
-fn should_reply(reply_weight: u32, call_weight: u32) -> bool {
-    RNG.with_borrow_mut(|rng| {
-        WeightedIndex::new(&[reply_weight, call_weight])
-            .map(|dist| dist.sample(rng) == 0)
-            .unwrap_or(true)
-    })
-}
-
-fn insert_new_call_record(call_id: u32, record: Record) {
-    RECORDS.with_borrow_mut(|records| {
-        records.insert(call_id, record);
-    })
-}
-
-fn set_reply_in_call_record(call_id: u32, reply: Reply) {
-    RECORDS.with_borrow_mut(|records| {
-        records.get_mut(&call_id).unwrap().reply = Some(reply);
-    });
-}
-
 /// Returns the canister records.
 #[export_name = "canister_query records"]
 fn records() {
@@ -128,7 +106,7 @@ where
     CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(&config))))
 }
 
-/// Returns a message id for use in keeping records.
+/// Returns the next call id for use in keeping records.
 fn next_call_id() -> u32 {
     let id = CALL_ID.take();
     CALL_ID.set(id + 1);
@@ -138,117 +116,119 @@ fn next_call_id() -> u32 {
 /// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
 /// attempted in `RECORDS` in the order they were made. Once a reply is received, this record is
 /// updated in place.
-fn try_call(is_downstream_call: bool) -> Result<(), ()> {
+///
+/// `on_response` is executed upon awaiting the outcome of the call, both on reply and on reject.
+/// By contrast, it is important to report a synchronous rejection without calling `on_response`
+/// because we could otherwise get stuck attempting new calls indefinitely.
+fn try_call(on_response: impl FnOnce() -> () + Copy + 'static) -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
     let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
-
     let call_id = next_call_id();
-    let on_reply = move || {
-        set_reply_in_call_record(call_id, Reply::Bytes(api::arg_data().len() as u32));
-
-        if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
-            if !is_downstream_call {
-                reply();
-            }
-        } else {
-            // Try to make a downstream call; reply if it fails synchronously.
-            //
-            // Note: replies for all other cases are handled in the corresponding
-            // callbacks, so this function does reply on every branch.
-            if let Err(()) = try_call(true) {
-                reply();
-            }
-        }
+    let insert_new_call_record = |reply: Option<Reply>| {
+        RECORDS.with_borrow_mut(|records| {
+            records.insert(
+                call_id,
+                Record {
+                    receiver,
+                    sent_bytes: payload_bytes,
+                    reply,
+                },
+            );
+        });
     };
-    let on_reject = move || {
-        set_reply_in_call_record(
-            call_id,
-            Reply::AsynchronousRejection(api::reject_code(), api::reject_message()),
-        );
-        if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
-            if !is_downstream_call {
-                reply();
-            }
-        } else {
-            // Try to make a downstream call; reply if it fails synchronously.
-            //
-            // Note: replies for all other cases are handled in the corresponding
-            // callbacks, so this function does reply on every branch.
-            if let Err(()) = try_call(true) {
-                reply();
-            }
-        }
+    let set_reply_in_call_record = move |reply: Reply| {
+        RECORDS.with_borrow_mut(|records| {
+            records.get_mut(&call_id).unwrap().reply = Some(reply);
+        });
     };
 
     match api::call_with_callbacks(
         api::CanisterId::try_from(receiver).unwrap(),
         "handle_call",
         &vec![0_u8; payload_bytes as usize][..],
-        on_reply,
-        on_reject,
+        move || {
+            set_reply_in_call_record(Reply::Bytes(api::arg_data().len() as u32));
+            on_response();
+        },
+        move || {
+            set_reply_in_call_record(Reply::AsynchronousRejection(
+                api::reject_code(),
+                api::reject_message(),
+            ));
+            on_response();
+        },
     ) {
         0 => {
-            insert_new_call_record(
-                call_id,
-                Record {
-                    receiver,
-                    sent_bytes: payload_bytes,
-                    reply: None,
-                },
-            );
+            insert_new_call_record(None);
             Ok(())
         }
         error_code => {
-            insert_new_call_record(
-                call_id,
-                Record {
-                    receiver,
-                    sent_bytes: payload_bytes,
-                    reply: Some(Reply::SynchronousRejection(error_code)),
-                },
-            );
+            insert_new_call_record(Some(Reply::SynchronousRejection(error_code)));
             Err(())
         }
     }
 }
 
-/// Replies with a random payload size after a random count of instructions have passed.
-fn reply() {
-    let payload_bytes = gen_range(|config| config.reply_bytes_min..=config.reply_bytes_max);
-    let instructions_count =
-        gen_range(|config| config.instructions_count_min..=config.instructions_count_max);
-
-    // Do some thinking.
-    let counts = api::performance_counter(0) + instructions_count as u64;
-    while counts > api::performance_counter(0) {}
-
-    let msg = vec![0_u8; payload_bytes as usize];
-    api::reply(&msg[..]);
+/// Samples a weighted binomial distribution to decide whether to make a reply (true) or a
+/// downstream call (false). Defaults to `true` for bad weights (e.g. both 0).
+fn should_reply() -> bool {
+    RNG.with_borrow_mut(|rng| {
+        WeightedIndex::new([REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
+            .map(|dist| dist.sample(rng) == 0)
+            .unwrap_or(true)
+    })
 }
 
-/// Randomly determines whether to make a downstream call; reply if not or if the downstream call fails.
+/// Handles incoming calls; this method is called from the heartbeat method.
+///
+/// Replies if:
+/// - sampling the weighted binomial distribution tells us to do so.
+/// - if it tells us not to do so but the attempted downstream call fails synchronously.
+///
+/// Note that a reply to a successful downstream call is made from the callbacks provided for this
+/// call; this amounts to awaiting the outcome of the call asynchronously first.
 #[export_name = "canister_update handle_call"]
 fn handle_call() {
-    if should_reply(REPLY_WEIGHT.get(), CALL_WEIGHT.get()) {
-        reply();
-    } else {
-        // Try to make a downstream call; reply if it fails synchronously.
-        //
-        // Note: replies for all other cases are handled in the corresponding
-        // callbacks, so this function does reply on every branch.
-        if let Err(()) = try_call(true) {
-            reply();
-        }
+    // Passing handle_call() as the `on_response` for `try_call()` leads to random call trees where
+    // it is recursively decided to make another call or reply on each node upon awaiting the
+    // outcome. The shape of the call tree is statistically determined by the values of `REPLY_WEIGHT`
+    // and `CALL_WEIGHT`.
+    //
+    // Note: Awaiting each call before possibly making another one also ensures there is only ever
+    // one response despite potentially multiple downstream calls, something that doesn't matter for
+    // the heartbeat where calls are not awaited because the heartbeat can't give a response anyway.
+    if should_reply() || try_call(handle_call).is_err() {
+        let payload_bytes = gen_range(|config| config.reply_bytes_min..=config.reply_bytes_max);
+        let instructions_count =
+            gen_range(|config| config.instructions_count_min..=config.instructions_count_max);
+
+        // Do some thinking.
+        let counts = api::performance_counter(0) + instructions_count as u64;
+        while counts > api::performance_counter(0) {}
+
+        let msg = vec![0_u8; payload_bytes as usize];
+        api::reply(&msg[..]);
     }
 }
 
-/// Attempts to call random canisters; stops once
-/// - the maximum number of calls per round is reached.
-/// - calling fails synchronously.
+/// Sends out calls to `handle_call()` on random instances of this canister as provided by the
+/// `receivers` in `CONFIG`. This is done in quick succession without awaiting the outcome of these
+/// calls until either `MAX_CALLS_PER_HEARTBEAT` is reached or a synchronous rejection is observed.
+///
+/// This approach makes sense for the heartbeat because
+/// - it does not need to make a reply so it can freely make calls and then forget about them.
+/// - it allows for a quick generation of a lot of traffic.
+///
+/// Note that each such call may then spawn its own call tree with a random structure determined by
+/// the weights chosen, but unlike the heartbeat, the calls are awaited on each node in this call
+/// trees. In a sense the heartbeat may plant up to `MAX_CALLS_PER_HEARTBEAT` new call trees very
+/// quickly, but the trees then grow, wither and eventually die slowly.
 #[export_name = "canister_heartbeat"]
 fn heartbeat() {
     for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
-        if let Err(()) = try_call(false) {
+        // Passing a no-op to `try_call()` as the `on_response` reflects the' make calls and forget
+        // about them' approach described above.
+        if let Err(()) = try_call(|| {}) {
             return;
         }
     }

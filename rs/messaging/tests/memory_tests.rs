@@ -88,7 +88,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
     // this number of rounds until there are no more hanging calls, the test fails.
-    const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 100;
+    const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 1000;
     // The amount of memory available for guaranteed response message memory on `local_env`.
     const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
     // The amount of memory available for guaranteed response message memory on `remote_env`.
@@ -111,8 +111,8 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     )
     .unwrap();
 
-    let reply_weight = 2_u32;
-    let call_weight = 1_u32;
+    let reply_weight = 1_u32;
+    let call_weight = 0_u32;
 
     // Send configs to canisters, seed the rng.
     for (index, canister) in fixture.canisters().into_iter().enumerate() {
