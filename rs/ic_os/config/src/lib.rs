@@ -354,7 +354,7 @@ mod tests {
         writeln!(temp_file, "domain=example.com")?;
         writeln!(temp_file, "verbose=false")?;
 
-        let temp_file_path = temp_file.path().to_path_buf();
+        let temp_file_path = temp_file.path();
 
         let (networking, verbose) = get_config_ini_settings(&temp_file_path)?;
 
@@ -402,7 +402,7 @@ mod tests {
         writeln!(temp_file_missing, "ipv4_gateway=212.71.124.177")?;
         writeln!(temp_file_missing, "ipv4_prefix_length=28")?;
 
-        let temp_file_path_missing = temp_file_missing.path().to_path_buf();
+        let temp_file_path_missing = temp_file_missing.path();
         let result = get_config_ini_settings(&temp_file_path_missing);
         assert!(result.is_err());
 
@@ -414,7 +414,7 @@ mod tests {
         writeln!(temp_file_invalid_ipv6, "ipv4_gateway=192.168.1.254")?;
         writeln!(temp_file_invalid_ipv6, "ipv4_prefix_length=24")?;
 
-        let temp_file_path_invalid_ipv6 = temp_file_invalid_ipv6.path().to_path_buf();
+        let temp_file_path_invalid_ipv6 = temp_file_invalid_ipv6.path();
         let result_invalid_ipv6 = get_config_ini_settings(&temp_file_path_invalid_ipv6);
         assert!(result_invalid_ipv6.is_err());
 
