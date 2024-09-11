@@ -9,34 +9,6 @@ use anyhow::{Context, Result};
 use crate::types::{ConfigIniSettings, NetworkSettings};
 pub type ConfigMap = HashMap<String, String>;
 
-fn parse_config_line(line: &str) -> Option<(String, String)> {
-    // Skip blank lines and comments
-    if line.is_empty() || line.trim().starts_with('#') {
-        return None;
-    }
-
-    let parts: Vec<&str> = line.splitn(2, '=').collect();
-    if parts.len() == 2 {
-        Some((parts[0].trim().into(), parts[1].trim().into()))
-    } else {
-        eprintln!("Warning: skipping config line due to unrecognized format: \"{line}\"");
-        eprintln!("Expected format: \"<key>=<value>\"");
-        None
-    }
-}
-
-pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
-    let file_contents = read_to_string(config_file_path)
-        .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
-
-    let normalized_file_contents = file_contents.replace("\r\n", "\n").replace("\r", "\n");
-
-    Ok(normalized_file_contents
-        .lines()
-        .filter_map(parse_config_line)
-        .collect())
-}
-
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
 // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
 fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
@@ -139,6 +111,34 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         network_settings,
         verbose,
     })
+}
+
+fn parse_config_line(line: &str) -> Option<(String, String)> {
+    // Skip blank lines and comments
+    if line.is_empty() || line.trim().starts_with('#') {
+        return None;
+    }
+
+    let parts: Vec<&str> = line.splitn(2, '=').collect();
+    if parts.len() == 2 {
+        Some((parts[0].trim().into(), parts[1].trim().into()))
+    } else {
+        eprintln!("Warning: skipping config line due to unrecognized format: \"{line}\"");
+        eprintln!("Expected format: \"<key>=<value>\"");
+        None
+    }
+}
+
+pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
+    let file_contents = read_to_string(config_file_path)
+        .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
+
+    let normalized_file_contents = file_contents.replace("\r\n", "\n").replace("\r", "\n");
+
+    Ok(normalized_file_contents
+        .lines()
+        .filter_map(parse_config_line)
+        .collect())
 }
 
 #[cfg(test)]
