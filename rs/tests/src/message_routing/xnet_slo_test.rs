@@ -29,6 +29,8 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::NrOfVCPUs;
+use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -129,7 +131,14 @@ impl Config {
 fn setup(env: TestEnv, config: Config) {
     (0..config.subnets)
         .fold(InternetComputer::new(), |ic, _idx| {
-            ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
+            ic.add_subnet(
+                Subnet::new(SubnetType::Application)
+                    .with_default_vm_resources(VmResources {
+                        vcpus: Some(NrOfVCPUs::new(16)),
+                        ..Default::default()
+                    })
+                    .add_nodes(config.nodes_per_subnet),
+            )
         })
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
