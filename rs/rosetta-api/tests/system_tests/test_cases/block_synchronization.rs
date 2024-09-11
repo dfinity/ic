@@ -66,11 +66,11 @@ fn test_block_synchronization() {
                         .unwrap();
                     let encoded_blocks = query_encoded_blocks(&agent, None, 1).await;
                     assert_eq!(encoded_blocks.blocks.len(), 1);
-                    let ledger_tip = encoded_blocks.blocks[0].clone();
+                    let ledger_tip = &encoded_blocks.blocks[0];
 
                     assert_eq!(
                         to_hash(&network_status.current_block_identifier.hash).unwrap(),
-                        icp_ledger::Block::block_hash(&ledger_tip),
+                        icp_ledger::Block::block_hash(ledger_tip),
                         "Block hashes do not match: Expected Block {:?} but got Block {:?}",
                         network_status.current_block_identifier,
                         ledger_tip
