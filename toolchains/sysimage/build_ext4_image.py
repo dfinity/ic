@@ -206,9 +206,9 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
+    fs_basedir = os.path.join(tmpdir, "fs")
+    os.mkdir(fs_basedir)
     if limit_prefix or strip_paths:
-        fs_basedir = os.path.join(tmpdir, "fs")
-        os.mkdir(fs_basedir)
         prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
         strip_files(fs_basedir, fakeroot_statefile, strip_paths)
         in_file = fs_basedir
@@ -217,7 +217,7 @@ def main():
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
     start = time.time()
-    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file] + (["-d", in_file] if in_file else []) + [str(image_size)]
+    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file] + [str(image_size)]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
     print("mkfs took %f s" % (time.time() - start))
 
@@ -226,14 +226,14 @@ def main():
 
 # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
-    # fs_config_path = os.path.join(tmpdir, "fs_config")
-    # diroid_args=[args.diroid, "--fakeroot", fakeroot_statefile, "--input-dir", os.path.join(fs_basedir, limit_prefix), "--output", fs_config_path]
-    # subprocess.run(diroid_args, check=True)
-    # print("CONFIG: ")
-    # print(fs_config_path)
+    fs_config_path = os.path.join(tmpdir, "fs_config")
+    diroid_args=[args.diroid, "--fakeroot", fakeroot_statefile, "--input-dir", os.path.join(fs_basedir, limit_prefix), "--output", fs_config_path]
+    subprocess.run(diroid_args, check=True)
+    print("CONFIG: ")
+    print(fs_config_path)
     #
     e2fsdroid_args= ["faketime", "-f", "1970-1-1 0:0:0", "fakeroot", "-i", fakeroot_statefile, "e2fsdroid", "-e", "-a", "/", "-T", "0"]
-    # e2fsdroid_args += ["-C", fs_config_path]
+    e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]

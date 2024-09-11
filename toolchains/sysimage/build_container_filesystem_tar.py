@@ -299,8 +299,8 @@ def main():
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     start = time.time()
-    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", destination_tar_filename] + ["3G"]
-    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    # mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-t", "ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", destination_tar_filename] + ["3G"]
+    # subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
     print("MKEXT %f" % (time.time() - start))
 
     container_dir = os.path.join(context_dir, "container")
