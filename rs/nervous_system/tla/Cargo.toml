@@ -11,7 +11,7 @@ name = "ic_nervous_system_tla"
 path = "src/lib.rs"
 
 [dependencies]
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
 local_key = { path = "../../tla_instrumentation/local_key", optional = true }
 
 ic-base-types = { path = "../../types/base_types" }
@@ -19,4 +19,4 @@ icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 ic-nns-constants = { path = "../../nns/constants" }
 
 [features]
-tla = ["tla_instrumentation", "local_key"]
+tla = ["local_key"]
