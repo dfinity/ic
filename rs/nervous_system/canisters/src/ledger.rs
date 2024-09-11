@@ -1,12 +1,14 @@
 use async_trait::async_trait;
+use dfn_candid::candid_one;
 use dfn_core::{call, CanisterId};
-use dfn_protobuf::protobuf;
 use ic_ledger_core::block::BlockIndex;
-use ic_nervous_system_common::ledger::{ICRC1Ledger, IcpLedger};
-use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_common::{
+    ledger::{ICRC1Ledger, IcpLedger},
+    NervousSystemError,
+};
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
-    Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
+    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
+    TransferArgs,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
@@ -77,14 +79,14 @@ impl IcpLedger for IcpLedgerCanister {
         // will be an error.
         let result: Result<u64, (Option<i32>, String)> = call(
             self.id,
-            "send_pb",
-            protobuf,
-            SendArgs {
+            "transfer",
+            candid_one,
+            TransferArgs {
                 memo: Memo(memo),
                 amount: Tokens::from_e8s(amount_e8s),
                 fee: Tokens::from_e8s(fee_e8s),
                 from_subaccount,
-                to,
+                to: to.to_address(),
                 created_at_time: None,
             },
         )
@@ -100,9 +102,9 @@ impl IcpLedger for IcpLedgerCanister {
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (Option<i32>, String)> =
-            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {})
+            call(self.id, "icrc1_total_supply", candid_one, ())
                 .await
-                .map(tokens_from_proto);
+                .map(|e8s| Tokens::from_e8s(e8s));
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
@@ -120,12 +122,14 @@ impl IcpLedger for IcpLedgerCanister {
     ) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (Option<i32>, String)> = call(
             self.id,
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs { account },
+            "account_balance",
+            candid_one,
+            BinaryAccountBalanceArgs {
+                account: account.to_address(),
+            },
         )
         .await
-        .map(tokens_from_proto);
+        .map(|e8s| Tokens::from_e8s(e8s));
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
