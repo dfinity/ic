@@ -327,16 +327,16 @@ mod tests {
 
     #[test]
     fn test_config_map_from_path_crlf() -> Result<()> {
-        let mut temp_file_crlf = NamedTempFile::new()?;
-        let file_path_crlf = temp_file_crlf.path().to_path_buf();
+        let mut temp_file = NamedTempFile::new()?;
+        let file_path = temp_file.path().to_path_buf();
 
-        writeln!(temp_file_crlf, "key4=value4\r\nkey5=value5\r\n")?;
+        writeln!(temp_file, "key4=value4\r\nkey5=value5\r\n")?;
 
-        let config_map_crlf = config_map_from_path(&file_path_crlf)?;
+        let config_map = config_map_from_path(&file_path)?;
 
-        assert_eq!(config_map_crlf.get("key4"), Some(&"value4".to_string()));
-        assert_eq!(config_map_crlf.get("key5"), Some(&"value5".to_string()));
-        assert_eq!(config_map_crlf.get("bad_key"), None);
+        assert_eq!(config_map.get("key4"), Some(&"value4".to_string()));
+        assert_eq!(config_map.get("key5"), Some(&"value5".to_string()));
+        assert_eq!(config_map.get("bad_key"), None);
 
         Ok(())
     }
