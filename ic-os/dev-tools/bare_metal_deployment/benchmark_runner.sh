@@ -4,7 +4,7 @@ set -ux
 rm -rf results
 mkdir -p results
 
-mkdir -p /var/lib/ic/data/bencmark
+mkdir -p /var/lib/ic/data/benchmark
 
 { time dd if=/dev/zero of=/var/lib/ic/data/benchmark/out bs=1M count=10000 oflag=direct ; } 2> results/big-dd.log
 { time bash -c 'for i in {1..16}; do dd if=/dev/zero of=/var/lib/ic/data/benchmark/out_${i} bs=1M count=1000 oflag=direct & done ; wait' ; } 2> results/small-dds.log
