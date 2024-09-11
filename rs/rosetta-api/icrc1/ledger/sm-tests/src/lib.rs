@@ -3809,7 +3809,7 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -3828,7 +3828,7 @@ test_bytes";
             .consent_message,
     );
 
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From Subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -3976,7 +3976,7 @@ test_bytes";
     );
     let expected_message = expected_approve_message
 .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4013,7 +4013,7 @@ test_bytes";
             .consent_message,
     );
 
-    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your Subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
+    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
     .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
@@ -4054,7 +4054,7 @@ fn test_icrc21_transfer_from_message(
 
     let expected_transfer_from_message = "# Transfer from a withdrawal account
 
-**Withdrawal Account:**
+**Withdrawal account:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
 
 **Account sending the transfer request:**
