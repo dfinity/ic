@@ -9,7 +9,7 @@ use ic_types::{
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
-use std::{cell::RefCell, rc::Rc, str::FromStr, time::Instant};
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";
@@ -280,14 +280,17 @@ impl QueryHandlerMetrics {
         }
     }
 
-    pub fn observe_subnet_query_message(&self, method: &str, duration: f64) {
+    pub fn observe_subnet_query_message(&self, query_method: QueryMethod, duration: f64) {
         // Determine the label based on whether the method is a subnet (management canister) query.
-        let label = match QueryMethod::from_str(method) {
-            Ok(q) if q.is_management_canister_query() => format!("query_ic00_{method}"),
-            Ok(_) => format!("query_{method}"),
-            Err(_) => "unknown_query".to_string(),
-        };
-
+        let label = format!(
+            "query_{}{}",
+            if query_method.is_management_canister_query() {
+                "ic00_"
+            } else {
+                ""
+            },
+            query_method.to_string()
+        );
         self.subnet_query_messages
             .with_label_values(&[&label])
             .observe(duration);

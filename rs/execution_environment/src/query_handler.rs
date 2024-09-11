@@ -206,7 +206,7 @@ impl InternalHttpQueryHandler {
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
                     self.metrics.observe_subnet_query_message(
-                        &query.method_name,
+                        QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
                     );
                     return result;
