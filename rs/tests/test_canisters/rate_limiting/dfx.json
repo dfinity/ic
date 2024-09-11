@@ -1,16 +1,21 @@
 {
+    "version": 1,
     "canisters": {
-      "rate_limiting_canister_backend": {
-        "candid": "src/rate_limiting_backend.did",
-        "type": "rust"
+      "rate_limiting": {
+        "type": "rust",
+        "package": "rate-limiting",
+        "candid": "src/rate_limiting_backend.did"
       }
     },
     "defaults": {
       "build": {
-        "args": "",
         "packtool": ""
       }
     },
-    "output_env_file": ".env",
-    "version": 1
+    "networks": {
+      "local": {
+        "bind": "127.0.0.1:8080",
+        "type": "ephemeral"
+      }
+    }
   }

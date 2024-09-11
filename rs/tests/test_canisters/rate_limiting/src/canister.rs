@@ -1,28 +1,35 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use serde::{Deserialize, Serialize};
-use candid::{Encode, Principal};
+use candid::Principal;
 use ic_cdk::api::call::call;
-use registry_canister::pb::v1::{ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
+const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
+
+static API_BNS_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[ic_cdk::query]
-fn counter() -> u64 {
-    COUNTER.load(Ordering::Relaxed)
+fn get_api_boundary_nodes_count() -> u64 {
+    API_BNS_COUNT.load(Ordering::Relaxed)
 }
+
+#[derive(candid::CandidType, candid::Deserialize)]
+pub struct GetApiBoundaryNodeIdsRequest {}
 
 #[ic_cdk::init]
 fn init(timer_interval_secs: u64) {
     let interval = std::time::Duration::from_secs(timer_interval_secs);
-    ic_cdk::println!("Starting a periodic task with interval {interval:?}");
     ic_cdk_timers::set_timer_interval(interval, || {
-        COUNTER.fetch_add(1, Ordering::Relaxed);
         ic_cdk::spawn(async {
-            let canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
-            // let args = Encode!(&GetApiBoundaryNodeIdsRequest {}).unwrap();
-            let (result,): (i64,) = call(canister_id, "get_api_boundary_node_ids", ())
-                .await
-                .unwrap();
+            let canister_id = Principal::from_text(REGISTRY_CANISTER_ID).unwrap();
+            let (result,): (Result<Vec<Option<Principal>>, String>,) = call(
+                canister_id,
+                REGISTRY_CANISTER_METHOD,
+                (&GetApiBoundaryNodeIdsRequest {},),
+            )
+            .await
+            .unwrap();
+            let api_bns_count = result.unwrap().len();
+            API_BNS_COUNT.store(api_bns_count as u64, Ordering::Relaxed);
         });
     });
 }

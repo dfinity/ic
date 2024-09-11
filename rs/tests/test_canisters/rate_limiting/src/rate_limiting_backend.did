@@ -12,6 +12,5 @@ type GetApiBoundaryNodeIdsRequest = record {
 };
 
 service : (nat64) -> {
-    "counter": () -> (nat64) query;
-    get_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
+    get_api_boundary_nodes_count : () -> (nat64) query;
 }
