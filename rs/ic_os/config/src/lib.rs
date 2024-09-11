@@ -74,6 +74,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
 
     // Per PFOPS - ipv6_subnet will never not be 64
     let ipv6_subnet = 64_u8;
+
     // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
     let ipv6_address = config_map
         .get("ipv6_address")
@@ -359,6 +360,7 @@ mod tests {
             networking.ipv6_gateway,
             "2a00:fb01:400:200::1".parse::<Ipv6Addr>()?
         );
+        assert_eq!(networking.ipv6_subnet, 64);
         assert_eq!(
             networking.ipv4_address.unwrap(),
             "212.71.124.178".parse::<Ipv4Addr>()?
@@ -370,6 +372,19 @@ mod tests {
         assert_eq!(networking.ipv4_prefix_length.unwrap(), 28);
         assert_eq!(networking.domain, Some("example.com".to_string()));
         assert!(!verbose);
+
+        // Test ipv6_address without subnet length
+        let mut temp_file_ipv6_address_subnet_length = NamedTempFile::new()?;
+        writeln!(
+            temp_file_ipv6_address_subnet_length,
+            "ipv6_address=2a00:fb01:400:200::"
+        )?;
+        let (networking, _) = get_config_ini_settings(&temp_file_path)?;
+        assert_eq!(
+            networking.ipv6_address.unwrap(),
+            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
+        );
+        assert_eq!(networking.ipv6_subnet, 64);
 
         // Test missing ipv6
         let mut temp_file_missing = NamedTempFile::new()?;
@@ -392,6 +407,16 @@ mod tests {
         let temp_file_path_invalid_ipv6 = temp_file_invalid_ipv6.path().to_path_buf();
         let result_invalid_ipv6 = get_config_ini_settings(&temp_file_path_invalid_ipv6);
         assert!(result_invalid_ipv6.is_err());
+
+        // Test missing prefix and address
+        let mut temp_file_missing_prefix_and_address = NamedTempFile::new()?;
+        writeln!(
+            temp_file_missing_prefix_and_address,
+            "ipv6_gateway=2001:db8:85a3:0000::1"
+        )?;
+        let result_missing_prefix_and_address =
+            get_config_ini_settings(&temp_file_path_invalid_ipv6);
+        assert!(result_missing_prefix_and_address.is_err());
 
         Ok(())
     }
