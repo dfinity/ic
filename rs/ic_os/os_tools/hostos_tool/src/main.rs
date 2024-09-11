@@ -3,10 +3,9 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
-use config::deployment_json::read_deployment_file;
 use config::config_ini::get_config_ini_settings;
-use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
-};
+use config::deployment_json::read_deployment_file;
+use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
 use network::mac_address::{generate_mac_address, FormattedMacAddress};
