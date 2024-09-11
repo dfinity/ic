@@ -163,7 +163,7 @@ impl RosettaClient {
                         .map_err(|e| anyhow::anyhow!("Failed to convert fee: {:?}", e))?
                         .0,
                 ),
-                currency.clone(),
+                currency,
             )),
             coin_change: None,
             metadata: None,
