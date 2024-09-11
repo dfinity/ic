@@ -8043,7 +8043,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "wasmparser 0.212.0",
 ]
 
@@ -9270,7 +9270,7 @@ dependencies = [
  "ic0 0.21.1",
  "icrc-ledger-types",
  "maplit",
- "mockall",
+ "mockall 0.13.0",
  "num-traits",
  "paste",
  "proptest",
@@ -12514,7 +12514,7 @@ dependencies = [
  "socket2 0.5.7",
  "tempfile",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "wasmprinter 0.212.0",
  "wat",
 ]
