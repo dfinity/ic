@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/types/base_types",
 ]
 
