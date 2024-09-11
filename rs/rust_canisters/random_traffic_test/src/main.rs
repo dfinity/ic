@@ -16,9 +16,9 @@ thread_local! {
     /// Random number generator used for determining payload sizes et.al.
     static RNG: RefCell<StdRng> = RefCell::new(StdRng::seed_from_u64(13));
     /// Weight for making a reply used in a weighted binomial distribution.
-    static REPLY_WEIGHT: Cell<u32> = Cell::new(1);
+    static REPLY_WEIGHT: Cell<u32> = const { Cell::new(1) };
     /// Weight for making a downstream call used in a weighted binomial distribution.
-    static CALL_WEIGHT: Cell<u32> = Cell::new(0);
+    static CALL_WEIGHT: Cell<u32> = const { Cell::new(0) };
     /// A configuration holding parameters for how to the canister should behave, such as the range
     /// of payload bytes it should send.
     static CONFIG: RefCell<Config> = RefCell::default();
@@ -103,7 +103,7 @@ fn gen_range<F>(f: F) -> u32
 where
     F: FnOnce(&Config) -> RangeInclusive<u32>,
 {
-    CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(&config))))
+    CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(config))))
 }
 
 /// Returns the next call id for use in keeping records.
@@ -120,7 +120,7 @@ fn next_call_id() -> u32 {
 /// `on_response` is executed upon awaiting the outcome of the call, both on reply and on reject.
 /// By contrast, it is important to report a synchronous rejection without calling `on_response`
 /// because we could otherwise get stuck attempting new calls indefinitely.
-fn try_call(on_response: impl FnOnce() -> () + Copy + 'static) -> Result<(), ()> {
+fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
     let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
     let call_id = next_call_id();
@@ -142,7 +142,7 @@ fn try_call(on_response: impl FnOnce() -> () + Copy + 'static) -> Result<(), ()>
         });
     };
 
-    match api::call_with_callbacks(
+    let error_code = api::call_with_callbacks(
         api::CanisterId::try_from(receiver).unwrap(),
         "handle_call",
         &vec![0_u8; payload_bytes as usize][..],
@@ -157,15 +157,13 @@ fn try_call(on_response: impl FnOnce() -> () + Copy + 'static) -> Result<(), ()>
             ));
             on_response();
         },
-    ) {
-        0 => {
-            insert_new_call_record(None);
-            Ok(())
-        }
-        error_code => {
-            insert_new_call_record(Some(Reply::SynchronousRejection(error_code)));
-            Err(())
-        }
+    );
+    if error_code == 0 {
+        insert_new_call_record(None);
+        Ok(())
+    } else {
+        insert_new_call_record(Some(Reply::SynchronousRejection(error_code)));
+        Err(())
     }
 }
 
