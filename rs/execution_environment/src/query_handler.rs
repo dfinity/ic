@@ -208,6 +208,7 @@ impl InternalHttpQueryHandler {
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
+                        &result,
                     );
                     return result;
                 }

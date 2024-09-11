@@ -1,3 +1,4 @@
+use ic_error_types::UserError;
 use ic_management_canister_types::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -16,6 +17,9 @@ pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
+
+pub const FINISHED_OUTCOME_LABEL: &str = "finished";
+pub const ERROR_OUTCOME_LABEL: &str = "error";
 
 #[derive(Clone)]
 pub struct IngressFilterMetrics {
@@ -275,14 +279,19 @@ impl QueryHandlerMetrics {
                 "execution_subnet_query_message_duration_seconds",
                 "Duration of a subnet query message execution, in seconds.",
                 decimal_buckets(-3, 2),
-                &["method_name"],
+                &["method_name", "outcome"],
             ),
         }
     }
 
-    pub fn observe_subnet_query_message(&self, query_method: QueryMethod, duration: f64) {
+    pub fn observe_subnet_query_message<T>(
+        &self,
+        query_method: QueryMethod,
+        duration: f64,
+        res: &Result<T, UserError>,
+    ) {
         // Determine the label based on whether the method is a subnet (management canister) query.
-        let label = format!(
+        let method_name_label = format!(
             "query_{}{}",
             if query_method.is_management_canister_query() {
                 "ic00_"
@@ -291,8 +300,12 @@ impl QueryHandlerMetrics {
             },
             query_method.to_string()
         );
+        let outcome_label = match res {
+            Ok(_) => FINISHED_OUTCOME_LABEL.into(),
+            Err(_) => ERROR_OUTCOME_LABEL.into(),
+        };
         self.subnet_query_messages
-            .with_label_values(&[&label])
+            .with_label_values(&[&method_name_label, outcome_label])
             .observe(duration);
     }
 }
