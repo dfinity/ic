@@ -1211,23 +1211,23 @@ impl PoolRefillTask {
             log,
         };
 
-        runtime_handle.spawn(async move {
-            while let Some(registry_version) = refill_receiver.recv().await {
+        let builder = std::thread::Builder::new().name("MR_Pool_Refill_Task".to_string());
+
+        let _ = builder.spawn(move || {
+            while let Some(registry_version) = refill_receiver.blocking_recv() {
                 task.refill_pool(
                     POOL_BYTE_SIZE_SOFT_CAP,
                     POOL_SLICE_BYTE_SIZE_MAX,
                     registry_version,
                 )
-                .await;
             }
         });
-
         RefillTaskHandle(Mutex::new(refill_trigger))
     }
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    async fn refill_pool(
+    fn refill_pool(
         &self,
         pool_byte_size_soft_cap: usize,
         slice_byte_size_max: usize,
@@ -1248,6 +1248,7 @@ impl PoolRefillTask {
                 .collect::<BTreeMap<_, _>>()
         };
 
+        let mut query_set = tokio::task::JoinSet::new();
         for (subnet_id, slice_stats) in pool_slice_stats {
             let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
                 // Have a cached stream position.
@@ -1303,52 +1304,61 @@ impl PoolRefillTask {
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
             let log = self.log.clone();
-            self.runtime_handle.spawn(async move {
-                let since = Instant::now();
-                metrics.outstanding_queries.inc();
-                let query_result = xnet_client.query(&endpoint_locator).await;
-                metrics.outstanding_queries.dec();
-                let proximity = endpoint_locator.proximity.into();
 
-                match query_result {
-                    Ok(slice) => {
-                        let res = if witness_begin != msg_begin {
-                            // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
-                        } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
-                        };
-                        let status = match res {
-                            Ok(()) => STATUS_SUCCESS,
-                            Err(e) => e.to_label_value(),
-                        };
+            query_set.spawn_on(
+                async move {
+                    metrics.outstanding_queries.inc();
+                    let query_result = xnet_client.query(&endpoint_locator).await;
+                    metrics.outstanding_queries.dec();
+                    let since = Instant::now();
+                    let proximity = endpoint_locator.proximity.into();
 
-                        metrics.observe_query_slice_duration(status, proximity, since);
-                        metrics.observe_pull_attempt(status);
-                    }
+                    match query_result {
+                        Ok(slice) => {
+                            let res = if witness_begin != msg_begin {
+                                // Pulled a stream suffix, append to pooled slice.
+                                pool.lock()
+                                    .unwrap()
+                                    .append(subnet_id, slice, registry_version, log)
+                            } else {
+                                // Pulled a complete stream, replace pooled slice (if any).
+                                pool.lock()
+                                    .unwrap()
+                                    .put(subnet_id, slice, registry_version, log)
+                            };
+                            let status = match res {
+                                Ok(()) => STATUS_SUCCESS,
+                                Err(e) => e.to_label_value(),
+                            };
 
-                    Err(e) => {
-                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
-                        metrics.observe_pull_attempt(&e.to_label_value());
-                        if let XNetClientError::NoContent = e {
-                        } else if Self::pass_log_sampling() {
-                            info!(
-                                log,
-                                "Failed to query stream slice for subnet {} from node {}: {}",
-                                subnet_id,
-                                endpoint_locator.node_id,
-                                e
+                            metrics.observe_query_slice_duration(status, proximity, since);
+                            metrics.observe_pull_attempt(status);
+                        }
+
+                        Err(e) => {
+                            metrics.observe_query_slice_duration(
+                                &e.to_label_value(),
+                                proximity,
+                                since,
                             );
+                            metrics.observe_pull_attempt(&e.to_label_value());
+                            if let XNetClientError::NoContent = e {
+                            } else if Self::pass_log_sampling() {
+                                info!(
+                                    log,
+                                    "Failed to query stream slice for subnet {} from node {}: {}",
+                                    subnet_id,
+                                    endpoint_locator.node_id,
+                                    e
+                                );
+                            }
                         }
                     }
-                }
-            });
+                },
+                &self.runtime_handle,
+            );
         }
+        self.runtime_handle.block_on(query_set.join_all());
     }
 
     fn pass_log_sampling() -> bool {
