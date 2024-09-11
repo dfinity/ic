@@ -861,6 +861,7 @@ pub struct RawMockCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Option<Vec<CanisterHttpResponse>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -868,6 +869,7 @@ pub struct MockCanisterHttpResponse {
     pub subnet_id: Principal,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Option<Vec<CanisterHttpResponse>>,
 }
 
 impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
@@ -878,6 +880,7 @@ impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
             ),
             request_id: raw_mock_canister_http_response.request_id,
             response: raw_mock_canister_http_response.response,
+            additional_responses: raw_mock_canister_http_response.additional_responses,
         }
     }
 }
@@ -890,6 +893,7 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             },
             request_id: mock_canister_http_response.request_id,
             response: mock_canister_http_response.response,
+            additional_responses: mock_canister_http_response.additional_responses,
         }
     }
 }

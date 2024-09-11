@@ -1,5 +1,5 @@
 use crate::common::utils::get_custom_agent;
-use crate::common::utils::wait_for_rosetta_block;
+use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 pub struct RosettaTestingEnvironment {
-    pub _pocket_ic: PocketIc,
+    pub pocket_ic: PocketIc,
     pub _rosetta_context: RosettaContext,
     pub rosetta_client: RosettaClient,
     pub network_identifier: NetworkIdentifier,
@@ -180,7 +180,7 @@ impl RosettaTestingEnviornmentBuilder {
 
         // Wait for rosetta to catch up with the ledger
         if let Some(last_block_idx) = block_idxes.last() {
-            let rosetta_last_block_idx = wait_for_rosetta_block(
+            let rosetta_last_block_idx = wait_for_rosetta_to_sync_up_to_block(
                 &rosetta_client,
                 network_identifier.clone(),
                 *last_block_idx,
@@ -194,7 +194,7 @@ impl RosettaTestingEnviornmentBuilder {
         }
 
         RosettaTestingEnvironment {
-            _pocket_ic: pocket_ic,
+            pocket_ic,
             _rosetta_context: rosetta_context,
             rosetta_client,
             network_identifier,
