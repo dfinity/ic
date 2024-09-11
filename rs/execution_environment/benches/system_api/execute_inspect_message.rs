@@ -5,7 +5,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 
-use crate::common::WASM64_ENABLED;
 use ic_execution_environment::{ExecutionEnvironment, IngressFilterMetrics};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -77,7 +76,6 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        WASM64_ENABLED,
     );
 }
 
