@@ -6,8 +6,12 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::{Context, Result};
 
-use crate::types::{ConfigIniSettings, NetworkSettings};
+use crate::types::NetworkSettings;
 pub type ConfigMap = HashMap<String, String>;
+pub struct ConfigIniSettings {
+    pub network_settings: NetworkSettings,
+    pub verbose: bool,
+}
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
 // It could have fewer characters though. Parsing as an ip address with trailing '::' should work.
