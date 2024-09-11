@@ -11,13 +11,13 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
-    "@crate_index//:tempfile",
     "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:once_cell",
+    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []

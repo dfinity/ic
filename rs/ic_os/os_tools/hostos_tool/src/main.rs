@@ -4,8 +4,8 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 use config::deployment::read_deployment_file;
-use config::{
-    get_config_ini_settings, DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
+use config::config_ini::get_config_ini_settings;
+use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
 };
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
