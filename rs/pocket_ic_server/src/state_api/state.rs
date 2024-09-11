@@ -54,7 +54,7 @@ use tokio::{
 };
 use tonic::Request;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{error, info, trace};
+use tracing::{debug, error, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -720,6 +720,23 @@ impl ApiState {
                 .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
         }
 
+        async fn handler_dashboard(
+            State(replica_url): State<String>,
+            bytes: Bytes,
+        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!("{}/_/dashboard", replica_url);
+            let req = Request::builder()
+                .uri(url)
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            client
+                .request(req)
+                .await
+                .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
+        }
+
         async fn handler_api_canister(
             api_version: ApiVersion,
             replica_url: String,
@@ -925,6 +942,7 @@ impl ApiState {
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") });
             let router = Router::new()
+                .route("/_/dashboard", get(handler_dashboard))
                 .nest("/api/v2", router_api_v2)
                 .nest("/api/v3", router_api_v3)
                 .fallback(
@@ -987,7 +1005,7 @@ impl ApiState {
                     .unwrap();
             }
 
-            info!("Terminating HTTP gateway.");
+            debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
