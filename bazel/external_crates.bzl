@@ -733,7 +733,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "little-loadshedder": crate.spec(
-                version = "^0.1.0",
+                version = "^0.2.0",
             ),
             "lmdb-rkv": crate.spec(
                 git = "https://github.com/dfinity-lab/lmdb-rs",

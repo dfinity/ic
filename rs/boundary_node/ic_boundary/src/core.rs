@@ -1,5 +1,4 @@
 use std::{
-    convert::Infallible,
     error::Error as StdError,
     net::{Ipv6Addr, SocketAddr},
     sync::Arc,
@@ -11,7 +10,6 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
-    error_handling::HandleErrorLayer,
     middleware,
     response::IntoResponse,
     routing::method_routing::{get, post},
@@ -26,12 +24,12 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use little_loadshedder::{LoadShedError, LoadShedLayer};
+use little_loadshedder::{LoadShedLayer, LoadShedResponse};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
+use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
 use tracing::{debug, error, warn};
 
@@ -410,12 +408,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
-// Load shedding middleware is fallible, so we must handle the errors that it emits and convert them into responses.
-// Error argument will always be LoadShedError::Overload since the inner Axum layers are infallible, so we don't care for it.
-async fn handle_shed_error(_err: LoadShedError<Infallible>) -> impl IntoResponse {
-    ErrorCause::LoadShed
-}
-
 // Return type for setup_registry() to make clippy happy
 struct RegistrySetupResult(
     Option<RegistryReplicator>,
@@ -777,7 +769,10 @@ pub fn setup_router(
         );
 
         ServiceBuilder::new()
-            .layer(HandleErrorLayer::new(handle_shed_error))
+            .layer(MapResponseLayer::new(|resp| match resp {
+                LoadShedResponse::Inner(inner) => inner,
+                LoadShedResponse::Overload => ErrorCause::LoadShed.into_response(),
+            }))
             .layer(LoadShedLayer::new(
                 x,
                 Duration::from_millis(cli.listen.shed_target_latency),
