@@ -76,6 +76,14 @@ impl TestLedger {
         }
     }
 
+    pub(crate) async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
+        let mut blockchain = self.blockchain.write().await;
+        blockchain.push(&hb).map_err(ApiError::from)?;
+        blockchain
+            .set_hashed_block_to_verified(&hb.index)
+            .map_err(ApiError::from)
+    }
+
     fn next_block_timestamp(&self) -> TimeStamp {
         let mut next_block_timestamp = self.next_block_timestamp.lock().unwrap();
         let res = *next_block_timestamp;
