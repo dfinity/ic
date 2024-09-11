@@ -2,7 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -262,7 +262,10 @@ where
     ));
     let config = Config {
         embedders_config: EmbeddersConfig {
-            metering_type: MeteringType::New,
+            feature_flags: FeatureFlags {
+                best_effort_responses: FlagStatus::Enabled,
+                ..FeatureFlags::default()
+            },
             ..EmbeddersConfig::default()
         },
         ..Default::default()
