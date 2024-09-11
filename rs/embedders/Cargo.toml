@@ -34,13 +34,13 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "23.0.1", default-features = false, features = [
+wasmtime = { version = "24.0.0", default-features = false, features = [
     'cranelift',
     'gc',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "23.0.1"
+wasmtime-environ = "24.0.0"
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue

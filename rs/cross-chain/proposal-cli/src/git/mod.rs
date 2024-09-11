@@ -134,7 +134,7 @@ impl GitRepository {
     }
 
     pub fn build_canister_artifact(&mut self, canister: &TargetCanister) -> CompressedWasmHash {
-        let build = Command::new("./gitlab-ci/container/build-ic.sh")
+        let build = Command::new("./ci/container/build-ic.sh")
             .arg("--canisters")
             .current_dir(self.dir.path())
             .status()

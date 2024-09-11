@@ -845,6 +845,7 @@ impl PolynomialMatchingFunction {
     pub fn new(
         total_maturity_equivalent_icp_e8s: u64,
         neurons_fund_participation_limits: NeuronsFundParticipationLimits,
+        enable_logging: bool,
     ) -> Result<Self, String> {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
@@ -882,7 +883,9 @@ impl PolynomialMatchingFunction {
             cap,
         };
 
-        persistent_data.log_unreachable_milestones(human_readable_cap_formula);
+        if enable_logging {
+            persistent_data.log_unreachable_milestones(human_readable_cap_formula);
+        }
 
         Self::from_persistent_data(persistent_data)
     }

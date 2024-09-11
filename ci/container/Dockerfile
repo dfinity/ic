@@ -3,9 +3,9 @@
 FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
-COPY --chmod=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
+COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 
-ARG PACKAGE_FILE=gitlab-ci/container/files/packages.common
+ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
@@ -91,13 +91,13 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Add gitconfig
-COPY ./gitlab-ci/container/files/gitconfig /etc/gitconfig
+COPY ./ci/container/files/gitconfig /etc/gitconfig
 
 # Pre-populate the Bazel installation for root
 COPY .bazelversion /tmp/bazel/
 RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
 
-COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
+COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
@@ -150,9 +150,9 @@ RUN mkdir -p /afl && \
     cd .. && rm -rf AFLplusplus
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
-COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
+COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./ci/container/files/docker.sh /usr/bin/docker
+COPY ./ci/container/files/entrypoint.sh /entrypoint.sh
 
 USER ubuntu
 
@@ -175,9 +175,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 ARG CARGO_AUDIT_VERSION=0.20.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
-COPY ./gitlab-ci/container/TAG /home/ubuntu/.DFINITY-TAG
+COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 # Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
+COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden
