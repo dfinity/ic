@@ -1,4 +1,4 @@
-use candid::{candid_method, CandidType, Decode, Encode};
+use candid::{candid_method, CandidType, Encode};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
@@ -252,87 +252,6 @@ impl StateV1 {
     }
 }
 
-/// Old state type. The State type migrates from this type.
-///
-/// The difference with State is that StateV0 has Option wrappers
-/// around blocks_notified and last_purged_notification.
-///
-/// TODO: remove this type once the CMC has upgraded to this version.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct StateV0 {
-    pub ledger_canister_id: CanisterId,
-    pub governance_canister_id: CanisterId,
-    pub exchange_rate_canister_id: Option<CanisterId>,
-    pub cycles_ledger_canister_id: Option<CanisterId>,
-    pub minting_account_id: Option<AccountIdentifier>,
-    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
-    pub default_subnets: Vec<SubnetId>,
-    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
-    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
-    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
-    pub cycles_per_xdr: Cycles,
-    pub cycles_limit: Cycles,
-    pub limiter: limiter::Limiter,
-    pub total_cycles_minted: Cycles,
-
-    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
-    pub last_purged_notification: Option<BlockIndex>,
-
-    pub maturity_modulation_permyriad: Option<i32>,
-    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
-    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
-}
-
-/// Migrate from the old state type to the current one.
-fn migrate(state_v0: StateV0) -> StateV1 {
-    let StateV0 {
-        ledger_canister_id,
-        governance_canister_id,
-        exchange_rate_canister_id,
-        cycles_ledger_canister_id,
-        minting_account_id,
-        authorized_subnets,
-        default_subnets,
-        icp_xdr_conversion_rate,
-        average_icp_xdr_conversion_rate,
-        recent_icp_xdr_rates,
-        cycles_per_xdr,
-        cycles_limit,
-        limiter,
-        total_cycles_minted,
-        blocks_notified,
-        last_purged_notification,
-        maturity_modulation_permyriad,
-        subnet_types_to_subnets,
-        update_exchange_rate_canister_state,
-    } = state_v0;
-
-    let blocks_notified = blocks_notified.unwrap_or_default();
-    let last_purged_notification = last_purged_notification.unwrap_or_default();
-
-    StateV1 {
-        ledger_canister_id,
-        governance_canister_id,
-        exchange_rate_canister_id,
-        cycles_ledger_canister_id,
-        minting_account_id,
-        authorized_subnets,
-        default_subnets,
-        icp_xdr_conversion_rate,
-        average_icp_xdr_conversion_rate,
-        recent_icp_xdr_rates,
-        cycles_per_xdr,
-        cycles_limit,
-        limiter,
-        total_cycles_minted,
-        blocks_notified,
-        last_purged_notification,
-        maturity_modulation_permyriad,
-        subnet_types_to_subnets,
-        update_exchange_rate_canister_state,
-    }
-}
-
 impl State {
     fn encode(&self) -> Vec<u8> {
         Encode!(&Self::state_version(), &self).unwrap()
@@ -340,44 +259,37 @@ impl State {
 
     fn decode(bytes: &[u8]) -> Result<Self, String> {
         let mut deserializer = candid::de::IDLDeserialize::new(bytes).unwrap();
-        match deserializer.get_value::<StateVersion>() {
-            // When stable storage contains a StateV0 encoded value
-            // decoding it as a StateVersion will fail (this has been experimentally verified).
-            // In this case we decode stable storage as a StateV0 and migrate it to the desired StateV1.
-            Err(_) => {
-                print("[cycles] state has not been migrated to the new versioned State format yet, doing that now ...");
-                let state_v0: StateV0 = Decode!(bytes, StateV0)
-                    .expect("stable storage needs to contain a candid-encoded StateV0 value!");
-                let state_v1: StateV1 = migrate(state_v0);
-                Ok(state_v1)
+        let stored_state_version: StateVersion =
+            deserializer.get_value().expect("state version is missing");
+        let current_state_version: StateVersion = Self::state_version();
+        match stored_state_version.cmp(&current_state_version) {
+            Ordering::Greater => {
+                return Err(format!(
+                    "[cycles] ERROR: stored state version {:?} is greater than the current state \
+                     version {:?}!  This likely means a rollback happened. This is not supported. \
+                     Please upgrade to a hotfix instead.",
+                    stored_state_version, current_state_version
+                ))
             }
-            Ok(stored_state_version) => {
-                let current_state_version: StateVersion = Self::state_version();
-                match stored_state_version.cmp(&current_state_version) {
-                    Ordering::Greater =>
-                        return Err(format!(
-                            "[cycles] ERROR: stored state version {:?} is greater than the current state version {:?}! \
-                            This likely means a rollback happened. This is not supported. Please upgrade to a hotfix instead.",
-                            stored_state_version, current_state_version
-                        )),
-                    Ordering::Less =>
-                        return Err(format!(
-                            "[cycles] ERROR: stored state version {:?} is lesser than the current state version {:?}! \
-                            Did you forget to migrate the old to the current type?",
-                            stored_state_version, current_state_version
-                        )),
-                    Ordering::Equal =>
-                        print(format!(
-                            "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
-                            Continuing to decode the stable storage ... ",
-                            stored_state_version, current_state_version,
-                        )),
-                }
-                let state = deserializer.get_value::<State>().unwrap();
-                deserializer.done().unwrap();
-                Ok(state)
+            Ordering::Less => {
+                // Since the version 1 is the latest version and also the first one encoded along
+                // with the state version, this should never happen. When we have a higher version
+                // than 1, we should add migration code here.
+                return Err(format!(
+                    "[cycles] ERROR: stored state version {:?} is lesser than the current state \
+                     version {:?}! Did you forget to migrate the old to the current type?",
+                    stored_state_version, current_state_version
+                ));
             }
-        }
+            Ordering::Equal => print(format!(
+                "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                Continuing to decode the stable storage ... ",
+                stored_state_version, current_state_version,
+            )),
+        };
+        let state = deserializer.get_value::<State>().unwrap();
+        deserializer.done().unwrap();
+        Ok(state)
     }
 
     // Keep the size of blocks_notified map not larger than max_history.
