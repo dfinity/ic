@@ -20,20 +20,20 @@ printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "-----------
 printf "| %-20s | %-18s | %-18s | %-18s |\n" "Instruction" "Wasm32 Time (ns)" "Wasm64 Time (ns)" "Overhead (%)"
 printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "------------------" "------------------" "------------------"
 
-for op in $OP_TYPES ; do
-  cat "${WASM64_FILE}" | grep $op | while read -r line; do
-    # Extract the opcode
-    opcode=$(echo $line | awk '{print $1}')
-    # Extract the Wasm64 time
-    wasm64_time=$(echo $line | awk '{print $3}')
-    # Extract the Wasm32 time
-    # Some operations are named "memop/i32.load8_s", we need to differentiate these from "memop/i32.load" when grepping.
-    wasm32_time=$(cat "${WASM32_FILE}" | grep -w "${opcode}" | awk '{print $4}')
-    # Compute the overhead
-    overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc)
-    # Print the results
-    printf "| %-20s | %-18s | %-18s | %-18s |\n" "$opcode" "$wasm32_time" "$wasm64_time" "$overhead"
-  done
+for op in $OP_TYPES; do
+    cat "${WASM64_FILE}" | grep $op | while read -r line; do
+        # Extract the opcode
+        opcode=$(echo $line | awk '{print $1}')
+        # Extract the Wasm64 time
+        wasm64_time=$(echo $line | awk '{print $3}')
+        # Extract the Wasm32 time
+        # Some operations are named "memop/i32.load8_s", we need to differentiate these from "memop/i32.load" when grepping.
+        wasm32_time=$(cat "${WASM32_FILE}" | grep -w "${opcode}" | awk '{print $4}')
+        # Compute the overhead
+        overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc)
+        # Print the results
+        printf "| %-20s | %-18s | %-18s | %-18s |\n" "$opcode" "$wasm32_time" "$wasm64_time" "$overhead"
+    done
 done
 
 printf "| %-20s | %-18s | %-18s | %-18s |\n" "--------------------" "------------------" "------------------" "------------------"
