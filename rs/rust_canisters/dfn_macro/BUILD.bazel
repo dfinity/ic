@@ -1,7 +1,12 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_proc_macro")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nns/handlers/root:__subpackages__",
+    "//rs/rosetta-api:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+])
 
 rust_proc_macro(
     name = "dfn_macro",

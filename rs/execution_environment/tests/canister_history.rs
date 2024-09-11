@@ -903,8 +903,8 @@ fn canister_info_retrieval() {
     assert_eq!(
         res,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            format!("{} cannot be called by a user.", Method::CanisterInfo)
+            ErrorCode::CanisterRejectedMessage,
+            "Only canisters can call ic00 method canister_info"
         ))
     );
 
@@ -976,7 +976,7 @@ fn canister_info_retrieval() {
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
-        19,
+        18,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
@@ -996,6 +996,7 @@ fn canister_info_retrieval() {
 fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Setup:
     let mut now = std::time::SystemTime::now();
+    let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     // Set up StateMachine
     let env = StateMachineBuilder::new()
@@ -1047,13 +1048,35 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
             .get_canister_id(),
         WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
     };
-    // Check canister history
-    let reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
+
+    let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 2, // the canister is created in the next round after the ingress message is received
         0,
         CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
         CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
     )];
+
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    let wasm_result = env
+        .execute_ingress_as(
+            ucan.into(),
+            ic00::IC_00,
+            Method::InstallCode,
+            InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
+        )
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(reason) => panic!("install_code call rejected: {}", reason),
+    };
+    // Check canister history.
+    reference_change_entries.push(CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
+        1,
+        CanisterChangeOrigin::from_user(ucan.into()),
+        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+    ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
         history.get_total_num_changes(),

@@ -22,6 +22,7 @@ use std::time::Duration;
 ///   |- tear_down/
 ///         |- ic_prep
 ///         |- test.log          <-- prefix :: finalization_log
+///
 /// Username for the ssh session.
 pub const SSH_USERNAME: &str = "admin";
 // Name of the network interfaces on the Node.

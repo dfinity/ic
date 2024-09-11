@@ -1,7 +1,6 @@
-use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
-use crate::eth_rpc::{BlockTag, Hash};
+use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
@@ -15,6 +14,7 @@ use crate::state::audit::apply_state_transition;
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
+use crate::test_fixtures::arb::{arb_address, arb_checked_amount_of, arb_hash};
 use crate::tx::{
     AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
     ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
@@ -22,7 +22,7 @@ use crate::tx::{
 use candid::{Nat, Principal};
 use ethnum::u256;
 use ic_ethereum_types::Address;
-use proptest::array::{uniform20, uniform32};
+use proptest::array::uniform32;
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 use std::collections::BTreeMap;
@@ -527,24 +527,12 @@ mod erc20 {
     }
 }
 
-fn arb_hash() -> impl Strategy<Value = Hash> {
-    uniform32(any::<u8>()).prop_map(Hash)
-}
-
-fn arb_address() -> impl Strategy<Value = Address> {
-    uniform20(any::<u8>()).prop_map(Address::new)
-}
-
 fn arb_principal() -> impl Strategy<Value = Principal> {
     pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
 }
 
 fn arb_u256() -> impl Strategy<Value = u256> {
     uniform32(any::<u8>()).prop_map(u256::from_be_bytes)
-}
-
-fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-    (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| CheckedAmountOf::from_words(hi, lo))
 }
 
 fn arb_event_source() -> impl Strategy<Value = EventSource> {

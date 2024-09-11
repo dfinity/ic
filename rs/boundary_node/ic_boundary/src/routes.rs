@@ -19,7 +19,7 @@ use axum::{
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
 use http::{
-    header::{HeaderName, HeaderValue, CONTENT_TYPE},
+    header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
     Method,
 };
 use ic_types::{
@@ -53,6 +53,10 @@ const METHOD_HTTP: &str = "http_request";
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+#[allow(clippy::declare_interior_mutable_const)]
+const X_CONTENT_TYPE_OPTIONS_NO_SNIFF: HeaderValue = HeaderValue::from_static("nosniff");
+#[allow(clippy::declare_interior_mutable_const)]
+const X_FRAME_OPTIONS_DENY: HeaderValue = HeaderValue::from_static("DENY");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
 #[allow(clippy::declare_interior_mutable_const)]
@@ -104,7 +108,7 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Debug, Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display, Default, Deserialize, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum RequestType {
@@ -118,7 +122,13 @@ pub enum RequestType {
     ReadStateSubnet,
 }
 
-#[derive(Debug, Clone, Display)]
+impl RequestType {
+    pub fn is_call(&self) -> bool {
+        matches!(self, Self::Call | Self::CallV3)
+    }
+}
+
+#[derive(Clone, Debug, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
     Normal,
@@ -128,7 +138,7 @@ pub enum RateLimitCause {
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum ErrorCause {
     UnableToReadBody(String),
     PayloadTooLarge(usize),
@@ -237,7 +247,7 @@ impl IntoResponse for ErrorCause {
     }
 }
 
-#[derive(Clone, CandidType, Deserialize, Hash, PartialEq)]
+#[derive(Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -247,7 +257,7 @@ pub struct HttpRequest {
 }
 
 // Object that holds per-request information
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct RequestContext {
     pub request_type: RequestType,
     pub request_size: u32,
@@ -308,7 +318,7 @@ impl PartialEq for RequestContext {
 impl Eq for RequestContext {}
 
 // This is the subset of the request fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
@@ -318,7 +328,7 @@ struct ICRequestContent {
     arg: Option<Blob>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ICRequestEnvelope {
     content: ICRequestContent,
 }
@@ -667,14 +677,13 @@ pub async fn lookup_subnet(
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let subnet: Arc<RouteSubnet> =
-        if let Some(canister_id) = request.extensions().get::<CanisterId>() {
-            lk.lookup_subnet_by_canister_id(canister_id)?
-        } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
-            lk.lookup_subnet_by_id(subnet_id)?
-        } else {
-            panic!("canister_id and subnet_id can't be both empty for a request")
-        };
+    let subnet = if let Some(canister_id) = request.extensions().get::<CanisterId>() {
+        lk.lookup_subnet_by_canister_id(canister_id)?
+    } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
+        lk.lookup_subnet_by_id(subnet_id)?
+    } else {
+        panic!("canister_id and subnet_id can't be both empty for a request")
+    };
 
     // Inject subnet into request
     request.extensions_mut().insert(Arc::clone(&subnet));
@@ -703,6 +712,12 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         response
             .headers_mut()
             .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+        response
+            .headers_mut()
+            .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+        response
+            .headers_mut()
+            .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
     }
 
     response.headers_mut().insert(
@@ -823,6 +838,12 @@ pub async fn status(
     response
         .headers_mut()
         .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+    response
+        .headers_mut()
+        .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
 
     response
 }

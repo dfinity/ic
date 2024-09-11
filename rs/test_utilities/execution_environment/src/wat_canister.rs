@@ -213,7 +213,7 @@ impl fmt::Display for WatData {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
+#[derive(Copy, Clone, PartialEq, Debug, EnumIter)]
 enum Method {
     Start,
     Init,
@@ -384,11 +384,11 @@ impl WatCanisterBuilder {
             (func $_wait (param $instructions i64)
                 ;; Calculate the instruction limit
                 (local $limit i64)
-                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (get_local $instructions)))
+                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (local.get $instructions)))
                 (loop $loop
                     (if (i64.lt_s
                             (call $ic0_performance_counter (i32.const 0))
-                            (get_local $limit))
+                            (local.get $limit))
                         (then
                             ;; Placeholder instruction for simulating work
                             (memory.fill (i32.const 0) (i32.const 0) (i32.const {MEMORY_FILL_MAX}))
@@ -752,11 +752,11 @@ mod tests {
             (func $_wait (param $instructions i64)
                 ;; Calculate the instruction limit
                 (local $limit i64)
-                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (get_local $instructions)))
+                (local.set $limit (i64.add (call $ic0_performance_counter (i32.const 0)) (local.get $instructions)))
                 (loop $loop
                     (if (i64.lt_s
                             (call $ic0_performance_counter (i32.const 0))
-                            (get_local $limit))
+                            (local.get $limit))
                         (then
                             ;; Placeholder instruction for simulating work
                             (memory.fill (i32.const 0) (i32.const 0) (i32.const 100))

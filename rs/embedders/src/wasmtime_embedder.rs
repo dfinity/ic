@@ -1,3 +1,8 @@
+// False positive clippy lint.
+// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 pub mod host_memory;
 mod signal_stack;
 mod system_api;
@@ -141,7 +146,7 @@ fn get_exported_globals<T>(
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMemoryType {
     Heap,
     Stable,
@@ -511,6 +516,7 @@ impl WasmtimeEmbedder {
             store,
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
@@ -758,6 +764,8 @@ pub struct WasmtimeInstance {
     store: wasmtime::Store<StoreData>,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]

@@ -13,8 +13,8 @@ DEPENDENCIES = [
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/constants",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
@@ -247,6 +247,9 @@ container_image(
     name = "ic_icrc_rosetta_image_base",
     base = "@rust_base//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
         ":data_tar",
@@ -267,6 +270,9 @@ container_image(
     ],
     ports = ["8080"],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "ic_icrc_rosetta",
     workdir = "/home/ic_icrc_rosetta",
 )

@@ -1,6 +1,24 @@
 # The goal of using package_groups is to decouple semantically different parts of the whole IC codebase.
 # There is a 1-to-1 mapping between each package and a package group defined in this file.
 # The relationship between package_groups is also defined here.
+#
+#               - system-tests -------
+#               |    \               |
+#               |    ic-os           |
+#               |       \            |
+#               |========VM===========
+#               |          \         |
+#               |         release    |
+#               |          |     \   |
+#               |          |     tools ( + integrations)
+#               |          |         |
+#               |          |         |
+#               |          |         |
+#               ======IC Protocol=====
+#               |          |         |
+#               BN     replica   dapps
+#
+#
 # In the future when upgrade to bazel >7, package groups will be moved into bazel modules so
 # all the dependency rules between package groups will be more strictly enforced.
 
@@ -21,16 +39,6 @@ package_group(
     packages = ["//rs/tests/..."],
 )
 
-# Targets for preparing release artifacts (e.g. stripping binaries, compressiong wasms, etc).
-#
-# Can depend on: all targets excluding the //rs:system-tests-pkg package group.
-#
-# Dependants: //rs:ic-os-pkg.
-package_group(
-    name = "release-pkg",
-    packages = ["//publish/..."],
-)
-
 # Targets containing tooling relevant creating VMs.
 #
 # Can depend on: //rs:release-pkg.
@@ -38,11 +46,47 @@ package_group(
 #       //rs/ic_os/launch-single-vm:__pkg__ depends on
 #       //rs/tests/driver:ic-system-test-driver
 #
-# Dependants: //rs:system-tests-pkg and //rs:release-pkg.
+# Dependants: //rs:system-tests-pkg.
 package_group(
     name = "ic-os-pkg",
     packages = [
         "//ic-os/...",
         "//rs/ic_os/...",
+    ],
+)
+
+# Targets for preparing release artifacts (e.g. stripping binaries, compressiong wasms, etc).
+#
+# Can depend on: all targets excluding the //rs:system-tests-pkg and //rs:ic-os-pkg package groups.
+#
+# Dependants: //rs:ic-os-pkg
+package_group(
+    name = "release-pkg",
+    packages = ["//publish/..."],
+)
+
+# Tools useful for local dev., operational tasks, debugging, etc.
+# Can depend on: ic-protocol package groups
+# Dependants: //rs:system-tests-pkg and //rs:release-pkg.
+package_group(
+    name = "tools-pkg",
+    packages = [
+        "//rs/backup/...",
+        "//rs/pocket_ic_server/...",
+        "//rs/recovery/...",
+        "//rs/registry/regedit/...",
+        "//rs/replay/...",
+        "//rs/starter/...",
+        "//rs/state_tool/...",
+    ],
+)
+
+# Boundary node code.
+# Can depend on: ic-protocol package groups
+# Dependants: //rs:release-pkg.
+package_group(
+    name = "boundary-node-pkg",
+    packages = [
+        "//rs/boundary_node/...",
     ],
 )

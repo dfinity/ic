@@ -35,8 +35,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
-on_wire = { path = "../../../rust_canisters/on_wire" }
 ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
+ic-ledger-test-utils = { path = "../test_utils" }
+ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

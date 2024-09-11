@@ -48,6 +48,6 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
-ic-nns-governance = { path = "../../nns/governance" }
-proptest = "1.0"
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+proptest = { workspace = true }
 serde_bytes = { workspace = true }

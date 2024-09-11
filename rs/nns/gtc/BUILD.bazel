@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -14,8 +14,8 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/getrandom_for_wasm",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nns/common",
@@ -39,11 +39,11 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -60,6 +60,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/gtc/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:candid_parser",
     "@crate_index//:tempfile",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -78,6 +79,13 @@ MACRO_DEV_DEPENDENCIES = select({
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*tests.rs"],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -89,9 +97,7 @@ cargo_build_script(
 
 rust_library(
     name = "gtc",
-    srcs = glob([
-        "src/**/*.rs",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -101,25 +107,13 @@ rust_library(
 
 rust_library(
     name = "gtc--test_feature",
-    srcs = glob([
-        "src/**/*.rs",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":gtc",
-    ],
 )
 
 rust_canister(
@@ -144,11 +138,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_genesis-token-canister",
-    data = ["canister/gtc.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/gtc",
-    },
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/gtc.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":gtc",
+    ],
 )
 
 rust_ic_test_suite(

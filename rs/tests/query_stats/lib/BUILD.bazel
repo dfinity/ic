@@ -11,7 +11,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",

@@ -11,7 +11,7 @@ pub type BalanceBook = Balances<ClientBalancesStore>;
 
 const EMPTY_HISTORY: [(BlockIndex, Tokens); 0] = [];
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BalanceHistory {
     // TODO consider switching to VecDeque, to have more efficient pruning
     // Unfortunately binary_search on VecDeque is only available on nightly,
@@ -136,7 +136,7 @@ impl BalanceHistory {
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct ClientBalancesStore {
     pub acc_to_hist: HashMap<AccountIdentifier, BalanceHistory>,
     pub transaction_context: Option<BlockIndex>,
@@ -179,8 +179,11 @@ impl BalancesStore for ClientBalancesStore {
     type AccountId = AccountIdentifier;
     type Tokens = Tokens;
 
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
-        self.acc_to_hist.get(k).and_then(|hist| hist.get_last_ref())
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<Tokens> {
+        self.acc_to_hist
+            .get(k)
+            .and_then(|hist| hist.get_last_ref())
+            .cloned()
     }
 
     // In here, ledger removes zero amount accounts from it's map,

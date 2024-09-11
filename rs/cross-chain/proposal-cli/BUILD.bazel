@@ -7,9 +7,12 @@ DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -20,6 +23,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:assert_matches",
+    "@crate_index//:maplit",
 ]
 
 DEV_MACRO_DEPENDENCIES = []
@@ -30,6 +34,7 @@ rust_binary(
     compile_data = [
         "templates/upgrade.md",
         "templates/install.md",
+        "templates/submit_with_ic_admin.shx",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,

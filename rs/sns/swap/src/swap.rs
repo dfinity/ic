@@ -5,22 +5,23 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
+        claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
         get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
         set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
-        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
-        DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
-        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateResponse, Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
+        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant,
+        ClaimSwapNeuronsRequest, DerivedState, DirectInvestment, ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, GetAutoFinalizationStatusRequest,
+        GetAutoFinalizationStatusResponse, GetBuyerStateRequest, GetBuyerStateResponse,
+        GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
+        GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
+        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Icrc1Account, Init,
+        Lifecycle, ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SwapNeuronId,
+        NeuronIds, NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse,
         Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
         SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
@@ -34,14 +35,14 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_nervous_system_common::{
+    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::NeuronParameters,
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    SetMode, SetModeResponse,
+    governance, ClaimSwapNeuronsError, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
 };
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
@@ -723,22 +724,6 @@ impl Swap {
         Ok(auto_finalize_swap_response)
     }
 
-    /// This function is obsolete.
-    pub async fn open(
-        &self,
-        _this_canister: CanisterId,
-        _sns_ledger: &dyn ICRC1Ledger,
-        _now_seconds: u64,
-        _req: OpenRequest,
-    ) -> Result<OpenResponse, String> {
-        Err(
-            "Swap.open is obsolete. An SNS instance should be created via \
-            a `CreateServiceNervousSystem` proposal, the execution of which automatically leads to \
-            the swap being in the open state."
-                .to_string(),
-        )
-    }
-
     /// Computes `amount_icp_e8s` scaled by (`total_sns_e8s` divided by
     /// `total_icp_e8s`), but perform the computation in integer space
     /// by computing `(amount_icp_e8s * total_sns_e8s) /
@@ -888,23 +873,24 @@ impl Swap {
 
         // Create the neuron basket for the Neuron Fund investors. The unique
         // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
-        // is a hash of PrincipalId and some unique memo. Since NF
+        // is a hash of PrincipalId and some unique memo. Since Neurons' Fund
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all NF investors.
-        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
-        for cf_participant in self.cf_participants.iter_mut() {
-            let controller = cf_participant.try_get_controller();
+        let mut global_neurons_fund_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
+        for neurons_fund_participant in self.cf_participants.iter_mut() {
+            let controller = neurons_fund_participant.try_get_controller();
 
-            for cf_neuron in cf_participant.cf_neurons.iter_mut() {
-                // Create a closure to ensure `global_cf_memo` is incremented in all cases
-                let mut process_cf_neuron = || {
+            for neurons_fund_neuron in neurons_fund_participant.cf_neurons.iter_mut() {
+                // Create a closure to ensure `global_neurons_fund_memo` is incremented in all cases
+                let hotkeys = neurons_fund_neuron.hotkeys.clone().unwrap_or_default();
+                let process_neurons_fund_neuron = || {
                     let controller = match controller.clone() {
                         Ok(nns_neuron_controller_principal) => nns_neuron_controller_principal,
                         Err(e) => {
                             log!(
                                 ERROR,
-                                "Error getting the controller for {cf_neuron:?} principal: {e}"
+                                "Error getting the controller for {neurons_fund_neuron:?} principal: {e}"
                             );
                             sweep_result.invalid +=
                                 neuron_basket_construction_parameters.count as u32;
@@ -915,25 +901,24 @@ impl Swap {
                     // The case that on a previous attempt at creating this neuron recipe, it was
                     // successfully created and recorded. Count the number of neuron recipes that
                     // would have been created.
-                    if cf_neuron.has_created_neuron_recipes == Some(true) {
+                    if neurons_fund_neuron.has_created_neuron_recipes == Some(true) {
                         sweep_result.skipped += neuron_basket_construction_parameters.count as u32;
                         return;
                     }
 
                     let amount_sns_e8s = Swap::scale(
-                        cf_neuron.amount_icp_e8s,
+                        neurons_fund_neuron.amount_icp_e8s,
                         sns_being_offered_e8s,
                         total_participant_icp_e8s,
                     );
 
-                    match create_sns_neuron_basket_for_cf_participant(
+                    match create_sns_neuron_basket_for_neurons_fund_participant(
                         &controller,
-                        // TODO(NNS1-3199): Populate this field
-                        Vec::new(),
-                        cf_neuron.nns_neuron_id,
+                        hotkeys.principals,
+                        neurons_fund_neuron.nns_neuron_id,
                         amount_sns_e8s,
                         neuron_basket_construction_parameters,
-                        global_cf_memo,
+                        global_neurons_fund_memo,
                         nns_governance_canister_id.get(),
                     ) {
                         Ok(cf_participants_sns_neuron_recipes) => {
@@ -943,7 +928,7 @@ impl Swap {
                                 .extend(cf_participants_sns_neuron_recipes);
                             total_sns_tokens_sold_e8s =
                                 total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
-                            cf_neuron.has_created_neuron_recipes = Some(true);
+                            neurons_fund_neuron.has_created_neuron_recipes = Some(true);
                         }
                         Err(error_message) => {
                             log!(
@@ -959,13 +944,15 @@ impl Swap {
                 };
 
                 // Call the closure
-                process_cf_neuron();
+                process_neurons_fund_neuron();
 
                 // Increment the memo by the number neurons in a neuron basket. This means that
-                // previous idempotent calls should increment global_cf_memo and handle overflow
-                match global_cf_memo.checked_add(neuron_basket_construction_parameters.count) {
+                // previous idempotent calls should increment global_neurons_fund_memo and handle overflow
+                match global_neurons_fund_memo
+                    .checked_add(neuron_basket_construction_parameters.count)
+                {
                     Some(new_value) => {
-                        global_cf_memo = new_value;
+                        global_neurons_fund_memo = new_value;
                     }
                     None => {
                         sweep_result.global_failures += 1;
@@ -1171,6 +1158,30 @@ impl Swap {
         let params = &self.params.as_ref().expect("Expected params to be set");
         // Subtraction safe because of the preceding if-statement.
         let max_increment_e8s = self.available_direct_participation_e8s();
+
+        // Check that the maximum number of participants has not been reached yet.
+        {
+            let num_direct_participants = self.buyers.len() as u64;
+            let num_sns_neurons_per_basket = params
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .expect("neuron_basket_construction_parameters must be specified")
+                .count;
+            if (num_direct_participants + 1) * num_sns_neurons_per_basket
+                > MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
+            {
+                return Err(format!(
+                    "The swap has reached the maximum number of direct participants ({}) and does \
+                     not accept new participants; existing participants may still increase their \
+                     ICP participation amount. This constraint ensures that SNS neuron baskets can \
+                     be created for all existing participants (SNS neuron basket size: {}, \
+                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {}).",
+                    num_direct_participants,
+                    num_sns_neurons_per_basket,
+                    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+                ));
+            }
+        }
 
         // Check that the minimum amount has been transferred before
         // actually creating an entry for the buyer.
@@ -1633,155 +1644,45 @@ impl Swap {
         // be accessed in O(1) time.
         let mut claimable_neurons_index = btreemap! {};
 
-        // The NeuronParameters that will be used to create neurons.
-        let mut neuron_parameters = vec![];
+        // The `NeuronRecipe`s that will be used to create neurons. We are converting
+        // `SnsNeuronRecipe`s to a type with a similar name, `NeuronRecipe`, as this is the type
+        // expected by the SNS Governance canister.
+        let mut neuron_recipes = vec![];
 
         for recipe in &mut self.neuron_recipes {
-            // TODO(NNS1-3207): This match will need to be changed to evaluate to a Participant
-            let (hotkey, controller, source_nns_neuron_id) = match recipe.investor.as_ref() {
-                Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
-                    let parsed_buyer_principal = match string_to_principal(buyer_principal) {
-                        Some(p) => p,
-                        // principal_str should always be parseable as a PrincipalId as that is enforced
-                        // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
-                        // the invalid field. This will require a manual intervention via an upgrade to correct
-                        None => {
-                            sweep_result.invalid += 1;
-                            continue;
-                        }
-                    };
-
-                    (None, parsed_buyer_principal, None)
-                }
-                Some(Investor::CommunityFund(cf_investment)) => {
-                    let nf_neuron_nns_controller = match cf_investment.try_get_controller() {
-                        Ok(controller) => controller,
-                        Err(e) => {
-                            log!(ERROR, "Invalid NF neuron: recipe={recipe:?} error={e}");
-                            sweep_result.invalid += 1;
-                            continue;
-                        }
-                    };
-                    (
-                        Some(nf_neuron_nns_controller),
-                        PrincipalId::from(nns_governance),
-                        Some(cf_investment.nns_neuron_id),
-                    )
-                }
-                // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
-                // In the case of a bug due to programmer error, increment the invalid field.
-                // This will require a manual intervention via an upgrade to correct
-                None => {
-                    log!(
-                        ERROR,
-                        "Missing investor information for neuron recipe {:?}",
-                        recipe,
+            // Here we convert the SnsNeuronRecipe (a Swap concept) to an SnsNeuronRecipe (an SNS
+            // Governance concept).
+            match recipe.to_neuron_recipe(nns_governance, sns_transaction_fee_e8s) {
+                Ok(neuron_recipe) => {
+                    let neuron_id = neuron_recipe.neuron_id.clone().expect(
+                        "NeuronRecipe.neuron_id is always set by \
+                        SnsNeuronRecipe::to_neuron_recipe",
                     );
-                    sweep_result.invalid += 1;
-                    continue;
+                    claimable_neurons_index.insert(neuron_id, recipe);
+                    neuron_recipes.push(neuron_recipe);
                 }
-            };
-
-            let (dissolve_delay_seconds, memo, followees) = match recipe.neuron_attributes.as_ref()
-            {
-                Some(neuron_attribute) => (
-                    neuron_attribute.dissolve_delay_seconds,
-                    neuron_attribute.memo,
-                    neuron_attribute.followees.clone(),
-                ),
-                // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
-                // In the case of a bug due to programmer error, increment the invalid field.
-                // This will require a manual intervention via an upgrade to correct
-                None => {
-                    log!(
-                        ERROR,
-                        "Missing neuron_attributes information for neuron recipe {:?}",
-                        recipe,
-                    );
-                    sweep_result.invalid += 1;
-                    continue;
-                }
-            };
-
-            let amount_e8s = match recipe.sns.as_ref() {
-                Some(transferable_amount) => transferable_amount.amount_e8s,
-                // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
-                // In the case of a bug due to programmer error, increment the invalid field.
-                // This will require a manual intervention via an upgrade to correct
-                None => {
-                    log!(
-                        ERROR,
-                        "Missing transfer information for neuron recipe {:?}",
-                        recipe,
-                    );
-                    sweep_result.invalid += 1;
-                    continue;
-                }
-            };
-
-            if recipe.claimed_status == Some(ClaimedStatus::Success as i32) {
-                log!(
-                    INFO,
-                    "Recipe {:?} was claimed in previous invocation of claim_swap_neurons(). Skipping",
-                    recipe,
-                );
-                sweep_result.skipped += 1;
-                continue;
-            }
-
-            if recipe.claimed_status == Some(ClaimedStatus::Invalid as i32) {
-                // If the Recipe is marked as invalid, intervention is needed to make valid again.
-                // As part of that intervention, the recipe must be marked as ClaimedStatus::Pending
-                // to attempt again.
-                log!(INFO, "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). Skipping", recipe);
-                sweep_result.invalid += 1;
-                continue;
-            }
-
-            let neuron_id =
-                NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, memo));
-
-            // TODO NNS1-1589: Followees will not be of type SwapNeuronId
-            let followees = followees
-                .into_iter()
-                .filter_map(|sale_neuron_id| match sale_neuron_id.try_into() {
-                    Ok(neuron_id) => Some(neuron_id),
-                    Err(error_message) => {
-                        log!(
-                            ERROR,
-                            "Error converting followee: ({}). Ignoring followee.",
-                            error_message
-                        );
-                        None
+                Err((error_type, error_message)) => {
+                    log!(ERROR, "Error creating neuron recipe: {:?}", error_message);
+                    match error_type {
+                        // In the case of a bug due to programmer error, increment the invalid field.
+                        ConversionError::Invalid => sweep_result.invalid += 1,
+                        // If we've already processed ths neuron, increment the `skip` field.
+                        ConversionError::AlreadyProcessed => sweep_result.skipped += 1,
                     }
-                })
-                .collect();
-
-            neuron_parameters.push(NeuronParameters {
-                neuron_id: Some(neuron_id.clone()),
-                controller: Some(controller),
-                hotkey,
-                // Since claim_swap_neurons is  a permission-ed API on governance, account
-                // for the transfer_fee that is applied with the sns ledger transfer
-                stake_e8s: Some(amount_e8s.saturating_sub(sns_transaction_fee_e8s)),
-                dissolve_delay_seconds: Some(dissolve_delay_seconds),
-                source_nns_neuron_id,
-                followees,
-            });
-
-            claimable_neurons_index.insert(neuron_id, recipe);
+                }
+            }
         }
 
-        // If neuron_parameters is empty, all recipes are either Invalid or Skipped and there
+        // If neuron_recipes is empty, all recipes are either Invalid or Skipped and there
         // is no work to do.
-        if neuron_parameters.is_empty() {
+        if neuron_recipes.is_empty() {
             return sweep_result;
         }
 
         sweep_result.consume(
             Self::batch_claim_swap_neurons(
                 sns_governance_client,
-                &mut neuron_parameters,
+                &mut neuron_recipes,
                 &mut claimable_neurons_index,
             )
             .await,
@@ -1793,24 +1694,23 @@ impl Swap {
     /// A helper to batch claim the swap neurons, and process the results from SNS Governance.
     async fn batch_claim_swap_neurons(
         sns_governance_client: &mut impl SnsGovernanceClient,
-        neuron_parameters: &mut Vec<NeuronParameters>,
-        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+        neuron_recipes: &mut Vec<NeuronRecipe>,
+        claimable_neurons_index: &mut BTreeMap<SwapNeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
         log!(
             INFO,
             "Attempting to claim {} Neurons in SNS Governance. Batch size is {}",
-            neuron_parameters.len(),
+            neuron_recipes.len(),
             CLAIM_SWAP_NEURONS_BATCH_SIZE
         );
 
         let mut sweep_result = SweepResult::default();
 
-        while !neuron_parameters.is_empty() {
+        while !neuron_recipes.is_empty() {
             let current_batch_limit =
-                std::cmp::min(CLAIM_SWAP_NEURONS_BATCH_SIZE, neuron_parameters.len());
+                std::cmp::min(CLAIM_SWAP_NEURONS_BATCH_SIZE, neuron_recipes.len());
 
-            let batch: Vec<NeuronParameters> =
-                neuron_parameters.drain(0..current_batch_limit).collect();
+            let batch: Vec<NeuronRecipe> = neuron_recipes.drain(0..current_batch_limit).collect();
             // Used for various operations
             let batch_count = batch.len();
 
@@ -1820,9 +1720,11 @@ impl Swap {
                 batch_count,
             );
 
+            #[allow(deprecated)] // TODO(NNS1-3198): Remove once `neuron_parameters` is removed
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
-                    neuron_parameters: batch,
+                    neuron_recipes: Some(NeuronRecipes::from(batch)),
+                    neuron_parameters: vec![],
                 })
                 .await;
 
@@ -1906,7 +1808,7 @@ impl Swap {
     /// status of the SwapNeuron. Return a SweepResult to be consumed by claim_swap_neurons
     fn process_swap_neuron(
         swap_neuron: SwapNeuron,
-        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+        claimable_neurons_index: &mut BTreeMap<SwapNeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
         let mut sweep_result = SweepResult::default();
 
@@ -1931,7 +1833,8 @@ impl Swap {
             }
         };
 
-        let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) else {
+        let Some(recipe) = claimable_neurons_index.get_mut(&SwapNeuronId::from(neuron_id.clone()))
+        else {
             log!(
                 ERROR,
                 "Unable to find neuron {:?} (ID {}) in claimable_neurons_index.",
@@ -2536,7 +2439,7 @@ impl Swap {
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
                 // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: nf_neuron_nns_controller.to_string(),
+                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{}`.", nf_neuron_nns_controller),
                 cf_neurons,
             })
             .collect();
@@ -3181,13 +3084,8 @@ impl Swap {
         GetSaleParametersResponse { params }
     }
 
-    /// Extracts a subset of Init fields. Currently, only `neurons_fund_participants` is excluded,
-    /// as that data is provided via a dedicated endpoint `list_community_fund_participants`.
     pub fn get_init(&self, _request: &GetInitRequest) -> GetInitResponse {
-        let init = Init {
-            neurons_fund_participants: None,
-            ..self.init.clone().expect("Swap.init must be defined")
-        };
+        let init = self.init.clone().expect("Swap.init must be defined");
         GetInitResponse { init: Some(init) }
     }
 
@@ -3373,7 +3271,7 @@ fn create_sns_neuron_basket_for_direct_participant(
         neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s)?;
 
     let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
-    let neuron_id_with_longest_dissolve_delay = SaleNeuronId::from(
+    let neuron_id_with_longest_dissolve_delay = SwapNeuronId::from(
         compute_neuron_staking_subaccount_bytes(*buyer_principal, memo_of_longest_dissolve_delay),
     );
 
@@ -3417,7 +3315,7 @@ fn create_sns_neuron_basket_for_direct_participant(
 }
 
 /// Create the basket of SNS Neuron Recipes for a single Neurons' Fund participant.
-fn create_sns_neuron_basket_for_cf_participant(
+fn create_sns_neuron_basket_for_neurons_fund_participant(
     controller: &PrincipalId,
     hotkeys: Vec<PrincipalId>,
     nns_neuron_id: u64,
@@ -3435,7 +3333,7 @@ fn create_sns_neuron_basket_for_cf_participant(
     // Each basket uses an offset to start its range of memos.
     let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
     let neuron_id_with_longest_dissolve_delay =
-        SaleNeuronId::from(compute_neuron_staking_subaccount_bytes(
+        SwapNeuronId::from(compute_neuron_staking_subaccount_bytes(
             nns_governance_canister_id,
             memo_of_longest_dissolve_delay,
         ));
@@ -3472,7 +3370,10 @@ fn create_sns_neuron_basket_for_cf_participant(
                 hotkeys: Some(Principals::from(hotkeys.clone())),
                 nns_neuron_id,
                 // TODO(NNS1-3198): Remove
-                hotkey_principal: controller.to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
             })),
             neuron_attributes: Some(NeuronAttributes {
                 memo,
@@ -3484,6 +3385,198 @@ fn create_sns_neuron_basket_for_cf_participant(
     }
 
     Ok(recipes)
+}
+
+#[derive(Clone, Debug)]
+pub enum ConversionError {
+    Invalid,
+    AlreadyProcessed,
+}
+
+impl SnsNeuronRecipe {
+    /// Converts a SnsNeuronRecipe (a Swap concept) to an SnsNeuronRecipe (an SNS Governance concept)
+    pub fn to_neuron_recipe(
+        &self,
+        nns_governance: CanisterId,
+        sns_transaction_fee_e8s: u64,
+    ) -> Result<NeuronRecipe, (ConversionError, String)> {
+        let SnsNeuronRecipe {
+            sns: transferable_amount, // Mitigating a historical misnomer.
+            neuron_attributes,
+            claimed_status,
+            investor,
+        } = self;
+
+        // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
+        // In the case of a bug due to programmer error, increment the invalid field.
+        // This will require a manual intervention via an upgrade to correct.
+        let investor = investor.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!("Missing investor information for neuron recipe {:?}", self),
+            )
+        })?;
+
+        // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
+        // This will require a manual intervention via an upgrade to correct
+        let neuron_attributes = neuron_attributes.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!(
+                    "Missing neuron_attributes information for neuron recipe {:?}",
+                    self
+                ),
+            )
+        })?;
+        // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
+        // This will require a manual intervention via an upgrade to correct
+        let transferable_amount = transferable_amount.as_ref().ok_or_else(|| {
+            (
+                ConversionError::Invalid,
+                format!(
+                    "Missing transferable_amount (field `sns`) for neuron recipe {:?}",
+                    self
+                ),
+            )
+        })?;
+
+        // Claimed status is used for sanitization only, it does not affect the Ok result.
+        {
+            let claimed_status = claimed_status.ok_or_else(|| {
+                (
+                    ConversionError::Invalid,
+                    format!(
+                        "Missing claimed_status information for neuron recipe {:?}",
+                        self
+                    ),
+                )
+            })?;
+            let claimed_status = ClaimedStatus::try_from(claimed_status).map_err(|err| {
+                (
+                    ConversionError::Invalid,
+                    format!(
+                    "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
+                    {:?}: {}", claimed_status, self, err
+                ),
+                )
+            })?;
+            match claimed_status {
+                ClaimedStatus::Success => {
+                    return Err((
+                        ConversionError::AlreadyProcessed,
+                        format!(
+                            "Recipe {:?} was claimed in previous invocation of \
+                             claim_swap_neurons(). Skipping",
+                            self,
+                        ),
+                    ));
+                }
+                ClaimedStatus::Invalid | ClaimedStatus::Unspecified => {
+                    // If the Recipe is marked as invalid or unspecified, intervention is needed
+                    // to make valid again. As part of that intervention, the recipe must be marked
+                    // as ClaimedStatus::Pending to attempt again.
+                    return Err((
+                        ConversionError::Invalid,
+                        format!(
+                        "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
+                        Skipping", self
+                    ),
+                    ));
+                }
+                // Remaining cases are tolerable:
+                // - Pending status indicates there hasn't been a claim yet for this neuron.
+                // - Failed status indicates it is okay to retry to claim a previously failed one.
+                ClaimedStatus::Pending | ClaimedStatus::Failed => (),
+            }
+        }
+
+        let NeuronAttributes {
+            dissolve_delay_seconds,
+            memo,
+            followees,
+            ..
+        } = neuron_attributes;
+
+        let (participant, controller) = match investor {
+            Investor::Direct(DirectInvestment { buyer_principal }) => {
+                let parsed_buyer_principal = match string_to_principal(buyer_principal) {
+                    Some(p) => p,
+                    // principal_str should always be parseable as a PrincipalId as that is enforced
+                    // in `refresh_buyer_tokens`. This is the result of a bug due to programmer error
+                    // and will require a manual intervention via an upgrade to correct.
+                    None => {
+                        return Err((
+                            ConversionError::Invalid,
+                            format!(
+                                "Invalid principal: recipe={:?} principal={}",
+                                self, buyer_principal
+                            ),
+                        ));
+                    }
+                };
+                let participant = neuron_recipe::Participant::Direct(neuron_recipe::Direct {});
+                (participant, parsed_buyer_principal)
+            }
+            Investor::CommunityFund(cf_investment) => {
+                let nns_neuron_controller = match cf_investment.try_get_controller() {
+                    Ok(controller) => Some(controller),
+                    Err(e) => {
+                        return Err((
+                            ConversionError::Invalid,
+                            format!(
+                                "Invalid Neurons' Fund neuron: recipe={:?} error={}",
+                                self, e
+                            ),
+                        ));
+                    }
+                };
+                let nns_neuron_id = Some(cf_investment.nns_neuron_id);
+                let nns_neuron_hotkeys = cf_investment.hotkeys.clone();
+                let participant =
+                    neuron_recipe::Participant::NeuronsFund(neuron_recipe::NeuronsFund {
+                        nns_neuron_controller,
+                        nns_neuron_id,
+                        nns_neuron_hotkeys,
+                    });
+                (participant, PrincipalId::from(nns_governance))
+            }
+        };
+
+        let neuron_id = Some(SwapNeuronId::from(NeuronId::from(
+            compute_neuron_staking_subaccount_bytes(controller, *memo),
+        )));
+
+        let followees = followees
+            .iter()
+            .cloned()
+            .map(NeuronId::from)
+            .collect::<Vec<_>>();
+        let followees = Some(NeuronIds::from(
+            followees
+                .clone()
+                // TODO(NNS1-3306): This transition will no longer be necessary
+                .into_iter()
+                .map(SwapNeuronId::from)
+                .collect::<Vec<_>>(),
+        ));
+
+        // Since claim_swap_neurons is a permission-ed API on governance, account for
+        // the transfer_fee that is applied with the sns ledger transfer.
+        let stake_e8s = Some(
+            transferable_amount
+                .amount_e8s
+                .saturating_sub(sns_transaction_fee_e8s),
+        );
+
+        Ok(NeuronRecipe {
+            participant: Some(participant),
+            controller: Some(controller),
+            neuron_id,
+            dissolve_delay_seconds: Some(*dissolve_delay_seconds),
+            followees,
+            stake_e8s,
+        })
+    }
 }
 
 impl Storable for Ticket {
@@ -3735,7 +3828,7 @@ mod tests {
     use super::*;
     use crate::pb::v1::{
         new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
-        NeuronsFundParticipants, Params,
+        Params,
     };
     use crate::swap_builder::SwapBuilder;
     use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -3883,9 +3976,9 @@ mod tests {
         };
 
         let mut index = btreemap! {
-            NeuronId::new_test_neuron_id(1) => &mut successful_recipe,
-            NeuronId::new_test_neuron_id(2) => &mut failed_recipe,
-            NeuronId::new_test_neuron_id(3) => &mut invalid_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(1)) => &mut successful_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(2)) => &mut failed_recipe,
+            SwapNeuronId::from(NeuronId::new_test_neuron_id(3)) => &mut invalid_recipe,
         };
 
         // Process first to satisfy the borrow checker
@@ -3988,24 +4081,11 @@ mod tests {
 
     #[test]
     fn test_get_init() {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let swap = Swap {
-            init: Some(Init {
-                neurons_fund_participants: Some(NeuronsFundParticipants {
-                    cf_participants: vec![CfParticipant {
-                        controller: None,
-                        hotkey_principal: "test".to_string(),
-                        cf_neurons: vec![CfNeuron::default()],
-                    }],
-                }),
-                ..Default::default()
-            }),
+            init: Some(Init::default()),
             ..Default::default()
         };
-        let expected_init = Init {
-            neurons_fund_participants: None,
-            ..swap.init.clone().unwrap()
-        };
+        let expected_init = swap.init.clone().unwrap();
         assert_eq!(
             swap.get_init(&GetInitRequest {}),
             GetInitResponse {
@@ -4020,43 +4100,35 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    1,
-                    698047,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(1, 698047, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    2,
-                    678574,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(2, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    3,
-                    305256,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(3, 305256, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(657894)),
-                hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    4,
-                    339747,
-                    Vec::new(), // TODO(NNS1-3199): Populate if relevant to this test
-                )
-                .unwrap()],
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
+                cf_neurons: vec![CfNeuron::try_new(4, 339747, Vec::new()).unwrap()],
             },
         ];
         let swap = Swap {
@@ -4854,7 +4926,10 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(1, 698047, Vec::new()).unwrap(),
                     CfNeuron::try_new(2, 303030, Vec::new()).unwrap(),
@@ -4862,12 +4937,18 @@ mod tests {
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(3, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(4, 305256, Vec::new()).unwrap(),
                     CfNeuron::try_new(5, 100000, Vec::new()).unwrap(),

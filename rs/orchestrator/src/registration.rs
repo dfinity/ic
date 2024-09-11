@@ -20,6 +20,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
@@ -30,13 +31,6 @@ use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion,
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
-use registry_canister::mutations::{
-    common::check_ipv4_config,
-    do_update_node_directly::UpdateNodeDirectlyPayload,
-    node_management::{
-        do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
-    },
-};
 use std::{
     net::IpAddr,
     sync::Arc,
@@ -645,16 +639,10 @@ fn process_ipv4_config(
             ))
         })?;
 
-        let ipv4_config = IPv4Config {
-            ip_addr: node_ip_address.to_string(),
-            gateway_ip_addr: ipv4_config.public_gateway.clone(),
+        let ipv4_config = IPv4Config::try_new(
+            node_ip_address.to_string(),
+            ipv4_config.public_gateway.clone(),
             prefix_length,
-        };
-
-        check_ipv4_config(
-            ipv4_config.ip_addr.to_string(),
-            vec![ipv4_config.gateway_ip_addr.to_string()],
-            ipv4_config.prefix_length,
         )
         .map_err(|err| OrchestratorError::invalid_configuration_error(format!("{err}",)))?;
 

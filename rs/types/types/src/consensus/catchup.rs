@@ -24,7 +24,7 @@ pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 /// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
 /// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentT<T> {
     /// Replica version that was running when this CUP was created.
     pub version: ReplicaVersion,
@@ -116,13 +116,9 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
 
 impl TryFrom<pb::CatchUpContent> for CatchUpContent {
     type Error = ProxyDecodeError;
+
     fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, Self::Error> {
-        let block = super::Block::try_from(
-            content
-                .block
-                .ok_or_else(|| ProxyDecodeError::MissingField("CatchUpContent::block"))?,
-        )
-        .map_err(ProxyDecodeError::Other)?;
+        let block = try_from_option_field(content.block, "CatchUpContent::block")?;
 
         let random_beacon =
             try_from_option_field(content.random_beacon, "CatchUpContent::random_beacon")?;
@@ -320,7 +316,7 @@ impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
 ///   C1.height > C2.height ||
 ///   C1.height == C2.height && C1.registry_version > C2.registry_version
 /// ```
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CatchUpPackageParam {
     height: Height,
     registry_version: RegistryVersion,
@@ -376,7 +372,7 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
 
 /// [`CatchUpContentProtobufBytes`] holds bytes that represent a protobuf serialized
 /// catch-up package
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentProtobufBytes(Vec<u8>);
 
 impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {

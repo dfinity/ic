@@ -20,6 +20,7 @@ use strum::IntoEnumIterator;
 /// This assumes that a set of keys has been provided and verifies that:
 /// * If the threshold signatures are used correctly, signatures verify.
 /// * If incorrect values are provided at any stage, relevant methods fail.
+///
 /// Note: We assume that all signers have been dealt keys but disqualify
 /// some as part of the test.
 ///

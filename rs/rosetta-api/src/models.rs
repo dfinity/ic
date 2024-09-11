@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,
     pub metadata: ObjectMap,
@@ -26,7 +26,7 @@ pub struct ConstructionHashResponse {
 
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SignedTransaction {
     pub requests: Vec<Request>,
 }
@@ -53,7 +53,7 @@ pub type Request = (RequestType, Vec<EnvelopePair>);
 
 /// A signed IC update call and the corresponding read-state call for
 /// a particular ingress window.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct EnvelopePair {
     pub update: HttpRequestEnvelope<HttpCallContent>,
     pub read_state: HttpRequestEnvelope<HttpReadStateContent>,
@@ -67,7 +67,7 @@ impl EnvelopePair {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "account_type")]
 pub enum AccountType {
@@ -84,7 +84,7 @@ impl Default for AccountType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionDeriveRequestMetadata {
     #[serde(flatten)]
     pub account_type: AccountType,
@@ -126,7 +126,7 @@ fn test_construction_derive_request_metadata() {
     assert_eq!(r0, r1);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
 }
@@ -194,7 +194,7 @@ impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
 }
 
 /// Typed metadata of ConstructionPayloadsRequest.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ConstructionPayloadsRequestMetadata {
     /// The memo to use for a ledger transfer.
     /// A random number is used by default.
@@ -242,7 +242,7 @@ impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UnsignedTransaction {
     pub updates: Vec<(RequestType, HttpCanisterUpdate)>,
     pub ingress_expiries: Vec<u64>,
@@ -266,8 +266,7 @@ impl FromStr for UnsignedTransaction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Error(pub rosetta_core::miscellaneous::Error);
 
 impl From<Error> for rosetta_core::miscellaneous::Error {
@@ -316,8 +315,7 @@ impl actix_web::ResponseError for Error {
 
 /// A MempoolTransactionRequest is utilized to retrieve a transaction from the
 /// mempool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MempoolTransactionRequest {
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,
@@ -338,8 +336,7 @@ impl MempoolTransactionRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronSubaccountComponents {
     #[serde(rename = "public_key")]
     pub public_key: PublicKey,
@@ -351,8 +348,7 @@ pub struct NeuronSubaccountComponents {
 
 /// We use this type to make query to the governance
 /// canister about the current neuron information.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "account_type")]
 pub enum BalanceAccountType {
     #[serde(rename = "ledger")]
@@ -383,8 +379,7 @@ impl Default for BalanceAccountType {
 }
 
 /// The type of metadata for the /account/balance endpoint.
-#[derive(Debug, Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct AccountBalanceMetadata {
     #[serde(rename = "account_type")]
     #[serde(flatten)]
@@ -487,8 +482,7 @@ fn test_neuron_info_request_parsing() {
     );
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum NeuronState {
     #[serde(rename = "NOT_DISSOLVING")]
     NotDissolving,
@@ -501,8 +495,7 @@ pub enum NeuronState {
 }
 
 /// Response for neuron public information.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronInfoResponse {
     #[serde(rename = "verified_query")]
     pub verified_query: bool,
@@ -557,7 +550,7 @@ impl TryFrom<Option<ObjectMap>> for NeuronInfoResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct QueryBlockRangeRequest {
     pub highest_block_index: u64,
     pub number_of_blocks: u64,
@@ -587,7 +580,7 @@ impl TryFrom<ObjectMap> for QueryBlockRangeRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct QueryBlockRangeResponse {
     pub blocks: Vec<rosetta_core::objects::Block>,
 }

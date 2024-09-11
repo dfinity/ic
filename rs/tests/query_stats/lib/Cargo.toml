@@ -7,15 +7,15 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-tests = { path = "../.." }
 candid = { workspace = true }
-ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-types = { path = "../../../types/types" }
 ic-agent = { workspace = true }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensu/utils" }
 itertools = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
-ic-system-test-driver = { path = "../../driver" }
 tokio = { workspace = true }

@@ -31,11 +31,14 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::sync::{Arc, RwLock};
+use std::{
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch,
@@ -44,6 +47,22 @@ use tokio::sync::{
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
+
+/// The subnets that can serve synchronous responses to update calls received
+/// on the `/api/v3/.../call`` endpoint.
+const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: [&str; 1] =
+    ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
+
+/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
+/// update calls.
+fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
+    WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
+        .iter()
+        .any(|s| match PrincipalId::from_str(s) {
+            Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
+            Err(_) => false,
+        })
+}
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -187,6 +206,8 @@ pub fn construct_ic_stack(
 
     let (completed_execution_messages_tx, finalized_ingress_height_rx) =
         channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+    let max_canister_http_requests_in_flight =
+        config.hypervisor.max_canister_http_requests_in_flight;
 
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
@@ -233,7 +254,7 @@ pub fn construct_ic_stack(
     let message_router = Arc::new(message_router);
     let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_xnet.clone(),
+        rt_handle_http.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
@@ -279,6 +300,7 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.adapters_config,
         execution_services.query_execution_service.clone(),
+        max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
     );
@@ -346,6 +368,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
+        subnet_is_whitelisted_for_synchronous_call_v3(&subnet_id),
     );
 
     Ok((

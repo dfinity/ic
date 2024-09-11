@@ -16,7 +16,6 @@ rust_library(
         # Keep sorted.
         "//rs/canonical_state/certification_version",
         "//rs/config",
-        "//rs/constants",
         "//rs/crypto/ed25519",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
@@ -24,6 +23,7 @@ rust_library(
         "//rs/interfaces/certified_stream_store",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/protobuf",
@@ -73,6 +73,7 @@ rust_test(
         "@crate_index//:lazy_static",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
+        "@crate_index//:pretty_assertions",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:tempfile",

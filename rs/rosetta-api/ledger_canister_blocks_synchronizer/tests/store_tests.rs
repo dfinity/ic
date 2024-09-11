@@ -95,7 +95,8 @@ async fn store_coherence_test() {
     for hb in &scribe.blockchain {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)";
+        let transaction = Block::decode(hb.block.clone()).unwrap().transaction;
+        let command = "INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp,tx_hash,operation_type) VALUES (?1, ?2, ?3, ?4, FALSE, ?5,?6,?7)";
         con.execute(
             command,
             params![
@@ -103,7 +104,9 @@ async fn store_coherence_test() {
                 hb.block.clone().into_vec(),
                 parent_hash,
                 hb.index,
-                timestamp_to_iso8601(hb.timestamp)
+                timestamp_to_iso8601(hb.timestamp),
+                transaction.hash().into_bytes().to_vec(),
+                <Operation as Into<&str>>::into(transaction.operation.clone())
             ],
         )
         .unwrap();
@@ -111,7 +114,6 @@ async fn store_coherence_test() {
     drop(con);
     for hb in &scribe.blockchain {
         assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
-        assert_eq!(store.get_transaction_hash(&hb.index).unwrap(), None);
         assert!(store.get_all_accounts().unwrap().is_empty());
     }
     let store = sqlite_on_disk_store(location);
@@ -165,13 +167,13 @@ async fn store_account_balances_test() {
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }

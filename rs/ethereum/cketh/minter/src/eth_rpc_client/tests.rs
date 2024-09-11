@@ -1,3 +1,9 @@
+use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+
+const POKT: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Pokt);
+const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
+const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes);
+
 mod eth_rpc_client {
     use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
     use crate::eth_rpc_client::EthRpcClient;
@@ -12,7 +18,7 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
+                RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
                 RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
             ]
         );
@@ -27,7 +33,7 @@ mod eth_rpc_client {
         assert_eq!(
             providers,
             &[
-                RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
+                RpcNodeProvider::Ethereum(EthereumProvider::Pokt),
                 RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
                 RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes)
             ]
@@ -36,16 +42,11 @@ mod eth_rpc_client {
 }
 
 mod multi_call_results {
-    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
-
-    const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
-    const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
-    const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes);
 
     mod reduce_with_equality {
-        use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use crate::eth_rpc::HttpOutcallError;
+        use crate::eth_rpc_client::tests::{POKT, PUBLIC_NODE};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -58,18 +59,20 @@ mod multi_call_results {
         fn should_be_inconsistent_when_different_call_errors() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
-                    ANKR,
+                    POKT,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::CanisterReject,
                         message: "reject".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
                 (
                     PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::SysTransient,
                         message: "transient".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
             ]);
 
@@ -82,15 +85,15 @@ mod multi_call_results {
         fn should_be_inconsistent_when_different_rpc_errors() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
-                    ANKR,
-                    Ok(JsonRpcResult::Error {
+                    POKT,
+                    Err(SingleCallError::JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
                     }),
                 ),
                 (
                     PUBLIC_NODE,
-                    Ok(JsonRpcResult::Error {
+                    Err(SingleCallError::JsonRpcError {
                         code: -32000,
                         message: "nonce too low".to_string(),
                     }),
@@ -105,8 +108,8 @@ mod multi_call_results {
         #[test]
         fn should_be_inconsistent_when_different_ok_results() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (ANKR, Ok(JsonRpcResult::Result("hello".to_string()))),
-                (PUBLIC_NODE, Ok(JsonRpcResult::Result("world".to_string()))),
+                (POKT, Ok("hello".to_string())),
+                (PUBLIC_NODE, Ok("world".to_string())),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -118,18 +121,20 @@ mod multi_call_results {
         fn should_be_consistent_http_outcall_error() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
-                    ANKR,
+                    POKT,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::CanisterReject,
                         message: "reject".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
                 (
                     PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
                         code: RejectionCode::CanisterReject,
                         message: "reject".to_string(),
-                    }),
+                    }
+                    .into()),
                 ),
             ]);
 
@@ -150,15 +155,15 @@ mod multi_call_results {
         fn should_be_consistent_rpc_error() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
-                    ANKR,
-                    Ok(JsonRpcResult::Error {
+                    POKT,
+                    Err(SingleCallError::JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
                     }),
                 ),
                 (
                     PUBLIC_NODE,
-                    Ok(JsonRpcResult::Error {
+                    Err(SingleCallError::JsonRpcError {
                         code: -32700,
                         message: "insufficient funds for gas * price + value".to_string(),
                     }),
@@ -179,8 +184,8 @@ mod multi_call_results {
         #[test]
         fn should_be_consistent_ok_result() {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (ANKR, Ok(JsonRpcResult::Result("0x01".to_string()))),
-                (PUBLIC_NODE, Ok(JsonRpcResult::Result("0x01".to_string()))),
+                (POKT, Ok("0x01".to_string())),
+                (PUBLIC_NODE, Ok("0x01".to_string())),
             ]);
 
             let reduced = results.clone().reduce_with_equality();
@@ -190,8 +195,8 @@ mod multi_call_results {
     }
 
     mod reduce_with_min_by_key {
-        use crate::eth_rpc::{Block, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, PUBLIC_NODE};
+        use crate::eth_rpc::Block;
+        use crate::eth_rpc_client::tests::{POKT, PUBLIC_NODE};
         use crate::eth_rpc_client::MultiCallResults;
         use crate::numeric::{BlockNumber, Wei};
 
@@ -199,18 +204,18 @@ mod multi_call_results {
         fn should_get_minimum_block_number() {
             let results: MultiCallResults<Block> = MultiCallResults::from_non_empty_iter(vec![
                 (
-                    ANKR,
-                    Ok(JsonRpcResult::Result(Block {
+                    POKT,
+                    Ok(Block {
                         number: BlockNumber::new(0x411cda),
                         base_fee_per_gas: Wei::new(0x10),
-                    })),
+                    }),
                 ),
                 (
                     PUBLIC_NODE,
-                    Ok(JsonRpcResult::Result(Block {
+                    Ok(Block {
                         number: BlockNumber::new(0x411cd9),
                         base_fee_per_gas: Wei::new(0x10),
-                    })),
+                    }),
                 ),
             ]);
 
@@ -227,9 +232,9 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc::{FeeHistory, HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use crate::eth_rpc::{FeeHistory, HttpOutcallError};
+        use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use crate::numeric::{BlockNumber, WeiPerGas};
         use ic_cdk::api::call::RejectionCode;
 
@@ -237,9 +242,9 @@ mod multi_call_results {
         fn should_get_unanimous_fee_history() {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
-                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(fee_history()))),
-                    (LLAMA_NODES, Ok(JsonRpcResult::Result(fee_history()))),
+                    (POKT, Ok(fee_history())),
+                    (PUBLIC_NODE, Ok(fee_history())),
+                    (LLAMA_NODES, Ok(fee_history())),
                 ]);
 
             let reduced =
@@ -259,18 +264,12 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [ankr_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
+                let [pokt_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
                 let results: MultiCallResults<FeeHistory> =
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
-                        (
-                            LLAMA_NODES,
-                            Ok(JsonRpcResult::Result(llama_nodes_fee_history)),
-                        ),
-                        (
-                            PUBLIC_NODE,
-                            Ok(JsonRpcResult::Result(public_node_fee_history)),
-                        ),
+                        (POKT, Ok(pokt_fee_history)),
+                        (LLAMA_NODES, Ok(llama_nodes_fee_history)),
+                        (PUBLIC_NODE, Ok(public_node_fee_history)),
                     ]);
 
                 let reduced = results
@@ -284,15 +283,16 @@ mod multi_call_results {
         fn should_get_fee_history_with_2_out_of_3_when_third_is_error() {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
+                    (POKT, Ok(fee_history())),
                     (
                         PUBLIC_NODE,
                         Err(HttpOutcallError::IcError {
                             code: RejectionCode::SysTransient,
                             message: "no consensus".to_string(),
-                        }),
+                        }
+                        .into()),
                     ),
-                    (LLAMA_NODES, Ok(JsonRpcResult::Result(fee_history()))),
+                    (LLAMA_NODES, Ok(fee_history())),
                 ]);
 
             let reduced =
@@ -303,7 +303,7 @@ mod multi_call_results {
 
         #[test]
         fn should_fail_when_no_strict_majority() {
-            let ankr_fee_history = FeeHistory {
+            let pokt_fee_history = FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fd),
                 ..fee_history()
             };
@@ -317,11 +317,8 @@ mod multi_call_results {
             };
             let three_distinct_results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
-                    (
-                        PUBLIC_NODE,
-                        Ok(JsonRpcResult::Result(public_node_fee_history.clone())),
-                    ),
+                    (POKT, Ok(pokt_fee_history.clone())),
+                    (PUBLIC_NODE, Ok(public_node_fee_history.clone())),
                 ]);
 
             let reduced = three_distinct_results
@@ -332,22 +329,16 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
-                        (
-                            PUBLIC_NODE,
-                            Ok(JsonRpcResult::Result(public_node_fee_history))
-                        ),
+                        (POKT, Ok(pokt_fee_history.clone())),
+                        (PUBLIC_NODE, Ok(public_node_fee_history)),
                     ])
                 ))
             );
 
             let two_distinct_results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
-                    (
-                        PUBLIC_NODE,
-                        Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone())),
-                    ),
+                    (POKT, Ok(pokt_fee_history.clone())),
+                    (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
             let reduced = two_distinct_results
@@ -358,29 +349,23 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
-                        (
-                            PUBLIC_NODE,
-                            Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone()))
-                        ),
+                        (POKT, Ok(pokt_fee_history.clone())),
+                        (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                     ])
                 ))
             );
 
             let two_distinct_results_and_error: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
+                    (POKT, Ok(pokt_fee_history.clone())),
                     (
                         PUBLIC_NODE,
-                        Ok(JsonRpcResult::Error {
+                        Err(SingleCallError::JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
                         }),
                     ),
-                    (
-                        LLAMA_NODES,
-                        Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone())),
-                    ),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
             let reduced = two_distinct_results_and_error
@@ -391,11 +376,8 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
-                        (
-                            LLAMA_NODES,
-                            Ok(JsonRpcResult::Result(llama_nodes_fee_history))
-                        ),
+                        (POKT, Ok(pokt_fee_history)),
+                        (LLAMA_NODES, Ok(llama_nodes_fee_history)),
                     ])
                 ))
             );
@@ -413,11 +395,8 @@ mod multi_call_results {
 
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
-                    (
-                        PUBLIC_NODE,
-                        Ok(JsonRpcResult::Result(inconsistent_fee.clone())),
-                    ),
+                    (POKT, Ok(fee.clone())),
+                    (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
                 ]);
 
             let reduced =
@@ -427,8 +406,8 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(fee.clone()))),
-                        (PUBLIC_NODE, Ok(JsonRpcResult::Result(inconsistent_fee))),
+                        (POKT, Ok(fee.clone())),
+                        (PUBLIC_NODE, Ok(inconsistent_fee)),
                     ])
                 ))
             );
@@ -438,10 +417,10 @@ mod multi_call_results {
         fn should_fail_when_no_sufficient_ok_responses() {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
+                    (POKT, Ok(fee_history())),
                     (
                         PUBLIC_NODE,
-                        Ok(JsonRpcResult::Error {
+                        Err(SingleCallError::JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
                         }),
@@ -478,9 +457,9 @@ mod multi_call_results {
     }
 
     mod has_http_outcall_error_matching {
-        use super::*;
-        use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
+        use crate::eth_rpc::HttpOutcallError;
+        use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
+        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
         use proptest::proptest;
@@ -517,29 +496,30 @@ mod multi_call_results {
             let always_true = |_outcall_error: &HttpOutcallError| true;
             let error_with_no_outcall_error =
                 MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (POKT, Ok(1)),
                     (
                         LLAMA_NODES,
-                        Ok(JsonRpcResult::Error {
+                        Err(SingleCallError::JsonRpcError {
                             code: -32700,
                             message: "error".to_string(),
                         }),
                     ),
-                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                    (PUBLIC_NODE, Ok(1)),
                 ]));
             assert!(!error_with_no_outcall_error.has_http_outcall_error_matching(always_true));
 
             let error_with_outcall_error =
                 MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
-                    (ANKR, Ok(JsonRpcResult::Result(1))),
+                    (POKT, Ok(1)),
                     (
                         LLAMA_NODES,
                         Err(HttpOutcallError::IcError {
                             code: RejectionCode::SysTransient,
                             message: "message".to_string(),
-                        }),
+                        }
+                        .into()),
                     ),
-                    (PUBLIC_NODE, Ok(JsonRpcResult::Result(1))),
+                    (PUBLIC_NODE, Ok(1)),
                 ]));
             assert!(error_with_outcall_error.has_http_outcall_error_matching(always_true));
         }
@@ -661,24 +641,40 @@ mod eth_get_transaction_count {
 }
 
 mod evm_rpc_conversion {
-    use crate::eth_rpc_client::providers::RpcNodeProvider;
-    use crate::eth_rpc_client::{Block, MultiCallError};
-    use crate::eth_rpc_client::{MultiCallResults, ReducedResult};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::eth_rpc::SendRawTransactionResult;
+    use crate::eth_rpc_client::responses::TransactionReceipt;
+    use crate::eth_rpc_client::tests::{LLAMA_NODES, POKT, PUBLIC_NODE};
+    use crate::eth_rpc_client::{
+        providers::RpcNodeProvider, Block, Equality, FeeHistory, HttpOutcallError, LogEntry,
+        MinByKey, MultiCallError, MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
+    };
+    use crate::numeric::{BlockNumber, TransactionCount, Wei};
+    use crate::test_fixtures::arb::{
+        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_log_entry,
+        arb_nat_256, arb_transaction_receipt,
+    };
     use assert_matches::assert_matches;
     use candid::Nat;
     use evm_rpc_client::types::candid::{
-        Block as EvmBlock, EthMainnetService as EvmEthMainnetService,
-        MultiRpcResult as EvmMultiRpcResult, RpcService as EvmRpcService,
+        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
+        HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
+        MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
+        RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcService,
+        SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        TransactionReceipt as EvmTransactionReceipt,
     };
     use num_bigint::BigUint;
+    use proptest::collection::vec;
+    use proptest::{prelude::Strategy, prop_assert_eq, proptest};
+    use std::collections::BTreeSet;
+    use std::fmt::Debug;
 
     #[test]
     fn should_map_consistent_result() {
         let block = evm_rpc_block();
         let evm_result = EvmMultiRpcResult::Consistent(Ok(block.clone()));
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
@@ -708,12 +704,12 @@ mod evm_rpc_conversion {
             ),
         ]);
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
             Err(MultiCallError::InconsistentResults(
-                MultiCallResults::from_iter(vec![
+                MultiCallResults::from_non_empty_iter(vec![
                     (
                         RpcNodeProvider::EvmRpc(EvmRpcService::EthMainnet(
                             EvmEthMainnetService::Alchemy
@@ -756,7 +752,7 @@ mod evm_rpc_conversion {
             ),
         ]);
 
-        let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+        let reduced_block: Result<_, _> = evm_result.reduce().into();
 
         assert_eq!(
             reduced_block,
@@ -786,12 +782,433 @@ mod evm_rpc_conversion {
             },
         ] {
             let evm_result = EvmMultiRpcResult::Consistent(Ok(invalid_block));
-            let reduced_block: Result<_, _> = ReducedResult::from(evm_result).into();
+            let reduced_block: Result<_, _> = evm_result.reduce().into();
 
             assert_matches!(
                 reduced_block,
                 Err(MultiCallError::ConsistentEvmRpcCanisterError(s)) if s.contains("Nat does not fit in a U256")
             );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_preserve_http_outcall_errors(evm_error in arb_evm_rpc_error()) {
+            let minter_error = SingleCallError::from(evm_error.clone());
+
+            match (evm_error, minter_error) {
+                (EvmRpcError::HttpOutcallError(e), SingleCallError::HttpOutcallError(m)) => match e {
+                    EvmHttpOutcallError::IcError { code, message } => {
+                        assert_eq!(m, HttpOutcallError::IcError { code, message })
+                    }
+                    EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
+                        status,
+                        body,
+                        parsing_error,
+                    } => {
+                        assert_eq!(
+                            m,
+                            HttpOutcallError::InvalidHttpJsonRpcResponse {
+                                status,
+                                body,
+                                parsing_error
+                            }
+                        )
+                    }
+                },
+                (EvmRpcError::HttpOutcallError(e), _) => {
+                    panic!("EVM-RPC HTTP outcall error not preserved: {:?}", e)
+                }
+                (_, SingleCallError::HttpOutcallError(e)) => {
+                    panic!("Unexpected Minter HTTP outcall error: {:?}", e)
+                }
+                _ => (),
+            };
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_block_between_minter_and_evm_rpc
+        (
+            blocks in minter_and_evm_rpc_blocks(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let (minter_block, evm_rpc_block) = blocks;
+            test_consistency_between_minter_and_evm_rpc(minter_block, evm_rpc_block, first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_log_entries_between_minter_and_evm_rpc
+        (
+            minter_logs in vec(arb_log_entry(), 1..=100),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let evm_rpc_logs: Vec<_> = minter_logs.clone().into_iter().map(evm_rpc_log_entry).collect();
+            test_consistency_between_minter_and_evm_rpc(minter_logs, evm_rpc_logs, first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_fee_history_between_minter_and_evm_rpc(
+            minter_fee_history in arb_fee_history(),
+            gas_used_ratio in arb_gas_used_ratio(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let evm_fee_history = evm_rpc_fee_history(minter_fee_history.clone(), gas_used_ratio);
+            test_consistency_between_minter_and_evm_rpc(minter_fee_history, Some(evm_fee_history), first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_transaction_receipts_between_minter_and_evm_rpc
+        (
+            transaction_receipts in minter_and_evm_rpc_transaction_receipts(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let (minter_tx_receipt, evm_rpc_tx_receipt) = transaction_receipts;
+            test_consistency_between_minter_and_evm_rpc(minter_tx_receipt, evm_rpc_tx_receipt, first_error, second_error, third_error)?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_transaction_count_between_minter_and_evm_rpc
+        (
+            first_tx_count in arb_evm_rpc_transaction_count(),
+            second_tx_count in arb_evm_rpc_transaction_count(),
+            third_tx_count in arb_evm_rpc_transaction_count(),
+        ) {
+            let (pokt_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+                evm_rpc_providers();
+            let evm_results = match (&first_tx_count, &second_tx_count, &third_tx_count) {
+                (Ok(count_1), Ok(count_2), Ok(count_3)) if count_1 == count_2 && count_2 == count_3 => {
+                    EvmMultiRpcResult::Consistent(Ok(count_1.clone()))
+                }
+                _ => EvmMultiRpcResult::Inconsistent(vec![
+                    (pokt_evm_rpc_provider, first_tx_count.clone()),
+                    (public_node_evm_rpc_provider, second_tx_count.clone()),
+                    (llama_nodes_evm_rpc_provider, third_tx_count.clone()),
+                ]),
+            };
+            let minter_results: MultiCallResults<TransactionCount> = MultiCallResults::from_non_empty_iter(vec![
+                (POKT, first_tx_count.map_err(SingleCallError::from)),
+                (PUBLIC_NODE, second_tx_count.map_err(SingleCallError::from)),
+                (LLAMA_NODES, third_tx_count.map_err(SingleCallError::from)),
+            ])
+            .map(&TransactionCount::try_from, &|e| {
+                panic!("BUG: selected Nat should fit in a U256: {:?}", e)
+            });
+
+            prop_assert_eq_ignoring_provider(
+                ReduceWithStrategy::<Equality>::reduce(evm_results.clone()),
+                ReduceWithStrategy::<Equality>::reduce(minter_results.clone()),
+            )?;
+            prop_assert_eq_ignoring_provider(
+                ReduceWithStrategy::<MinByKey>::reduce(evm_results),
+                ReduceWithStrategy::<MinByKey>::reduce(minter_results),
+            )?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_send_raw_transaction_result_between_minter_and_evm_rpc
+        (
+            evm_tx_status in arb_evm_rpc_send_raw_transaction_status(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let minter_tx_result = SendRawTransactionResult::from(evm_tx_status.clone());
+            test_consistency_between_minter_and_evm_rpc(minter_tx_result, evm_tx_status, first_error, second_error, third_error)?;
+        }
+    }
+
+    fn test_consistency_between_minter_and_evm_rpc<R, M, E>(
+        minter_ok: M,
+        evm_rpc_ok: E,
+        first_error: EvmRpcError,
+        second_error: EvmRpcError,
+        third_error: EvmRpcError,
+    ) -> Result<(), proptest::prelude::TestCaseError>
+    where
+        R: Debug + PartialEq + serde::Serialize,
+        M: Clone,
+        E: Clone,
+        MultiCallResults<M>: Reduce<Item = R>,
+        EvmMultiRpcResult<E>: Reduce<Item = R>,
+    {
+        let (pokt_evm_rpc_provider, public_node_evm_rpc_provider, llama_nodes_evm_rpc_provider) =
+            evm_rpc_providers();
+
+        // 0 error
+        let evm_result = EvmMultiRpcResult::Consistent(Ok(evm_rpc_ok.clone()));
+        let minter_result: MultiCallResults<M> = MultiCallResults::from_non_empty_iter(vec![
+            (POKT, Ok(minter_ok.clone())),
+            (PUBLIC_NODE, Ok(minter_ok.clone())),
+            (LLAMA_NODES, Ok(minter_ok.clone())),
+        ]);
+        prop_assert_eq!(evm_result.reduce(), minter_result.reduce());
+
+        // 1 error
+        for first_error_index in 0..3_usize {
+            let mut evm_results = vec![
+                (pokt_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+                (public_node_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+                (llama_nodes_evm_rpc_provider.clone(), Ok(evm_rpc_ok.clone())),
+            ];
+            evm_results.get_mut(first_error_index).unwrap().1 = Err(first_error.clone());
+            let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
+
+            let mut minter_results = vec![
+                (POKT, Ok(minter_ok.clone())),
+                (PUBLIC_NODE, Ok(minter_ok.clone())),
+                (LLAMA_NODES, Ok(minter_ok.clone())),
+            ];
+            minter_results.get_mut(first_error_index).unwrap().1 =
+                Err(SingleCallError::from(first_error.clone()));
+            let minter_result: MultiCallResults<M> =
+                MultiCallResults::from_non_empty_iter(minter_results);
+
+            prop_assert_eq!(evm_result.reduce(), minter_result.reduce());
+        }
+
+        // 2 errors
+        for ok_index in 0..3_usize {
+            let mut evm_results = vec![
+                (pokt_evm_rpc_provider.clone(), Err(first_error.clone())),
+                (
+                    public_node_evm_rpc_provider.clone(),
+                    Err(second_error.clone()),
+                ),
+                (
+                    llama_nodes_evm_rpc_provider.clone(),
+                    Err(third_error.clone()),
+                ),
+            ];
+            evm_results.get_mut(ok_index).unwrap().1 = Ok(evm_rpc_ok.clone());
+            let evm_result = EvmMultiRpcResult::Inconsistent(evm_results);
+
+            let mut minter_results = vec![
+                (POKT, Err(SingleCallError::from(first_error.clone()))),
+                (
+                    PUBLIC_NODE,
+                    Err(SingleCallError::from(second_error.clone())),
+                ),
+                (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
+            ];
+            minter_results.get_mut(ok_index).unwrap().1 = Ok(minter_ok.clone());
+            let minter_result: MultiCallResults<M> =
+                MultiCallResults::from_non_empty_iter(minter_results);
+
+            prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
+        }
+
+        // 3 errors
+        let evm_result: EvmMultiRpcResult<E> = EvmMultiRpcResult::Inconsistent(vec![
+            (pokt_evm_rpc_provider.clone(), Err(first_error.clone())),
+            (
+                public_node_evm_rpc_provider.clone(),
+                Err(second_error.clone()),
+            ),
+            (
+                llama_nodes_evm_rpc_provider.clone(),
+                Err(third_error.clone()),
+            ),
+        ]);
+        let minter_result: MultiCallResults<M> = MultiCallResults::from_non_empty_iter(vec![
+            (POKT, Err(SingleCallError::from(first_error.clone()))),
+            (
+                PUBLIC_NODE,
+                Err(SingleCallError::from(second_error.clone())),
+            ),
+            (LLAMA_NODES, Err(SingleCallError::from(third_error.clone()))),
+        ]);
+        prop_assert_eq_ignoring_provider(evm_result.reduce(), minter_result.reduce())?;
+
+        Ok(())
+    }
+
+    fn evm_rpc_providers() -> (RpcService, RpcService, RpcService) {
+        let pokt_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "pokt".to_string(),
+            headers: None,
+        });
+        let public_node_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "public_node".to_string(),
+            headers: None,
+        });
+        let llama_nodes_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
+            url: "llama".to_string(),
+            headers: None,
+        });
+        (
+            pokt_evm_rpc_provider,
+            public_node_evm_rpc_provider,
+            llama_nodes_evm_rpc_provider,
+        )
+    }
+
+    fn prop_assert_eq_ignoring_provider<
+        R: AsRef<Result<T, MultiCallError<T>>>,
+        T: PartialEq + Debug + serde::Serialize,
+    >(
+        left: R,
+        right: R,
+    ) -> Result<(), proptest::prelude::TestCaseError> {
+        let left = left.as_ref();
+        let right = right.as_ref();
+        match left {
+            Ok(_) => {
+                prop_assert_eq!(left, right)
+            }
+            Err(e) => match e {
+                MultiCallError::ConsistentHttpOutcallError(_)
+                | MultiCallError::ConsistentJsonRpcError { .. }
+                | MultiCallError::ConsistentEvmRpcCanisterError(_) => {
+                    prop_assert_eq!(left, right)
+                }
+                MultiCallError::InconsistentResults(left_inconsistent_results) => {
+                    let right_inconsistent_results = match right {
+                        Err(MultiCallError::InconsistentResults(results)) => results,
+                        _ => panic!("Expected inconsistent results"),
+                    };
+                    // Providers are used as keys for MultiCallResults::ok_results and MultiCallResults::errors,
+                    // so since we want to ignore them, it makes sense to also ignore the order of the values,
+                    // since different providers have different orderings.
+                    prop_assert_eq!(
+                        left_inconsistent_results
+                            .ok_results
+                            .values()
+                            // It generally doesn't make sense for `T` to implement `Ord`,
+                            // but in this context it can always be serialized to JSON,
+                            // which we use for comparison purposes.
+                            .map(|v| serde_json::to_string(v).unwrap())
+                            .collect::<BTreeSet<_>>(),
+                        right_inconsistent_results
+                            .ok_results
+                            .values()
+                            .map(|v| serde_json::to_string(v).unwrap())
+                            .collect::<BTreeSet<_>>()
+                    );
+                    prop_assert_eq!(
+                        left_inconsistent_results
+                            .errors
+                            .values()
+                            .collect::<BTreeSet<_>>(),
+                        right_inconsistent_results
+                            .errors
+                            .values()
+                            .collect::<BTreeSet<_>>()
+                    );
+                }
+            },
+        }
+        Ok(())
+    }
+
+    pub fn minter_and_evm_rpc_blocks() -> impl Strategy<Value = (Block, EvmBlock)> {
+        use proptest::prelude::Just;
+        arb_block().prop_flat_map(|minter_block| {
+            (Just(minter_block.clone()), arb_evm_rpc_block(minter_block))
+        })
+    }
+
+    pub fn arb_evm_rpc_block(minter_block: Block) -> impl Strategy<Value = EvmBlock> {
+        use proptest::{array, collection::vec};
+        //prop_map is limited to tuples of at most 11 elements, so we group the Nat and String fields
+        (
+            array::uniform7(arb_nat_256()),
+            array::uniform9(".*"),
+            vec(".*", 0..10),
+            proptest::option::of(".*"),
+            vec(".*", 0..10),
+        )
+            .prop_map(
+                move |(
+                    [difficulty, gas_limit, gas_used, nonce, size, timestamp, total_difficulty],
+                    [extra_data, hash, logs_bloom, miner, mix_hash, parent_hash, receipts_root, sha3_uncles, state_root],
+                    transactions,
+                    transactions_root,
+                    uncles,
+                )| EvmBlock {
+                    base_fee_per_gas: Nat::from(minter_block.base_fee_per_gas),
+                    number: Nat::from(minter_block.number),
+                    difficulty,
+                    extra_data,
+                    gas_limit,
+                    gas_used,
+                    hash,
+                    logs_bloom,
+                    miner,
+                    mix_hash,
+                    nonce,
+                    parent_hash,
+                    receipts_root,
+                    sha3_uncles,
+                    size,
+                    state_root,
+                    timestamp,
+                    total_difficulty,
+                    transactions,
+                    transactions_root,
+                    uncles,
+                },
+            )
+    }
+
+    fn evm_rpc_log_entry(minter_log_entry: LogEntry) -> EvmLogEntry {
+        EvmLogEntry {
+            address: minter_log_entry.address.to_string(),
+            topics: minter_log_entry
+                .topics
+                .into_iter()
+                .map(|topic| topic.to_string())
+                .collect(),
+            data: format!("0x{}", hex::encode(minter_log_entry.data)),
+            block_number: minter_log_entry.block_number.map(Nat::from),
+            transaction_hash: minter_log_entry
+                .transaction_hash
+                .map(|hash| hash.to_string()),
+            transaction_index: minter_log_entry
+                .transaction_index
+                .map(crate::eth_rpc::into_nat),
+            block_hash: minter_log_entry.block_hash.map(|hash| hash.to_string()),
+            log_index: minter_log_entry.log_index.map(Nat::from),
+            removed: minter_log_entry.removed,
+        }
+    }
+
+    pub fn evm_rpc_fee_history(
+        minter_fee_history: FeeHistory,
+        gas_used_ratio: Vec<f64>,
+    ) -> EvmFeeHistory {
+        EvmFeeHistory {
+            oldest_block: minter_fee_history.oldest_block.into(),
+            base_fee_per_gas: minter_fee_history
+                .base_fee_per_gas
+                .into_iter()
+                .map(Nat::from)
+                .collect(),
+            gas_used_ratio,
+            reward: minter_fee_history
+                .reward
+                .into_iter()
+                .map(|rewards| rewards.into_iter().map(Nat::from).collect())
+                .collect(),
         }
     }
 
@@ -888,5 +1305,81 @@ mod evm_rpc_conversion {
             transactions_root: Some("0xdee0b25a965ff236e4d2e89f56de233759d71ad3e3e150ceb4cf5bb1f0ecf5c0".to_string()),
             uncles: vec![],
         }
+    }
+
+    fn minter_and_evm_rpc_transaction_receipts(
+    ) -> impl Strategy<Value = (Option<TransactionReceipt>, Option<EvmTransactionReceipt>)> {
+        use proptest::{option, prelude::Just};
+        option::of(arb_transaction_receipt()).prop_flat_map(|minter_tx_receipt| {
+            (
+                Just(minter_tx_receipt.clone()),
+                arb_evm_rpc_transaction_receipt(minter_tx_receipt),
+            )
+        })
+    }
+
+    fn arb_evm_rpc_transaction_receipt(
+        minter_tx_receipt: Option<TransactionReceipt>,
+    ) -> impl Strategy<Value = Option<EvmTransactionReceipt>> {
+        use proptest::{collection::vec, option, prelude::Just};
+
+        match minter_tx_receipt {
+            None => Just(None).boxed(),
+            Some(r) => (
+                option::of(".*"),
+                ".*",
+                vec(arb_log_entry(), 1..=100),
+                ".*",
+                ".*",
+                arb_nat_256(),
+                ".*",
+            )
+                .prop_map(
+                    move |(
+                        contract_address,
+                        from,
+                        minter_logs,
+                        logs_bloom,
+                        to,
+                        transaction_index,
+                        r#type,
+                    )| {
+                        Some(EvmTransactionReceipt {
+                            block_hash: r.block_hash.to_string(),
+                            block_number: r.block_number.into(),
+                            effective_gas_price: r.effective_gas_price.into(),
+                            gas_used: r.gas_used.into(),
+                            status: Nat::from(ethnum::u256::from(r.status).as_u8()),
+                            transaction_hash: r.transaction_hash.to_string(),
+                            contract_address,
+                            from,
+                            logs: minter_logs.into_iter().map(evm_rpc_log_entry).collect(),
+                            logs_bloom,
+                            to,
+                            transaction_index,
+                            r#type,
+                        })
+                    },
+                )
+                .boxed(),
+        }
+    }
+
+    fn arb_evm_rpc_transaction_count() -> impl Strategy<Value = EvmRpcResult<Nat>> {
+        proptest::result::maybe_ok(arb_nat_256(), arb_evm_rpc_error())
+    }
+
+    fn arb_evm_rpc_send_raw_transaction_status(
+    ) -> impl Strategy<Value = EvmSendRawTransactionStatus> {
+        use proptest::{
+            option,
+            prelude::{prop_oneof, Just},
+        };
+        prop_oneof![
+            option::of(".*").prop_map(EvmSendRawTransactionStatus::Ok),
+            Just(EvmSendRawTransactionStatus::InsufficientFunds),
+            Just(EvmSendRawTransactionStatus::NonceTooLow),
+            Just(EvmSendRawTransactionStatus::NonceTooHigh),
+        ]
     }
 }

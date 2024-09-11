@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
@@ -13,6 +11,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/local_store",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:chrono",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:rand",
@@ -43,6 +42,9 @@ rust_library(
     crate_name = "ic_backup",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.2",
+    visibility = [
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
@@ -52,6 +54,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":backup"],
 )
 

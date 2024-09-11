@@ -365,7 +365,7 @@ impl ProcessWithdrawalParams {
     pub fn with_inconsistent_transaction_receipt(self) -> Self {
         self.with_mock_eth_get_transaction_receipt(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Ankr,
+                JsonRpcProvider::Pokt,
                 &mut |response: &mut ethers_core::types::TransactionReceipt| {
                     response.status = Some(0.into())
                 },
@@ -648,6 +648,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> LatestTransactionCountProcessWi
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
+        self.setup.as_ref().env.tick();
         self
     }
 
@@ -681,9 +682,13 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
         self,
         mut override_mock: F,
     ) -> Self {
-        let default_eth_send_raw_transaction =
+        let default_eth_send_raw_transaction = if self.setup.as_ref().evm_rpc_id.is_none() {
             MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
-                .respond_with(JsonRpcProvider::Ankr, send_raw_transaction_response());
+                .respond_with(JsonRpcProvider::Pokt, send_raw_transaction_response())
+        } else {
+            MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
+                .respond_for_all_with(send_raw_transaction_response())
+        };
         (override_mock)(default_eth_send_raw_transaction)
             .build()
             .expect_rpc_calls(&self.setup);
@@ -703,7 +708,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
         let tx_hash = hash_transaction(tx, sig);
         self.send_raw_transaction(|mock| {
             mock.with_request_params(json!([expected_sent_tx]))
-                .respond_with(JsonRpcProvider::Ankr, tx_hash)
+                .respond_with(JsonRpcProvider::Pokt, tx_hash)
         })
     }
 
@@ -818,6 +823,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> TransactionReceiptProcessWithdr
         (override_mock)(default_eth_get_transaction_receipt)
             .build()
             .expect_rpc_calls(&self.setup);
+        self.setup.as_ref().env.tick();
         self
     }
 

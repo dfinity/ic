@@ -2,7 +2,12 @@ type BuyerState = record {
   icp : opt TransferableAmount;
   has_created_neuron_recipes : opt bool;
 };
-type CanisterCallError = record { code : opt int32; description : text };
+
+type CanisterCallError = record {
+  code : opt int32;
+  description : text;
+};
+
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -11,31 +16,45 @@ type CanisterStatusResultV2 = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
 };
-type CanisterStatusType = variant { stopped; stopping; running };
+
+type CanisterStatusType = variant {
+  stopped;
+  stopping;
+  running;
+};
+
 type CfInvestment = record {
   controller : opt principal;
   hotkey_principal : text;
   hotkeys : opt Principals;
   nns_neuron_id : nat64;
 };
+
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
   hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
+
 type CfParticipant = record {
   controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
-type Countries = record { iso_codes : vec text };
+
+type Countries = record {
+  iso_codes : vec text;
+};
+
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
+  wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
 };
+
 type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
@@ -45,21 +64,43 @@ type DerivedState = record {
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
-type DirectInvestment = record { buyer_principal : text };
-type Err = record { description : opt text; error_type : opt int32 };
-type Err_1 = record { error_type : opt int32 };
+
+type DirectInvestment = record {
+  buyer_principal : text;
+};
+
+type Err = record {
+  description : opt text;
+  error_type : opt int32;
+};
+
+type Err_1 = record {
+  error_type : opt int32;
+};
+
 type Err_2 = record {
   invalid_user_amount : opt InvalidUserAmount;
   existing_ticket : opt Ticket;
   error_type : int32;
 };
-type Error = record { message : opt text };
-type ErrorRefundIcpRequest = record { source_principal_id : opt principal };
-type ErrorRefundIcpResponse = record { result : opt Result };
+
+type Error = record {
+  message : opt text;
+};
+
+type ErrorRefundIcpRequest = record {
+  source_principal_id : opt principal;
+};
+
+type ErrorRefundIcpResponse = record {
+  result : opt Result;
+};
+
 type FailedUpdate = record {
   err : opt CanisterCallError;
   dapp_canister_id : opt principal;
 };
+
 type FinalizeSwapResponse = record {
   set_dapp_controllers_call_result : opt SetDappControllersCallResult;
   create_sns_neuron_recipes_result : opt SweepResult;
@@ -71,14 +112,25 @@ type FinalizeSwapResponse = record {
   claim_neuron_result : opt SweepResult;
   sweep_sns_result : opt SweepResult;
 };
+
 type GetAutoFinalizationStatusResponse = record {
   auto_finalize_swap_response : opt FinalizeSwapResponse;
   has_auto_finalize_been_attempted : opt bool;
   is_auto_finalize_enabled : opt bool;
 };
-type GetBuyerStateRequest = record { principal_id : opt principal };
-type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
-type GetBuyersTotalResponse = record { buyers_total : nat64 };
+
+type GetBuyerStateRequest = record {
+  principal_id : opt principal;
+};
+
+type GetBuyerStateResponse = record {
+  buyer_state : opt BuyerState;
+};
+
+type GetBuyersTotalResponse = record {
+  buyers_total : nat64;
+};
+
 type GetDerivedStateResponse = record {
   sns_tokens_per_icp : opt float64;
   buyer_total_icp_e8s : opt nat64;
@@ -88,20 +140,44 @@ type GetDerivedStateResponse = record {
   direct_participant_count : opt nat64;
   cf_neuron_count : opt nat64;
 };
-type GetInitResponse = record { init : opt Init };
+
+type GetInitResponse = record {
+  init : opt Init;
+};
+
 type GetLifecycleResponse = record {
   decentralization_sale_open_timestamp_seconds : opt nat64;
   lifecycle : opt int32;
   decentralization_swap_termination_timestamp_seconds : opt nat64;
 };
-type GetOpenTicketResponse = record { result : opt Result_1 };
-type GetSaleParametersResponse = record { params : opt Params };
-type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
-type GovernanceError = record { error_message : text; error_type : int32 };
-type Icrc1Account = record { owner : opt principal; subaccount : opt blob };
+
+type GetOpenTicketResponse = record {
+  result : opt Result_1;
+};
+
+type GetSaleParametersResponse = record {
+  params : opt Params;
+};
+
+type GetStateResponse = record {
+  swap : opt Swap;
+  derived : opt DerivedState;
+};
+
+type GovernanceError = record {
+  error_message : text;
+  error_type : int32;
+};
+
+type Icrc1Account = record {
+  owner : opt principal;
+  subaccount : opt blob;
+};
+
 type IdealMatchedParticipationFunction = record {
   serialized_representation : opt text;
 };
+
 type Init = record {
   nns_proposal_id : opt nat64;
   sns_root_canister_id : text;
@@ -121,7 +197,6 @@ type Init = record {
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
   neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
-  neurons_fund_participants : opt NeuronsFundParticipants;
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
@@ -130,14 +205,17 @@ type Init = record {
   min_icp_e8s : opt nat64;
   max_direct_participation_icp_e8s : opt nat64;
 };
+
 type InvalidUserAmount = record {
   min_amount_icp_e8s_included : nat64;
   max_amount_icp_e8s_included : nat64;
 };
+
 type Investor = variant {
   CommunityFund : CfInvestment;
   Direct : DirectInvestment;
 };
+
 type LinearScalingCoefficient = record {
   slope_numerator : opt nat64;
   intercept_icp_e8s : opt nat64;
@@ -145,55 +223,78 @@ type LinearScalingCoefficient = record {
   slope_denominator : opt nat64;
   to_direct_participation_icp_e8s : opt nat64;
 };
+
 type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
   limit : opt nat32;
 };
+
+type ListCommunityFundParticipantsResponse = record {
+  cf_participants : vec CfParticipant;
+};
+
 type ListDirectParticipantsRequest = record {
   offset : opt nat32;
   limit : opt nat32;
 };
-type ListDirectParticipantsResponse = record { participants : vec Participant };
+
+type ListDirectParticipantsResponse = record {
+  participants : vec Participant;
+};
+
 type ListSnsNeuronRecipesRequest = record {
   offset : opt nat64;
   limit : opt nat32;
 };
+
 type ListSnsNeuronRecipesResponse = record {
   sns_neuron_recipes : vec SnsNeuronRecipe;
 };
+
 type NeuronAttributes = record {
   dissolve_delay_seconds : nat64;
   memo : nat64;
   followees : vec NeuronId;
 };
+
 type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
 };
-type NeuronId = record { id : blob };
-type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
+
+type NeuronId = record {
+  id : blob;
+};
+
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
   min_direct_participation_threshold_icp_e8s : opt nat64;
   ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
 };
+
 type NewSaleTicketRequest = record {
   subaccount : opt blob;
   amount_icp_e8s : nat64;
 };
-type NewSaleTicketResponse = record { result : opt Result_2 };
-type Ok = record { block_height : opt nat64 };
+
+type NewSaleTicketResponse = record {
+  result : opt Result_2;
+};
+
+type Ok = record {
+  block_height : opt nat64;
+};
+
 type Ok_1 = record {
   neurons_fund_participation_icp_e8s : opt nat64;
   neurons_fund_neurons_count : opt nat64;
 };
-type Ok_2 = record { ticket : opt Ticket };
-type OpenRequest = record {
-  cf_participants : vec CfParticipant;
-  params : opt Params;
-  open_sns_token_swap_proposal_id : opt nat64;
+
+type Ok_2 = record {
+  ticket : opt Ticket;
 };
+
 type Params = record {
   min_participant_icp_e8s : nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
@@ -207,45 +308,92 @@ type Params = record {
   min_icp_e8s : nat64;
   max_direct_participation_icp_e8s : opt nat64;
 };
+
 type Participant = record {
   participation : opt BuyerState;
   participant_id : opt principal;
 };
+
 type Possibility = variant {
   Ok : SetDappControllersResponse;
   Err : CanisterCallError;
 };
-type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
-type Possibility_2 = variant { Ok : Ok_1; Err : Error };
-type Possibility_3 = variant { Ok : record {}; Err : CanisterCallError };
-type Principals = record { principals : vec principal };
+
+type Possibility_1 = variant {
+  Ok : Response;
+  Err : CanisterCallError;
+};
+
+type Possibility_2 = variant {
+  Ok : Ok_1;
+  Err : Error;
+};
+
+type Possibility_3 = variant {
+  Ok : record {};
+  Err : CanisterCallError;
+};
+
+type Principals = record {
+  principals : vec principal;
+};
+
 type RefreshBuyerTokensRequest = record {
   confirmation_text : opt text;
   buyer : text;
 };
+
 type RefreshBuyerTokensResponse = record {
   icp_accepted_participation_e8s : nat64;
   icp_ledger_account_balance_e8s : nat64;
 };
-type Response = record { governance_error : opt GovernanceError };
-type Result = variant { Ok : Ok; Err : Err };
-type Result_1 = variant { Ok : Ok_2; Err : Err_1 };
-type Result_2 = variant { Ok : Ok_2; Err : Err_2 };
-type SetDappControllersCallResult = record { possibility : opt Possibility };
-type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
-type SetModeCallResult = record { possibility : opt Possibility_3 };
+
+type Response = record {
+  governance_error : opt GovernanceError;
+};
+
+type Result = variant {
+  Ok : Ok;
+  Err : Err;
+};
+
+type Result_1 = variant {
+  Ok : Ok_2;
+  Err : Err_1;
+};
+
+type Result_2 = variant {
+  Ok : Ok_2;
+  Err : Err_2;
+};
+
+type SetDappControllersCallResult = record {
+  possibility : opt Possibility;
+};
+
+type SetDappControllersResponse = record {
+  failed_updates : vec FailedUpdate;
+};
+
+type SetModeCallResult = record {
+  possibility : opt Possibility_3;
+};
+
 type SettleCommunityFundParticipationResult = record {
   possibility : opt Possibility_1;
 };
+
 type SettleNeuronsFundParticipationResult = record {
   possibility : opt Possibility_2;
 };
+
 type SnsNeuronRecipe = record {
   sns : opt TransferableAmount;
   claimed_status : opt int32;
   neuron_attributes : opt NeuronAttributes;
   investor : opt Investor;
 };
+
 type Swap = record {
   auto_finalize_swap_response : opt FinalizeSwapResponse;
   neuron_recipes : vec SnsNeuronRecipe;
@@ -265,6 +413,7 @@ type Swap = record {
   params : opt Params;
   open_sns_token_swap_proposal_id : opt nat64;
 };
+
 type SweepResult = record {
   failure : nat32;
   skipped : nat32;
@@ -272,12 +421,14 @@ type SweepResult = record {
   success : nat32;
   global_failures : nat32;
 };
+
 type Ticket = record {
   creation_time : nat64;
   ticket_id : nat64;
   account : opt Icrc1Account;
   amount_icp_e8s : nat64;
 };
+
 type TransferableAmount = record {
   transfer_fee_paid_e8s : opt nat64;
   transfer_start_timestamp_seconds : nat64;
@@ -285,6 +436,7 @@ type TransferableAmount = record {
   amount_transferred_e8s : opt nat64;
   transfer_success_timestamp_seconds : nat64;
 };
+
 service : (Init) -> {
   error_refund_icp : (ErrorRefundIcpRequest) -> (ErrorRefundIcpResponse);
   finalize_swap : (record {}) -> (FinalizeSwapResponse);
@@ -301,7 +453,7 @@ service : (Init) -> {
   get_sale_parameters : (record {}) -> (GetSaleParametersResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
-      NeuronsFundParticipants,
+      ListCommunityFundParticipantsResponse,
     ) query;
   list_direct_participants : (ListDirectParticipantsRequest) -> (
       ListDirectParticipantsResponse,
@@ -311,7 +463,6 @@ service : (Init) -> {
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
   notify_payment_failure : (record {}) -> (Ok_2);
-  open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );

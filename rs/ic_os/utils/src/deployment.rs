@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentJson {
     pub deployment: Deployment,
     pub logging: Logging,
@@ -14,28 +14,31 @@ pub struct DeploymentJson {
     pub resources: Resources,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mgmt_mac: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Logging {
     pub hosts: String,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
     #[serde(with = "comma_urls")]
     pub url: Vec<Url>,
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Resources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Can be "kvm" or "qemu". If None, is treated as "kvm".
     pub cpu: Option<String>,
 }
 
@@ -79,7 +82,68 @@ mod test {
     use once_cell::sync::Lazy;
     use serde_json::{json, Value};
 
+    static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
+        json!({
+              "deployment": {
+                "name": "mainnet",
+                "mgmt_mac": null
+              },
+              "logging": {
+                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+              },
+              "nns": {
+                "url": "https://wiki.internetcomputer.org/"
+              },
+              "resources": {
+                "memory": "490",
+                "cpu": "kvm"
+              }
+            }
+        )
+    });
+
     const DEPLOYMENT_STR: &str = r#"{
+  "deployment": {
+    "name": "mainnet",
+    "mgmt_mac": null
+  },
+  "logging": {
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+  },
+  "nns": {
+    "url": "https://wiki.internetcomputer.org/"
+  },
+  "resources": {
+    "memory": "490",
+    "cpu": "kvm"
+  }
+}"#;
+
+    static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
+        DeploymentJson {
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+            },
+        }
+    });
+
+    const DEPLOYMENT_STR_NO_MGMT_MAC: &str = r#"{
   "deployment": {
     "name": "mainnet"
   },
@@ -87,41 +151,78 @@ mod test {
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
-    "url": "https://dfinity.org/"
+    "url": "https://wiki.internetcomputer.org/"
+  },
+  "resources": {
+    "memory": "490",
+    "cpu": "kvm"
+  }
+}"#;
+
+    static DEPLOYMENT_STRUCT_NO_MGMT_MAC: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
+        DeploymentJson {
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+            },
+        }
+    });
+
+    const DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC: &str = r#"{
+  "deployment": {
+    "name": "mainnet"
+  },
+  "logging": {
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+  },
+  "nns": {
+    "url": "https://wiki.internetcomputer.org/"
   },
   "resources": {
     "memory": "490"
   }
 }"#;
 
-    static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
-        json!({
-              "deployment": {
-                "name": "mainnet"
-              },
-              "logging": {
-                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
-              },
-              "nns": {
-                "url": "https://dfinity.org/"
-              },
-              "resources": {
-                "memory": "490"
-              }
-            }
-        )
-    });
-
-    static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu: None },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: None,
+            },
         }
     });
 
-    const CPU_DEPLOYMENT_STR: &str = r#"{
+    const QEMU_CPU_DEPLOYMENT_STR: &str = r#"{
   "deployment": {
     "name": "mainnet"
   },
@@ -129,7 +230,7 @@ mod test {
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
-    "url": "https://dfinity.org/"
+    "url": "https://wiki.internetcomputer.org/"
   },
   "resources": {
     "memory": "490",
@@ -137,12 +238,27 @@ mod test {
   }
 }"#;
 
-    static CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu: Some("qemu".to_string()) },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("qemu".to_string()),
+            },
         }
     });
 
@@ -177,24 +293,53 @@ mod test {
 }"#;
 
     static MULTI_URL_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentJson {
-            deployment: Deployment { name: "mainnet".to_string() },
-            logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
-            nns: Nns { url: vec![Url::parse("http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080").unwrap(), Url::parse("http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080").unwrap(), Url::parse("http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080").unwrap()] },
-            resources: Resources { memory: 490, cpu: None },
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![
+                    Url::parse("http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080").unwrap(),
+                    Url::parse("http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080").unwrap(),
+                    Url::parse("http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080").unwrap(),
+                ],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: None,
+            },
         }
     });
 
     #[test]
-    fn read_deployment() {
+    fn deserialize_deployment() {
         let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
 
-        let parsed_cpu_deployment: DeploymentJson =
-            { serde_json::from_str(CPU_DEPLOYMENT_STR).unwrap() };
+        let parsed_deployment: DeploymentJson =
+            { serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap() };
 
-        assert_eq!(*CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_MGMT_MAC, parsed_deployment);
+
+        let parsed_deployment: DeploymentJson =
+            { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC, parsed_deployment);
+
+        let parsed_cpu_deployment: DeploymentJson =
+            { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
+
+        assert_eq!(*QEMU_CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
 
         let parsed_multi_url_deployment: DeploymentJson =
             { serde_json::from_str(MULTI_URL_STR).unwrap() };
@@ -220,20 +365,38 @@ mod test {
     }
 
     #[test]
-    fn write_deployment() {
-        let written_deployment =
+    fn serialize_deployment() {
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR, written_deployment);
+        // DEPLOYMENT_STRUCT serializes to DEPLOYMENT_STR_NO_MGMT_MAC because mgmt_mac field is skipped in serialization
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
 
-        let written_cpu_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&CPU_DEPLOYMENT_STRUCT).unwrap();
+        let serialized_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
+                .unwrap();
 
-        assert_eq!(CPU_DEPLOYMENT_STR, written_cpu_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
 
-        let written_multi_url_deployment =
+        let serialized_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_MGMT_MAC).unwrap();
+
+        assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
+
+        let serialized_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
+                .unwrap();
+
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
+
+        let serialized_deployment =
+            serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
+
+        assert_eq!(QEMU_CPU_DEPLOYMENT_STR, serialized_deployment);
+
+        let serialized_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&MULTI_URL_STRUCT).unwrap();
 
-        assert_eq!(MULTI_URL_STR, written_multi_url_deployment);
+        assert_eq!(MULTI_URL_STR, serialized_deployment);
     }
 }

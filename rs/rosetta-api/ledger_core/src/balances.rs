@@ -9,7 +9,7 @@ pub trait BalancesStore {
     type Tokens;
 
     /// Returns the balance on the specified account.
-    fn get_balance(&self, k: &Self::AccountId) -> Option<&Self::Tokens>;
+    fn get_balance(&self, k: &Self::AccountId) -> Option<Self::Tokens>;
 
     /// Update balance for an account using function f.
     /// Its arg is previous balance or None if not found and
@@ -34,8 +34,8 @@ where
     type AccountId = AccountId;
     type Tokens = Tokens;
 
-    fn get_balance(&self, k: &Self::AccountId) -> Option<&Self::Tokens> {
-        self.get(k)
+    fn get_balance(&self, k: &Self::AccountId) -> Option<Self::Tokens> {
+        self.get(k).cloned()
     }
 
     fn update<F, E>(&mut self, k: AccountId, mut f: F) -> Result<Self::Tokens, E>
@@ -86,7 +86,7 @@ pub enum BalanceError<Tokens> {
 }
 
 /// Describes the state of users accounts at the tip of the chain
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Balances<S: BalancesStore> {
     // This uses a mutable map because we don't want to risk a space leak and we only require the
     // account balances at the tip of the chain
@@ -225,7 +225,6 @@ where
     pub fn account_balance(&self, account: &S::AccountId) -> S::Tokens {
         self.store
             .get_balance(account)
-            .cloned()
             .unwrap_or_else(S::Tokens::zero)
     }
 

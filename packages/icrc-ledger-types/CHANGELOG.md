@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.1.6
+
+### Added
+
+- `icrc3` and `icrc21` types.
+
 ## 0.1.5
 
 - Use candid 0.10

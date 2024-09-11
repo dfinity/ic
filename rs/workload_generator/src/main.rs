@@ -36,7 +36,7 @@ use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HA
 use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
 use stats::Summary;
 
-#[cfg(build = "debug")]
+#[cfg(debug_assertions)]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(
@@ -47,7 +47,7 @@ fn get_logger() -> slog::Logger {
         slog_o!(),
     )
 }
-#[cfg(not(build = "debug"))]
+#[cfg(not(debug_assertions))]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(
@@ -68,7 +68,7 @@ fn write_output_json(filename: &str, summaries: &[Summary]) -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, ArgEnum)]
+#[derive(Copy, Clone, Debug, ArgEnum)]
 #[clap(rename_all = "camel")]
 pub enum RequestType {
     // Needs to expose "read"
@@ -85,7 +85,7 @@ pub enum RequestType {
     Query,
 }
 
-#[derive(ArgEnum, Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ArgEnum)]
 #[clap(rename_all = "camel")]
 pub enum ChartSize {
     None,

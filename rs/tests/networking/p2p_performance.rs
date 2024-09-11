@@ -2,10 +2,7 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_system_test_driver::{
-    driver::{
-        group::SystemTestGroup,
-        simulate_network::{NetworkSimulation, ProductionSubnetTopology},
-    },
+    driver::{group::SystemTestGroup, simulate_network::ProductionSubnetTopology},
     systest,
 };
 use ic_tests::networking::p2p_performance_workload::{config, test};
@@ -21,8 +18,7 @@ const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
-const NETWORK_SIMULATION: Option<NetworkSimulation> =
-    Some(NetworkSimulation::Subnet(ProductionSubnetTopology::IO67));
+const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;

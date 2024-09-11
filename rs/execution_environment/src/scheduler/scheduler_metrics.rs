@@ -12,7 +12,7 @@ use prometheus::{
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, ScopedMetrics,
+    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -27,7 +27,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
-    pub(super) canister_log_memory_usage: Histogram,
+    pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
+    pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -106,13 +107,13 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
-    // TODO(CON-1302): Remove metric once `threshold_signature_agreements` is rolled out.
-    pub(super) ecdsa_signature_agreements: IntGauge,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
+    pub(super) canister_snapshots_memory_usage: IntGauge,
+    pub(super) num_canister_snapshots: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -122,6 +123,9 @@ pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
 /// Alert for call contexts older than this cutoff (one day).
 pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
+
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -146,10 +150,31 @@ impl SchedulerMetrics {
                 "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
             ),
+            // TODO(EXC-1722): remove after migrating to v2.
             canister_log_memory_usage: memory_histogram(
                 "canister_log_memory_usage_bytes",
                 "Canisters log memory usage distribution in bytes.",
                 metrics_registry,
+            ),
+            canister_log_memory_usage_v2: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v2",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                ])
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
@@ -191,8 +216,8 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
-                // 1, 2, 5, …, 1000, 2000, 5000
-                decimal_buckets(0, 3),
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",
@@ -226,24 +251,20 @@ impl SchedulerMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_gauge(
-                "replicated_state_ecdsa_signature_agreements_total",
-                "Total number of ECDSA signature agreements created",
-            ),
             threshold_signature_agreements: metrics_registry.int_gauge_vec(
                 "replicated_state_threshold_signature_agreements_total",
                 "Total number of threshold signature agreements created by key Id",
                 &["key_id"],
             ),
             delivered_pre_signatures: metrics_registry.histogram_vec(
-                "execution_ecdsa_delivered_quadruples",
-                "Number of ECDSA quadruples delivered to execution by key ID",
+                "execution_idkg_delivered_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
-                "execution_completed_sign_with_ecdsa_contexts_total",
-                "Total number of completed sign with ECDSA contexts by key ID",
+                "execution_completed_signature_request_contexts_total",
+                "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
@@ -450,8 +471,8 @@ impl SchedulerMetrics {
                 metrics_registry,
             ),
             round_update_signature_request_contexts_duration: duration_histogram(
-                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
-                "The duration of updating sign with ecdsa contexts in seconds.",
+                "execution_round_update_signature_request_contexts_duration_seconds",
+                "The duration of updating signature request contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {
@@ -680,6 +701,14 @@ impl SchedulerMetrics {
             stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
+            ),
+            canister_snapshots_memory_usage: metrics_registry.int_gauge(
+                "scheduler_canister_snapshots_memory_usage_bytes",
+                "Canisters total snapshots memory usage in bytes.",
+            ),
+            num_canister_snapshots: metrics_registry.int_gauge(
+                "scheduler_num_canister_snapshots",
+                "Total number of canister snapshots on this subnet.",
             ),
         }
     }

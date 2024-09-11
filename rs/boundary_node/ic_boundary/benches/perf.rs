@@ -50,7 +50,7 @@ fn benchmark(c: &mut Criterion) {
     group.sample_size(250);
     group.measurement_time(Duration::from_secs(15));
 
-    let (app, _) = setup_test_router(true, true, 40, 15, 16384);
+    let (app, _) = setup_test_router(true, true, 40, 15, 16384, None);
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -103,7 +103,7 @@ criterion_main!(benches);
 async fn main2() {
     use std::time::Instant;
 
-    let (app, _) = setup_test_router(false, false, 100, 50, 16384); // 16k is > than 97% IC responses
+    let (app, _) = setup_test_router(false, false, 100, 50, 16384, None); // 16k is > than 97% IC responses
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
 

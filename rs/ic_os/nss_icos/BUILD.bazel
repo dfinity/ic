@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_shared_library")
 
+package(default_visibility = ["//rs:ic-os-pkg"])
+
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:base64",
@@ -23,6 +25,5 @@ rust_shared_library(
     aliases = ALIASES,
     crate_name = "nss_icos",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )

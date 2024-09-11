@@ -118,10 +118,10 @@ use ic_config::flag_status::FlagStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_types::{methods::WasmMethod, MAX_WASM_MEMORY_IN_BYTES};
-use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::methods::WasmMethod;
+use ic_types::NumBytes;
+use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
@@ -136,7 +136,9 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-#[derive(Clone, Copy, Debug)]
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum WasmMemoryType {
     Wasm32,
     Wasm64,
@@ -707,14 +709,14 @@ pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty
 pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
 const CANISTER_START_STR: &str = "canister_start";
 
-/// There is one byte for each OS page in the wasm heap.
-const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
-    MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
+/// There is one byte for each OS page in the memory.
+fn bytemap_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
+    memory_size.get() / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64)
+}
 
-const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
-const MAX_WASM_MEMORY_IN_WASM_PAGES: u64 = MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
-/// There is one byte for each OS page in the stable memory.
-const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
+fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
+    memory_size.get() / (WASM_PAGE_SIZE as u64)
+}
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
@@ -917,13 +919,20 @@ pub(super) fn instrument(
     metering_type: MeteringType,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    max_wasm_memory_size: NumBytes,
+    max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
     let stable_memory_index;
     let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
     module = export_table(module);
-    (module, stable_memory_index) =
-        update_memories(module, write_barrier, wasm_native_stable_memory);
+    (module, stable_memory_index) = update_memories(
+        module,
+        write_barrier,
+        wasm_native_stable_memory,
+        max_wasm_memory_size,
+        max_stable_memory_size,
+    );
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -1023,6 +1032,7 @@ pub(super) fn instrument(
             subnet_type,
             dirty_page_overhead,
             main_memory_type,
+            max_wasm_memory_size,
         )
     }
 
@@ -1107,6 +1117,7 @@ fn replace_system_api_functions(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
+    max_wasm_memory_size: NumBytes,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -1123,6 +1134,7 @@ fn replace_system_api_functions(
         subnet_type,
         dirty_page_overhead,
         main_memory_type,
+        max_wasm_memory_size,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
@@ -1338,6 +1350,7 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
@@ -1348,6 +1361,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1356,6 +1370,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1366,7 +1381,7 @@ fn export_additional_symbols<'a>(
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
@@ -1375,7 +1390,7 @@ enum Scope {
 
 // Represents the type of the cost operand on the stack.
 // Needed to determine the correct instruction to decrement the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CostOperandOnStack {
     X32Bit,
     X64Bit,
@@ -1384,7 +1399,7 @@ enum CostOperandOnStack {
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
         scope: Scope,
@@ -1942,20 +1957,24 @@ fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    max_wasm_memory_size: NumBytes,
+    max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
     let mut stable_index = 0;
 
     if let Some(mem) = module.memories.first_mut() {
         if mem.memory64 {
+            let max_wasm_memory_size_in_wasm_pages =
+                max_memory_size_in_wasm_pages(max_wasm_memory_size);
             match mem.maximum {
                 Some(max) => {
                     // In case the maximum memory size is larger than the maximum allowed, cap it.
-                    if max > MAX_WASM_MEMORY_IN_WASM_PAGES {
-                        mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+                    if max > max_wasm_memory_size_in_wasm_pages {
+                        mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
                     }
                 }
                 None => {
-                    mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+                    mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
                 }
             }
         }
@@ -1978,12 +1997,14 @@ fn update_memories(
         module.exports.push(memory_export);
     }
 
+    let wasm_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_wasm_memory_size);
     if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
         module.memories.push(MemoryType {
             memory64: false,
             shared: false,
-            initial: BYTEMAP_SIZE_IN_WASM_PAGES,
-            maximum: Some(BYTEMAP_SIZE_IN_WASM_PAGES),
+            initial: wasm_bytemap_size_in_wasm_pages,
+            maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -1999,7 +2020,8 @@ fn update_memories(
             memory64: true,
             shared: false,
             initial: 0,
-            maximum: Some(MAX_STABLE_MEMORY_IN_WASM_PAGES),
+            maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2008,11 +2030,13 @@ fn update_memories(
             index: stable_index,
         });
 
+        let stable_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_stable_memory_size);
         module.memories.push(MemoryType {
             memory64: false,
             shared: false,
-            initial: STABLE_BYTEMAP_SIZE_IN_WASM_PAGES,
-            maximum: Some(STABLE_BYTEMAP_SIZE_IN_WASM_PAGES),
+            initial: stable_bytemap_size_in_wasm_pages,
+            maximum: Some(stable_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {

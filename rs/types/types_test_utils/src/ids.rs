@@ -174,8 +174,8 @@ pub fn new_node_test_id(i: u64) -> NodeId {
 }
 
 /// Returns a [`UserId`] that can be used in tests.
-pub fn user_test_id(i: u64) -> UserId {
-    UserId::from(PrincipalId::new_user_test_id(i))
+pub const fn user_test_id(i: u64) -> UserId {
+    UserId::new(PrincipalId::new_user_test_id(i))
 }
 
 /// Returns the user id of the anonymous user.

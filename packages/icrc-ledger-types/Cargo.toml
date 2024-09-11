@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-types"
-version = "0.1.5"
+version = "0.1.6"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
@@ -27,4 +27,4 @@ time = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-proptest = "1.0.0"
+proptest = { workspace = true }

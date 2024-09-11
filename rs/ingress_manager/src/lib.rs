@@ -2,6 +2,7 @@
 //! The ingress manager crate implements the selection and validation of
 //! ingresses on the internet computer block chain.
 
+pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
 
@@ -45,7 +46,7 @@ use std::{
 /// tuple (Height, HashOfBatchPayload) for two reasons:
 /// 1. We want to purge this cache by height, for those below certified height.
 /// 2. There could be more than one payloads at a given height due to blockchain
-/// branching.
+///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 

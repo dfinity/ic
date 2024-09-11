@@ -27,7 +27,7 @@ use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
-use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
 use rand::{Rng, SeedableRng};
@@ -60,7 +60,7 @@ const FILE_TO_GROUP: &str = CANISTER_FILE;
 ///     will decrease by at least two orders of magnitude, which is significant enough.
 const MAX_FILE_SIZE_TO_GROUP: u32 = 1 << 13; // 8 KiB
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ManifestValidationError {
     InvalidRootHash {
         expected_hash: Vec<u8>,
@@ -118,7 +118,7 @@ impl fmt::Display for ManifestValidationError {
 
 impl std::error::Error for ManifestValidationError {}
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ChunkValidationError {
     InvalidChunkHash {
         chunk_ix: usize,
@@ -174,10 +174,10 @@ impl fmt::Display for ChunkValidationError {
 impl std::error::Error for ChunkValidationError {}
 
 /// Relative path to a file and the size of the file.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 struct FileWithSize(PathBuf, u64);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum ChunkAction {
     /// Recompute the hash of the chunk, as no previously computed hash is
     /// available
@@ -195,7 +195,7 @@ pub type NewIndex = usize;
 pub type OldIndex = usize;
 
 /// A script describing how to turn an old state into a new state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct DiffScript {
     /// Copy some files from the old state.
     /// Keys are indices of the file table in the new manifest file,
@@ -873,13 +873,27 @@ pub fn compute_manifest(
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
-    let files = {
+    let mut files = {
         let mut files = Vec::new();
         files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
+
+    // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
+    // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
+    //
+    // Because this function may still be used by tests and external tools to compute manifest of an unverified checkpoint,
+    // the function does not crash here. Instead, we exclude the marker file from the manifest computation.
+    if !checkpoint.is_checkpoint_verified() {
+        files.retain(|FileWithSize(p, _)| {
+            checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
+        });
+        assert!(!files
+            .iter()
+            .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
+    }
 
     let chunk_actions = match opt_manifest_delta {
         Some(manifest_delta) => {

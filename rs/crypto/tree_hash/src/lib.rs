@@ -27,10 +27,11 @@ pub use tree_hash::*;
 /// - If you have a single [`Label`], use `Path::from(Label)`.
 ///
 /// - If you have an iterator that contains [`Label`] or `&Label` use
-/// `Path::from_iter(iterator)`.
-// Implemented as a newtype to allow implementation of traits like
+///   `Path::from_iter(iterator)`.
+///
+// Implemented as a new type to allow implementation of traits like
 // `fmt::Display`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct Path(Vec<Label>);
 
 impl Deref for Path {
@@ -97,13 +98,13 @@ impl Path {
 ///
 /// Note that
 /// - `Label`s are compared by comparing their byte representation.
-/// Therefore, `Label`s casted from other representations must not
-/// necessarily retain their original ordering, e.g., if `Label`s are
-/// obtained via `From<String>`.
+///   Therefore, `Label`s casted from other representations must not
+///   necessarily retain their original ordering, e.g., if `Label`s are
+///   obtained via `From<String>`.
 /// - `Label`s that hold a reference to an object are compared with
-/// other labels by comparing the bytes of the underlying representation,
-/// i.e., as if the `Label` would hold the bytes and not the reference.
-#[derive(Clone, Serialize, Deserialize)]
+///   other labels by comparing the bytes of the underlying representation,
+///   i.e., as if the `Label` would hold the bytes and not the reference.
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(from = "&serde_bytes::Bytes")]
 #[serde(into = "serde_bytes::ByteBuf")]
 pub struct Label(LabelRepr);
@@ -230,7 +231,7 @@ where
     }
 }
 /// The computed hash of the data in a `Leaf`; or of a [`LabeledTree`].
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Digest(pub [u8; Sha256::DIGEST_LEN]);
 ic_crypto_internal_types::derive_serde!(Digest, Sha256::DIGEST_LEN);
 
@@ -281,7 +282,7 @@ impl AsRef<[u8]> for Digest {
 }
 
 /// A sorted, labeled rose tree whose leaves contain values of type `T`.
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum LabeledTree<T> {
     /// A leaf node. Only `Leaf` nodes contain values.
     Leaf(T),
@@ -379,7 +380,7 @@ pub fn lookup_path<'a>(
 /// A [`HashTree`] can be obtained by feeding a [`LabeledTree`] to an
 /// implementation of the [`HashTreeBuilder`] trait. The hash values contained
 /// in the [`HashTree`] are not recomputed by altering the [`HashTree`].
-#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum HashTree {
     /// An unlabeled leaf that is either the root or the child of a `Node`.
     Leaf { digest: Digest },
@@ -423,7 +424,7 @@ impl HashTree {
 ///
 /// A [`MixedHashTree`] contains the data requested by the call to
 /// `read_certified_state` and digests for pruned parts of the hash tree.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MixedHashTree {
     /// Empty subtree, which has a specific hash with a different domain separator.
     Empty,
@@ -439,7 +440,7 @@ pub enum MixedHashTree {
 }
 
 /// The result of a path lookup in a hash tree.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum LookupStatus<'a> {
     /// The label exists in the tree.
     Found(&'a MixedHashTree),
@@ -606,7 +607,7 @@ impl MixedHashTree {
 
 /// An error indicating that a hash tree doesn't correspond to a valid
 /// [`LabeledTree`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum InvalidHashTreeError {
     /// The hash tree contains a non-root leaf that is not a direct child of a
     /// labeled node. For example:
@@ -628,7 +629,7 @@ pub enum InvalidHashTreeError {
     LabelsNotSorted(Label),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MixedHashTreeConversionError {
     /// The hash tree contains a non-root leaf that is not a direct child of a
     /// labeled node.
@@ -868,7 +869,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
 }
 
 /// Errors occurring in `tree_hash` module.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TreeHashError {
     InconsistentPartialTree {
         offending_path: Vec<Label>,
@@ -902,7 +903,7 @@ pub enum TreeHashError {
 ///
 /// A witness can also be used to update a [`HashTree`] when part of the
 /// original data is updated.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub enum Witness {
     /// Represents a [`HashTree::Fork`].
     Fork {
@@ -980,7 +981,7 @@ pub trait WitnessGenerator {
 }
 
 /// Error produced by generating a witness of type `W` from [`WitnessGenerator`].
-#[derive(thiserror::Error, Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, thiserror::Error)]
 pub enum WitnessGenerationError<W: WitnessBuilder> {
     #[error("Generating a witness failed due to too deep recursion (depth={0})")]
     TooDeepRecursion(u8),

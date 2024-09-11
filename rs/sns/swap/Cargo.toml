@@ -31,6 +31,7 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -56,14 +57,15 @@ serde_bytes = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-proptest = "1.0"
-pretty_assertions = { workspace = true }
+futures = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-futures = { workspace = true }
+pretty_assertions = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"

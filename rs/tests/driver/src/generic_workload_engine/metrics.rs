@@ -14,7 +14,7 @@ use crate::util::{add_box_drawing_left_border, pad_all_lines_but_first};
 
 use super::engine::Engine;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RequestDurationBucket {
     threshold: Duration,
     requests_below_threshold: u64,
@@ -35,7 +35,7 @@ impl RequestDurationBucket {
 
 pub type Counter = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RequestMetrics {
     errors_max: Counter,
     errors_map: HashMap<String, Counter>,
@@ -341,14 +341,14 @@ impl Display for RequestMetrics {
 ///    even when they correspond to different requests that return responses of incompatible types. For example, this is needed
 ///    for collecting metrics in a stateful workload generation scenario, when one first calls request A and then (upon its success)
 ///    request B, and if type(response(A)) != type(response(B)).
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RequestOutcome<ResultType, ErrorType> {
     result: Result<ResultType, ErrorType>,
     /// Each request class can be identified via a [`(workflow_pos, label)`] pair used to aggregate statistical information about outcomes of multiple requests with the same label.
     /// - [`workflow_pos`] is an (optional, unique) position of this request in its workflow. [`None`] is used to classify the overall workflow outcome, in which case the position
     ///   is statically unknown. See [`with_workflow_position`]
     /// - [`label`] is a canister endpoint name, or some other (short) description of the request.
-    /// See [`RequestOutcome.into_test_outcome`].
+    ///   See [`RequestOutcome.into_test_outcome`].
     workflow_pos: Option<usize>,
     label: String,
     pub duration: Duration,

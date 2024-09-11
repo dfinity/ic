@@ -16,7 +16,6 @@ pub mod public_key_store;
 pub mod secret_key_store;
 mod signer;
 pub mod threshold;
-pub mod tls;
 pub mod types;
 pub mod vault;
 
@@ -25,17 +24,13 @@ pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
-use crate::api::{
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    ThresholdSignatureCspClient,
-};
+use crate::api::{CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
-use crate::vault::api::{CspPublicKeyStoreError, CspVault};
+use crate::vault::api::CspVault;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
-use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
@@ -46,25 +41,10 @@ mod tests;
 
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
-pub trait CryptoServiceProvider:
-    CspSigner
-    + CspSigVerifier
-    + ThresholdSignatureCspClient
-    + NiDkgCspClient
-    + CspTlsHandshakeSignerProvider
-    + CspPublicKeyStore
-{
-}
+pub trait CryptoServiceProvider: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient {}
 
-impl<T> CryptoServiceProvider for T where
-    T: CspSigner
-        + CspSigVerifier
-        + ThresholdSignatureCspClient
-        + NiDkgCspClient
-        + CspTlsHandshakeSignerProvider
-        + CspPublicKeyStore
-{
-}
+impl<T> CryptoServiceProvider for T where T: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient
+{}
 
 /// Implements `CryptoServiceProvider` that uses a `CspVault` for
 /// storing and managing secret keys.
@@ -169,21 +149,5 @@ impl Csp {
             logger,
             metrics,
         }
-    }
-}
-
-impl CspPublicKeyStore for Csp {
-    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
-        self.csp_vault.current_node_public_keys()
-    }
-
-    fn current_node_public_keys_with_timestamps(
-        &self,
-    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
-        self.csp_vault.current_node_public_keys_with_timestamps()
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
-        self.csp_vault.idkg_dealing_encryption_pubkeys_count()
     }
 }

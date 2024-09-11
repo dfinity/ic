@@ -25,7 +25,7 @@ macro_rules! try_from_u8 {
 }
 
 try_from_u8!(
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Eq, PartialEq, Debug)]
     pub enum Ops {
         Noop = 0,
         Drop = 1,
@@ -111,5 +111,6 @@ try_from_u8!(
         InReplicatedExecution = 81,
         CallWithBestEffortResponse = 82,
         MsgDeadline = 83,
+        MemorySizeIsAtLeast = 84,
     }
 );
