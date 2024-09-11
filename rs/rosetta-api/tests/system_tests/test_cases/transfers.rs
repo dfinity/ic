@@ -80,7 +80,7 @@ fn test_icp_transfer() {
                                 agent: get_custom_agent(
                                     arg_with_caller.caller.clone(),
                                     rosetta_testing_environment
-                                        ._pocket_ic
+                                        .pocket_ic
                                         .url()
                                         .unwrap()
                                         .port()

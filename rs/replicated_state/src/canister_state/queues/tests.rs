@@ -2792,8 +2792,8 @@ fn time_out_messages_pushes_correct_reject_responses() {
             .unwrap()
             .0;
         assert_eq!(1, input_queue_from_canister.len());
-        let id = input_queue_from_canister.peek().unwrap().id();
-        let reject_response = canister_queues.pool.get(id).unwrap();
+        let reference = input_queue_from_canister.peek().unwrap();
+        let reject_response = canister_queues.pool.get(reference).unwrap();
         assert_eq!(
             RequestOrResponse::from(Response {
                 originator: own_canister_id,

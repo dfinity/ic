@@ -43,10 +43,11 @@ use ic_management_canister_types::{
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
-    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
-    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
+    CanisterStatusType, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
+    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -2039,9 +2040,10 @@ impl StateMachine {
         request_id: u64,
         timeout: Time,
         canister_id: CanisterId,
-        content: CanisterHttpResponseContent,
+        contents: Vec<CanisterHttpResponseContent>,
     ) {
-        for node in &self.nodes {
+        assert_eq!(contents.len(), self.nodes.len());
+        for (node, content) in std::iter::zip(self.nodes.iter(), contents.into_iter()) {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),

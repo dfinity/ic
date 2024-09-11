@@ -3,8 +3,8 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+    https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
@@ -112,7 +112,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // Tonic clients use &mut self and can only send one request at a time.
         // It is suggested to clone the underlying channel which is cheap.
         // https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html
-        let mut http_adapter_client = CanisterHttpServiceClient::new(self.grpc_channel.clone());
+        let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
@@ -145,7 +145,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let adapter_req_timer = Instant::now();
             // Build future that sends and transforms request.
             let adapter_canister_http_response = http_adapter_client
-                .canister_http_send(CanisterHttpSendRequest {
+                .https_outcall(HttpsOutcallRequest {
                     url: request_url,
                     method: match request_http_method{
                         CanisterHttpMethod::GET => HttpMethod::Get.into(),
@@ -172,7 +172,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 })
                 .and_then(|adapter_response| async move {
 
-                    let CanisterHttpSendResponse { status, headers, content: body} = adapter_response.into_inner();
+                    let HttpsOutcallResponse { status, headers, content: body} = adapter_response.into_inner();
 
                     let canister_http_payload = CanisterHttpResponsePayload{
                         status: status as u128,
@@ -336,8 +336,8 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
-        CanisterHttpSendRequest, CanisterHttpSendResponse,
+        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
+        HttpsOutcallRequest, HttpsOutcallResponse,
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_test_utilities_types::messages::RequestBuilder;
@@ -360,21 +360,21 @@ mod tests {
 
     #[derive(Clone)]
     pub struct SingleResponseAdapter {
-        response: Result<CanisterHttpSendResponse, (Code, String)>,
+        response: Result<HttpsOutcallResponse, (Code, String)>,
     }
 
     impl SingleResponseAdapter {
-        fn new(response: Result<CanisterHttpSendResponse, (Code, String)>) -> Self {
+        fn new(response: Result<HttpsOutcallResponse, (Code, String)>) -> Self {
             Self { response }
         }
     }
 
     #[tonic::async_trait]
-    impl CanisterHttpService for SingleResponseAdapter {
-        async fn canister_http_send(
+    impl HttpsOutcallsService for SingleResponseAdapter {
+        async fn https_outcall(
             &self,
-            _request: Request<CanisterHttpSendRequest>,
-        ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+            _request: Request<HttpsOutcallRequest>,
+        ) -> Result<Response<HttpsOutcallResponse>, Status> {
             match self.response.clone() {
                 Ok(resp) => Ok(Response::new(resp)),
                 Err((code, msg)) => Err(Status::new(code, msg)),
@@ -383,13 +383,13 @@ mod tests {
     }
 
     async fn setup_adapter_mock(
-        adapter_response: Result<CanisterHttpSendResponse, (Code, String)>,
+        adapter_response: Result<HttpsOutcallResponse, (Code, String)>,
     ) -> Channel {
         let (client, server) = tokio::io::duplex(1024);
         let mock_adapter = SingleResponseAdapter::new(adapter_response);
         tokio::spawn(async move {
             Server::builder()
-                .add_service(CanisterHttpServiceServer::new(mock_adapter))
+                .add_service(HttpsOutcallsServiceServer::new(mock_adapter))
                 .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
         });
@@ -533,7 +533,7 @@ mod tests {
         }];
 
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
+        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
@@ -637,7 +637,7 @@ mod tests {
     #[tokio::test]
     async fn test_client_transformed_limit() {
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
+        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
             status: 200,
             headers: Vec::new(),
             content: Vec::new(),
@@ -769,7 +769,7 @@ mod tests {
         }];
 
         // Adapter mock setup.
-        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
+        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
@@ -859,7 +859,7 @@ mod tests {
         }];
 
         // Adapter mock setup. Not relevant for client response in this test case.
-        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
+        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
