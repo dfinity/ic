@@ -9397,9 +9397,12 @@ dependencies = [
  "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-tla",
  "ic-nns-constants",
  "icp-ledger",
  "icrc-ledger-types",
+ "local_key",
+ "tla_instrumentation",
 ]
 
 [[package]]
@@ -9687,6 +9690,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-tla"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-nns-constants",
+ "icp-ledger",
+ "local_key",
+ "tla_instrumentation",
+]
+
+[[package]]
 name = "ic-neurons-fund"
 version = "0.0.1"
 dependencies = [
@@ -9803,6 +9817,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nervous-system-temporary",
+ "ic-nervous-system-tla",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
@@ -9842,6 +9857,8 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tla_instrumentation",
+ "tla_instrumentation_proc_macros",
  "tokio",
  "tokio-test",
 ]
