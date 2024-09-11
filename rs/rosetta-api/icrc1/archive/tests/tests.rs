@@ -1,6 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{CanisterId, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -338,4 +339,11 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     );
     check_icrc3_get_blocks(vec![(0, 10), (20, 10)], vec![(0, 10), (20, 10)]);
     check_icrc3_get_blocks(vec![(0, 10), (5, 10)], vec![(0, 10), (5, 10)]);
+}
+
+#[test]
+fn test_archive_http_request_decoding_quota() {
+    let setup = Setup::default();
+
+    test_http_request_decoding_quota(&setup.state_machine, setup.archive_id);
 }

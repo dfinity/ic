@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
-use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::wasm_executor::{

@@ -8,9 +8,9 @@ DEPENDENCIES = [
     "//rs/bitcoin/replica_types",
     "//rs/canonical_state/certification_version",
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/sha2",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "//rs/utils/validate_eq",
     "@crate_index//:bit-vec",
     "@crate_index//:cvt",
     "@crate_index//:ic-btc-interface",
@@ -39,6 +40,7 @@ DEPENDENCIES = [
     "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:slog",
+    "@crate_index//:static_assertions",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
@@ -46,6 +48,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/utils/validate_eq_derive",
     "@crate_index//:strum_macros",
 ]
 
@@ -68,7 +71,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 BIN_DEPENDENCIES = [
     # Keep sorted.

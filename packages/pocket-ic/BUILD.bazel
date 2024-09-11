@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
+    "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
@@ -30,6 +31,7 @@ TEST_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/universal_canister/lib",
     "@crate_index//:candid_parser",
+    "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
@@ -52,6 +54,7 @@ rust_canister(
         # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
     ],
 )
 

@@ -128,7 +128,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -151,7 +151,7 @@ impl From<&Query> for EntryKey {
         Self {
             source: match query.source {
                 QuerySource::User { user_id, .. } => user_id,
-                QuerySource::Anonymous => UserId::from(PrincipalId::new_anonymous()),
+                QuerySource::Anonymous => UserId::from(PrincipalId::default()),
             },
             receiver: query.receiver,
             method_name: query.method_name.clone(),

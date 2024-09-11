@@ -20,7 +20,6 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
@@ -30,6 +29,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
+use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -243,7 +243,7 @@ pub fn log_dirty_pages(
 /// inspect message, benchmarks, tests also have to initialize the round limits.
 /// In such cases the "round" should be considered as a trivial round consisting
 /// of a single message.
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
@@ -309,7 +309,7 @@ struct PausedExecutionRegistry {
 }
 
 // The replies that can be returned for a `stop_canister` request.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum StopCanisterReply {
     // The stop request was completed successfully.
     Completed,
@@ -339,7 +339,7 @@ pub struct ExecutionEnvironment {
 
 /// This is a helper enum that indicates whether the current DTS execution of
 /// install_code is the first execution or not.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum DtsInstallCodeStatus {
     StartingFirstExecution,
     ResumingPausedOrAbortedExecution,
@@ -397,6 +397,7 @@ impl ExecutionEnvironment {
             upload_wasm_chunk_instructions,
             config.embedders_config.wasm_max_size,
             canister_snapshot_baseline_instructions,
+            config.default_wasm_memory_limit,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -1499,7 +1500,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
                     let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.delete_canister_snapshot(*msg.sender(), &mut state, args)
+                        self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
                     });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
@@ -2143,7 +2144,7 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
-        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             &old_canister,
@@ -2192,6 +2193,7 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
+        round_limits: &mut RoundLimits,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2207,7 +2209,13 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .delete_canister_snapshot(sender, &mut canister, args.get_snapshot_id(), state)
+            .delete_canister_snapshot(
+                sender,
+                &mut canister,
+                args.get_snapshot_id(),
+                state,
+                round_limits,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
 
@@ -3561,6 +3569,11 @@ impl ExecutionEnvironment {
         )
     }
 
+    /// Returns the default value of `wasm_memory_limit` in canister settings.
+    pub fn default_wasm_memory_limit(&self) -> NumBytes {
+        self.config.default_wasm_memory_limit
+    }
+
     /// For testing purposes only.
     #[doc(hidden)]
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
@@ -3580,7 +3593,7 @@ impl ExecutionEnvironment {
 /// for compilation costs even when they aren't counted against the round
 /// limits. Only public for testing.
 #[doc(hidden)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompilationCostHandling {
     CountReducedAmount,
     CountFullAmount,

@@ -108,6 +108,7 @@ fn test_api_for_update(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
@@ -406,7 +407,7 @@ fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
     make_module_wat_with_write_fun(heap_size, write_fun)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,

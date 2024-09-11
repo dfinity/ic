@@ -68,7 +68,7 @@ impl Keccak256 {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 /// SHAKE256 hasher state.
 pub struct Shake256 {
     state: sha3::Shake256,
