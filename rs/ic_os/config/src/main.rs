@@ -59,7 +59,9 @@ pub fn main() -> Result<()> {
             setupos_config_json_path,
         }) => {
             // get config.ini variables
-            let (mut network_settings, verbose) = get_config_ini_settings(&config_ini_path)?;
+            let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
+            let mut network_settings = config_ini_settings.network_settings;
+            let verbose = config_ini_settings.verbose;
 
             // get deployment.json variables
             let deployment_json = read_deployment_file(&deployment_json_path)?;

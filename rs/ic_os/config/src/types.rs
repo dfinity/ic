@@ -94,3 +94,8 @@ pub struct Logging {
     pub elasticsearch_hosts: String,
     pub elasticsearch_tags: Option<String>,
 }
+
+pub struct ConfigIniSettings {
+    pub network_settings: NetworkSettings,
+    pub verbose: bool,
+}

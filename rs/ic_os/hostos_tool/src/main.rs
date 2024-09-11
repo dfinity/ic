@@ -56,7 +56,8 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
+            let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
+            let mut network_settings = config_ini_settings.network_settings;
 
             let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json);
@@ -76,7 +77,8 @@ pub fn main() -> Result<()> {
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
+            let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
+            let mut network_settings = config_ini_settings.network_settings;
 
             let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json);
@@ -102,7 +104,8 @@ pub fn main() -> Result<()> {
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
-            let (mut network_settings, _) = get_config_ini_settings(Path::new(&opts.config))?;
+            let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
+            let mut network_settings = config_ini_settings.network_settings;
 
             let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json);

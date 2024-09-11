@@ -10,7 +10,7 @@ use anyhow::bail;
 use anyhow::{Context, Result};
 
 pub mod types;
-use crate::types::NetworkSettings;
+use crate::types::{ConfigIniSettings, NetworkSettings};
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -59,7 +59,7 @@ fn is_valid_ipv6_prefix(ipv6_prefix: &str) -> bool {
     ipv6_prefix.len() <= 19 && format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok()
 }
 
-pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettings, bool)> {
+pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSettings> {
     let config_map: ConfigMap = config_map_from_path(config_file_path)?;
 
     let ipv6_prefix = config_map
@@ -134,7 +134,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
 
     let domain = config_map.get("domain").cloned();
 
-    let networking = crate::types::NetworkSettings {
+    let network_settings = NetworkSettings {
         ipv6_prefix,
         ipv6_address,
         ipv6_subnet,
@@ -151,7 +151,10 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<(NetworkSettin
         .map(|s| s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
-    Ok((networking, verbose))
+    Ok(ConfigIniSettings {
+        network_settings,
+        verbose,
+    })
 }
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
@@ -356,32 +359,41 @@ mod tests {
 
         let temp_file_path = temp_file.path();
 
-        let (networking, verbose) = get_config_ini_settings(&temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(&temp_file_path)?;
 
         assert_eq!(
-            networking.ipv6_prefix.unwrap(),
+            config_ini_settings.network_settings.ipv6_prefix.unwrap(),
             "2a00:fb01:400:200".to_string()
         );
         assert_eq!(
-            networking.ipv6_address.unwrap(),
+            config_ini_settings.network_settings.ipv6_address.unwrap(),
             "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
         );
         assert_eq!(
-            networking.ipv6_gateway,
+            config_ini_settings.network_settings.ipv6_gateway,
             "2a00:fb01:400:200::1".parse::<Ipv6Addr>()?
         );
-        assert_eq!(networking.ipv6_subnet, 64);
+        assert_eq!(config_ini_settings.network_settings.ipv6_subnet, 64);
         assert_eq!(
-            networking.ipv4_address.unwrap(),
+            config_ini_settings.network_settings.ipv4_address.unwrap(),
             "212.71.124.178".parse::<Ipv4Addr>()?
         );
         assert_eq!(
-            networking.ipv4_gateway.unwrap(),
+            config_ini_settings.network_settings.ipv4_gateway.unwrap(),
             "212.71.124.177".parse::<Ipv4Addr>()?
         );
-        assert_eq!(networking.ipv4_prefix_length.unwrap(), 28);
-        assert_eq!(networking.domain, Some("example.com".to_string()));
-        assert!(!verbose);
+        assert_eq!(
+            config_ini_settings
+                .network_settings
+                .ipv4_prefix_length
+                .unwrap(),
+            28
+        );
+        assert_eq!(
+            config_ini_settings.network_settings.domain,
+            Some("example.com".to_string())
+        );
+        assert!(!config_ini_settings.verbose);
 
         // Test ipv6_address without subnet length
         let mut temp_file_ipv6_address_subnet_length = NamedTempFile::new()?;
@@ -389,12 +401,12 @@ mod tests {
             temp_file_ipv6_address_subnet_length,
             "ipv6_address=2a00:fb01:400:200::"
         )?;
-        let (networking, _) = get_config_ini_settings(&temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(&temp_file_path)?;
         assert_eq!(
-            networking.ipv6_address.unwrap(),
+            config_ini_settings.network_settings.ipv6_address.unwrap(),
             "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
         );
-        assert_eq!(networking.ipv6_subnet, 64);
+        assert_eq!(config_ini_settings.network_settings.ipv6_subnet, 64);
 
         // Test missing ipv6
         let mut temp_file_missing = NamedTempFile::new()?;
