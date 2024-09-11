@@ -35,7 +35,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -127,10 +127,10 @@ fn compute_subnet_seed(
     hasher.finish()
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct RawTopologyInternal(pub BTreeMap<String, RawSubnetConfigInternal>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct RawSubnetConfigInternal {
     pub subnet_config: SubnetConfigInternal,
     pub time: SystemTime,
@@ -139,7 +139,7 @@ struct RawSubnetConfigInternal {
 #[derive(Clone)]
 struct TopologyInternal(pub BTreeMap<[u8; 32], SubnetConfigInternal>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
@@ -465,19 +465,24 @@ impl PocketIc {
                 builder = builder.with_subnet_id(subnet_id);
             }
 
-            if subnet_kind == SubnetKind::II {
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "dfx_test_key1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "test_key_1".to_string(),
-                }));
-                builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "key_1".to_string(),
-                }));
+            if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
+                for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+                    for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                        let key_id = SchnorrKeyId {
+                            algorithm,
+                            name: name.to_string(),
+                        };
+                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                    }
+                }
+
+                for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                    let key_id = EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: name.to_string(),
+                    };
+                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                }
             }
 
             let sm = builder.build_with_subnets(subnets.clone());
@@ -866,7 +871,7 @@ struct SubnetConfigInfo {
 // Operations on PocketIc
 
 // When raw (rest) types are cast to operations, errors can occur.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ConversionError {
     message: String,
 }
@@ -890,7 +895,7 @@ impl Operation for SetTime {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetTopology;
 
 impl Operation for GetTopology {
@@ -903,7 +908,7 @@ impl Operation for GetTopology {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetTime;
 
 impl Operation for GetTime {
@@ -918,7 +923,7 @@ impl Operation for GetTime {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct GetCanisterHttp;
 
 fn http_method_from(
@@ -1141,7 +1146,7 @@ impl Operation for MockCanisterHttp {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct PubKey {
     pub subnet_id: SubnetId,
 }
@@ -1160,7 +1165,7 @@ impl Operation for PubKey {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct Tick;
 
 impl Operation for Tick {
@@ -1176,7 +1181,7 @@ impl Operation for Tick {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct AdvanceTimeAndTick(pub Duration);
 
 impl Operation for AdvanceTimeAndTick {
@@ -1887,7 +1892,7 @@ impl Operation for SubnetReadStateRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum EffectivePrincipal {
     None,
     SubnetId(SubnetId),
@@ -1994,7 +1999,7 @@ impl CanisterCall {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SetStableMemory {
     pub canister_id: CanisterId,
     pub data: Vec<u8>,
@@ -2064,7 +2069,7 @@ impl Operation for SetStableMemory {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetStableMemory {
     pub canister_id: CanisterId,
 }

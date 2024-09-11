@@ -10,6 +10,10 @@ use ic_cdk::api::management_canister::http_request::{
     TransformFunc,
 };
 
+pub mod blocklist;
+mod types;
+pub use types::*;
+
 #[derive(Debug)]
 pub enum BitcoinTxError {
     Address(FromScriptError),
@@ -22,6 +26,12 @@ pub enum BitcoinTxError {
         code: RejectionCode,
         message: String,
     },
+}
+
+pub fn blocklist_contains(address: &Address) -> bool {
+    blocklist::BTC_ADDRESS_BLOCKLIST
+        .binary_search(&address.to_string().as_ref())
+        .is_ok()
 }
 
 pub async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTxError> {
@@ -105,6 +115,19 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
                 code: r,
                 message: m,
             })
+        }
+    }
+}
+
+mod test {
+    #[test]
+    fn blocklist_is_sorted() {
+        use crate::blocklist::BTC_ADDRESS_BLOCKLIST;
+        for (l, r) in BTC_ADDRESS_BLOCKLIST
+            .iter()
+            .zip(BTC_ADDRESS_BLOCKLIST.iter().skip(1))
+        {
+            assert!(l < r, "the block list is not sorted: {} >= {}", l, r);
         }
     }
 }

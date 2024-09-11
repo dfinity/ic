@@ -289,7 +289,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"length limit exceeded".to_string()));
+            .contains(&"Http body exceeds size limit of".to_string()));
     }
 
     #[tokio::test]

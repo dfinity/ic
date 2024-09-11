@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
 
 /// State of the recovery, i.e. which step are we on right now + arguments.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RecoveryState<T> {
     pub recovery_args: RecoveryArgs,
     pub subcommand_args: T,

@@ -1,4 +1,5 @@
 pub mod nns;
+pub mod sns;
 
 use anyhow::{anyhow, Result};
 use candid::{Decode, Encode, Principal};

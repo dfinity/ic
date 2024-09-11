@@ -30,7 +30,7 @@ use slog::Logger;
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
 
 const PORT: u32 = 8104;
-const VM_NAME: &str = "rosetta-neuron-disburse";
+const VM_NAME: &str = "neuron-disburse";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();

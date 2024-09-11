@@ -178,7 +178,7 @@ fn generate_all_node_keys(vault: &dyn CspVault) {
         .unwrap_or_else(|e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e));
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum NodeKeyGenerationError {
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),

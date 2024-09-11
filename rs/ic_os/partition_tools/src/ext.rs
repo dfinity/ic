@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Output, Stdio};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use itertools::Itertools;
 use pcre2::bytes::Regex;
 use tempfile::{tempdir, TempDir};
 use tokio::fs;
 use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, SeekFrom};
+use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
 use crate::partition;
@@ -89,32 +90,12 @@ impl Partition for ExtPartition {
             .spawn()
             .context("failed to run debugfs")?;
 
-        let mut stdin = cmd.stdin.as_mut().unwrap();
-        io::copy(
-            &mut indoc::formatdoc!(
-                r#"
-                cd {path}
-                rm {filename}
-                write {input} {filename}
-            "#,
-                path = output.parent().unwrap().to_str().unwrap(),
-                filename = output.file_name().unwrap().to_str().unwrap(),
-                input = &input.to_str().unwrap(),
-            )
-            .as_bytes(),
-            &mut stdin,
-        )
-        .await?;
-
-        let out = cmd.wait_with_output().await?;
-        if !out.status.success() {
-            return Err(anyhow!(
-                "debugfs failed: {}",
-                String::from_utf8(out.stderr)?
-            ));
-        }
-
-        Ok(())
+        cmd.stdin
+            .as_mut()
+            .unwrap()
+            .write_all(Self::debugfs_input(input, output).as_bytes())
+            .await?;
+        Self::check_debugfs_result(&cmd.wait_with_output().await?)
     }
 
     /// Read a file from a given partition
@@ -148,12 +129,7 @@ impl Partition for ExtPartition {
         .await?;
 
         let out = cmd.wait_with_output().await?;
-        if !out.status.success() {
-            return Err(anyhow!(
-                "debugfs failed: {}",
-                String::from_utf8(out.stderr)?
-            ));
-        }
+        Self::check_debugfs_result(&out)?;
 
         let cleaned_output = std::str::from_utf8(&out.stdout)?
             .lines()
@@ -229,6 +205,50 @@ impl ExtPartition {
         }
 
         Ok(())
+    }
+
+    fn check_debugfs_result(out: &Output) -> Result<()> {
+        let errors = std::str::from_utf8(&out.stderr)?
+            .lines()
+            .filter(|error| !error.starts_with("debugfs")) // version number
+            // Some errors we ignore.
+            .filter(|error| !error.contains("Ext2 directory already exists"))
+            .filter(|error| !error.contains("rm: File not found"))
+            .join("\n");
+        if !out.status.success() || !errors.is_empty() {
+            bail!("debugfs failed:\n{errors}");
+        }
+
+        Ok(())
+    }
+
+    fn debugfs_input(input: &Path, output: &Path) -> String {
+        // Commands that generate all parent dirs of input (debugfs doesn't
+        // support mkdir -p)
+        // Eg. if `output` is `/opt/ic/bin/something.txt`, `mkdir_all` will be:
+        // mkdir /opt
+        // mkdir /opt/ic
+        // mkdir /opt/ic/bin
+        let mkdir_all = output
+            .ancestors()
+            .skip(1) // skip `output` itself
+            .take_while(|path| path != &Path::new("/"))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .map(|path| format!("mkdir {}", path.display()))
+            .join("\n");
+        indoc::formatdoc!(
+            r#"
+            {mkdir_all}
+            cd {path}
+            rm {filename}
+            write {input} {filename}
+        "#,
+            path = output.parent().unwrap().to_str().unwrap(),
+            filename = output.file_name().unwrap().to_str().unwrap(),
+            input = &input.to_str().unwrap(),
+        )
     }
 }
 
@@ -352,5 +372,101 @@ mod test {
             "/extra_boot_args",
             Some("/boot"),
         );
+    }
+
+    #[test]
+    fn debugfs_input_test() {
+        assert_eq!(
+            ExtPartition::debugfs_input(
+                Path::new("path/to/input.sh"),
+                Path::new("/opt/ic/bin/output.sh")
+            ),
+            indoc::formatdoc!(
+                "mkdir /opt
+                 mkdir /opt/ic
+                 mkdir /opt/ic/bin
+                 cd /opt/ic/bin
+                 rm output.sh
+                 write path/to/input.sh output.sh
+               "
+            )
+        );
+    }
+
+    async fn create_empty_partition_img(path: &Path) -> Result<()> {
+        Command::new("/usr/bin/dd")
+            .args([
+                "if=/dev/zero",
+                &format!("of={}", path.display()),
+                "bs=1K",
+                "count=256",
+            ])
+            .spawn()
+            .unwrap()
+            .wait()
+            .await?;
+
+        Command::new("/usr/sbin/mkfs.ext4")
+            .args([path.as_os_str()])
+            .spawn()
+            .unwrap()
+            .wait()
+            .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn write_read_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path)
+            .await
+            .expect("Could not create test partition image");
+
+        let input_file1 = dir.path().join("input.txt");
+        let contents1 = b"Hello World!";
+        fs::write(input_file1.clone(), contents1).await.unwrap();
+
+        let input_file2 = dir.path().join("input2.txt");
+        let contents2 = b"Foo Bar";
+        fs::write(input_file2.clone(), contents2).await.unwrap();
+
+        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
+            .await
+            .expect("Could not open partition");
+
+        // Copy a file to the partition.
+        let target_path = Path::new("/home/ubuntu/files/out.txt");
+        partition
+            .write_file(&input_file1, target_path)
+            .await
+            .expect("Could not write file to partition");
+        let read = partition
+            .read_file(target_path)
+            .await
+            .expect("Could not read file from partition");
+
+        assert_eq!(read, std::str::from_utf8(contents1).unwrap());
+
+        // Overwrite the file that we just created.
+        partition
+            .write_file(&input_file2, target_path)
+            .await
+            .unwrap();
+        let read = partition
+            .read_file(target_path)
+            .await
+            .expect("Could not read file from partition");
+
+        assert_eq!(read, std::str::from_utf8(contents2).unwrap());
+
+        // Reading non-existing files should fail.
+        assert!(partition
+            .read_file(Path::new("/does/not/exist.txt"))
+            .await
+            .expect_err("Expected reading non-existing file to fail")
+            .to_string()
+            .contains("File not found"));
     }
 }

@@ -6,7 +6,6 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
@@ -16,6 +15,7 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;

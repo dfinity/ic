@@ -55,7 +55,7 @@ impl EncryptionKeyInstance {
 }
 
 /// A PoP could not be generated or verified
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum EncryptionKeyPopError {
     InvalidProof,
     InvalidInstance,
