@@ -17,14 +17,11 @@ colored = "2.0.0"
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-agent = { path = "../../agent" }
 ic-nervous-system-clients = { path = "../../clients" }
 ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-nns-governance = { path = "../../../nns/governance" }
-ic-sns-governance = { path = "../../../sns/governance" }
-ic-sns-swap = { path = "../../../sns/swap" }
-ic-sns-wasm = { path = "../../../nns/sns-wasm" }
 rgb = "0.8.37"
 serde = { workspace = true }
 tempfile = { workspace = true }

@@ -13,7 +13,7 @@ use ic_replicated_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
         system_state::CyclesUseCase,
-        testing::new_canister_queues_for_test,
+        testing::new_canister_output_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
         BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
@@ -564,7 +564,6 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState {
                 canister_root: "NOT_USED".into(),
-                session_nonce: None,
                 wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
                 wasm_memory: Memory::new_for_testing(),
                 stable_memory: Memory::new_for_testing(),
@@ -931,9 +930,7 @@ prop_compose! {
             max_size,
             min_signal_count,
             max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream
@@ -1098,7 +1095,7 @@ prop_compose! {
 ///
 /// Returns the generated `ReplicatedState`; the requests grouped by canister,
 /// in expected iteration order; and the total number of requests.
-fn new_replicated_state_for_test(
+fn new_replicated_state_with_output_queues(
     own_subnet_id: SubnetId,
     mut output_requests: Vec<Vec<Request>>,
     num_receivers: usize,
@@ -1111,8 +1108,11 @@ fn new_replicated_state_for_test(
     let mut requests = VecDeque::new();
 
     let subnet_queues = if let Some(reqs) = output_requests.pop() {
-        let (queues, raw_requests) =
-            new_canister_queues_for_test(reqs, CanisterId::from(own_subnet_id), num_receivers);
+        let (queues, raw_requests) = new_canister_output_queues_for_test(
+            reqs,
+            CanisterId::from(own_subnet_id),
+            num_receivers,
+        );
         total_requests += raw_requests.len();
         requests.push_back(raw_requests);
         Some(queues)
@@ -1128,8 +1128,11 @@ fn new_replicated_state_for_test(
             let mut canister = CanisterStateBuilder::new()
                 .with_canister_id(canister_id)
                 .build();
-            let (queues, raw_requests) =
-                new_canister_queues_for_test(reqs, canister_test_id(i as u64), num_receivers);
+            let (queues, raw_requests) = new_canister_output_queues_for_test(
+                reqs,
+                canister_test_id(i as u64),
+                num_receivers,
+            );
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
@@ -1160,7 +1163,7 @@ fn new_replicated_state_for_test(
 }
 
 prop_compose! {
-     pub fn arb_replicated_state_with_queues(
+     pub fn arb_replicated_state_with_output_queues(
         own_subnet_id: SubnetId,
         max_canisters: usize,
         max_requests_per_canister: usize,
@@ -1173,7 +1176,7 @@ prop_compose! {
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
 
-        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_with_output_queues(own_subnet_id, request_queues, num_receivers);
 
         // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
         // Note that subnet queues are always at the front which is why we need to pop them

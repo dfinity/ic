@@ -182,7 +182,7 @@
 
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, IDkgGossipMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
+    timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -194,24 +194,20 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::IDkgMessageId,
-    consensus::idkg::{IDkgBlockReader, IDkgMessageAttribute, RequestId},
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -235,8 +231,6 @@ pub(crate) use payload_verifier::{
     validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;
-
-use self::utils::get_context_request_id;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -438,164 +432,115 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgGossipImpl` implements the priority function and other gossip related
-/// functionality
-pub struct IDkgGossipImpl {
+/// Implements the BouncerFactory interface for IDkg.
+pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    metrics: IDkgGossipMetrics,
 }
 
-impl IDkgGossipImpl {
-    /// Builds a new IDkgGossipImpl component
+impl IDkgBouncer {
+    /// Builds a new IDkgBouncer component
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        metrics_registry: MetricsRegistry,
     ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
             state_reader,
-            metrics: IDkgGossipMetrics::new(metrics_registry),
         }
     }
 }
 
-struct IDkgPriorityFnArgs {
+struct IDkgBouncerArgs {
     finalized_height: Height,
-    #[allow(dead_code)]
     certified_height: Height,
-    requested_transcripts: BTreeSet<IDkgTranscriptId>,
-    requested_signatures: BTreeSet<RequestId>,
-    active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
-impl IDkgPriorityFnArgs {
+impl IDkgBouncerArgs {
     fn new(
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
     ) -> Self {
-        let mut requested_transcripts = BTreeSet::new();
-        for params in block_reader.requested_transcripts() {
-            requested_transcripts.insert(params.transcript_id);
-        }
-
-        let mut active_transcripts = BTreeSet::new();
-        for transcript_ref in block_reader.active_transcripts() {
-            active_transcripts.insert(transcript_ref.transcript_id);
-        }
-
-        let (certified_height, requested_signatures) = state_reader
-            .get_certified_state_snapshot()
-            .map_or(Default::default(), |snapshot| {
-                let request_contexts = snapshot
-                    .get_state()
-                    .signature_request_contexts()
-                    .values()
-                    .flat_map(get_context_request_id)
-                    .collect::<BTreeSet<_>>();
-
-                (snapshot.get_height(), request_contexts)
-            });
-
         Self {
             finalized_height: block_reader.tip_height(),
-            certified_height,
-            requested_transcripts,
-            requested_signatures,
-            active_transcripts,
+            certified_height: state_reader.latest_certified_height(),
         }
     }
 }
 
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_priority_function(
-        &self,
-        _idkg_pool: &Pool,
-    ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
+    fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        let metrics = self.metrics.clone();
-        Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
-            compute_priority(attr, subnet_id, &args, &metrics)
-        })
+        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        Box::new(move |id| compute_bouncer(id, subnet_id, &args))
+    }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
 
-fn compute_priority(
-    attr: &IDkgMessageAttribute,
+fn compute_bouncer(
+    id: &IDkgMessageId,
     subnet_id: SubnetId,
-    args: &IDkgPriorityFnArgs,
-    metrics: &IDkgGossipMetrics,
-) -> Priority {
-    match attr {
-        IDkgMessageAttribute::Dealing(transcript_id)
-        | IDkgMessageAttribute::DealingSupport(transcript_id) => {
+    args: &IDkgBouncerArgs,
+) -> BouncerValue {
+    match id {
+        IDkgMessageId::Dealing(_, data) => {
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
+            }
+
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::DealingSupport(_, data) => {
             // For xnet dealings(target side), always fetch the artifacts,
             // as the source_height from different subnet cannot be compared
             // anyways.
-            if *transcript_id.source_subnet() != subnet_id {
-                return Priority::FetchNow;
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
             }
 
-            let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.requested_transcripts.contains(transcript_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageAttribute::EcdsaSigShare(request_id)
-        | IDkgMessageAttribute::SchnorrSigShare(request_id) => {
-            if request_id.height <= args.certified_height {
-                if args.requested_signatures.contains(request_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+        IDkgMessageId::EcdsaSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageAttribute::Complaint(transcript_id)
-        | IDkgMessageAttribute::Opening(transcript_id) => {
-            let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.active_transcripts.contains(transcript_id)
-                    || args.requested_transcripts.contains(transcript_id)
-                {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+        IDkgMessageId::SchnorrSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::Complaint(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::Opening(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
             }
         }
     }
@@ -604,16 +549,24 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use self::test_utils::{
-        fake_completed_signature_request_context, fake_signature_request_context_with_pre_sig,
-        fake_state_with_signature_requests, TestIDkgBlockReader,
+        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
+        TestIDkgBlockReader,
     };
+    use self::utils::get_context_request_id;
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{IDkgUIDGenerator, PreSigId};
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
-    use test_utils::fake_ecdsa_master_public_key_id;
+    use ic_types::consensus::idkg::IDkgUIDGenerator;
+    use ic_types::consensus::idkg::{
+        complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
+        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
+    };
+    use ic_types::{
+        consensus::idkg::{RequestId, SigShareIdData},
+        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+    };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+
     use tests::test_utils::create_sig_inputs;
 
     #[test]
@@ -625,19 +578,10 @@ mod tests {
         let pre_sig_id = PreSigId(0);
         let context_with_quadruple =
             fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
-        let context_without_quadruple =
-            fake_signature_request_context_with_pre_sig(1, key_id.clone(), None);
-        let snapshot = fake_state_with_signature_requests(
-            height,
-            [
-                context_with_quadruple.clone(),
-                context_without_quadruple.clone(),
-            ],
-        );
         state_manager
             .get_mut()
-            .expect_get_certified_state_snapshot()
-            .returning(move || Some(Box::new(snapshot.clone()) as Box<_>));
+            .expect_latest_certified_height()
+            .returning(move || height);
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
@@ -649,106 +593,114 @@ mod tests {
         );
 
         // Only the context with matched quadruple should be in "requested"
-        let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
-        assert_eq!(args.requested_signatures.len(), 1);
-        assert_eq!(
-            args.requested_signatures.first().unwrap(),
-            &expected_request_id
-        );
     }
 
-    // Tests the priority computation for dealings/support.
+    fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {
+        IDkgArtifactIdData {
+            height: i.source_height(),
+            subnet_id: *i.source_subnet(),
+            hash: CryptoHash(vec![]),
+        }
+    }
+
+    fn get_fake_share_id_data(i: &RequestId) -> SigShareIdData {
+        SigShareIdData {
+            hash: CryptoHash(vec![]),
+            height: i.height,
+        }
+    }
+
+    // Tests the bouncer computation for dealings/support.
     #[test]
     fn test_idkg_priority_fn_dealing_support() {
-        let xnet_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
-        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
-        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
-        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+        let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
+        let local_subnet_id = SUBNET_2;
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
 
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut requested_transcripts = BTreeSet::new();
-        requested_transcripts.insert(transcript_id_fetch_1);
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageAttribute::Dealing(xnet_transcript_id),
-                Priority::FetchNow,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&xnet_transcript_id, &NODE_1),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_fetch_1, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_fetch_2, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_stash),
-                Priority::Stash,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_stash, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             // Dealing support
             (
-                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
-                Priority::FetchNow,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
-                Priority::Stash,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
-    // Tests the priority computation for sig shares.
+    // Tests the bouncer computation for sig shares.
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let mut uid_generator = IDkgUIDGenerator::new(subnet_id, Height::new(0));
+        let local_subnet_id = SUBNET_2;
+        let mut uid_generator = IDkgUIDGenerator::new(local_subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
             pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
-        };
-        let request_id_drop = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [2; 32],
-            height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
             pre_signature_id: uid_generator.next_pre_signature_id(),
@@ -760,138 +712,138 @@ mod tests {
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
-
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut requested_signatures = BTreeSet::new();
-        requested_signatures.insert(request_id_fetch_1.clone());
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts: BTreeSet::new(),
-            requested_signatures,
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
-                Priority::Drop,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_drop.clone()),
-                Priority::Drop,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_2.clone()),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_stash.clone()),
-                Priority::Stash,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
     // Tests the priority computation for complaints/openings.
     #[test]
     fn test_idkg_priority_fn_complaint_opening() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
-        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
-        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
-        let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
+        let local_subnet_id = SUBNET_2;
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
+        let transcript_id_fetch_3 = IDkgTranscriptId::new(local_subnet_id, 5, Height::from(80));
 
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut active_transcripts = BTreeSet::new();
-        active_transcripts.insert(transcript_id_fetch_1);
-        let mut requested_transcripts = BTreeSet::new();
-        requested_transcripts.insert(transcript_id_fetch_3);
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts,
         };
 
         let tests = vec![
             // Complaints
             (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_2),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_stash),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_3),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_3).into(),
+                ),
+                BouncerValue::Wants,
             ),
             // Openings
             (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_2),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_stash),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_3),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_3).into(),
+                ),
+                BouncerValue::Wants,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 }

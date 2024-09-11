@@ -1,6 +1,5 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    enable_new_canister_management_topics,
     pb::v1::{
         update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
     },
@@ -17,12 +16,6 @@ use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
 
 impl UpdateCanisterSettings {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !enable_new_canister_management_topics() {
-            return Err(invalid_proposal_error(
-                "UpdateCanisterSettings proposal is not yet supported",
-            ));
-        }
-
         let _ = self.valid_canister_id()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;
@@ -133,35 +126,12 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::governance_error::ErrorType;
-    #[cfg(feature = "test")]
     use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
-    #[cfg(feature = "test")]
     use candid::Decode;
-    #[cfg(feature = "test")]
     use ic_base_types::CanisterId;
     use ic_nns_constants::LEDGER_CANISTER_ID;
-    #[cfg(feature = "test")]
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn update_canister_settings_disabled() {
-        let update_canister_settings = UpdateCanisterSettings {
-            canister_id: Some(LEDGER_CANISTER_ID.get()),
-            settings: Some(Default::default()),
-        };
-
-        assert_eq!(
-            update_canister_settings.validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal invalid because of UpdateCanisterSettings proposal is not yet supported"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_invalid_update_canister_settings() {
         let valid_update_canister_settings = UpdateCanisterSettings {
@@ -236,7 +206,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_update_ledger_canister_settings() {
         let update_ledger_canister_settings = UpdateCanisterSettings {
@@ -286,7 +255,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_update_root_canister_settings() {
         let update_root_canister_settings = UpdateCanisterSettings {
@@ -333,7 +301,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_update_canister_settings_topic_mapping() {
         let test_cases = vec![

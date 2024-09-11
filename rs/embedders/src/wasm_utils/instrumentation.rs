@@ -1415,6 +1415,7 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
@@ -1425,6 +1426,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1433,6 +1435,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1443,7 +1446,7 @@ fn export_additional_symbols<'a>(
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
@@ -1452,7 +1455,7 @@ enum Scope {
 
 // Represents the type of the cost operand on the stack.
 // Needed to determine the correct instruction to decrement the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CostOperandOnStack {
     X32Bit,
     X64Bit,
@@ -1461,7 +1464,7 @@ enum CostOperandOnStack {
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
         scope: Scope,
@@ -2067,6 +2070,7 @@ fn update_memories(
             shared: false,
             initial: wasm_bytemap_size_in_wasm_pages,
             maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2083,6 +2087,7 @@ fn update_memories(
             shared: false,
             initial: 0,
             maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2097,6 +2102,7 @@ fn update_memories(
             shared: false,
             initial: stable_bytemap_size_in_wasm_pages,
             maximum: Some(stable_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {

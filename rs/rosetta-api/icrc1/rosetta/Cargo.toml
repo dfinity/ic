@@ -21,7 +21,7 @@ hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-certification = { workspace = true }
-ic-constants = { path = "../../../constants" }
+ic-limits = { path = "../../../limits" }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-icrc1 = { path = ".." }
 ic-icrc1-ledger = { path = "../ledger" }
@@ -38,7 +38,7 @@ indicatif = "0.17.3"
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"

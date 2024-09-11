@@ -16,26 +16,24 @@ tls = []
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = "1"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
+arc-swap = "1.7.1"
+async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
-axum = "0.6.1"
-axum-extra = "=0.9.1"
-axum-server = { version = "0.5.1", features = ["tls-rustls"] }
+axum = { workspace = true }
+axum-extra = "0.9.3"
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-dashmap = "5.3.4"
+dashmap = "6.1.0"
 ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
-http = "0.2.12"
-http-body = "0.4"
+http = { workspace = true }
+http-body = { workspace = true }
 humantime = "2.1"
-hyper = "0.14.18"
-hyper-rustls = { version = "0.24.2", features = ["http2"] }
 ic-base-types = { path = "../../types/base_types" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "9abf1e385e4a32279de005d0019c17774e164828" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
@@ -55,12 +53,11 @@ ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-instant-acme = "0.7.1"
 lazy_static = { workspace = true }
-little-loadshedder = "0.1.0"
+little-loadshedder = "0.2.0"
 maxminddb = "0.24"
 mockall = { workspace = true }
-moka = { version = "0.12", features = ["sync", "future"] }
+moka = { version = "0.12.8", features = ["sync", "future"] }
 nftables = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
@@ -68,16 +65,9 @@ rand = { workspace = true }
 ratelimit = "0.9.1"
 rcgen = { workspace = true }
 regex = { workspace = true }
-reqwest = { version = "0.11.27", default-features = false, features = [
-    "blocking",
-    "json",
-    "multipart",
-    "rustls-tls",
-    "rustls-tls-webpki-roots",
-    "stream",
-] }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
-rustls-pemfile = "2.1.2"
+reqwest = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = "2.1.3"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -91,30 +81,21 @@ thiserror = { workspace = true }
 tikv-jemalloc-ctl = "0.5"
 tikv-jemallocator = "0.5"
 tokio = { workspace = true }
-tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = { workspace = true }
 tower = { workspace = true }
-tower-http = { version = "0.4.4", features = [
-    "trace",
-    "request-id",
-    "util",
-    "compression-full",
-] }
-tower_governor = "0.1"
+tower-http = { workspace = true }
+tower_governor = "0.4.2"
 tracing = { workspace = true }
-tracing-core = "0.1.32"
 tracing-serde = "0.1.3"
 tracing-slog = "0.2"
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 x509-parser = { workspace = true }
-zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 indoc = "1.0"
 tempfile = { workspace = true }
-wiremock = "=0.5.19"
 
 [[bench]]
 name = "perf"

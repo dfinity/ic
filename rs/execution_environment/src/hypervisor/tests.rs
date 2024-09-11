@@ -3925,7 +3925,7 @@ fn write_after_grow() {
     );
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 enum Operation {
     Read(i32),

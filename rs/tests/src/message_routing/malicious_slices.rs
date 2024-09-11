@@ -35,7 +35,7 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,

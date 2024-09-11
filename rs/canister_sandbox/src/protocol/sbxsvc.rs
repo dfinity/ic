@@ -30,18 +30,18 @@ use super::{
 /// this RPC (controller may perform a "hard kill" after timeout).
 ///
 /// We do not implement graceful termination.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TerminateRequest {}
 
 /// Ack signal to the controller that termination was complete.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TerminateReply {}
 
 /// Register wasm for a canister that can be executed in the sandbox.
 /// Multiple wasms can be registered to the same sandbox (in order to
 /// support multiple code states e.g. during upgrades). A single wasm
 /// instance can be used concurrently for multiple executions.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmRequest {
     /// Id used to later refer to this canister runner. Must be unique
     /// per sandbox instance.
@@ -57,10 +57,10 @@ pub struct OpenWasmRequest {
 }
 
 /// Reply to an `OpenWasmRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmReply(pub HypervisorResult<(CompilationResult, SerializedModule)>);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmSerializedRequest {
     /// Id used to later refer to this canister runner. Must be unique
     /// per sandbox instance.
@@ -76,31 +76,31 @@ pub struct OpenWasmSerializedRequest {
 }
 
 /// Reply to an `OpenWasmRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmSerializedReply(pub HypervisorResult<()>);
 
 /// Request to close the indicated wasm object.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CloseWasmRequest {
     pub wasm_id: WasmId,
 }
 
 /// Reply to a `CloseWasm` request.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CloseWasmReply {
     pub success: bool,
 }
 
 /// We build state on the tip or branch off at some specific round via
 /// tagged state.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum StateBranch {
     TipOfTheTip,
     Round(structs::Round),
 }
 
 /// Represents a snapshot of a memory that can be sent to the sandbox process.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MemorySerialization {
     pub page_map: PageMapSerialization,
     pub num_wasm_pages: NumWasmPages,
@@ -164,7 +164,7 @@ impl EnumerateInnerFileDescriptors for PageAllocatorSerialization {
 }
 
 /// Describe a request to open a particular memory.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenMemoryRequest {
     pub memory_id: MemoryId,
     pub memory: MemorySerialization,
@@ -178,25 +178,25 @@ impl EnumerateInnerFileDescriptors for OpenMemoryRequest {
 
 /// Ack to the controller that memory was opened or failed to open. A
 /// failure to open will lead to a panic in the controller.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenMemoryReply {
     pub success: bool,
 }
 
 /// Request the indicated memory to be purged and dropped.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CloseMemoryRequest {
     pub memory_id: MemoryId,
 }
 
 /// Ack memory was successfully closed or not.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CloseMemoryReply {
     pub success: bool,
 }
 
 /// Start execution of a canister.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StartExecutionRequest {
     /// Id of the newly created invocation of this canister. This is
     /// used to identify the running instance in callbacks as well as
@@ -218,38 +218,38 @@ pub struct StartExecutionRequest {
 }
 
 /// Reply to an `StartExecutionRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StartExecutionReply {
     pub success: bool,
 }
 
 /// Resume execution.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ResumeExecutionRequest {
     /// Id of the previously paused execution.
     pub exec_id: ExecId,
 }
 
 /// Reply to an `ResumeExecutionRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ResumeExecutionReply {
     pub success: bool,
 }
 
 /// Abort execution.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct AbortExecutionRequest {
     /// Id of the previously paused execution.
     pub exec_id: ExecId,
 }
 
 /// Reply to an `AbortExecutionRequest`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct AbortExecutionReply {
     pub success: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateRequest {
     pub wasm_id: WasmId,
     #[serde(with = "serde_bytes")]
@@ -267,7 +267,7 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateSuccessReply {
     pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
@@ -275,10 +275,10 @@ pub struct CreateExecutionStateSuccessReply {
     pub serialized_module: SerializedModule,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSuccessReply>);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateSerializedRequest {
     pub wasm_id: WasmId,
     /// The serialization of a previously compiled `wasmtime::Module`.
@@ -301,7 +301,7 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateSerializedRequest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateSerializedSuccessReply {
     pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
@@ -309,14 +309,14 @@ pub struct CreateExecutionStateSerializedSuccessReply {
     pub total_sandbox_time: Duration,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateSerializedReply(
     pub HypervisorResult<CreateExecutionStateSerializedSuccessReply>,
 );
 
 /// All possible requests to a sandboxed process.
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Request {
     Terminate(TerminateRequest),
     OpenWasm(OpenWasmRequest),
@@ -351,7 +351,7 @@ impl EnumerateInnerFileDescriptors for Request {
 
 /// All ack replies by the sandboxed process to the controller.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Reply {
     Terminate(TerminateReply),
     OpenWasm(OpenWasmReply),

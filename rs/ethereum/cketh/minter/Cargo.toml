@@ -24,7 +24,7 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
 ic-crypto-sha3 = { path = "../../../crypto/sha3" }
 ic-ethereum-types = { path = "../../types" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
@@ -63,7 +63,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/rep
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 maplit = "1"
-proptest = "1.0"
+proptest = { workspace = true }
 rand = { workspace = true }
 scraper = "0.17.1"
 tempfile = { workspace = true }

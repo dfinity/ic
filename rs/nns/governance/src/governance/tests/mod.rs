@@ -23,6 +23,7 @@ use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
 mod neurons_fund;
+mod node_provider_rewards;
 mod stake_maturity;
 
 #[test]
@@ -508,7 +509,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 #[cfg(feature = "test")]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
+mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
@@ -546,23 +547,49 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                    .clone(),
-                proposal_id,
-                random_swap_start_time: GlobalTimeOfDay {
+        // Step 2: Call the code under test.
+        let converted = {
+            let create_service_nervous_system =
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+            // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+            // is inlined from `Governance::make_sns_init_payload`.
+            let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+                let random_swap_start_time = GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
-                },
+                };
+
+                let start_time = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.start_time);
+
+                let duration = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.duration);
+
+                CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                    start_time.unwrap_or(random_swap_start_time),
+                    duration.unwrap_or_default(),
+                    current_timestamp_seconds,
+                )
+                .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
+            };
+
+            let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system).unwrap();
+
+            SnsInitPayload {
                 neurons_fund_participation_constraints: Some(
                     NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
                 ),
-            };
+                nns_proposal_id: Some(proposal_id),
+                swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+                swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+                ..sns_init_payload
+            }
+        };
 
-        // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+        converted.validate_post_execution().unwrap();
 
         // Step 3: Inspect the result.
 
@@ -1622,55 +1649,6 @@ fn topic_min_max_test() {
         assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
         assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
     }
-}
-
-#[test]
-fn test_node_provider_rewards_read_from_correct_sources() {
-    let rewards_1 = MonthlyNodeProviderRewards {
-        timestamp: 1,
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let rewards_2 = MonthlyNodeProviderRewards {
-        timestamp: 2,
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let mut governance = Governance::new(
-        GovernanceProto {
-            most_recent_monthly_node_provider_rewards: Some(rewards_1.clone()),
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 100)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    let result_1 = governance.get_most_recent_monthly_node_provider_rewards();
-
-    assert_eq!(result_1.unwrap(), rewards_1);
-
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
-    // TODO stop recording this in heap data
-    assert_eq!(
-        governance
-            .heap_data
-            .most_recent_monthly_node_provider_rewards,
-        Some(rewards_2.clone())
-    );
-
-    let result_2 = governance.get_most_recent_monthly_node_provider_rewards();
-    assert_eq!(result_2.unwrap(), rewards_2);
 }
 
 #[cfg(feature = "test")]

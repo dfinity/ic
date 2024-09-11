@@ -364,6 +364,12 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["generate_change_set"])
             .start_timer();
         let mut change_set = Vec::new();
+
+        // Whenever we have artifacts to purge, we insert the purge change actions before everything
+        // else, to avoid having in the validated pool artifacts belonging to different epochs and
+        // hence preserving the expected maximal number of artifacts in the pool.
+        change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
+
         let finalized_height = self.consensus_pool_cache.finalized_block().height();
 
         if self
@@ -384,9 +390,6 @@ impl CanisterHttpPoolManagerImpl {
             canister_http_pool,
             finalized_height,
         ));
-
-        // Purge items in the pool that are no longer needed
-        change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
 
         self.metrics
             .in_client_requests

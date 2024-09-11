@@ -12,7 +12,7 @@ use prometheus::{
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, ScopedMetrics,
+    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -27,7 +27,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
-    pub(super) canister_log_memory_usage: Histogram,
+    pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
+    pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -111,6 +112,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
+    pub(super) canister_snapshots_memory_usage: IntGauge,
+    pub(super) num_canister_snapshots: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -120,6 +123,9 @@ pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
 /// Alert for call contexts older than this cutoff (one day).
 pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
+
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -144,10 +150,31 @@ impl SchedulerMetrics {
                 "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
             ),
+            // TODO(EXC-1722): remove after migrating to v2.
             canister_log_memory_usage: memory_histogram(
                 "canister_log_memory_usage_bytes",
                 "Canisters log memory usage distribution in bytes.",
                 metrics_registry,
+            ),
+            canister_log_memory_usage_v2: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v2",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                ])
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
@@ -189,8 +216,8 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
-                // 1, 2, 5, …, 1000, 2000, 5000
-                decimal_buckets(0, 3),
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",
@@ -674,6 +701,14 @@ impl SchedulerMetrics {
             stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
+            ),
+            canister_snapshots_memory_usage: metrics_registry.int_gauge(
+                "scheduler_canister_snapshots_memory_usage_bytes",
+                "Canisters total snapshots memory usage in bytes.",
+            ),
+            num_canister_snapshots: metrics_registry.int_gauge(
+                "scheduler_num_canister_snapshots",
+                "Total number of canister snapshots on this subnet.",
             ),
         }
     }
