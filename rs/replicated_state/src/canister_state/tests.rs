@@ -6,7 +6,7 @@ use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
+    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase, OnLowWasmMemoryHookStatus,
     MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -987,4 +987,93 @@ fn reverts_stopping_status_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
+}
+
+const GIB: u64 = 1 << 30;
+
+fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+    wasm_memory_threshold: u64,
+    memory_allocation: Option<u64>,
+    wasm_memory_limit: Option<u64>,
+    used_stable_memory: u64,
+    used_wasm_memory: u64,
+) -> bool {
+    let wasm_memory_limit = if let Some(wasm_memory_limit) = wasm_memory_limit {
+        wasm_memory_limit
+    } else {
+        4 * GIB
+    };
+
+    let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
+        std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+    } else {
+        wasm_memory_limit
+    };
+
+    wasm_capacity < used_wasm_memory + wasm_memory_threshold
+}
+
+fn helper_test_on_low_wasm_memory_hook(
+    start_status: OnLowWasmMemoryHookStatus,
+    status_if_condition_satisfied: OnLowWasmMemoryHookStatus,
+) {
+    for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+        for memory_allocation in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)] {
+            for wasm_memory_limit in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+            {
+                for used_stable_memory in [0, GIB] {
+                    for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                        let mut hook_status = start_status.clone();
+
+                        hook_status.update(
+                            wasm_memory_threshold.into(),
+                            memory_allocation.map(|m| m.into()),
+                            wasm_memory_limit.map(|m| m.into()),
+                            used_stable_memory.into(),
+                            used_wasm_memory.into(),
+                        );
+
+                        assert_eq!(
+                            hook_status,
+                            if helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                                wasm_memory_threshold,
+                                memory_allocation,
+                                wasm_memory_limit,
+                                used_stable_memory,
+                                used_wasm_memory
+                            ) {
+                                status_if_condition_satisfied.clone()
+                            } else {
+                                OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+                            }
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
+    helper_test_on_low_wasm_memory_hook(
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::Ready,
+    );
+}
+
+#[test]
+fn test_on_low_wasm_memory_hook_start_status_ready() {
+    helper_test_on_low_wasm_memory_hook(
+        OnLowWasmMemoryHookStatus::Ready,
+        OnLowWasmMemoryHookStatus::Ready,
+    );
+}
+
+#[test]
+fn test_on_low_wasm_memory_hook_start_status_executed() {
+    helper_test_on_low_wasm_memory_hook(
+        OnLowWasmMemoryHookStatus::Executed,
+        OnLowWasmMemoryHookStatus::Executed,
+    );
 }
