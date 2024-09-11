@@ -1,5 +1,5 @@
 {
-  "checksum": "6f819e2e7d57c9da3b4073499d88547d5caeeba876466f24cc844186ba607842",
+  "checksum": "9720cc8acc4631be0712d005f92ada5d2f0a48086a3d12f44dc447bf56eac023",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18006,7 +18006,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "ic-wasm 0.8.1",
+              "id": "ic-wasm 0.8.4",
               "target": "ic_wasm"
             },
             {
@@ -30707,14 +30707,14 @@
       ],
       "license_file": null
     },
-    "ic-wasm 0.8.1": {
+    "ic-wasm 0.8.4": {
       "name": "ic-wasm",
-      "version": "0.8.1",
+      "version": "0.8.4",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.8.1/download",
-          "sha256": "941376953c00628d8edae0adcad4b6e882c01cbfd5416d2ac2bc5fb709927737"
+          "url": "https://static.crates.io/crates/ic-wasm/0.8.4/download",
+          "sha256": "45bc33855672981ae4a2f4e77c1a77d1bdc0756fb1b36ad0dbe47df77a955e2d"
         }
       },
       "targets": [
@@ -30799,7 +30799,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.1"
+        "version": "0.8.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -77961,7 +77961,7 @@
   },
   "binary_crates": [
     "canbench 0.1.4",
-    "ic-wasm 0.8.1",
+    "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -79149,7 +79149,7 @@
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.37.0",
     "ic-verify-bls-signature 0.6.0",
-    "ic-wasm 0.8.1",
+    "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
     "ic_bls12_381 0.10.0",
