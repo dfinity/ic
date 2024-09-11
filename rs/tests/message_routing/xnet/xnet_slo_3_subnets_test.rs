@@ -16,7 +16,7 @@ const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 fn main() -> Result<()> {
-    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);
+    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE).with_prometheus();
     let test = config.clone().test();
     SystemTestGroup::new()
         .with_setup(config.build())
