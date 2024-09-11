@@ -270,7 +270,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "burn": crate.spec(
                 version = "^0.14.0",
                 features = [
-                    "wgpu",
+                    "candle",
                 ],
                 default_features = False,
             ),

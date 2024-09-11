@@ -3395,7 +3395,7 @@ impl SystemApi for SystemApiImpl {
 //        println!("a : {:?}", tensor_a);
 //        println!("b : {:?}", tensor_b);
 
-        use burn::backend::Wgpu as Backend;
+        use burn::backend::Candle as Backend;
         use burn::prelude::Tensor;
         use burn::prelude::TensorData;
         use std::time::Instant;
