@@ -322,7 +322,11 @@ mod tests {
         assert_eq!(config_map.get("key3"), Some(&"value3".to_string()));
         assert_eq!(config_map.get("bad_key"), None);
 
-        // CRLF test
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_map_from_path_crlf() -> Result<()> {
         let mut temp_file_crlf = NamedTempFile::new()?;
         let file_path_crlf = temp_file_crlf.path().to_path_buf();
 
@@ -332,10 +336,7 @@ mod tests {
 
         assert_eq!(config_map_crlf.get("key4"), Some(&"value4".to_string()));
         assert_eq!(config_map_crlf.get("key5"), Some(&"value5".to_string()));
-        assert_eq!(config_map.get("bad_key"), None);
-
-        std::fs::remove_file(&file_path)?;
-        std::fs::remove_file(&file_path_crlf)?;
+        assert_eq!(config_map_crlf.get("bad_key"), None);
 
         Ok(())
     }
