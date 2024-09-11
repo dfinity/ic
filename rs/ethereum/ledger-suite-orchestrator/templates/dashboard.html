@@ -81,6 +81,31 @@
         {% endfor %}
         {%- endif %}
 
+        {% if !other_canisters.is_empty() -%}
+        <h1 id="other-canisters">Other Managed Canisters</h1>
+        {%- for (symbol, canisters) in other_canisters %}
+        <h2 id="other-canisters-{{symbol}}">{{symbol}}</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Version installed</th>
+            </tr>
+            </thead>
+            <tbody>
+            {%- for canister in canisters %}
+            <tr>
+                <td>{{ canister.canister_id }}</td>
+                <td>{{ canister.canister_type }}</td>
+                <td>{{ canister.installed_from }}</td>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endfor %}
+        {%- endif %}
+
         {% if !wasm_store.is_empty() -%}
         <h1 id="wasm-store">WASM Store</h1>
         <table>

@@ -282,7 +282,13 @@ impl CanisterHttpService for CanisterHttp {
                 .request_errors
                 .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                 .inc();
-            Status::new(tonic::Code::OutOfRange, err.to_string())
+            Status::new(
+                tonic::Code::OutOfRange,
+                format!(
+                    "Http body exceeds size limit of {} bytes.",
+                    req.max_response_size_bytes
+                ),
+            )
         })?;
 
         self.metrics
