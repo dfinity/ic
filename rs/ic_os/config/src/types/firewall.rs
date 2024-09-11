@@ -211,11 +211,105 @@ pub struct FirewallRule {
     pub comment: String,
 }
 
+impl FirewallRule {
+    fn as_nftables(
+        &self,
+        destination: &FirewallRuleDestination,
+        ip_version: &str,
+    ) -> Option<String> {
+        if (self.to == *destination || self.to == FirewallRuleDestination::Both)
+            && (match self.from {
+                IpNet::V6(_) => ip_version == "ip6",
+                IpNet::V4(_) => ip_version == "ip",
+            })
+        {
+            Some(format!(
+                "{}\t\t{} saddr {} ct state new{} {}",
+                match self.comment.as_str() {
+                    "" => "".to_string(),
+                    &_ => self
+                        .comment
+                        .split("\n")
+                        .map(|c| format!("\t\t# {}\n", c))
+                        .collect::<Vec<String>>()
+                        .join(""),
+                },
+                ip_version,
+                self.from,
+                match self.protocol {
+                    FirewallRuleProtocol::All => "".to_string(),
+                    _ => format!(
+                        " {}{}{}{}",
+                        self.protocol.name(),
+                        match &self.from_ports {
+                            None => "".to_string(),
+                            Some(s) => format!(" sport {}", s.as_nft_interval()),
+                        },
+                        match &self.to_ports {
+                            None => "".to_string(),
+                            Some(s) => format!(" dport {}", s.as_nft_interval()),
+                        },
+                        match (&self.from_ports, &self.to_ports) {
+                            (None, None) => " flags syn".to_string(),
+                            _ => "".to_string(),
+                        },
+                    ),
+                },
+                match self.action {
+                    FirewallRuleAction::Accept => "accept",
+                    FirewallRuleAction::Drop => "drop",
+                }
+            ))
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct FirewallSettings {
     pub rules: Vec<FirewallRule>,
 }
 
+impl FirewallSettings {
+    /// Render a list of firewall rules to an NFT script.
+    ///
+    /// In the generated script, the chains are first created, then flushed,
+    /// then filled, such that loading them (which is atomic) can never fail.
+    pub fn as_nftables(&self, destination: &FirewallRuleDestination) -> String {
+        ["ip", "ip6"]
+            .into_iter()
+            .map(|t| {
+                format!(
+                    "# Create the provider_INPUT chain.
+table {} filter {{
+\tchain provider_INPUT {{
+\t}}
+}}
+
+# Flush the provider_INPUT chain.
+flush chain {} filter provider_INPUT
+
+# Fill the provider_INPUT chain.
+table {} filter {{
+\tchain provider_INPUT {{
+{}\t}}
+}}",
+                    t,
+                    t,
+                    t,
+                    self.rules
+                        .iter()
+                        .filter_map(|r| r.as_nftables(destination, t))
+                        .map(|text| format!("{}\n", text))
+                        .collect::<Vec<String>>()
+                        .join(""),
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
