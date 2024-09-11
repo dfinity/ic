@@ -274,9 +274,15 @@ mod tests {
 
     #[test]
     fn test_is_valid_ipv6_prefix() {
+        // Valid prefixes
         assert!(is_valid_ipv6_prefix("2a00:1111:1111:1111"));
         assert!(is_valid_ipv6_prefix("2a00:111:11:11"));
         assert!(is_valid_ipv6_prefix("2602:fb2b:100:10"));
+
+        // Invalid prefixes
+        assert!(!is_valid_ipv6_prefix("2a00:1111:1111:1111:")); // Trailing colon
+        assert!(!is_valid_ipv6_prefix("2a00:1111:1111:1111:1111:1111")); // Too long
+        assert!(!is_valid_ipv6_prefix("abcd::1234:5678")); // Contains "::"
     }
 
     #[test]
