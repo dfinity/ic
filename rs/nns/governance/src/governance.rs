@@ -406,6 +406,7 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::ReviseElectedGuestosVersions
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
@@ -962,6 +963,8 @@ impl Action {
                     None => false,
                 }
             }
+            Action::InstallCode(_) => true,
+            Action::UpdateCanisterSettings(_) => true,
             _ => false,
         }
     }
