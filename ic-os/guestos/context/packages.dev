@@ -26,6 +26,8 @@ linux-tools-virtual-hwe-24.04
 
 # performance testing additions
 fio
+stress-ng
+sysbench
 bpftrace
 linux-tools-common
 linux-tools-generic
@@ -35,9 +37,3 @@ perf-tools-unstable
 xz-utils
 # static busybox for various missing utilities and to have a static binary with less noise
 busybox-static
-
-stress-ng
-sysbench
-fio
-build-essential
-mpich
