@@ -306,7 +306,7 @@ impl SystemStateChanges {
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        system_state.on_low_wasm_memory_hook_status = self.on_low_wasm_memory_hook_status;
+        system_state.set_on_low_wasm_memory_hook_status(self.on_low_wasm_memory_hook_status);
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.

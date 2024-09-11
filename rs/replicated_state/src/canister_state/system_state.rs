@@ -373,7 +373,7 @@ pub struct SystemState {
     pub snapshots_memory_usage: NumBytes,
 
     /// Status of low_on_wasm_memory hook execution.
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// A wrapper around the different canister statuses.
@@ -1660,6 +1660,14 @@ impl SystemState {
             }) => Some(request),
             _ => None,
         }
+    }
+
+    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
+        self.on_low_wasm_memory_hook_status = status;
+    }
+
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> &OnLowWasmMemoryHookStatus {
+        &self.on_low_wasm_memory_hook_status
     }
 }
 

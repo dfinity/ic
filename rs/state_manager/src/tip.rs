@@ -1079,7 +1079,7 @@ fn serialize_canister_to_tip(
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             on_low_wasm_memory_hook_status: canister_state
                 .system_state
-                .on_low_wasm_memory_hook_status
+                .get_on_low_wasm_memory_hook_status()
                 .clone(),
         }
         .into(),
