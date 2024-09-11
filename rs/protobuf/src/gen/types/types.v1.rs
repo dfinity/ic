@@ -324,6 +324,7 @@ pub enum RejectCode {
     DestinationInvalid = 3,
     CanisterReject = 4,
     CanisterError = 5,
+    SysUnknown = 6,
 }
 impl RejectCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -338,6 +339,7 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
             RejectCode::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
             RejectCode::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+            RejectCode::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -349,6 +351,7 @@ impl RejectCode {
             "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
             "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
             "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
+            "REJECT_CODE_SYS_UNKNOWN" => Some(Self::SysUnknown),
             _ => None,
         }
     }

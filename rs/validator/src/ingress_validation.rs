@@ -1,8 +1,8 @@
 use crate::webauthn::validate_webauthn_sig;
-use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
+use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::crypto::threshold_sig::RootOfTrustProvider;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
 use ic_types::messages::{Query, ReadState, SignedIngressContent};
