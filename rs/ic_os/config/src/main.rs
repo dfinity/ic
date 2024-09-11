@@ -58,49 +58,40 @@ pub fn main() -> Result<()> {
             node_operator_private_key_path,
             setupos_config_json_path,
         }) => {
-            let ssh_authorized_keys_path = ssh_authorized_keys_path
-                .exists()
-                .then_some(ssh_authorized_keys_path);
-
-            let node_operator_private_key_path = node_operator_private_key_path
-                .exists()
-                .then_some(node_operator_private_key_path);
-
             // get config.ini variables
             let (mut network_settings, verbose) = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
             let deployment_json = read_deployment_file(&deployment_json_path)?;
-            let vm_memory = deployment_json.resources.memory;
-            let vm_cpu = deployment_json
-                .resources
-                .cpu
-                .clone()
-                .unwrap_or("kvm".to_string());
-            let nns_urls = deployment_json.nns.url.clone();
-            let hostname = deployment_json.deployment.name.to_string();
-            let elasticsearch_hosts = deployment_json.logging.hosts.to_string();
             network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
 
             let logging = Logging {
-                elasticsearch_hosts,
+                elasticsearch_hosts: deployment_json.logging.hosts.to_string(),
                 elasticsearch_tags: None,
             };
 
             let icos_settings = ICOSSettings {
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
-                nns_urls,
-                hostname,
-                node_operator_private_key_path,
-                ssh_authorized_keys_path,
+                nns_urls: deployment_json.nns.url.clone(),
+                hostname: deployment_json.deployment.name.to_string(),
+                node_operator_private_key_path: node_operator_private_key_path
+                    .exists()
+                    .then_some(node_operator_private_key_path),
+                ssh_authorized_keys_path: ssh_authorized_keys_path
+                    .exists()
+                    .then_some(ssh_authorized_keys_path),
             };
 
             let setupos_settings = SetupOSSettings;
 
             let hostos_settings = HostOSSettings {
-                vm_memory,
-                vm_cpu,
+                vm_memory: deployment_json.resources.memory,
+                vm_cpu: deployment_json
+                    .resources
+                    .cpu
+                    .clone()
+                    .unwrap_or("kvm".to_string()),
                 verbose,
             };
 
