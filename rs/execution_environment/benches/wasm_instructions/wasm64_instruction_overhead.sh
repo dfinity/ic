@@ -18,7 +18,6 @@ OP_TYPES="memop vmem"
 forty_dashes="----------------------------------------"
 eighteen_dashes="----------------"
 
-
 # Print the header using printf to have a better formatting for the length of the columns.
 printf "| %-40s | %-18s | %-18s | %-18s |\n" $forty_dashes $eighteen_dashes $eighteen_dashes $eighteen_dashes
 printf "| %-40s | %-18s | %-18s | %-18s |\n" "Instruction" "Wasm32 Time (ns)" "Wasm64 Time (ns)" "Overhead (%)"
