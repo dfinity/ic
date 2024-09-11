@@ -4,7 +4,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
 
-/// SetupOS configuration. User-facing configuration files 
+/// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SetupOSConfig {

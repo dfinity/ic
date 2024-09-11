@@ -397,10 +397,7 @@ mod tests {
 
         // Test ipv6_address without ipv6_prefix_length length
         let mut temp_file = NamedTempFile::new()?;
-        writeln!(
-            temp_file,
-            "ipv6_address=2a00:fb01:400:200::"
-        )?;
+        writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::")?;
         let config_ini_settings = get_config_ini_settings(temp_file_path)?;
         assert_eq!(
             config_ini_settings.network_settings.ipv6_address.unwrap(),
@@ -432,12 +429,8 @@ mod tests {
 
         // Test missing prefix and address
         let mut temp_file = NamedTempFile::new()?;
-        writeln!(
-            temp_file,
-            "ipv6_gateway=2001:db8:85a3:0000::1"
-        )?;
-        let result =
-            get_config_ini_settings(temp_file_path);
+        writeln!(temp_file, "ipv6_gateway=2001:db8:85a3:0000::1")?;
+        let result = get_config_ini_settings(temp_file_path);
         assert!(result.is_err());
 
         Ok(())
