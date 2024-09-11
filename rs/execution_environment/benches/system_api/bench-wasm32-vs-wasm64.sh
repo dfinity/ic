@@ -27,7 +27,7 @@ printf "%20s %s\n" \
     "REPEAT :=" "${REPEAT:=9}" \
     "FILTER :=" "${FILTER:=}" \
     "QUICK :=" "${QUICK:=}" \
-echo 
+    echo
 
 ## Other (hidden) options
 WORK_DIR=$PWD
@@ -210,7 +210,7 @@ for i in $(seq ${REPEAT}); do
             exit 1
         )
     set +o pipefail
-    
+
     echo "==> Iteration ${i}: running Wasm32 benchmarks..."
     echo "    See full log: ${WORK_DIR}/wasm32-${i}.txt"
     set -o pipefail
@@ -228,8 +228,7 @@ for i in $(seq ${REPEAT}); do
             exit 1
         )
     set +o pipefail
-    
-    
+
 done
 
 ########################################################################
@@ -250,7 +249,6 @@ done | xargs paste >"${WORK_DIR}/summary-wasm64.txt"
 for i in $(seq ${REPEAT}); do
     echo "${WORK_DIR}/wasm32-${i}-sum.txt"
 done | xargs paste >"${WORK_DIR}/summary-wasm32.txt"
-
 
 ## Generate final report
 (
@@ -278,9 +276,9 @@ done | xargs paste >"${WORK_DIR}/summary-wasm32.txt"
     cat_wasm64_benchmark_names \
         | while read name; do
             printf "| ${name} | "
-            
+
             print_min_time "${name}" "${WORK_DIR}/summary-wasm32.txt"
-            
+
             printf " | "
             print_min_time "      ${name}" "${WORK_DIR}/summary-wasm64.txt"
             printf " |\n"
