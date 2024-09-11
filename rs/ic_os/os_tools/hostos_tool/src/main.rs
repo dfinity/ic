@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
-use config::deployment::read_deployment_file;
+use config::deployment_json::read_deployment_file;
 use config::config_ini::get_config_ini_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
 };

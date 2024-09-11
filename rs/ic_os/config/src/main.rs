@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::config_ini::get_config_ini_settings;
-use config::deployment::read_deployment_file;
+use config::deployment_json::read_deployment_file;
 use config::serialize_and_write_config;
 use std::fs::File;
 use std::path::{Path, PathBuf};

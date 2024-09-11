@@ -12,7 +12,7 @@ use clap::{Args, Parser};
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::deployment::DeploymentJson;
+use config::deployment_json::DeploymentJson;
 use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
 
 const SERVICE_NAME: &str = "setupos-inject-configuration";

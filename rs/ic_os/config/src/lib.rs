@@ -1,5 +1,5 @@
 pub mod config_ini;
-pub mod deployment;
+pub mod deployment_json;
 pub mod types;
 
 use anyhow::{Context, Result};
