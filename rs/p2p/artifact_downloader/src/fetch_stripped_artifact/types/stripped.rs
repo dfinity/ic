@@ -5,20 +5,12 @@ use ic_protobuf::{
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
     consensus::ConsensusMessage,
-    messages::{SignedIngress, SignedRequestBytes},
 };
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum MaybeStrippedIngress {
-    Full(IngressMessageId, SignedIngress),
-    Stripped(IngressMessageId),
-}
 
 /// Stripped version of the [`IngressPayload`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct StrippedIngressPayload {
-    pub(crate) ingress_messages: Vec<MaybeStrippedIngress>,
+    pub(crate) ingress_messages: Vec<IngressMessageId>,
 }
 
 /// Stripped version of the [`BlockProposal`].
@@ -84,7 +76,12 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 ingress_messages: value
                     .ingress_messages
                     .into_iter()
-                    .map(MaybeStrippedIngress::try_from)
+                    .map(|stripped_ingress| {
+                        try_from_option_field(
+                            stripped_ingress.stripped,
+                            "StrippedIngressMessage::stripped",
+                        )
+                    })
                     .collect::<Result<Vec<_>, _>>()?,
             },
             unstripped_consensus_message_id: try_from_option_field(
@@ -105,52 +102,12 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 .stripped_ingress_payload
                 .ingress_messages
                 .into_iter()
-                .map(pb::StrippedIngressMessage::from)
+                .map(|ingress_id| pb::StrippedIngressMessage {
+                    stripped: Some(ingress_id.into()),
+                })
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),
         }
-    }
-}
-
-impl From<MaybeStrippedIngress> for pb::StrippedIngressMessage {
-    fn from(value: MaybeStrippedIngress) -> Self {
-        use pb::stripped_ingress_message::Msg as MaybeStrippedIngressProto;
-
-        let msg = match value {
-            MaybeStrippedIngress::Full(_ingress_id, ingress) => {
-                MaybeStrippedIngressProto::Full(SignedRequestBytes::from(ingress).into())
-            }
-            MaybeStrippedIngress::Stripped(ingress_id) => {
-                MaybeStrippedIngressProto::Stripped(ingress_id.into())
-            }
-        };
-
-        pb::StrippedIngressMessage { msg: Some(msg) }
-    }
-}
-
-impl TryFrom<pb::StrippedIngressMessage> for MaybeStrippedIngress {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::StrippedIngressMessage) -> Result<Self, Self::Error> {
-        let Some(msg) = value.msg else {
-            return Err(ProxyDecodeError::MissingField("msg"));
-        };
-
-        use pb::stripped_ingress_message::Msg as MaybeStrippedIngressProto;
-
-        let ingress = match msg {
-            MaybeStrippedIngressProto::Full(ingress) => {
-                let ingress = SignedIngress::try_from(SignedRequestBytes::from(ingress))
-                    .map_err(|err| ProxyDecodeError::Other(err.to_string()))?;
-                MaybeStrippedIngress::Full(IngressMessageId::from(&ingress), ingress)
-            }
-            MaybeStrippedIngressProto::Stripped(ingress_id) => {
-                MaybeStrippedIngress::Stripped(ingress_id.try_into()?)
-            }
-        };
-
-        Ok(ingress)
     }
 }
 
@@ -236,12 +193,10 @@ mod tests {
 
     #[test]
     fn serialize_deserialize_stripped_block_proposal_test() {
-        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
         let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
-        let stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
-            MaybeStrippedIngress::Full(ingress_1_id, ingress_1),
-            MaybeStrippedIngress::Stripped(ingress_2_id),
-        ]);
+        let stripped_block_proposal =
+            fake_stripped_block_proposal_with_ingresses(vec![ingress_1_id, ingress_2_id]);
         let original_consensus_message =
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
 

@@ -1,13 +1,10 @@
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::{IdentifiableArtifact, IngressMessageId},
-    batch::IngressPayload,
-    consensus::ConsensusMessage,
+    artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
 };
 
 use super::types::stripped::{
-    MaybeStrippedConsensusMessage, MaybeStrippedIngress, StrippedBlockProposal,
-    StrippedIngressPayload,
+    MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload,
 };
 
 /// Provides functionality for stripping objects of given information.
@@ -40,8 +37,7 @@ impl Strippable for ConsensusMessage {
                 }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
-                // TODO(CON-1402): avoid the clone
-                let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();
+                let stripped_ingress_payload = data_payload.batch.ingress.strip();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     block_proposal_without_ingresses_proto: proto,
@@ -54,24 +50,12 @@ impl Strippable for ConsensusMessage {
     }
 }
 
-impl Strippable for IngressPayload {
+impl Strippable for &IngressPayload {
     type Output = StrippedIngressPayload;
 
     fn strip(self) -> Self::Output {
-        let ingresses: Vec<_> = self.try_into().expect(
-            "A valid ingress payload shouldn't fail when converting to a vector of ingresses",
-        );
-
-        let stripped_ingresses = ingresses
-            .into_iter()
-            .map(|ingress| {
-                let ingress_message_id = IngressMessageId::from(&ingress);
-                MaybeStrippedIngress::Stripped(ingress_message_id)
-            })
-            .collect();
-
         Self::Output {
-            ingress_messages: stripped_ingresses,
+            ingress_messages: self.message_ids(),
         }
     }
 }

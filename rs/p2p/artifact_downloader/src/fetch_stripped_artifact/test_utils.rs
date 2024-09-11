@@ -18,7 +18,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::node_test_id;
 
-use super::types::stripped::{MaybeStrippedIngress, StrippedBlockProposal, StrippedIngressPayload};
+use super::types::stripped::{StrippedBlockProposal, StrippedIngressPayload};
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
     fake_ingress_message_with_arg_size(method_name, 0)
@@ -77,7 +77,7 @@ pub(crate) fn fake_block_proposal_with_ingresses(
 }
 
 pub(crate) fn fake_stripped_block_proposal_with_ingresses(
-    ingress_messages: Vec<MaybeStrippedIngress>,
+    ingress_messages: Vec<IngressMessageId>,
 ) -> StrippedBlockProposal {
     StrippedBlockProposal {
         block_proposal_without_ingresses_proto: pb::BlockProposal::default(),

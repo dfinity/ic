@@ -226,10 +226,7 @@ message StrippedBlockProposal {
 }
 
 message StrippedIngressMessage {
-  oneof msg {
-    bytes full = 1;
-    IngressMessageId stripped = 2;
-  }
+  IngressMessageId stripped = 1;
 }
 
 message StrippedConsensusMessage {
