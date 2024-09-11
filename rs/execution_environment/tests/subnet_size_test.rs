@@ -38,11 +38,11 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
     use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-    use ic_embedders::wasm_utils::WasmMemoryType;
+    use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
-        MeteringType::None => |_op: &wasmparser::Operator| 0u64,
+        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
     };
 
     let cc = instruction_to_cost(

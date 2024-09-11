@@ -122,18 +122,16 @@ lazy_static! {
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
-    static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
-        + instruction_to_cost(
-            &wasmparser::Operator::MemoryGrow {
-                mem: 0,
-                mem_byte: 0,
-            },
-            WasmMemoryType::Wasm32
-        )
-        + instruction_to_cost(
-            &wasmparser::Operator::I32Const { value: 0 },
-            WasmMemoryType::Wasm32
-        );
+    static ref DROP_MEMORY_GROW_CONST_COST: u64 =
+        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+            + instruction_to_cost(
+                &wasmparser::Operator::MemoryGrow { mem: 0 },
+                WasmMemoryType::Wasm32
+            )
+            + instruction_to_cost(
+                &wasmparser::Operator::I32Const { value: 0 },
+                WasmMemoryType::Wasm32
+            );
     static ref UNREACHABLE_COST: u64 =
         instruction_to_cost(&wasmparser::Operator::Unreachable, WasmMemoryType::Wasm32);
 }
