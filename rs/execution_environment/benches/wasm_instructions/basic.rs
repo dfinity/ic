@@ -408,7 +408,7 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
-    // Store: `({op} $address_i64 $x_{type})`
+    // Store: `({op} $address_i32/64 $x_{type})`
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&["i32.store", "i64.store", "f32.store", "f64.store"]) {
         let ty = dst_type(op);

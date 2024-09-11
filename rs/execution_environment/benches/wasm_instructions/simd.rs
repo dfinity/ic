@@ -15,10 +15,20 @@ const X_V128: &str = "(local.get $x_v128)";
 const Y_V128: &str = "(local.get $y_v128)";
 const Y_I32: &str = "(local.get $y_i32)";
 const Z_V128: &str = "(local.get $z_v128)";
-const ADDRESS_I32: &str = "(local.get $address_i32)";
-const UNALIGNED_ADDRESS_I32: &str = "(local.get $one_i32)";
 
 pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
+    let address_i32 = if wasm64_enabled == Wasm64::Enabled {
+        "(local.get $address_i64)"
+    } else {
+        "(local.get $address_i32)"
+    };
+
+    let unaligned_address_i32 = if wasm64_enabled == Wasm64::Enabled {
+        "(local.get $one_i64)"
+    } else {
+        "(local.get $one_i32)"
+    };
+
     // List of benchmarks to run.
     let mut benchmarks = vec![];
 
@@ -663,13 +673,13 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} {address_i32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}_unaligned");
-        let code = &format!("({SET_X_V128} ({op} {UNALIGNED_ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} {unaligned_address_i32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -677,13 +687,13 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({op} {ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} {address_i32} {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}_unaligned");
-        let code = &format!("({op} {UNALIGNED_ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} {unaligned_address_i32} {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -698,7 +708,7 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
         "v128.load32x2_u",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} {address_i32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -706,7 +716,7 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load32_zero", "v128.load64_zero"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} {address_i32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -719,7 +729,7 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
         "v128.load64_splat",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} {address_i32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -727,13 +737,13 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["v128.load8_lane", "v128.load16_lane"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
+        let code = &format!("({SET_X_V128} ({op} 1 {address_i32} {X_V128}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load32_lane", "v128.load64_lane"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
+        let code = &format!("({SET_X_V128} ({op} 1 {address_i32} {X_V128}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 
@@ -746,7 +756,7 @@ pub fn benchmarks(wasm64_enabled: Wasm64) -> Vec<Benchmark> {
         "v128.store64_lane",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({op} 1 {ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} 1 {address_i32} {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code, wasm64_enabled));
     }
 

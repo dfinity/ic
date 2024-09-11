@@ -25,7 +25,7 @@ mod simd;
 use crate::common::Wasm64;
 
 pub fn wasm_instructions_bench(c: &mut Criterion) {
-    let WASM64_ENABLED = Wasm64::Enabled;
+    const WASM64_ENABLED: Wasm64 = Wasm64::Enabled;
 
     // List of benchmarks to run.
     let mut benchmarks = vec![];
