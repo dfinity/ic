@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:rstest",
     "@crate_index//:turmoil",
 ]
 

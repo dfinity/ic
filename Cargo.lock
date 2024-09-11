@@ -10405,6 +10405,7 @@ dependencies = [
  "prometheus",
  "prost",
  "quinn",
+ "rstest",
  "rustls 0.23.12",
  "slog",
  "socket2 0.5.7",
