@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
+use config::deployment::read_deployment_file;
 use config::{
     get_config_ini_settings, DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
 };
@@ -11,7 +12,6 @@ use network::ipv6::generate_ipv6_address;
 use network::mac_address::{generate_mac_address, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
-use utils::deployment::read_deployment_file;
 use utils::to_cidr;
 
 #[derive(Subcommand)]

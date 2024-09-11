@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use config::deployment::read_deployment_file;
 use config::{get_config_ini_settings, serialize_and_write_config};
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use utils::deployment::read_deployment_file;
 
 use config::types::{
     GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, SetupOSConfig,

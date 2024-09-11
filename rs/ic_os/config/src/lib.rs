@@ -12,6 +12,8 @@ use anyhow::{Context, Result};
 pub mod types;
 use crate::types::{ConfigIniSettings, NetworkSettings};
 
+pub mod deployment;
+
 pub type ConfigMap = HashMap<String, String>;
 
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";

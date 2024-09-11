@@ -96,6 +96,7 @@ pub struct Logging {
     pub elasticsearch_tags: Option<String>,
 }
 
+// ConfigIniSettings is not a public config interface and is strictly used for parsing config.ini
 pub struct ConfigIniSettings {
     pub network_settings: NetworkSettings,
     pub verbose: bool,
