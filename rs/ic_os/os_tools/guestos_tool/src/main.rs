@@ -9,10 +9,13 @@ use node_gen::get_node_gen_metric;
 mod prometheus_metric;
 use prometheus_metric::write_single_metric;
 
+use config::firewall_json;
+use config::types::firewall;
+
 mod generate_network_config;
 use generate_network_config::{
     generate_networkd_config, validate_and_construct_ipv4_address_info,
-    DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
+    DEFAULT_GUESTOS_FIREWALL_JSON_PATH, DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
 };
 
 use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
@@ -60,6 +63,15 @@ pub enum Commands {
         /// Filename to write the prometheus metric for node generation.
         /// Fails if directory doesn't exist.
         output_path: String,
+    },
+    RenderFirewallConfig {
+        #[arg(index = 1)]
+        /// Path to firewall.json.  Defaults to DEFAULT_GUESTOS_FIREWALL_JSON_PATH if unspecified.
+        /// If the option is not specified, and the default file does not exist, it renders an
+        /// empty firewall ruleset.  If the option is specified, and the file does not exist,
+        /// it will raise an error.  If the file exists but the rules cannot be read, it will
+        /// raise an error.
+        firewall_file: Option<String>,
     },
 }
 
@@ -112,6 +124,28 @@ pub fn main() -> Result<()> {
             eprintln!("Restarting systemd networkd");
             restart_systemd_networkd();
 
+            Ok(())
+        }
+        Some(Commands::RenderFirewallConfig { firewall_file }) => {
+            let config = firewall_json::get_firewall_rules_json_or_default(
+                firewall_file.as_ref().map(Path::new),
+                Path::new(DEFAULT_GUESTOS_FIREWALL_JSON_PATH),
+            )?;
+            eprintln!(
+                "Firewall config ({}): {:#?}",
+                match firewall_file {
+                    Some(f) => format!("from explicitly specified {}", f),
+                    None => format!("from default {}", DEFAULT_GUESTOS_FIREWALL_JSON_PATH),
+                },
+                config
+            );
+            println!(
+                "{}",
+                match config {
+                    Some(c) => c.as_nftables(&firewall::FirewallRuleDestination::GuestOS),
+                    None => "".to_string(),
+                },
+            );
             Ok(())
         }
         None => Ok(()),
