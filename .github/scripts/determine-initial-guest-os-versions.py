@@ -1,63 +1,67 @@
 import json
 import sys
-import urllib.error
-from urllib.request import Request, urlopen
+from enum import StrEnum
 
-from typing_extensions import Any
+import requests
+from typing_extensions import Any, Dict, List, Tuple, TypedDict, cast
 
 ROLLOUT_DASHBOARD_ENDPOINT='https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts'
 PUBLIC_DASHBOARD_ENDPOINT='https://ic-api.internetcomputer.org/api/v3/subnets?format=json'
 
 # Key definitions
-STATE = 'state'
-FAILED = 'failed'
-COMPLETE = 'complete'
-BATCHES = 'batches'
-SUBNETS = 'subnets'
-GIT_REVISION = 'git_revision'
 EXECUTED_TIMESTAMP_SECONDS = 'executed_timestamp_seconds'
 REPLICA_VERSIONS = 'replica_versions'
 REPLICA_VERSION_ID = 'replica_version_id'
+SUBNETS = 'subnets'
+
+# Minimal subset of API structure needed for rollout dashboard.
+# Always keep me in sync with https://github.com/dfinity/dre-airflow/blob/main/rollout-dashboard/server/src/types.rs
+# We do not expect to change the API in ways that break code.
+class SubnetRolloutState(StrEnum):
+    error = "error"
+    predecessor_failed = "predecessor_failed"
+    pending = "pending"
+    waiting = "waiting"
+    proposing = "proposing"
+    waiting_for_election = "waiting_for_election"
+    waiting_for_adoption = "waiting_for_adoption"
+    waiting_for_alerts_gone = "waiting_for_alerts_gone"
+    complete = "complete"
+    unknown = "unknown"
+
+class Subnet(TypedDict):
+    subnet_id: str
+    git_revision: str
+    state: SubnetRolloutState
+
+class Batch(TypedDict):
+    subnets: List[Subnet]
+    # The following three are dates but they are ISO UTF Z,
+    # so they sort alphabetically.  Heh.
+    planned_start_time: str
+    actual_start_time: str | None
+    end_time: str | None
+
+class RolloutState(StrEnum):
+    complete = "complete"
+    failed = "failed"
+    preparing = "preparing"
+    upgrading_subnets = "upgrading_subnets"
+    upgrading_unassigned_nodes = "upgrading_unassigned_nodes"
+    waiting = "waiting"
+    problem = "problem"
+
+class Rollout(TypedDict):
+    name: str
+    state: RolloutState
+    batches: Dict[str, Batch]
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
-def maybe_fetch_data(url : str, timeout : float) -> str | None:
-    """
-    Try fetch data from `url`.
-
-    Will try to fetch data and return `None` if the resource is unavailable for some.
-    If this call fails other resources should be considered.
-    """
-    try:
-        req = Request(url)
-        req.add_header('accept', '*/*')
-        req.add_header('user-agent', 'dfinity-ci')
-        with urlopen(req, timeout=timeout) as response:
-            encoding = response.headers.get_content_charset('utf-8')
-            body = response.read()
-            return body.decode(encoding)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
-        eprint(f"Error fetching data from {url}: {e}")
-        return None
-
-def ensure_json_response(url : str, timeout : float = 10) -> Any | None:
-    response = maybe_fetch_data(url, timeout)
-    if response is None:
-        # Resource was unavailable, if there are
-        # other options they should be considered
-        # at this point
-        return None
-
-    try:
-        return json.loads(response)
-    except (json.JSONDecodeError) as e:
-        # The resource returned some response but it wasn't json.
-        # This error should not be retried and should panic because it was
-        # likely an API change and requires investigation.
-        eprint(f"Received error when decoding the response from {url}: {e}")
-        eprint(f"Response was:\n{response}")
-        exit(1)
+def eprint_fmt(str, *args):
+    return # remove me to get some real action
+    print((str % args) if args else str, file=sys.stderr)
 
 def fetch_versions_from_rollout_dashboard() -> list[str] | None:
     """
@@ -66,36 +70,54 @@ def fetch_versions_from_rollout_dashboard() -> list[str] | None:
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
     """
-    data = ensure_json_response(ROLLOUT_DASHBOARD_ENDPOINT)
-    if data is None:
-        # Resource was unavailable
+    try:
+        url = ROLLOUT_DASHBOARD_ENDPOINT
+        r =requests.get(url, timeout=30)
+        r.raise_for_status()
+        rollouts = cast(List[Rollout], r.json())
+    except Exception as e:
+        eprint(f"Error fetching / decoding data from {url}: {e}.  Returning no versions.")
         return []
 
-    versions = set()
-    try:
-        for rollout in data:
-            if rollout.get(STATE, None) is None:
-                raise Exception(f"Expected '{STATE}' in 'rollout'")
-            if rollout.get(STATE) in [FAILED, COMPLETE]:
-                continue
-            if rollout.get(BATCHES, None) is None:
-                raise Exception(f"Expected '{BATCHES}' in 'rollout'")
-            for batch in rollout.get(BATCHES).values():
-                if batch.get(SUBNETS, None) is None:
-                    raise Exception(f"Expected '{SUBNETS}' in 'batch'")
-                for subnet in batch.get(SUBNETS):
-                    if subnet.get(GIT_REVISION, None) is None:
-                        raise Exception(f"Expected '{GIT_REVISION}' in 'subnet'")
-                    versions.add(subnet.get(GIT_REVISION))
-    except Exception as e:
-        # Rollout dashboard returned json but the format changed. Likely an
-        # API change that is not retriable and requires investigation.
-        eprint(f"Error while parsing response from {ROLLOUT_DASHBOARD_ENDPOINT}: {e}")
-        eprint(f"Json response received:\n{data}")
-        exit(1)
-    return list(versions)
+    # The value of the dict entry is datestring, git revision.
+    subnet_to_revision: Dict[str, List[Tuple[str, str]]] = {}
 
-def maybe_exectued_timestamp(x : Any) -> int:
+    for rollout in reversed(rollouts):  # Oldest to newest
+        for batch_num_ignored, batch in rollout["batches"].items():
+            for subnet in batch["subnets"]:
+                if subnet["state"] in (SubnetRolloutState.error, SubnetRolloutState.predecessor_failed):
+                    # This subnet failed?  We ignore it, because it could not have been upgraded.
+                    eprint_fmt(
+                        "Version %s targeting subnet %s in rollout %s is %s, disregarding",
+                        subnet["git_revision"],
+                        subnet["subnet_id"],
+                        rollout["name"],
+                        subnet["state"]
+                    )
+                    continue
+                else:
+                    eprint_fmt(
+                        "Version %s targeting subnet %s in rollout %s is %s, taking into account",
+                        subnet["git_revision"],
+                        subnet["subnet_id"],
+                        rollout["name"],
+                        subnet["state"]
+                    )
+                t = batch.get("end_time") or batch.get("actual_start_time") or batch["planned_start_time"]
+                if subnet["subnet_id"] not in subnet_to_revision:
+                    subnet_to_revision[subnet["subnet_id"]] = []
+                subnet_to_revision[subnet["subnet_id"]].append((t, subnet["git_revision"]))
+
+    # Now we have a list of subnets associated with each
+    # Git revision coupled with the putative date or actual
+    # finish date for the revision.  Let's fish the latest
+    # revision for each subnet, and get that.
+    return list(set([
+        list(sorted(datestring_revision_tuple))[-1][1]
+        for datestring_revision_tuple in subnet_to_revision.values()
+    ]))
+
+def maybe_executed_timestamp(x : Any) -> int:
     if x.get(EXECUTED_TIMESTAMP_SECONDS, None) is None:
         raise Exception(f"Expected '{EXECUTED_TIMESTAMP_SECONDS}' in 'replica_version'")
     return int(x.get(EXECUTED_TIMESTAMP_SECONDS))
@@ -107,12 +129,18 @@ def fetch_versions_from_public_dashboard() -> list[str] | None:
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
     """
-    data = ensure_json_response(PUBLIC_DASHBOARD_ENDPOINT)
-    if data is None:
-        # Resource was unavailable
+    try:
+        url = PUBLIC_DASHBOARD_ENDPOINT
+        r =requests.get(url, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        eprint(f"Error fetching / decoding data from {url}: {e}.  Returning no versions.")
         return []
 
     versions = set()
+    # Manuel: I'm not modifying this because I do not know the shape
+    # of this data structure.
     try:
         if data.get(SUBNETS, None) is None:
             raise Exception(f"Expected '{SUBNETS}' in response")
@@ -121,7 +149,7 @@ def fetch_versions_from_public_dashboard() -> list[str] | None:
             if subnet.get(REPLICA_VERSIONS, None) is None:
                 raise Exception(f"Expected '{REPLICA_VERSIONS}' in 'subnet'")
             replica_versions = subnet.get(REPLICA_VERSIONS)
-            replica_version = sorted(replica_versions, key=maybe_exectued_timestamp, reverse=True)[0]
+            replica_version = sorted(replica_versions, key=maybe_executed_timestamp, reverse=True)[0]
             if replica_version.get(REPLICA_VERSION_ID, None) is None:
                 raise Exception(f"Expected '{REPLICA_VERSION_ID}' in 'replica_version'")
             versions.add(replica_version.get(REPLICA_VERSION_ID))
@@ -129,7 +157,7 @@ def fetch_versions_from_public_dashboard() -> list[str] | None:
         # Public dashboard returned json but the format changed. Likely an
         # API change that is not retriable and requires investigation.
         eprint(f"Error while parsing response from {PUBLIC_DASHBOARD_ENDPOINT}: {e}")
-        eprint(f"Json response received:\n{data}")
+        eprint(f"JSON response received:\n{data}")
         exit(1)
     return list(versions)
 
@@ -141,7 +169,7 @@ def main():
 
     if not unique_versions:
         # At this moment if we don't have any starting version we cannot proceed
-        raise Exception(f"Didn't find any versions from:\n\t1. {ROLLOUT_DASHBOARD_ENDPOINT}\n\t2. {PUBLIC_DASHBOARD_ENDPOINT}")
+        raise RuntimeError(f"Didn't find any versions from:\n\t1. {ROLLOUT_DASHBOARD_ENDPOINT}\n\t2. {PUBLIC_DASHBOARD_ENDPOINT}")
     eprint(f"Will qualify, starting from versions: {json.dumps(unique_versions)}")
     matrix = {
         "versions": unique_versions
