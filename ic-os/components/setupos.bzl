@@ -9,7 +9,7 @@ component_files = {
     Label("setupos-scripts/setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",
     Label("setupos-scripts/setup-disk.sh"): "/opt/ic/bin/setup-disk.sh",
     Label("setupos-scripts/functions.sh"): "/opt/ic/bin/functions.sh",
-    Label("setupos-scripts/guestos.sh"): "/opt/ic/bin/guestos.sh",
+    Label("setupos-scripts/install-guestos.sh"): "/opt/ic/bin/install-guestos.sh",
     Label("setupos-scripts/check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
     Label("setupos-scripts/install-hostos.sh"): "/opt/ic/bin/install-hostos.sh",
     Label("setupos-scripts/check-network.sh"): "/opt/ic/bin/check-network.sh",

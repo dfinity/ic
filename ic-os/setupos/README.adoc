@@ -34,7 +34,7 @@ The sequence of the scripts is defined in the main installation script, `setupos
   check-network.sh              # Tests network connectivity and reachability of the NNS
   setup-disk.sh                 # Purges existing LVM configurations and partitions
   install-hostos.sh                     # Installs and configures the HostOS operating system
-  guestos.sh                    # Installs and configures the GuestOS operating system
+  install-guestos.sh                    # Installs and configures the GuestOS operating system
   setup-hostos-config.sh        # Sets up the HostOS config partition
 
 == Node Providers, Node Technicians, and Node Operators
