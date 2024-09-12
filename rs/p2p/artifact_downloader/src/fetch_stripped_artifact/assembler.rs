@@ -7,7 +7,7 @@ use thiserror::Error;
 use ic_interfaces::p2p::consensus::{
     Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
@@ -185,12 +185,24 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 return Err(Aborted {});
             };
 
-            assembler
-                .try_insert_ingress_message(ingress)
-                .map_err(|_| Aborted {})?;
+            if let Err(err) = assembler.try_insert_ingress_message(ingress) {
+                warn!(
+                    self.log,
+                    "Failed to ingress message {}. This is a bug.", err
+                );
+
+                return Err(Aborted {});
+            }
         }
 
-        let reconstructed_block_proposal = assembler.try_assemble().map_err(|_| Aborted {})?;
+        let reconstructed_block_proposal = assembler.try_assemble().map_err(|err| {
+            warn!(
+                self.log,
+                "Failed to reassemble the block {}. This is a bug.", err
+            );
+
+            Aborted {}
+        })?;
 
         Ok((
             ConsensusMessage::BlockProposal(reconstructed_block_proposal),
