@@ -86,16 +86,3 @@ In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped
 When the corresponding IPv6 address is assigned, the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format is followed. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
 
 The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.json+ configuration file. The host part is the EUI-64 formatted address.
-
-== Active backup
-
-[NOTE]
-This feature is currently under development. See ticket https://dfinity.atlassian.net/browse/NODE-869#[NODE-869].
-
-In order to simplify the physical cabling of the machine, Linux's active-backup bonding technique is utilized. This operating mode also improves redundancy when more than one 10-gigabit ethernet network interface is connected to the switch. A Node Technician can decide to either just use one or all of the 10GbE network interfaces in the bond. The handling of the uplink and connectivity is taken care of by the Linux operating system.
-
-Details can be found in:
-
-  ic/rs/ic_os/os_tools/setupos_tool generate-network-config
-
-Note that this mode does not increase the bandwidth/throughput. Only one link will be active at the same time.
