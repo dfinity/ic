@@ -200,9 +200,9 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
     };
     debug_assert_eq!(
         id_to_name.len(),
-        // Because 0 through 13 accounts for the first 14 canister +
+        // Because 0 through 14 accounts for the first 15 canister +
         // 1 for exchange rate canister.
-        15,
+        16,
         "{:#?}",
         id_to_name
     );
