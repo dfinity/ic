@@ -5,7 +5,7 @@ use ic_interfaces::{
         ChangeSet, IngressPool, IngressPoolThrottler, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
     },
-    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{ArtifactTransmits, MutablePool, UnvalidatedArtifact},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -55,7 +55,7 @@ impl MutablePool<SignedIngress> for TestIngressPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<SignedIngress> {
         self.pool.apply_changes(change_set)
     }
 }

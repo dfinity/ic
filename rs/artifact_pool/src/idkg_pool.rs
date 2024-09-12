@@ -13,7 +13,7 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+    ArtifactTransmit, ArtifactWithOpt, ArtifactTransmits, MutablePool, UnvalidatedArtifact,
     ValidatedPoolReader,
 };
 use ic_interfaces::{
@@ -429,7 +429,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ChangeResult<IDkgMessage> {
+    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ArtifactTransmits<IDkgMessage> {
         let mut unvalidated_ops = IDkgPoolSectionOps::new();
         let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
@@ -437,7 +437,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         for action in change_set {
             match action {
                 IDkgChangeAction::AddToValidated(message) => {
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
                     }));
@@ -449,7 +449,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
-                    mutations.push(ArtifactMutation::Remove(msg_id.clone()));
+                    mutations.push(ArtifactTransmit::Abort(msg_id.clone()));
                     validated_ops.remove(msg_id);
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
@@ -461,7 +461,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     if self.unvalidated.as_pool_section().contains(&msg_id) {
                         unvalidated_ops.remove(msg_id);
                     } else if self.validated.as_pool_section().contains(&msg_id) {
-                        mutations.push(ArtifactMutation::Remove(msg_id.clone()));
+                        mutations.push(ArtifactTransmit::Abort(msg_id.clone()));
                         validated_ops.remove(msg_id);
                     } else {
                         warn!(
@@ -474,7 +474,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         }
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
-        ChangeResult {
+        ArtifactTransmits {
             mutations,
             poll_immediately: changed,
         }
@@ -633,9 +633,9 @@ mod tests {
                 assert!(!result
                     .mutations
                     .iter()
-                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+                    .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
                 assert!(matches!(
-                    &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == support.message_id()
+                    &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == support.message_id()
                 ));
                 assert!(result.poll_immediately);
             }
@@ -977,7 +977,7 @@ mod tests {
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
-                    matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_1)
+                    matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == msg_id_1)
                 );
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
@@ -986,7 +986,7 @@ mod tests {
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
-                    matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_2)
+                    matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == msg_id_2)
                 );
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3], &[]);

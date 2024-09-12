@@ -194,7 +194,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -373,7 +373,7 @@ impl IDkgImpl {
     }
 }
 
-impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
+impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
     type ChangeSet = IDkgChangeSet;
 
     fn on_state_change(&self, idkg_pool: &T) -> IDkgChangeSet {

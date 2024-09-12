@@ -6,7 +6,7 @@ use ic_interfaces::{
         },
         ChangeSet, IngressPool, IngressPoolObject,
     },
-    p2p::consensus::ChangeSetProducer,
+    p2p::consensus::PoolMutationsProducer,
 };
 use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::debug;
@@ -17,7 +17,7 @@ use ic_types::{
 };
 use ic_validator::RequestValidationError;
 
-impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
+impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     type ChangeSet = ChangeSet;
 
     fn on_state_change(&self, pool: &T) -> ChangeSet {

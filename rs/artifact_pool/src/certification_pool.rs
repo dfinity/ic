@@ -7,7 +7,7 @@ use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
     p2p::consensus::{
-        ArtifactMutation, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -202,13 +202,13 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationMessage> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<CertificationMessage> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
 
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
-                mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                     artifact: msg.clone(),
                     is_latency_sensitive: true,
                 }));
@@ -221,7 +221,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: msg.clone(),
                         // relayed
                         is_latency_sensitive: false,
@@ -256,7 +256,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                     self.persistent_pool
                         .purge_below(height)
                         .drain(..)
-                        .map(ArtifactMutation::Remove),
+                        .map(ArtifactTransmit::Abort),
                 );
             }
 
@@ -274,7 +274,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
             self.update_metrics();
         }
 
-        ChangeResult {
+        ArtifactTransmits {
             mutations,
             poll_immediately: changed,
         }
@@ -581,7 +581,7 @@ mod tests {
             assert!(!result
                 .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -613,7 +613,7 @@ mod tests {
             ]);
             let expected = cert_msg.id();
             assert!(
-                matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
+                matches!(&result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == expected)
             );
             assert_eq!(result.mutations.len(), 1);
             assert!(result.poll_immediately);
@@ -695,7 +695,7 @@ mod tests {
             assert!(!result
                 .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
@@ -814,7 +814,7 @@ mod tests {
             assert!(!result
                 .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),

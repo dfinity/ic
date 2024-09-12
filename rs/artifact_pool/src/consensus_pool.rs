@@ -16,7 +16,7 @@ use ic_interfaces::{
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ArtifactMutation, ChangeResult, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -697,7 +697,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
@@ -710,7 +710,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
                     }));
@@ -721,7 +721,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                        mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                             artifact: to_move.clone(),
                             is_latency_sensitive: false,
                         }));
@@ -793,7 +793,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         mutations.extend(
             self.apply_changes_validated(validated_ops)
                 .drain(..)
-                .map(ArtifactMutation::Remove),
+                .map(ArtifactTransmit::Abort),
         );
 
         if let Some(backup) = &self.backup {
@@ -804,7 +804,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
-        ChangeResult {
+        ArtifactTransmits {
             mutations,
             poll_immediately: changed,
         }
@@ -1190,20 +1190,20 @@ mod tests {
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_2.get_id()));
+                &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_2.get_id()));
             assert!(matches!(
-                &result.mutations[1], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_3.get_id()));
+                &result.mutations[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
                 .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.mutations.len(), 3);
             assert!(result.mutations.iter().any(
-                |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
+                |x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_2.get_id())
             ));
             assert!(result.poll_immediately);
 
@@ -1271,7 +1271,7 @@ mod tests {
             assert_eq!(result.mutations.len(), 1);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_share_3.get_id()
+                &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
             ));
 
             let result =
@@ -1279,11 +1279,11 @@ mod tests {
             assert!(!result
                 .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.mutations.len(), 4);
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }

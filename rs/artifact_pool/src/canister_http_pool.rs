@@ -7,7 +7,7 @@ use crate::{
 use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
@@ -113,13 +113,13 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     fn apply_changes(
         &mut self,
         change_set: CanisterHttpChangeSet,
-    ) -> ChangeResult<CanisterHttpResponseShare> {
+    ) -> ArtifactTransmits<CanisterHttpResponseShare> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: share.clone(),
                         is_latency_sensitive: true,
                     }));
@@ -134,7 +134,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
                     if self.validated.remove(&id).is_some() {
-                        mutations.push(ArtifactMutation::Remove(id));
+                        mutations.push(ArtifactTransmit::Abort(id));
                     }
                 }
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
@@ -153,7 +153,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
             }
         }
-        ChangeResult {
+        ArtifactTransmits {
             mutations,
             poll_immediately: changed,
         }
@@ -253,9 +253,9 @@ mod tests {
         ]);
 
         assert!(
-            matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == id)
+            matches!(&result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == id)
         );
-        assert!(matches!(&result.mutations[1], ArtifactMutation::Insert(_)));
+        assert!(matches!(&result.mutations[1], ArtifactTransmit::Deliver(_)));
         assert!(result.poll_immediately);
         assert_eq!(result.mutations.len(), 2);
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
@@ -272,7 +272,7 @@ mod tests {
 
         assert_eq!(result.mutations.len(), 1);
         assert!(result.poll_immediately);
-        assert!(matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == id));
+        assert!(matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == id));
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);
@@ -299,7 +299,7 @@ mod tests {
         assert!(!result
             .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+            .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 

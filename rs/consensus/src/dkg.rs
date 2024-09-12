@@ -15,7 +15,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -315,7 +315,7 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
     ChangeAction::HandleInvalid(DkgMessageId::from(message), reason.as_ref().to_string())
 }
 
-impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
+impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
     type ChangeSet = ChangeSet;
 
     fn on_state_change(&self, dkg_pool: &T) -> ChangeSet {

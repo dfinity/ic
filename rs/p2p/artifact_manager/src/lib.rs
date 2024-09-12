@@ -2,8 +2,8 @@ use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
         consensus::{
-            ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool,
-            UnvalidatedArtifact, ValidatedPoolReader,
+            ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool,
+            PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
@@ -102,7 +102,7 @@ pub trait ArtifactProcessor<A: IdentifiableArtifact>: Send {
         &self,
         time_source: &dyn TimeSource,
         new_artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A>;
+    ) -> ArtifactTransmits<A>;
 }
 
 // TODO: remove in favour of the Shutdown struct instead
@@ -136,7 +136,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactMutation<Artifact>>,
+    send_advert: Sender<ArtifactTransmit<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
     // Making this channel bounded can be problematic since we don't have true multiplexing
@@ -155,7 +155,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
         .name(format!("{}_Processor", Artifact::NAME))
         .spawn(move || {
             for artifact in initial_artifacts {
-                let _ = send_advert.blocking_send(ArtifactMutation::Insert(ArtifactWithOpt {
+                let _ = send_advert.blocking_send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                     artifact,
                     is_latency_sensitive: false,
                 }));
@@ -181,7 +181,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
 fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Sender<ArtifactMutation<Artifact>>,
+    send_advert: Sender<ArtifactTransmit<Artifact>>,
     mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
@@ -223,7 +223,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
                 return;
             }
         };
-        let ChangeResult {
+        let ArtifactTransmits {
             mutations,
             poll_immediately,
         } = metrics
@@ -243,11 +243,11 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<SignedIngress> + Send + Sync + ValidatedPoolReader<SignedIngress> + 'static,
 >(
-    send_advert: Sender<ArtifactMutation<SignedIngress>>,
+    send_advert: Sender<ArtifactTransmit<SignedIngress>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
-        dyn ChangeSetProducer<
+        dyn PoolMutationsProducer<
                 PoolIngress,
                 ChangeSet = <PoolIngress as MutablePool<SignedIngress>>::ChangeSet,
             > + Send
@@ -273,9 +273,9 @@ pub fn create_ingress_handlers<
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
-    C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
+    C: PoolMutationsProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
 >(
-    send_advert: Sender<ArtifactMutation<Artifact>>,
+    send_advert: Sender<ArtifactTransmit<Artifact>>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
@@ -306,7 +306,7 @@ pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A>,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
     > Processor<A, P, C>
 {
     pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
@@ -321,7 +321,7 @@ impl<
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A> + Send + Sync + 'static,
-        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
     > ArtifactProcessor<A> for Processor<A, P, C>
 {
     #[instrument(skip_all)]
@@ -329,7 +329,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
-    ) -> ChangeResult<A> {
+    ) -> ArtifactTransmits<A> {
         {
             let mut pool = self.pool.write().unwrap();
             for artifact_event in artifact_events {
@@ -360,7 +360,7 @@ pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+        dyn PoolMutationsProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
             + Send
             + Sync,
     >,
@@ -370,7 +370,7 @@ impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+            dyn PoolMutationsProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
                 + Send
                 + Sync,
         >,
@@ -391,7 +391,7 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
         &self,
         time_source: &dyn TimeSource,
         artifact_events: Vec<UnvalidatedArtifactMutation<SignedIngress>>,
-    ) -> ChangeResult<SignedIngress> {
+    ) -> ArtifactTransmits<SignedIngress> {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact_event in artifact_events {
@@ -462,8 +462,8 @@ mod tests {
                 &self,
                 _: &dyn TimeSource,
                 _: Vec<UnvalidatedArtifactMutation<DummyArtifact>>,
-            ) -> ChangeResult<DummyArtifact> {
-                ChangeResult {
+            ) -> ArtifactTransmits<DummyArtifact> {
+                ArtifactTransmits {
                     mutations: vec![],
                     poll_immediately: false,
                 }
@@ -482,7 +482,7 @@ mod tests {
 
         for i in 0..10 {
             match send_rx.blocking_recv().unwrap() {
-                ArtifactMutation::Insert(a) => {
+                ArtifactTransmit::Deliver(a) => {
                     assert_eq!(a.artifact.0, i);
                 }
                 _ => panic!("initial events are not purge"),

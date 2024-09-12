@@ -43,7 +43,7 @@ use ic_interfaces::{
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -371,7 +371,7 @@ impl ConsensusImpl {
     }
 }
 
-impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
+impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
     type ChangeSet = ChangeSet;
     /// Invoke `on_state_change` on each subcomponent in order.
     /// Return the first non-empty [ChangeSet] as returned by a subcomponent.

@@ -8,7 +8,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -122,7 +122,7 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
 ///    artifacts below this height.
-impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
+impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
     type ChangeSet = ChangeSet;
 
     /// Should be called on every change of the certification pool and timeouts.

@@ -6,8 +6,8 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, BouncerFactory, BouncerValue, ChangeResult,
-    ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, BouncerFactory, BouncerValue,
+    MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -135,7 +135,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ArtifactTransmits<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -145,21 +145,21 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         }
         let mut mutations = vec![];
         mutations.extend(change_set.0.drain(..).map(|m| {
-            ArtifactMutation::Insert(ArtifactWithOpt {
+            ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: self.id_to_msg(m).into(),
                 is_latency_sensitive: self.latency_sensitive,
             })
         }));
 
-        mutations.extend(change_set.1.drain(..).map(ArtifactMutation::Remove));
-        ChangeResult {
+        mutations.extend(change_set.1.drain(..).map(ArtifactTransmit::Abort));
+        ArtifactTransmits {
             mutations,
             poll_immediately,
         }
     }
 }
 
-impl ChangeSetProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
     type ChangeSet = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::ChangeSet;
     fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::ChangeSet {
         let mut inner = self.inner.lock().unwrap();

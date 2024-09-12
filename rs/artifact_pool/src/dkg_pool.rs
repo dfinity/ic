@@ -5,7 +5,7 @@ use crate::{
 use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit, ArtifactWithOpt, ArtifactTransmits, MutablePool, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
@@ -99,7 +99,7 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<dkg::Message> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<dkg::Message> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
         for action in change_set {
@@ -110,14 +110,14 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                     self.unvalidated.remove(&id);
                 }
                 ChangeAction::AddToValidated(message) => {
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
                     }));
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: message.clone(),
                         // relayed
                         is_latency_sensitive: false,
@@ -135,11 +135,11 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                         .expect("Unvalidated artifact was not found.");
                 }
                 ChangeAction::Purge(height) => {
-                    mutations.extend(self.purge(height).drain(..).map(ArtifactMutation::Remove))
+                    mutations.extend(self.purge(height).drain(..).map(ArtifactTransmit::Abort))
                 }
             }
         }
-        ChangeResult {
+        ArtifactTransmits {
             mutations,
             poll_immediately: changed,
         }
@@ -269,7 +269,7 @@ mod test {
         assert!(!result
             .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+            .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
@@ -281,7 +281,7 @@ mod test {
         assert!(!result
             .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -294,7 +294,7 @@ mod test {
         assert!(!result
             .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

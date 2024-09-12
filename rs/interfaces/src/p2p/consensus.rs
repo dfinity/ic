@@ -19,13 +19,13 @@ pub struct ArtifactWithOpt<T> {
 
 /// Specifies an addition or removal to the outbound set of messages that are replicated.
 #[derive(PartialEq, Debug)]
-pub enum ArtifactMutation<T: IdentifiableArtifact> {
-    Insert(ArtifactWithOpt<T>),
-    Remove(T::Id),
+pub enum ArtifactTransmit<T: IdentifiableArtifact> {
+    Deliver(ArtifactWithOpt<T>),
+    Abort(T::Id),
 }
 
 /// Produces mutations to be applied on the artifact pool.
-pub trait ChangeSetProducer<Pool>: Send {
+pub trait PoolMutationsProducer<Pool>: Send {
     type ChangeSet;
 
     /// Inspect the input `Pool` to build a `ChangeSet` of actions to
@@ -47,9 +47,9 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
-pub struct ChangeResult<T: IdentifiableArtifact> {
+pub struct ArtifactTransmits<T: IdentifiableArtifact> {
     /// The list of replication mutations returned by the client. Mutations are applied in order by P2P-replication.
-    pub mutations: Vec<ArtifactMutation<T>>,
+    pub mutations: Vec<ArtifactTransmit<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
@@ -68,7 +68,7 @@ pub trait MutablePool<T: IdentifiableArtifact> {
     fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<T>;
+    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ArtifactTransmits<T>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact

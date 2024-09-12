@@ -7,7 +7,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::ChangeSetProducer,
+    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
 };
 use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
@@ -420,7 +420,7 @@ impl CanisterHttpPoolManagerImpl {
     }
 }
 
-impl<T: CanisterHttpPool> ChangeSetProducer<T> for CanisterHttpPoolManagerImpl {
+impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerImpl {
     type ChangeSet = CanisterHttpChangeSet;
 
     fn on_state_change(&self, canister_http_pool: &T) -> CanisterHttpChangeSet {

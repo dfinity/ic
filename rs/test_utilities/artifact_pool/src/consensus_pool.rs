@@ -9,7 +9,7 @@ use ic_interfaces::{
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
-    p2p::consensus::{ChangeResult, MutablePool},
+    p2p::consensus::{ArtifactTransmits, MutablePool},
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -805,7 +805,7 @@ impl MutablePool<ConsensusMessage> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<ConsensusMessage> {
         self.pool.apply_changes(change_set)
     }
 }
