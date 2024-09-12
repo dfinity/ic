@@ -16,7 +16,7 @@ pub enum IncomingSource {
     Path(PathBuf),
 }
 
-/// This struct contains configuration options for the HTTP Adapter.
+/// Contains configuration options for the HTTPS Outcalls adapter/service.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {

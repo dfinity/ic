@@ -216,8 +216,8 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
-                // 1, 2, 5, …, 1000, 2000, 5000
-                decimal_buckets(0, 3),
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",

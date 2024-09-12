@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 5.0.0 - 2024-09-12
+
 ### Added
 - Support for verified application subnets: the library function `PocketIcBuilder::with_verified_application_subnet` adds a verified application subnet to the PocketIC instance;
   the library function `PocketIc::get_verified_app_subnets` lists all verified application subnets of the PocketIC instance.
