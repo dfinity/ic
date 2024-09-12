@@ -415,8 +415,12 @@ impl CallContextManagerStats {
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
-    /// Maps call context to its responded status.
+
+    /// Call contexts (including deleted ones) that still have open callbacks.
     call_contexts: BTreeMap<CallContextId, CallContext>,
+
+    /// Callbacks still awaiting response, plus the callback of the currently
+    /// paused or aborted DTS response execution, if any.
     callbacks: BTreeMap<CallbackId, Arc<Callback>>,
 
     /// Guaranteed response and overall callback and call context stats.
