@@ -164,10 +164,6 @@ impl ValidatedPoolReader<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseShare> {
         self.validated.get(id).map(|()| id.clone())
     }
-
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
-        Box::new(std::iter::empty())
-    }
 }
 
 impl HasLabel for CanisterHttpResponse {

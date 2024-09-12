@@ -85,7 +85,9 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
 
     /// Returns all artifacts that need to be broadcasted.
     /// This is used only during the boostrapping/recovery phase.
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_>;
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_> {
+        Box::new(std::iter::empty())
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

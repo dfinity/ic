@@ -485,10 +485,6 @@ impl ValidatedPoolReader<IDkgMessage> for IDkgPoolImpl {
     fn get(&self, msg_id: &IDkgMessageId) -> Option<IDkgMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
-
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage>> {
-        Box::new(std::iter::empty())
-    }
 }
 
 #[cfg(test)]

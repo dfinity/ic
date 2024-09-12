@@ -60,7 +60,7 @@ mock! {
 
     impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
         fn get(&self, id: &A::Id) -> Option<A>;
-        fn get_all_for_broadcast
+        fn get_all_for_broadcast(
             &self,
         ) -> Box<dyn Iterator<Item = A>>;
     }

@@ -50,13 +50,6 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
             .get(id.as_ref())
             .map(Strippable::strip)
     }
-
-    fn get_all_for_broadcast(
-        &self,
-    ) -> Box<dyn Iterator<Item = MaybeStrippedConsensusMessage> + '_> {
-        // This method will never be called, so it's okay to return an empty iterator.
-        Box::new(std::iter::empty())
-    }
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>>
