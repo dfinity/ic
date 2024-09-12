@@ -64,6 +64,7 @@ function copy_config_files() {
 
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config generate-hostos-config
+    log_and_halt_installation_on_error "${?}" "Unable to generate hostos configuration.”
 
     # TODO: NODE-1466: Configuration revamp (HostOS and GuestOS integration)
     # echo "* Copying 'config-hostos.json' to hostOS config partition..."
