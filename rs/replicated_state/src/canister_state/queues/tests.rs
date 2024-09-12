@@ -2045,6 +2045,52 @@ fn decode_with_duplicate_inbound_response() {
 }
 
 #[test]
+fn decode_duplicate_inbound_response() {
+    let mut queues = CanisterQueues::default();
+
+    // Make 2 input queue reservations.
+    queues
+        .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
+        .unwrap();
+    queues
+        .push_output_request(request(2, SOME_DEADLINE).into(), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(2, queues.output_into_iter().count());
+
+    // Enqueue 2 inbound responses.
+    queues
+        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
+        .unwrap();
+    queues
+        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
+        .unwrap();
+
+    // Sanity check: roundtrip encode succeeds.
+    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = (
+        encoded.clone(),
+        &StrictMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
+    assert_eq!(queues, decoded);
+
+    // Tweak the encoded queues so both responses have the same `CallbackId`.
+    for entry in &mut encoded.pool.as_mut().unwrap().messages {
+        let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
+        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
+            panic!("Expected only responses");
+        };
+        response.originator_reply_callback = 1;
+    }
+
+    // Decoding should now fail because of the duplicate `CallbackId`.
+    let err = CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics))
+        .unwrap_err();
+    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1]");
+}
+
+#[test]
 fn test_stats_best_effort() {
     let mut queues = CanisterQueues::default();
 

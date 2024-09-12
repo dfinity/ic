@@ -174,50 +174,54 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     let _p = canbench_rs::bench_scope("post_upgrade");
 
     let start = ic_cdk::api::instruction_counter();
-    let mut stable_reader = StableReader::default();
+
+    let mut magic_bytes_reader = StableReader::default();
+    const MAGIC_BYTES: &[u8; 3] = b"MGR";
+    let mut first_bytes = [0u8; 3];
+    let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
+        Ok(_) => first_bytes == *MAGIC_BYTES,
+        Err(_) => false,
+    };
 
     let mut pre_upgrade_instructions_consumed = 0;
 
-    let old_des_result: Result<Ledger<Tokens>, _> = ciborium::de::from_reader(&mut stable_reader);
-
-    match old_des_result {
-        Ok(state) => {
-            LEDGER.with(|cell| {
-                *cell.borrow_mut() = Some(state);
-            });
+    if !memory_manager_found {
+        let mut stable_reader = StableReader::default();
+        LEDGER.with(|cell| {
+            *cell.borrow_mut() = Some(
+                ciborium::de::from_reader(&mut stable_reader)
+                    .expect("failed to decode ledger state"),
+            );
+        });
+        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+        pre_upgrade_instructions_consumed =
+            match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                Err(_) => {
+                    // If upgrading from a version that didn't write the instructions counter to stable memory
+                    0u64
+                }
+            };
+    } else {
+        let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
+            let reader = Reader::new(bs, 0);
+            let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
+            let state = ciborium::de::from_reader(&mut buffered_reader).expect(
+                "Failed to read the Ledger state from memory manager managed stable structures",
+            );
             let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
             pre_upgrade_instructions_consumed =
-                match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                     Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                     Err(_) => {
                         // If upgrading from a version that didn't write the instructions counter to stable memory
                         0u64
                     }
                 };
-        }
-        Err(_) => {
-            let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
-                let reader = Reader::new(bs, 0);
-                let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
-                let state = ciborium::de::from_reader(&mut buffered_reader).expect(
-                    "Failed to read the Ledger state from memory manager managed stable structures",
-                );
-                let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-                pre_upgrade_instructions_consumed =
-                    match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-                        Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-                        Err(_) => {
-                            // If upgrading from a version that didn't write the instructions counter to stable memory
-                            0u64
-                        }
-                    };
-                state
-            });
-            ic_cdk::println!(
-                "Successfully read state from memory manager managed stable structures"
-            );
-            LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
-        }
+            state
+        });
+        ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+        LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
     }
 
     if let Some(args) = args {

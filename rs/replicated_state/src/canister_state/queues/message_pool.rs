@@ -511,19 +511,6 @@ impl MessagePool {
         stats
     }
 
-    /// Returns an iterator over the callbacks of all inbound responses in the pool.
-    ///
-    /// Time complexity: `O(n)`.
-    pub(super) fn inbound_response_callbacks(&self) -> impl Iterator<Item = CallbackId> + '_ {
-        self.messages.iter().filter_map(|(id, msg)| match msg {
-            RequestOrResponse::Response(response) if id.context() == Context::Inbound => {
-                assert_eq!(Kind::Response, id.kind());
-                Some(response.originator_reply_callback)
-            }
-            _ => None,
-        })
-    }
-
     /// Invariant check for use at loading time and in `debug_asserts`.
     ///
     /// Time complexity: `O(n * log(n))`.

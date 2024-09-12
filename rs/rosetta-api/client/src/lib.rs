@@ -14,6 +14,7 @@ use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::identifiers::PartialBlockIdentifier;
+use rosetta_core::identifiers::TransactionIdentifier;
 use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::Amount;
@@ -23,6 +24,7 @@ use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use url::ParseError;
 pub struct RosettaClient {
     pub url: Url,
@@ -48,7 +50,7 @@ impl RosettaClient {
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
     }
 
-    async fn call_endpoint<T: Serialize + ?Sized, R: for<'a> Deserialize<'a>>(
+    async fn call_endpoint<T: Serialize + ?Sized + Debug, R: for<'a> Deserialize<'a>>(
         &self,
         path: &str,
         arg: &T,
@@ -67,8 +69,7 @@ impl RosettaClient {
                 .json::<rosetta_core::miscellaneous::Error>()
                 .await
                 .unwrap();
-            println!("Failed to call endpoint: {:?}", error);
-            bail!("Failed to call endpoint: {:?}", error);
+            bail!("Failed to call endpoint: {:?}, Request: {:?}", error, arg);
         } else {
             Ok(response
                 .json()
@@ -87,10 +88,15 @@ impl RosettaClient {
     ) -> anyhow::Result<Vec<Operation>> {
         let suggested_fee = self
             .construction_metadata(
-                ConstructionMetadataRequestOptions {
-                    request_types: vec![RequestType::Send],
-                },
-                network_identifier.clone(),
+                ConstructionMetadataRequest::builder(network_identifier.clone())
+                    .with_options(
+                        ConstructionMetadataRequestOptions {
+                            request_types: vec![RequestType::Send],
+                        }
+                        .try_into()
+                        .map_err(|e| anyhow::anyhow!("Failed to convert options: {:?}", e))?,
+                    )
+                    .build(),
             )
             .await?
             .suggested_fee
@@ -175,6 +181,20 @@ impl RosettaClient {
             .await
     }
 
+    pub async fn network_options(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<NetworkOptionsResponse> {
+        self.call_endpoint(
+            "/network/options",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
     pub async fn network_status(
         &self,
         network_identifier: NetworkIdentifier,
@@ -187,6 +207,42 @@ impl RosettaClient {
             },
         )
         .await
+    }
+
+    pub async fn mempool(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<MempoolResponse> {
+        self.call_endpoint(
+            "/mempool",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
+    pub async fn mempool_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+    ) -> anyhow::Result<MempoolTransactionResponse> {
+        self.call_endpoint(
+            "/mempool/transaction",
+            &MempoolTransactionRequest {
+                network_identifier,
+                transaction_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn account_balance(
+        &self,
+        request: AccountBalanceRequest,
+    ) -> anyhow::Result<AccountBalanceResponse> {
+        self.call_endpoint("/account/balance", &request).await
     }
 
     pub async fn search_transactions(
@@ -289,8 +345,6 @@ impl RosettaClient {
         memo: Option<u64>,
         created_at_time: Option<u64>,
     ) -> anyhow::Result<ConstructionSubmitResponse> {
-        println!("Making payloads request");
-        println!("Operations: {:?}", operations);
         let payloads_response = self
             .construction_payloads(
                 network_identifier.clone(),
@@ -304,9 +358,7 @@ impl RosettaClient {
                 }),
             )
             .await?;
-        println!("Signing transaction");
         let signatures = Self::sign_transaction(signer_keypair, payloads_response.clone())?;
-        println!("Combining transaction");
         let combine_response = self
             .construction_combine(
                 network_identifier.clone(),
@@ -314,7 +366,7 @@ impl RosettaClient {
                 signatures,
             )
             .await?;
-        println!("Submitting transaction");
+
         let submit_response = self
             .construction_submit(
                 network_identifier.clone(),
@@ -369,22 +421,9 @@ impl RosettaClient {
 
     pub async fn construction_metadata(
         &self,
-        construction_metadata_options: ConstructionMetadataRequestOptions,
-        network_identifier: NetworkIdentifier,
+        request: ConstructionMetadataRequest,
     ) -> anyhow::Result<ConstructionMetadataResponse> {
-        self.call_endpoint(
-            "/construction/metadata",
-            &ConstructionMetadataRequest {
-                options: Some(
-                    construction_metadata_options
-                        .try_into()
-                        .map_err(|e| anyhow::anyhow!("Failed to convert options: {:?}", e))?,
-                ),
-                network_identifier,
-                public_keys: None,
-            },
-        )
-        .await
+        self.call_endpoint("/construction/metadata", &request).await
     }
 
     pub async fn construction_submit(
