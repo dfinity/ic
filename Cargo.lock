@@ -8089,6 +8089,7 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "nix 0.24.3",
+ "num-traits",
  "pretty_assertions",
  "prometheus",
  "proptest",
