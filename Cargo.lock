@@ -16521,7 +16521,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -16551,7 +16551,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "aide",
  "askama",
