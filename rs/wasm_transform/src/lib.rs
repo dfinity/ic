@@ -667,7 +667,7 @@ impl<'a> NameSection<'a> {
         ) -> wasm_encoder::IndirectNameMap {
             let mut result = wasm_encoder::IndirectNameMap::new();
             for (index, names) in values {
-                result.append(*index, &make_name_map(&names));
+                result.append(*index, &make_name_map(names));
             }
             result
         }
