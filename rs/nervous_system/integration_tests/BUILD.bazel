@@ -118,7 +118,7 @@ DEV_DATA = [
     "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
+    "@mainnet_pocket_ic",
     "//rs/sns/governance:sns-governance-canister",
     "@mainnet_sns-governance-canister//file",
     "//rs/sns/root:sns-root-canister",
@@ -160,7 +160,7 @@ DEV_ENV = {
     "MAINNET_SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-swap-canister//file)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "POCKET_IC_BIN": "$(rootpath @mainnet_pocket_ic)",
 }
 
 rust_library(
