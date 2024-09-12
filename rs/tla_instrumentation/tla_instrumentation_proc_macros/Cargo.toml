@@ -1,5 +1,5 @@
 [package]
-name = "tla_instrumentation_proc_macros"
+name = "tla-instrumentation-proc-macros"
 version = "0.1.0"
 edition = "2021"
 

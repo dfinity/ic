@@ -1,5 +1,5 @@
 [package]
-name = "tla_instrumentation"
+name = "tla-instrumentation"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,9 +8,9 @@ edition = "2021"
 [dependencies]
 candid = { workspace = true }
 serde = { workspace = true }
-tla_instrumentation_proc_macros = { path = "../tla_instrumentation_proc_macros" }
+tla-instrumentation-proc-macros = { path = "../tla_instrumentation_proc_macros" }
 sha2 = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-local_key = { path = "../local_key" }
+local-key = { path = "../local_key" }
