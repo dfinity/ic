@@ -1,19 +1,20 @@
 //! The public interface that defines the Consensus-P2P API.
-//! Clients must implement the traits in this file in order to use the IC P2P/Replication protocol.
+//! Clients must implement the traits in this file in order to use the IC's P2P/Replication/Broadcast protocol.
 use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
 };
 use std::time::Duration;
 
+/// Artifact is the abstracted term for the message that needs to be broadcast/replicated.
 #[derive(PartialEq, Debug)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     /// The value defines the strategy to deliver a message to all peers.
     /// If true, the artifact will be pushed (send directly to all peers).
     /// This is fast but it can result in significant traffic overhead.
-    /// If false, only the ID of the artifact is pushed to the peers and then each
-    /// peer can fetch the artifact on demand.
+    /// If false, only the ID (think of advert in legacy terms) of the artifact
+    /// is pushed to the peers and then each peer can fetch the artifact on demand.
     pub is_latency_sensitive: bool,
 }
 
@@ -61,10 +62,10 @@ pub struct ArtifactTransmits<T: IdentifiableArtifact> {
 pub trait MutablePool<T: IdentifiableArtifact> {
     type Mutations;
 
-    /// Inserts a message into the unvalidated part of the pool.
+    /// Inserts a message into the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<T>);
 
-    /// Removes a message from the unvalidated part of the pool.
+    /// Removes a message from the pool.
     fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
@@ -87,20 +88,6 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// #Returns:
     /// A iterator over all the validated artifacts.
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = T> + '_>;
-}
-
-/// Unvalidated artifact
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct UnvalidatedArtifact<T> {
-    pub message: T,
-    pub peer_id: NodeId,
-    pub timestamp: Time,
-}
-
-impl<T> AsRef<T> for UnvalidatedArtifact<T> {
-    fn as_ref(&self) -> &T {
-        &self.message
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -151,4 +138,19 @@ pub trait BouncerFactory<Id, Pool>: Send + Sync {
     /// Implementors fo the bouncer are well suited for determing the
     /// refresh period.
     fn refresh_period(&self) -> Duration;
+}
+
+/// Unvalidated artifact
+// TODO: the API should be unvalidated pool agnostic, to remove this struct we need to sign ingress messages
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct UnvalidatedArtifact<T> {
+    pub message: T,
+    pub peer_id: NodeId,
+    pub timestamp: Time,
+}
+
+impl<T> AsRef<T> for UnvalidatedArtifact<T> {
+    fn as_ref(&self) -> &T {
+        &self.message
+    }
 }
