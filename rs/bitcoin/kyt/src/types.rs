@@ -39,27 +39,13 @@ pub enum CheckTransactionError {
         message: String,
     },
     /// Canister call is rejected with rejection code and message.
-    Rejected {
-        code: u32,
-        message: String,
-    },
+    Rejected { code: u32, message: String },
     /// Response size is too large (> `RETRY_BUFFER_SIZE`) when fetching the transaction data of a txid.
-    ResponseTooLarge {
-        txid: Vec<u8>,
-    },
+    ResponseTooLarge { txid: Vec<u8> },
     /// Error decoding transaction data of a txid.
-    Tx {
-        txid: Vec<u8>,
-        message: String,
-    },
+    Tx { txid: Vec<u8>, message: String },
     /// Error decoding transaction id.
-    Txid {
-        txid: Vec<u8>,
-        message: String,
-    },
+    Txid { txid: Vec<u8>, message: String },
     /// Mismatch between the expected txid, and that computed from fetched transaction data.
-    TxidMismatch {
-        expected: Vec<u8>,
-        decoded: Vec<u8>,
-    },
+    TxidMismatch { expected: Vec<u8>, decoded: Vec<u8> },
 }
