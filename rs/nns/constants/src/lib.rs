@@ -29,6 +29,7 @@ pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 10;
 pub const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
 pub const ICP_LEDGER_ARCHIVE_1_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 12;
 pub const SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 13;
+pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 // Exchange Rate, Cycles Ledger (Index) Canisters are deployed to the II subnet.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
 pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
@@ -111,6 +112,9 @@ pub const ICP_LEDGER_ARCHIVE_1_CANISTER_ID: CanisterId =
 /// 13: qvhpv-4qaaa-aaaaa-aaagq-cai
 pub const SUBNET_RENTAL_CANISTER_ID: CanisterId =
     CanisterId::from_u64(SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 14: q4eej-kyaaa-aaaaa-aaaha-cai
+pub const ICP_LEDGER_ARCHIVE_2_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
@@ -182,6 +186,7 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         GENESIS_TOKEN_CANISTER_ID        => "genesis-token",
         GOVERNANCE_CANISTER_ID           => "governance",
         ICP_LEDGER_ARCHIVE_1_CANISTER_ID => "icp-ledger-archive-1",
+        ICP_LEDGER_ARCHIVE_2_CANISTER_ID => "icp-ledger-archive-2",
         ICP_LEDGER_ARCHIVE_CANISTER_ID   => "icp-ledger-archive",
         IDENTITY_CANISTER_ID             => "identity",
         LEDGER_CANISTER_ID               => "ledger",
