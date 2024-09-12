@@ -21,6 +21,10 @@ use crate::{
     ConnId, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
 };
 
+/// QUIC error code for stream cancellation. See
+/// https://datatracker.ietf.org/doc/html/draft-ietf-quic-transport-03#section-12.3.
+const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(6);
+
 /// Drop guard to send a [`SendStream::reset`] frame on drop. QUINN sends a [`SendStream::finish`] frame by default when dropping a [`SendStream`],
 /// which can lead to the peer receiving the stream thinking a complete message was sent. This guard is used to send a reset frame instead, to signal
 /// that the transmission of the message was cancelled.
@@ -37,7 +41,7 @@ impl SendStreamDropGuard {
 impl Drop for SendStreamDropGuard {
     fn drop(&mut self) {
         // fails silently if the stream is already closed.
-        let _ = self.send_stream.reset(VarInt::from_u32(0));
+        let _ = self.send_stream.reset(QUIC_STREAM_CANCELLED);
     }
 }
 
