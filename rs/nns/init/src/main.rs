@@ -10,6 +10,7 @@ use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     itest_helpers::NnsCanisters,
 };
+use icp_ledger::AccountIdentifier;
 use prost::Message;
 use std::{
     fs,
@@ -282,12 +283,30 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
                 account,
                 icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
             );
+
         eprintln!(
             "{}Initializing with test ledger account: {}",
             LOG_PREFIX,
             account.to_hex(),
         );
     }
+
+    init_payloads_builder
+        .ledger
+        .init_args()
+        .unwrap()
+        .minting_account = AccountIdentifier::new(
+        PrincipalId(
+            candid::Principal::from_text(
+                "iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe",
+            )
+            .unwrap(),
+        ),
+        None,
+    );
+    eprintln!(
+    "Initializing with test ledger minter: iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe"
+);
 
     if args.initialize_with_gtc_neurons {
         init_payloads_builder.genesis_token.sr_months_to_release =
