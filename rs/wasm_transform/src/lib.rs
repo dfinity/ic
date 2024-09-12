@@ -1,9 +1,8 @@
 use std::ops::Range;
 
-use wasmparser::Name;
 use wasmparser::{
-    BinaryReaderError, Export, GlobalType, Import, MemoryType, Operator, Parser, Payload, RefType,
-    SubType, TableType, ValType,
+    BinaryReaderError, Export, GlobalType, Import, MemoryType, Name, Operator, Parser, Payload,
+    RefType, SubType, Subsections, TableType, ValType,
 };
 
 mod convert;
@@ -174,9 +173,7 @@ pub struct Module<'a> {
     pub elements: Vec<(ElementKind<'a>, ElementItems<'a>)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
-    // Instead of keeping the "name" custom section, we parse out the function
-    // names into this field. It is a mapping from function index to name.
-    pub function_names: Vec<(u32, &'a str)>,
+    pub name_section: Option<NameSection<'a>>,
 }
 
 impl<'a> Module<'a> {
@@ -196,7 +193,7 @@ impl<'a> Module<'a> {
         let mut start = None;
         let mut data_section_count = None;
         let mut custom_sections = vec![];
-        let mut function_names = vec![];
+        let mut name_section = None;
         for payload in parser.parse_all(wasm) {
             let payload = payload?;
             match payload {
@@ -310,17 +307,10 @@ impl<'a> Module<'a> {
                     });
                 }
                 Payload::CustomSection(custom_section_reader) => {
-                    if let wasmparser::KnownCustom::Name(name_section) =
+                    if let wasmparser::KnownCustom::Name(subsection) =
                         custom_section_reader.as_known()
                     {
-                        for subsection_reader in name_section.into_iter() {
-                            if let Name::Function(name_map) = subsection_reader? {
-                                for naming in name_map.into_iter() {
-                                    let naming = naming?;
-                                    function_names.push((naming.index, naming.name));
-                                }
-                            }
-                        }
+                        name_section = Some(NameSection::parse(subsection)?);
                     } else {
                         custom_sections
                             .push((custom_section_reader.name(), custom_section_reader.data()));
@@ -390,7 +380,7 @@ impl<'a> Module<'a> {
             code_sections,
             data,
             custom_sections,
-            function_names,
+            name_section,
         })
     }
 
@@ -585,14 +575,8 @@ impl<'a> Module<'a> {
             module.section(&data);
         }
 
-        if !self.function_names.is_empty() {
-            let mut name_section = wasm_encoder::NameSection::new();
-            let mut functions = wasm_encoder::NameMap::new();
-            for (index, name) in self.function_names {
-                functions.append(index, name);
-            }
-            name_section.functions(&functions);
-            module.section(&name_section);
+        if let Some(name_section) = self.name_section {
+            name_section.encode(&mut module);
         }
 
         for (name, data) in self.custom_sections {
@@ -603,5 +587,113 @@ impl<'a> Module<'a> {
         }
 
         Ok(module.finish())
+    }
+}
+
+pub struct NameSection<'a> {
+    pub function_names: Vec<(u32, &'a str)>,
+    pub type_names: Vec<(u32, &'a str)>,
+    pub memory_names: Vec<(u32, &'a str)>,
+    pub local_names: Vec<(u32, Vec<(u32, &'a str)>)>,
+    pub label_names: Vec<(u32, Vec<(u32, &'a str)>)>,
+}
+
+impl<'a> NameSection<'a> {
+    fn parse(name_section: Subsections<'a, Name<'a>>) -> Result<Self, Error> {
+        fn add_names<'a>(
+            name_map: wasmparser::SectionLimited<'a, wasmparser::Naming<'a>>,
+            values: &mut Vec<(u32, &'a str)>,
+        ) -> Result<(), Error> {
+            for naming in name_map.into_iter() {
+                let naming = naming?;
+                values.push((naming.index, naming.name));
+            }
+            Ok(())
+        }
+
+        fn add_indirect_names<'a>(
+            indirect_name_map: wasmparser::SectionLimited<'a, wasmparser::IndirectNaming<'a>>,
+            values: &mut Vec<(u32, Vec<(u32, &'a str)>)>,
+        ) -> Result<(), Error> {
+            for indirect in indirect_name_map.into_iter() {
+                let indirect = indirect?;
+                let mut names = vec![];
+                add_names(indirect.names, &mut names)?;
+                values.push((indirect.index, names));
+            }
+            Ok(())
+        }
+
+        let mut function_names = vec![];
+        let mut type_names = vec![];
+        let mut memory_names = vec![];
+        let mut local_names = vec![];
+        let mut label_names = vec![];
+        for subsection_reader in name_section.into_iter() {
+            match subsection_reader? {
+                Name::Function(name_map) => add_names(name_map, &mut function_names)?,
+                Name::Type(name_map) => add_names(name_map, &mut type_names)?,
+                Name::Memory(name_map) => add_names(name_map, &mut memory_names)?,
+                Name::Local(indirect_name_map) => {
+                    add_indirect_names(indirect_name_map, &mut local_names)?
+                }
+                Name::Label(indirect_name_map) => {
+                    add_indirect_names(indirect_name_map, &mut label_names)?
+                }
+                _ => {}
+            }
+        }
+
+        Ok(Self {
+            function_names,
+            type_names,
+            memory_names,
+            local_names,
+            label_names,
+        })
+    }
+
+    fn encode(self, module: &mut wasm_encoder::Module) {
+        fn make_name_map(values: &[(u32, &str)]) -> wasm_encoder::NameMap {
+            let mut result = wasm_encoder::NameMap::new();
+            for (index, name) in values {
+                result.append(*index, name);
+            }
+            result
+        }
+
+        fn make_indirect_name_map(
+            values: &[(u32, Vec<(u32, &str)>)],
+        ) -> wasm_encoder::IndirectNameMap {
+            let mut result = wasm_encoder::IndirectNameMap::new();
+            for (index, names) in values {
+                result.append(*index, &make_name_map(&names));
+            }
+            result
+        }
+
+        let mut name_section = wasm_encoder::NameSection::new();
+
+        if !self.function_names.is_empty() {
+            name_section.functions(&make_name_map(&self.function_names));
+        }
+
+        if !self.type_names.is_empty() {
+            name_section.types(&make_name_map(&self.type_names));
+        }
+
+        if !self.memory_names.is_empty() {
+            name_section.memories(&make_name_map(&self.memory_names));
+        }
+
+        if !self.local_names.is_empty() {
+            name_section.locals(&make_indirect_name_map(&self.local_names));
+        }
+
+        if !self.label_names.is_empty() {
+            name_section.labels(&make_indirect_name_map(&self.label_names));
+        }
+
+        module.section(&name_section);
     }
 }

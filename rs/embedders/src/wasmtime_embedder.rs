@@ -127,38 +127,24 @@ fn trap_code_to_hypervisor_error(
     trap: wasmtime::Trap,
     backtrace: Option<CanisterBacktrace>,
 ) -> HypervisorError {
-    match trap {
-        wasmtime::Trap::StackOverflow => HypervisorError::Trapped {
-            trap_code: TrapCode::StackOverflow,
-            backtrace,
-        },
-        wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped {
-            trap_code: TrapCode::HeapOutOfBounds,
-            backtrace,
-        },
-        wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped {
-            trap_code: TrapCode::TableOutOfBounds,
-            backtrace,
-        },
-        wasmtime::Trap::BadSignature => HypervisorError::ToolchainContractViolation {
+    if trap == wasmtime::Trap::BadSignature {
+        return HypervisorError::ToolchainContractViolation {
             error: BAD_SIGNATURE_MESSAGE.to_string(),
-        },
-        wasmtime::Trap::IntegerDivisionByZero => HypervisorError::Trapped {
-            trap_code: TrapCode::IntegerDivByZero,
-            backtrace,
-        },
-        wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped {
-            trap_code: TrapCode::Unreachable,
-            backtrace,
-        },
-        _ => {
-            // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
-            // so we have to use the wildcard matching here.
-            HypervisorError::Trapped {
-                trap_code: TrapCode::Other,
-                backtrace,
-            }
-        }
+        };
+    };
+    let trap_code = match trap {
+        wasmtime::Trap::StackOverflow => TrapCode::StackOverflow,
+        wasmtime::Trap::MemoryOutOfBounds => TrapCode::HeapOutOfBounds,
+        wasmtime::Trap::TableOutOfBounds => TrapCode::TableOutOfBounds,
+        wasmtime::Trap::IntegerDivisionByZero => TrapCode::IntegerDivByZero,
+        wasmtime::Trap::UnreachableCodeReached => TrapCode::Unreachable,
+        // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
+        // so we have to use the wildcard matching here.
+        _ => TrapCode::Other,
+    };
+    HypervisorError::Trapped {
+        trap_code,
+        backtrace,
     }
 }
 

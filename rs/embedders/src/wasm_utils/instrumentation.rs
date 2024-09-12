@@ -793,8 +793,16 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
         *start_idx = f(*start_idx);
     }
 
-    for (index, _name) in &mut module.function_names {
-        *index = f(*index);
+    if let Some(name_section) = module.name_section.as_mut() {
+        for (index, _name) in &mut name_section.function_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.local_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.label_names {
+            *index = f(*index);
+        }
     }
 }
 

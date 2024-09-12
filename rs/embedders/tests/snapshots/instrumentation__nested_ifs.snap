@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 53
+assertion_line: 62
 expression: out
 ---
 (module
@@ -11,12 +11,12 @@ expression: out
   (type (;4;) (func (param i32)))
   (type (;5;) (func (param i64 i64 i64)))
   (type (;6;) (func (param i32 i32) (result i32 i32)))
-  (import "__" "out_of_instructions" (func $compute (;0;) (type 1)))
+  (import "__" "out_of_instructions" (func (;0;) (type 1)))
   (import "__" "try_grow_wasm_memory" (func (;1;) (type 2)))
   (import "__" "try_grow_stable_memory" (func (;2;) (type 3)))
   (import "__" "internal_trap" (func (;3;) (type 4)))
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
-  (func (;5;) (type 0) (param i64) (result i64)
+  (func $compute (;5;) (type 0) (param $count i64) (result i64)
     global.get 0
     i64.const 7
     i64.sub
@@ -25,9 +25,9 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call $compute
+      call 0
     end
-    local.get 0
+    local.get $count
     i64.const 1
     i64.and
     i32.wrap_i64
@@ -36,10 +36,10 @@ expression: out
       i64.const 8
       i64.sub
       global.set 0
-      local.get 0
+      local.get $count
       i64.const -1
       i64.mul
-      local.tee 0
+      local.tee $count
       i64.const -50
       i64.lt_s
       if ;; label = @2
@@ -47,33 +47,33 @@ expression: out
         i64.const 4
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 100
         i64.mul
-        local.set 0
+        local.set $count
       else
         global.get 0
         i64.const 6
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const -111
         i64.add
-        local.set 0
-        local.get 0
-        local.set 0
+        local.set $count
+        local.get $count
+        local.set $count
       end
     else
       global.get 0
       i64.const 10
       i64.sub
       global.set 0
-      local.get 0
+      local.get $count
       i64.const 1
       i64.add
       i64.const 2
       i64.mul
-      local.tee 0
+      local.tee $count
       i64.const 50
       i64.lt_s
       if ;; label = @2
@@ -81,28 +81,28 @@ expression: out
         i64.const 4
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 100
         i64.mul
-        local.set 0
+        local.set $count
       else
         global.get 0
         i64.const 6
         i64.sub
         global.set 0
-        local.get 0
+        local.get $count
         i64.const 111
         i64.add
-        local.set 0
-        local.get 0
-        local.set 0
+        local.set $count
+        local.get $count
+        local.set $count
       end
     end
     global.get 0
     i64.const 1
     i64.sub
     global.set 0
-    local.get 0
+    local.get $count
   )
   (func (;6;) (type 0) (param i64) (result i64)
     (local i64)
@@ -122,7 +122,7 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call $compute
+      call 0
     end
     local.get 0
   )
@@ -179,10 +179,11 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
-  (export "compute" (func 5))
+  (export "compute" (func $compute))
   (export "stable_memory" (memory 0))
   (export "stable_bytemap_memory" (memory 1))
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
 )
+
