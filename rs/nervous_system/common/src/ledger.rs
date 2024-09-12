@@ -217,6 +217,15 @@ impl IcpLedger for IcpLedgerCanister {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
+        tla_log_request!(
+            "WaitForBalanceQuery",
+            Destination::new("ledger"),
+            "BalanceQuery",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("account".to_string(), account_to_tla(&account))
+            ]))
+        );
+
         let result: Result<Tokens, (Option<i32>, String)> = call(
             self.id,
             "account_balance_pb",
@@ -225,6 +234,23 @@ impl IcpLedger for IcpLedgerCanister {
         )
         .await
         .map(tokens_from_proto);
+
+        tla_log_response!(
+            "WaitForBalanceQuery",
+            Destination::new("ledger"),
+            "BalanceQuery",
+            if let Ok(balance) = result {
+                tla::TlaValue::Variant {
+                    tag: "TransferOk".to_string(),
+                    value: Box::new(balance.to_tla_value()),
+                }
+            } else {
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            }
+        );
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(

@@ -133,7 +133,7 @@ mod tests;
 pub mod tla;
 #[cfg(feature = "tla")]
 use tla::{
-    split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
+    split_neuron_desc, claim_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
     TLA_TRACES,
 };
 
@@ -6079,6 +6079,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
+    #[cfg_attr(feature = "tla", tla_update_method(claim_neuron_desc()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
@@ -6116,6 +6117,7 @@ impl Governance {
         // Get the balance of the neuron's subaccount from ledger canister.
         let account = neuron_subaccount(subaccount);
         let balance = self.ledger.account_balance(account).await?;
+        tla_log_locals! { account: account_to_tla(account), balance: balance, neuron_id: nid.id };
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
             // To prevent this method from creating non-staked
