@@ -292,7 +292,7 @@ impl QueryHandlerMetrics {
         let method_name_label = &format!("query_ic00_{}", query_method);
         let status_label = match result {
             Ok(_) => SUCCESS_STATUS_LABEL,
-            Err(user_error) => &format!("{:?}", user_error),
+            Err(user_error) => &format!("{:?}", user_error.code()),
         };
 
         self.subnet_query_messages
