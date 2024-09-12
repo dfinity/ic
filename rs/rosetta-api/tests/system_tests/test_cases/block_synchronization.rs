@@ -217,3 +217,58 @@ fn test_ledger_upgrade_synchronization() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_load_from_storage() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS * 2,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut env = RosettaTestingEnvironment::builder()
+                        .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
+                        .wit
+                        .build()
+                        .await;
+
+                    env.restart_rosetta_node(
+                        RosettaOptions::builder(env.pocket_ic.url().unwrap().to_string())
+                            .with_persistent_storage()
+                            .offline()
+                            .build(),
+                    )
+                    .await;
+
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        args_with_caller.len(),
+                    )
+                    .await
+                    .unwrap();
+
+                    assert_rosetta_blockchain_is_valid(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
+                    )
+                });
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}

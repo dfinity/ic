@@ -54,6 +54,7 @@ pub struct RosettaOptionsBuilder {
     ledger_id: Option<Principal>,
     persistent_storage: bool,
     ic_url: String,
+    offline: bool,
 }
 
 impl RosettaOptionsBuilder {
@@ -72,6 +73,11 @@ impl RosettaOptionsBuilder {
 
     pub fn with_persistent_storage(mut self) -> Self {
         self.persistent_storage = true;
+        self
+    }
+
+    pub fn offline(mut self) -> Self {
+        self.offline = true;
         self
     }
 
@@ -127,6 +133,10 @@ pub async fn start_rosetta(
     if arguments.ledger_id.is_some() {
         cmd.arg("--canister-id")
             .arg(arguments.ledger_id.unwrap().to_string());
+    }
+
+    if arguments.offline {
+        cmd.arg("--offline");
     }
 
     let _proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
