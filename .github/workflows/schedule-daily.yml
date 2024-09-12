@@ -98,7 +98,7 @@ jobs:
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
-          # Deploy the bare metal machine with SetupOS
+          # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
@@ -109,7 +109,7 @@ jobs:
               --file_share_username ci_interim \
               --ci_mode
 
-          # Run node performance benchmarks
+          # Run bare metal node performance benchmarks
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
