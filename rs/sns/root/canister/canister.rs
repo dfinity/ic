@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::println;
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
@@ -354,16 +354,6 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
             .expect("STATE.governance_canister_id is not populated");
         assert_eq!(id, governance_canister_id);
     });
-}
-
-#[heartbeat]
-async fn heartbeat() {
-    // Asynchronous method called for the canister_heartbeat that injects
-    // dependencies to run_periodic_tasks.
-    let now = CanisterEnvironment {}.now();
-    let ledger_client = create_ledger_client();
-
-    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
 }
 
 // Resources to serve for a given http_request
