@@ -41,7 +41,7 @@ main() {
     /opt/ic/bin/check-hardware.sh
     /opt/ic/bin/check-network.sh
     /opt/ic/bin/setup-disk.sh
-    /opt/ic/bin/hostos.sh
+    /opt/ic/bin/install-hostos.sh
     /opt/ic/bin/guestos.sh
     /opt/ic/bin/setup-hostos-config.sh
     reboot_setupos

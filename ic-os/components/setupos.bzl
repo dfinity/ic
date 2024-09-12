@@ -11,7 +11,7 @@ component_files = {
     Label("setupos-scripts/functions.sh"): "/opt/ic/bin/functions.sh",
     Label("setupos-scripts/guestos.sh"): "/opt/ic/bin/guestos.sh",
     Label("setupos-scripts/check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
-    Label("setupos-scripts/hostos.sh"): "/opt/ic/bin/hostos.sh",
+    Label("setupos-scripts/install-hostos.sh"): "/opt/ic/bin/install-hostos.sh",
     Label("setupos-scripts/check-network.sh"): "/opt/ic/bin/check-network.sh",
     Label("setupos-scripts/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("setupos-scripts/setupos.sh"): "/opt/ic/bin/setupos.sh",
