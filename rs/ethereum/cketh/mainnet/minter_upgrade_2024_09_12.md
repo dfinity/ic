@@ -12,13 +12,12 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-The ckETH minter is stuck and unable to process deposits nor withdrawals due to the following events:
+The ckETH minter is currently unable to process conversions between ETH/ERC20 and ckETH/ckERC20 due to the following events:
 1. Proposal [132415](https://dashboard.internetcomputer.org/proposal/132415) was executed at 2024.09.11 09:28 (UTC) and successfully replaced the Ethereum JSON-RPC provider Ankr (rpc.ankr.com) with `eth-pokt.nodies.app` from [Pocket Network](https://www.pokt.network/).
 2. Unfortunately, at the same time the Ethereum JSON-RPC provider LlamaNodes  `eth.llamarpc.com` was down and constantly replying with `no response`. This seems to have been resolved since the ckETH minter did make progress around 2024.09.11 22:00 (UTC) but stopped since then.
 3. The [logs](https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/logs?sort=desc) show that responses from the Ethereum JSON-RPC provider Pocket Network (`eth-pokt.nodies.app`) differ between the replicas resulting in consensus failures.
 
 As a temporary fix, this proposal replaces the Ethereum JSON-RPC provider Pocket Network (`eth-pokt.nodies.app`) with the Ethereum JSON-RPC provider BlockPi (`https://ethereum.blockpi.network/v1/rpc/public).
-The long term solution is to use a more robust strategy (e.g., agreement among 3 providers, when 4 were queried) using the EVM-RPC canister.
 
 ## Upgrade args
 
