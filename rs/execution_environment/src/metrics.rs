@@ -289,16 +289,7 @@ impl QueryHandlerMetrics {
         duration: f64,
         result: &Result<T, UserError>,
     ) {
-        // Determine the label based on whether the method is a subnet (management canister) query.
-        let method_name_label = &format!(
-            "query_{}{}",
-            if query_method.is_management_canister_query() {
-                "ic00_"
-            } else {
-                ""
-            },
-            query_method
-        );
+        let method_name_label = &format!("query_ic00_{}", query_method);
         let status_label = match result {
             Ok(_) => SUCCESS_STATUS_LABEL,
             Err(user_error) => &format!("{:?}", user_error),
