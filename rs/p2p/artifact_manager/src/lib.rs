@@ -284,7 +284,7 @@ pub fn create_artifact_handler<
     UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     Box<dyn JoinGuard>,
 ) {
-    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast).collect();
+    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();
     let client = Processor::new(pool, change_set_producer);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
