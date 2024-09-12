@@ -1,5 +1,6 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("mainnet-binaries.bzl", "mainnet_binaries")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -98,3 +99,5 @@ test_suite(
     tags = ["manual"],
     tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
 )
+
+mainnet_binaries()
