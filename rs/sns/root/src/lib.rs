@@ -728,8 +728,8 @@ impl SnsRootCanister {
         }
     }
 
-    /// Polls for new archives canisters from the
-    async fn poll_for_new_archive_canisters(
+    /// Polls for new archives canisters from the ledger canister.
+    pub async fn poll_for_new_archive_canisters(
         self_ref: &'static LocalKey<RefCell<Self>>,
         ledger_client: &impl LedgerCanisterClient,
         current_timestamp_seconds: u64,

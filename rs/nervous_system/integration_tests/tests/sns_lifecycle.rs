@@ -1874,7 +1874,7 @@ fn test_sns_lifecycle(
     pocket_ic.tick();
     let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
     assert!(
-        response.archives_canister_summaries().len() > 0,
+        !response.archives_canister_summaries().is_empty(),
         "No archives found from get_sns_canisters_summary response: {:#?}",
         response
     );
