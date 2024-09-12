@@ -9422,6 +9422,7 @@ dependencies = [
  "icrc-ledger-types",
  "json5",
  "lazy_static",
+ "local-key",
  "maplit",
  "mockall",
  "num-traits",
@@ -9432,6 +9433,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "tla-instrumentation",
+ "tla-instrumentation-proc-macros",
 ]
 
 [[package]]
@@ -9734,7 +9737,6 @@ dependencies = [
  "bytes",
  "canbench-rs",
  "candid",
- "candid_parser",
  "comparable",
  "criterion",
  "csv",
@@ -9751,7 +9753,6 @@ dependencies = [
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
  "ic-ledger-core",
- "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
@@ -9762,15 +9763,11 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
- "ic-nervous-system-temporary",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance-api",
- "ic-nns-governance-init",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
- "ic-nns-handler-root-interface",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",
@@ -9779,7 +9776,6 @@ dependencies = [
  "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "ic-types",
- "ic-utils 0.9.0",
  "icp-ledger",
  "itertools 0.12.0",
  "lazy_static",
@@ -9802,6 +9798,8 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tla-instrumentation",
+ "tla-instrumentation-proc-macros",
  "tokio",
  "tokio-test",
 ]
@@ -14560,17 +14558,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "local-waker"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e34f76eb3611940e0e7d53a9aaa4e6a3151f69541a282fd0dad5571420c53ff1"
-
-[[package]]
-name = "local_key"
+name = "local-key"
 version = "0.1.0"
 dependencies = [
  "pin-project-lite",
 ]
+
+[[package]]
+name = "local-waker"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e34f76eb3611940e0e7d53a9aaa4e6a3151f69541a282fd0dad5571420c53ff1"
 
 [[package]]
 name = "lock_api"
@@ -19907,19 +19905,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
-name = "tla_instrumentation"
+name = "tla-instrumentation"
 version = "0.1.0"
 dependencies = [
  "candid",
- "local_key",
+ "local-key",
  "serde",
  "sha2 0.10.8",
- "tla_instrumentation_proc_macros",
+ "tla-instrumentation-proc-macros",
  "tokio-test",
 ]
 
 [[package]]
-name = "tla_instrumentation_proc_macros"
+name = "tla-instrumentation-proc-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
