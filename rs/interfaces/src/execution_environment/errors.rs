@@ -126,7 +126,10 @@ pub enum HypervisorError {
         backtrace: Option<CanisterBacktrace>,
     },
     /// Canister explicitly called `ic.trap`.
-    CalledTrap(String),
+    CalledTrap {
+        message: String,
+        backtrace: Option<CanisterBacktrace>,
+    },
     /// An attempt was made to execute a message on a canister that does not
     /// contain a Wasm module.
     WasmModuleNotFound,
@@ -245,7 +248,7 @@ impl std::fmt::Display for HypervisorError {
                 trap_code,
                 backtrace,
             } => {
-                writeln!(f, "Canister trapped: {}", trap_code)?;
+                write!(f, "Canister trapped: {}", trap_code)?;
                 // When the wasm_backtrace feature is enabled, we can provide a
                 // more helpful message on how to get backtraces. E.g.:
                 // "Canister backtrace omitted here, but may be included in
@@ -254,13 +257,18 @@ impl std::fmt::Display for HypervisorError {
                 // and call it from a canister with permission to view
                 // backtraces."
                 if let Some(bt) = backtrace {
-                    write!(f, "{}", bt)
+                    write!(f, "\n{}", bt)
                 } else {
                     Ok(())
                 }
             }
-            Self::CalledTrap(msg) => {
-                write!(f, "Canister called `ic0.trap` with message: {}", msg)
+            Self::CalledTrap { message, backtrace } => {
+                write!(f, "Canister called `ic0.trap` with message: {}", message)?;
+                if let Some(bt) = backtrace {
+                    write!(f, "\n{}", bt)
+                } else {
+                    Ok(())
+                }
             }
             Self::WasmModuleNotFound => write!(
                 f,
@@ -406,7 +414,7 @@ impl AsErrorHelp for HypervisorError {
                     .to_string(),
                 doc_link: doc_ref("trapped"),
             },
-            Self::CalledTrap(_) => ErrorHelp::UserError {
+            Self::CalledTrap { .. } => ErrorHelp::UserError {
                 suggestion: "Consider gracefully handling failures from this canister \
                 or altering the canister to handle exceptions."
                     .to_string(),
@@ -511,7 +519,7 @@ impl HypervisorError {
             Self::InvalidWasm(_) => E::CanisterInvalidWasm,
             Self::InstrumentationFailed(_) => E::CanisterInvalidWasm,
             Self::Trapped { .. } => E::CanisterTrapped,
-            Self::CalledTrap(_) => E::CanisterCalledTrap,
+            Self::CalledTrap { .. } => E::CanisterCalledTrap,
             Self::WasmModuleNotFound => E::CanisterWasmModuleNotFound,
             Self::OutOfMemory => E::CanisterOutOfMemory,
             Self::InvalidPrincipalId(_) => E::CanisterContractViolation,
@@ -552,7 +560,7 @@ impl HypervisorError {
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped { .. } => "Trapped",
-            HypervisorError::CalledTrap(_) => "CalledTrap",
+            HypervisorError::CalledTrap { .. } => "CalledTrap",
             HypervisorError::WasmModuleNotFound => "WasmModuleNotFound",
             HypervisorError::OutOfMemory => "OutOfMemory",
             HypervisorError::InvalidPrincipalId(_) => "InvalidPrincipalId",

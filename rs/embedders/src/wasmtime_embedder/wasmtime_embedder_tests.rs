@@ -40,10 +40,9 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
-        &EmbeddersConfig::default(),
-    ))
-    .expect("Failed to initialize Wasmtime engine");
+    let config = EmbeddersConfig::default();
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
+        .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_running(
         canister_id,
@@ -103,6 +102,7 @@ fn test_wasmtime_system_api() {
             log: no_op_logger(),
             num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
             limits: StoreLimits::default(),
+            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 

@@ -3146,10 +3146,13 @@ impl SystemApi for SystemApiImpl {
         const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
-            let msg = valid_subslice("trap", src, size, heap)
+            let message = valid_subslice("trap", src, size, heap)
                 .map(|bytes| String::from_utf8_lossy(bytes).to_string())
                 .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
-            CalledTrap(msg)
+            CalledTrap {
+                message,
+                backtrace: None,
+            }
         };
         trace_syscall!(self, Trap, src, size, summarize(heap, src, size));
         Err(result)

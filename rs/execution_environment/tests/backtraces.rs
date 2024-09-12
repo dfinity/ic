@@ -46,8 +46,9 @@ fn unreachable_instr_backtrace() {
         ErrorCode::CanisterTrapped,
         r#"Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: unreachable
 Canister Backtrace:
-_wasm_backtrace_canister::unreachable_bar
-_wasm_backtrace_canister::unreachable_foo
+_wasm_backtrace_canister::unreachable::inner_2
+_wasm_backtrace_canister::unreachable::inner
+_wasm_backtrace_canister::unreachable::outer
 _wasm_backtrace_canister::__canister_method_unreachable::{{closure}}
 canister_update unreachable
 .
@@ -81,18 +82,57 @@ fn oob_backtrace() {
         ErrorCode::CanisterTrapped,
         r#"Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: heap out of bounds
 Canister Backtrace:
-_wasm_backtrace_canister::oob_foo
-_wasm_backtrace_canister::__canister_method_oob::{{closure}}
+_wasm_backtrace_canister::oob::inner_2
+_wasm_backtrace_canister::oob::inner
+_wasm_backtrace_canister::oob::outer
 canister_update oob
-.
-"#,
+."#,
     )
 }
 
 #[test]
 fn backtrace_test_ic0_trap() {
     let (env, canister_id) = env_with_backtrace_canister(true);
-    assert!(env
+    let result = env
         .execute_ingress(canister_id, "ic0_trap", Encode!(&()).unwrap())
-        .is_err());
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        r#"Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: Panicked at 'uh oh', rs/rust_canisters/backtrace_canister/src/main.rs:47:5
+Canister Backtrace:
+ic_cdk::api::trap
+ic_cdk::printer::set_panic_hook::{{closure}}
+std::panicking::rust_panic_with_hook
+std::panicking::begin_panic_handler::{{closure}}
+std::sys_common::backtrace::__rust_end_short_backtrace
+rust_begin_unwind
+core::panicking::panic_fmt
+_wasm_backtrace_canister::ic0_trap::inner_2
+_wasm_backtrace_canister::ic0_trap::inner
+_wasm_backtrace_canister::ic0_trap::outer
+_wasm_backtrace_canister::__canister_method_ic0_trap::{{closure}}
+canister_update ic0_trap
+.
+"#,
+    )
+}
+
+#[test]
+fn backtrace_test_stable_oob() {
+    let (env, canister_id) = env_with_backtrace_canister(true);
+    let result = env
+        .execute_ingress(canister_id, "stable_oob", Encode!(&()).unwrap())
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterTrapped,
+        r#"Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: stable memory out of bounds
+Canister Backtrace:
+ic0::ic0::stable_write
+_wasm_backtrace_canister::stable_oob::inner_2
+_wasm_backtrace_canister::stable_oob::inner
+_wasm_backtrace_canister::stable_oob::outer
+canister_update stable_oob
+.
+"#,
+    )
 }
