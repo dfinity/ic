@@ -7,7 +7,7 @@ component_files = {
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",
     Label("setupos-scripts/setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",
-    Label("setupos-scripts/disk.sh"): "/opt/ic/bin/disk.sh",
+    Label("setupos-scripts/setup-disk.sh"): "/opt/ic/bin/setup-disk.sh",
     Label("setupos-scripts/functions.sh"): "/opt/ic/bin/functions.sh",
     Label("setupos-scripts/guestos.sh"): "/opt/ic/bin/guestos.sh",
     Label("setupos-scripts/check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
