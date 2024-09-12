@@ -518,7 +518,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_validated();
+                let filtered_msgs = ingress_pool.get_all_for_broadcast);
                 assert!(filtered_msgs.count() == 0);
             })
         })

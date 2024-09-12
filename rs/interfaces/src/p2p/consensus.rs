@@ -6,14 +6,15 @@ use ic_types::{
 };
 use std::time::Duration;
 
+/// Artifact is the abstracted term for the message that needs to be replicated.
 #[derive(PartialEq, Debug)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     /// The value defines the strategy to deliver a message to all peers.
     /// If true, the artifact will be pushed (send directly to all peers).
     /// This is fast but it can result in significant traffic overhead.
-    /// If false, only the ID of the artifact is pushed to the peers and then each
-    /// peer can fetch the artifact on demand.
+    /// If false, only the ID (think of advert in legacy terms) of the artifact
+    /// is pushed to the peers and then each peer can fetch the artifact on demand.
     pub is_latency_sensitive: bool,
 }
 
@@ -61,10 +62,10 @@ pub struct ChangeResult<T: IdentifiableArtifact> {
 pub trait MutablePool<T: IdentifiableArtifact> {
     type ChangeSet;
 
-    /// Inserts a message into the unvalidated part of the pool.
+    /// Inserts a message into the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<T>);
 
-    /// Removes a message from the unvalidated part of the pool.
+    /// Removes a message from the pool.
     fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
@@ -82,30 +83,13 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
 
-    /// Get all validated artifacts.
-    ///
-    /// #Returns:
-    /// A iterator over all the validated artifacts.
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T> + '_>;
-}
-
-/// Unvalidated artifact
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct UnvalidatedArtifact<T> {
-    pub message: T,
-    pub peer_id: NodeId,
-    pub timestamp: Time,
-}
-
-impl<T> AsRef<T> for UnvalidatedArtifact<T> {
-    fn as_ref(&self) -> &T {
-        &self.message
-    }
+    /// Returns all artifacts that need to be broadcasted.
+    /// This is used only during the boostrapping/recovery phase.
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_>;
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Aborted;
-
 pub trait Peers {
     fn peers(&self) -> Vec<NodeId>;
 }
@@ -127,7 +111,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 }
 
 /// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
-/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
+/// Think of this closure as guarding access to the pool (similar to a bouncer in a night club).
 pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 
 /// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.
@@ -148,7 +132,21 @@ pub trait BouncerFactory<Id, Pool>: Send + Sync {
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
 
     /// The period at which the bouncer should be refreshed.
-    /// Implementors fo the bouncer are well suited for determing the
-    /// refresh period.
+    /// Implementors of the bouncer are well suited for determing the refresh period.
     fn refresh_period(&self) -> Duration;
+}
+
+/// Unvalidated artifact
+// TODO: the API should be unvalidated pool agnostic, to remove this struct we need to sign ingress messages
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct UnvalidatedArtifact<T> {
+    pub message: T,
+    pub peer_id: NodeId,
+    pub timestamp: Time,
+}
+
+impl<T> AsRef<T> for UnvalidatedArtifact<T> {
+    fn as_ref(&self) -> &T {
+        &self.message
+    }
 }

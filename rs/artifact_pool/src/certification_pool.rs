@@ -393,7 +393,7 @@ impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
         }
     }
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
+    fn get_all_for_broadcast&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         let certification_range = self.persistent_pool.certifications().height_range();
         let share_range = self.persistent_pool.certification_shares().height_range();
 
@@ -870,7 +870,7 @@ mod tests {
             };
 
             let mut heights = HashSet::new();
-            pool.get_all_validated().for_each(|m| {
+            pool.get_all_for_broadcast).for_each(|m| {
                 if m.height().get() % 2 == 0 {
                     assert!(!m.is_share());
                 }
@@ -883,7 +883,7 @@ mod tests {
                 assert!(heights.insert(m.height()));
             });
             assert_eq!(heights.len(), 20);
-            assert_eq!(pool.get_all_validated().count(), 20);
+            assert_eq!(pool.get_all_for_broadcast).count(), 20);
         });
     }
 }
