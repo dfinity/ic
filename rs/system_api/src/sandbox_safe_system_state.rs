@@ -617,6 +617,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self {
             canister_id,
@@ -633,6 +634,7 @@ impl SandboxSafeSystemState {
                 canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
+                on_low_wasm_memory_hook_status,
                 ..SystemStateChanges::default()
             },
             initial_cycles_balance,
@@ -734,6 +736,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            system_state.get_on_low_wasm_memory_hook_status().clone(),
         )
     }
 
@@ -1306,7 +1309,10 @@ mod tests {
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
+    use ic_replicated_state::{
+        canister_state::system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        SystemState,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
@@ -1416,6 +1422,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         );
         sandbox_state.msg_deadline()
     }
