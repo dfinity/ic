@@ -515,7 +515,11 @@ impl State {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
         }
         if let Some(evm_id) = evm_rpc_id {
-            self.evm_rpc_id = Some(evm_id);
+            if evm_id == Principal::management_canister() {
+                self.evm_rpc_id = None;
+            } else {
+                self.evm_rpc_id = Some(evm_id);
+            }
         }
         self.validate_config()
     }

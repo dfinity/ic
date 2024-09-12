@@ -634,7 +634,7 @@ set_testnet_env_variables() {
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
-        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md."
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './ci/container/container-run.sh', and that you created it by following the instructions in README.md."
         exit 1
     fi
 

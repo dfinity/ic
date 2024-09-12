@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::queue::CanisterQueue;
 use super::CanisterQueues;
 use crate::{InputQueueType, InputSource};
@@ -7,8 +5,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::CanisterId;
-use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeSet, VecDeque};
 use std::convert::TryFrom;
 
@@ -43,19 +39,17 @@ mod tests;
 /// following soft invariants:
 ///
 ///  * All non-empty input queues are scheduled exactly once.
-///  * A sender is enqueued in `local_sender_schedule` or
-///    `remote_sender_schedule` iff it is present in `scheduled_senders`.
-///  * Local senders are enqueued in the `local_sender_schedule`; remote senders
-///    may be ensured in either schedule (this is because we rely on
-///    `ReplicatedState::canister_states` to decide whether a canister is local,
-///    and this will mis-identify a recently deleted local sender as remote).
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+///  * A sender is enqueued in the local or remote input schedule iff present in
+///    the `scheduled_senders` set.
+///  * Local canisters (including ourselves) are scheduled in the local sender
+///    schedule. Canisters that are not known to be local (including potentially
+///    deleted local canisters) may be scheduled in either input schedule.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct InputSchedule {
     /// The input source (local senders, ingress or remote senders) at the front
     /// of the schedule.
     ///
     /// Used to implement round-robin rotation over input sources.
-    #[validate_eq(Ignore)]
     next_input_source: InputSource,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
@@ -151,7 +145,8 @@ impl InputSchedule {
             InputQueueType::LocalSubnet => self.local_sender_schedule.pop_front(),
             InputQueueType::RemoteSubnet => self.remote_sender_schedule.pop_front(),
         }?;
-        debug_assert!(self.scheduled_senders.remove(&sender));
+        let removed = self.scheduled_senders.remove(&sender);
+        debug_assert!(removed);
         Some(sender)
     }
 
@@ -298,7 +293,7 @@ impl TryFrom<(i32, Vec<pb_types::CanisterId>, Vec<pb_types::CanisterId>)> for In
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,
@@ -308,11 +303,11 @@ pub struct CanisterQueuesLoopDetector {
 impl CanisterQueuesLoopDetector {
     /// Detects a loop in `CanisterQueues`.
     pub fn detected_loop(&self, canister_queues: &CanisterQueues) -> bool {
-        let skipped_all_remote =
-            self.remote_queue_skip_count >= canister_queues.remote_subnet_input_schedule.len();
+        let skipped_all_remote = self.remote_queue_skip_count
+            >= canister_queues.input_schedule.remote_sender_schedule.len();
 
-        let skipped_all_local =
-            self.local_queue_skip_count >= canister_queues.local_subnet_input_schedule.len();
+        let skipped_all_local = self.local_queue_skip_count
+            >= canister_queues.input_schedule.local_sender_schedule.len();
 
         let skipped_all_ingress =
             self.ingress_queue_skip_count >= canister_queues.ingress_queue.ingress_schedule_size();
