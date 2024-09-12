@@ -222,7 +222,7 @@ impl IcpLedger for IcpLedgerCanister {
             Destination::new("ledger"),
             "BalanceQuery",
             tla::TlaValue::Record(BTreeMap::from([
-                ("account".to_string(), account_to_tla(&account))
+                ("account".to_string(), account_to_tla(account))
             ]))
         );
 
@@ -236,9 +236,7 @@ impl IcpLedger for IcpLedgerCanister {
         .map(tokens_from_proto);
 
         tla_log_response!(
-            "WaitForBalanceQuery",
             Destination::new("ledger"),
-            "BalanceQuery",
             if let Ok(balance) = result {
                 tla::TlaValue::Variant {
                     tag: "TransferOk".to_string(),
