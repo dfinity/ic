@@ -425,7 +425,7 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_changes.apply(time, system_state, network_topology, subnet_id, log)
+    system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
 
 /// Applies canister state change after Wasm execution if possible.
