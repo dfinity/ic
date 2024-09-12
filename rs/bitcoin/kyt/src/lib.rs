@@ -1,4 +1,4 @@
-use bitcoin::{address::FromScriptError, consensus::Decodable, Address, Transaction};
+use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{
@@ -21,17 +21,34 @@ pub use types::*;
 
 #[derive(Debug, Clone)]
 pub enum GetTxError {
-    Address(FromScriptError),
-    Encoding(String),
-    TxIdMismatch {
-        expected: [u8; 32],
-        decoded: [u8; 32],
+    TxEncoding(String),
+    TxidMismatch {
+        expected: Txid,
+        decoded: Txid,
     },
     ResponseTooLarge,
     Rejected {
         code: RejectionCode,
         message: String,
     },
+}
+
+impl From<(Txid, GetTxError)> for CheckTransactionError {
+    fn from((txid, err): (Txid, GetTxError)) -> CheckTransactionError {
+        let txid = txid.as_ref().to_vec();
+        match err {
+            GetTxError::TxEncoding(message) => CheckTransactionError::Tx { txid, message },
+            GetTxError::TxidMismatch { expected, decoded } => CheckTransactionError::TxidMismatch {
+                expected: expected.as_ref().to_vec(),
+                decoded: decoded.as_ref().to_vec(),
+            },
+            GetTxError::Rejected { code, message } => CheckTransactionError::Rejected {
+                code: code as u32,
+                message,
+            },
+            GetTxError::ResponseTooLarge => CheckTransactionError::ResponseTooLarge { txid },
+        }
+    }
 }
 
 pub fn blocklist_contains(address: &Address) -> bool {
@@ -78,13 +95,13 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
         Ok((response,)) => {
             // TODO(XC-158): ensure response is 200 before decoding
             let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                .map_err(|err| GetTxError::Encoding(err.to_string()))?;
+                .map_err(|err| GetTxError::TxEncoding(err.to_string()))?;
             // Verify the correctness of the transaction by recomputing the transaction ID.
             let decoded_tx_id = tx.compute_txid();
             if decoded_tx_id.as_ref() as &[u8; 32] != tx_id.as_ref() {
-                return Err(GetTxError::TxIdMismatch {
-                    expected: tx_id.into(),
-                    decoded: *decoded_tx_id.as_ref(),
+                return Err(GetTxError::TxidMismatch {
+                    expected: tx_id,
+                    decoded: Txid::from(*(decoded_tx_id.as_ref() as &[u8; 32])),
                 });
             }
             Ok(tx)
@@ -137,22 +154,22 @@ impl FetchEnv for KytCanisterEnv {
     }
 }
 
-pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
+pub async fn check_transaction_inputs(
+    txid: Txid,
+) -> Result<CheckTransactionResponse, CheckTransactionError> {
     let env = &KytCanisterEnv;
     let state = &KytCanisterState;
     match env.try_fetch_tx(state, txid) {
-        TryFetchResult::Pending => CheckTransactionResponse::Pending,
-        TryFetchResult::HighLoad => CheckTransactionResponse::HighLoad,
-        TryFetchResult::Error(msg) => CheckTransactionResponse::Error(format!("{:?}", msg)),
-        TryFetchResult::NotEnoughCycles => CheckTransactionResponse::NotEnoughCycles,
+        TryFetchResult::Pending => Ok(CheckTransactionResponse::Pending),
+        TryFetchResult::HighLoad => Ok(CheckTransactionResponse::HighLoad),
+        TryFetchResult::Error(err) => Err((txid, err).into()),
+        TryFetchResult::NotEnoughCycles => Ok(CheckTransactionResponse::NotEnoughCycles),
         TryFetchResult::Fetched(fetched) => env.check_fetched(state, txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {
             match do_fetch.await {
                 Ok(FetchResult::Fetched(fetched)) => env.check_fetched(state, txid, &fetched).await,
-                Ok(FetchResult::Error(err)) => {
-                    CheckTransactionResponse::Error(format!("{:?}", err))
-                }
-                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionResponse::Pending,
+                Ok(FetchResult::Error(err)) => Err((txid, err).into()),
+                Ok(FetchResult::RetryWithBiggerBuffer) => Ok(CheckTransactionResponse::Pending),
                 Err(_) => unreachable!(), // should never happen
             }
         }

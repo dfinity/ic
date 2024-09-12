@@ -1,7 +1,7 @@
 use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx};
-use crate::types::CheckTransactionResponse;
+use crate::types::{CheckTransactionError, CheckTransactionResponse};
 use crate::{blocklist_contains, GetTxError};
-use bitcoin::{Address, Network, Transaction};
+use bitcoin::{address::FromScriptError, Address, Network, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
 use std::convert::Infallible;
@@ -153,7 +153,7 @@ pub trait FetchEnv {
         state: &State,
         txid: Txid,
         fetched: &FetchedTx,
-    ) -> CheckTransactionResponse {
+    ) -> Result<CheckTransactionResponse, CheckTransactionError> {
         // Return Passed or Failed when all checks are complete, or None otherwise.
         fn check_completed(fetched: &FetchedTx) -> Option<CheckTransactionResponse> {
             if fetched.input_addresses.iter().all(|x| x.is_some()) {
@@ -170,7 +170,7 @@ pub trait FetchEnv {
         }
 
         if let Some(result) = check_completed(fetched) {
-            return result;
+            return Ok(result);
         }
 
         let mut futures = vec![];
@@ -189,10 +189,11 @@ pub trait FetchEnv {
                         match transaction_output_address(&fetched.tx, vout) {
                             Ok(address) => state.set_fetched_address(txid, index, address),
                             Err(err) => {
-                                return CheckTransactionResponse::Error(format!(
-                                    "Error in fetching {}: {:?}",
-                                    input_txid, err
-                                ));
+                                return Err(CheckTransactionError::Address {
+                                    txid: txid.as_ref().to_vec(),
+                                    vout,
+                                    message: format!("{}", err),
+                                })
                             }
                         }
                     }
@@ -205,9 +206,9 @@ pub trait FetchEnv {
         if futures.is_empty() {
             // Return NotEnoughCycles if we have deducted all available cycles
             if self.cycles_available() == 0 {
-                return CheckTransactionResponse::NotEnoughCycles;
+                return Ok(CheckTransactionResponse::NotEnoughCycles);
             } else {
-                return CheckTransactionResponse::HighLoad;
+                return Ok(CheckTransactionResponse::HighLoad);
             }
         }
 
@@ -216,28 +217,27 @@ pub trait FetchEnv {
             .unwrap_or_else(|err| unreachable!("error in try_join_all {:?}", err));
 
         let mut error = None;
-        for (i, result) in fetch_results.iter().enumerate() {
+        for (i, result) in fetch_results.into_iter().enumerate() {
+            let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    let (index, input_txid, vout) = jobs[i];
                     match transaction_output_address(&fetched.tx, vout) {
                         Ok(address) => state.set_fetched_address(txid, index, address),
                         Err(err) => {
-                            error = Some(format!(
-                                "error in computing address of {} vout {}: {:?}",
-                                input_txid, vout, err
-                            ))
+                            error = Some(CheckTransactionError::Address {
+                                txid: input_txid.as_ref().to_vec(),
+                                vout,
+                                message: format!("{:?}", err),
+                            })
                         }
                     }
                 }
-                FetchResult::Error(err) => {
-                    error = Some(format!("error in fetching {}: {:?}", txid, err))
-                }
+                FetchResult::Error(err) => error = Some((input_txid, err).into()),
                 FetchResult::RetryWithBiggerBuffer => (),
             }
         }
         if let Some(err) = error {
-            return CheckTransactionResponse::Error(err);
+            return Err(err);
         }
         // Check again to see if we have completed
         match state
@@ -246,13 +246,13 @@ pub trait FetchEnv {
                 FetchTxStatus::Fetched(fetched) => check_completed(&fetched),
                 _ => None,
             }) {
-            Some(result) => result,
-            None => CheckTransactionResponse::Pending,
+            Some(result) => Ok(result),
+            None => Ok(CheckTransactionResponse::Pending),
         }
     }
 }
 
-fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, GetTxError> {
+fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, FromScriptError> {
     let output = &tx.output[vout as usize];
-    Address::from_script(&output.script_pubkey, Network::Bitcoin).map_err(GetTxError::Address)
+    Address::from_script(&output.script_pubkey, Network::Bitcoin)
 }

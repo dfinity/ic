@@ -3,7 +3,7 @@ use ic_base_types::PrincipalId;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
-    CheckTransactionResponse, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CheckTransactionError, CheckTransactionResponse, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_BUFFER_SIZE,
 };
 use ic_test_utilities_load_wasm::load_wasm;
@@ -17,6 +17,8 @@ use pocket_ic::{
     query_candid, PocketIc, UserError, WasmResult,
 };
 use std::str::FromStr;
+
+type CheckTransactionResult = Result<CheckTransactionResponse, CheckTransactionError>;
 
 const MAX_TICKS: usize = 10;
 
@@ -245,8 +247,8 @@ fn test_check_transaction_passed() {
 
     match &result {
         WasmResult::Reply(bytes) => {
-            let response = Decode!(bytes, CheckTransactionResponse).unwrap();
-            assert!(matches!(response, CheckTransactionResponse::Passed));
+            let response = Decode!(bytes, CheckTransactionResult).unwrap();
+            assert!(matches!(response, Ok(CheckTransactionResponse::Passed)));
         }
         WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
@@ -284,10 +286,10 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     match &result {
         WasmResult::Reply(bytes) => {
-            let response = Decode!(bytes, CheckTransactionResponse).unwrap();
+            let response = Decode!(bytes, CheckTransactionResult).unwrap();
             assert!(matches!(
                 response,
-                CheckTransactionResponse::NotEnoughCycles
+                Ok(CheckTransactionResponse::NotEnoughCycles { .. })
             ));
         }
         WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
@@ -315,11 +317,8 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     match &result {
         WasmResult::Reply(bytes) => {
-            let response = Decode!(bytes, CheckTransactionResponse).unwrap();
-            assert!(matches!(
-                response,
-                CheckTransactionResponse::Error(msg) if msg.contains("Invalid txid"),
-            ));
+            let response = Decode!(bytes, CheckTransactionResult).unwrap();
+            assert!(matches!(response, Err(CheckTransactionError::Txid { .. })));
         }
         WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     };

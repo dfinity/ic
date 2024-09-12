@@ -22,12 +22,44 @@ pub struct CheckTransactionArgs {
 pub enum CheckTransactionResponse {
     Passed,
     Failed,
-    /// Job is scheduled but result is not yet available. Caller has to call again later.
+    /// More work to be done, and the caller should call again.
     Pending,
-    /// The service is experiencing high load, and the caller has to call again later.
+    /// The service is experiencing high load, and the caller should call again later.
     HighLoad,
-    /// Caller has to call again with minimum required amount of cycles.
+    /// Caller should call with a minimum of 40 billion cycles.
     NotEnoughCycles,
-    /// Permanent error.
-    Error(String),
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum CheckTransactionError {
+    /// Error computing address of a transaction's vout.
+    Address {
+        txid: Vec<u8>,
+        vout: u32,
+        message: String,
+    },
+    /// Canister call is rejected with rejection code and message.
+    Rejected {
+        code: u32,
+        message: String,
+    },
+    /// Response size is too large (> `RETRY_BUFFER_SIZE`) when fetching the transaction data of a txid.
+    ResponseTooLarge {
+        txid: Vec<u8>,
+    },
+    /// Error decoding transaction data of a txid.
+    Tx {
+        txid: Vec<u8>,
+        message: String,
+    },
+    /// Error decoding transaction id.
+    Txid {
+        txid: Vec<u8>,
+        message: String,
+    },
+    /// Mismatch between the expected txid, and that computed from fetched transaction data.
+    TxidMismatch {
+        expected: Vec<u8>,
+        decoded: Vec<u8>,
+    },
 }

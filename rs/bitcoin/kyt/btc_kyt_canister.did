@@ -19,12 +19,25 @@ type CheckTransactionResponse = variant {
     Failed;
     // More work to be done, and the caller should call again.
     Pending;
-    // Too much work pending, and the caller should try again later.
+    // The service is experiencing high load, and the caller should call again later.
     HighLoad;
     // Caller should call with a minimum of 40 billion cycles.
     NotEnoughCycles;
-    // Permanent error with a description.
-    Error: text;
+};
+
+type CheckTransactionError = variant {
+    // Error computing address of a transaction's vout.
+    Address : record { txid : blob; vout : nat32; message : text };
+    // Canister call is rejected with rejection code and message.
+    Rejected : record { code : nat32; message : text };
+    // Response size is too large (>400kB) when fetching the transaction data of a txid.
+    ResponseTooLarge : record { txid: blob };
+    // Error decoding transaction data of a txid.
+    Tx : record { txid : blob; message : text };
+    // Error decoding transaction id.
+    Txid : record { txid : blob; message : text };
+    // Mismatch between the expected txid, and that computed from fetched transaction data.
+    TxidMismatch : record { expected : blob; decoded : blob };
 };
 
 service : {
@@ -35,7 +48,7 @@ service : {
     // The actual cost may be well less than that, and unspent cycles will be refunded.
     // There is also a service charge of 0.1 billion cycles for each call, regardless
     // of the return result.
-    check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
+    check_transaction: (CheckTransactionArgs) -> (variant { Ok: CheckTransactionResponse; Err: CheckTransactionError });
 
     // Return `Passed` if the given bitcoin address passes the KYT check, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
