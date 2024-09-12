@@ -1,6 +1,4 @@
-use bitcoin::{
-    address::FromScriptError, consensus::Decodable, Address, Network, Transaction, TxIn,
-};
+use bitcoin::{address::FromScriptError, consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{
@@ -17,7 +15,7 @@ pub use fetch::{
     get_tx_cycle_cost, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_BUFFER_SIZE,
 };
-use fetch::{FetchEnv, FetchResult, FetchState, HasOutPoint, TransactionLike, TryFetchResult};
+use fetch::{FetchEnv, FetchResult, FetchState, TryFetchResult};
 use state::{FetchGuardError, FetchTxStatus};
 pub use types::*;
 
@@ -103,42 +101,20 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
     }
 }
 
-impl HasOutPoint for TxIn {
-    fn txid(&self) -> Txid {
-        Txid::from(*(self.previous_output.txid.as_ref() as &[u8; 32]))
-    }
-    fn vout(&self) -> u32 {
-        self.previous_output.vout
-    }
-}
-
-impl TransactionLike for Transaction {
-    type Input = TxIn;
-    type AddressError = GetTxError;
-
-    fn iter_inputs(&self) -> impl Iterator<Item = &TxIn> {
-        self.input.iter()
-    }
-    fn output_address(&self, vout: u32) -> Result<Address, GetTxError> {
-        let output = &self.output[vout as usize];
-        Address::from_script(&output.script_pubkey, Network::Bitcoin).map_err(GetTxError::Address)
-    }
-}
-
 struct KytCanisterState;
 
-impl FetchState<Transaction> for KytCanisterState {
+impl FetchState for KytCanisterState {
     type FetchGuard = state::FetchGuard;
 
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
         state::FetchGuard::new(txid)
     }
 
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus<Transaction>> {
+    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus> {
         state::get_fetch_status(txid)
     }
 
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus<Transaction>) {
+    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus) {
         state::set_fetch_status(txid, status)
     }
 
@@ -149,7 +125,7 @@ impl FetchState<Transaction> for KytCanisterState {
 
 struct KytCanisterEnv;
 
-impl FetchEnv<TxIn, Transaction> for KytCanisterEnv {
+impl FetchEnv for KytCanisterEnv {
     async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
         get_tx(txid, buffer_size).await
     }

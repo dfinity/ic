@@ -1,10 +1,9 @@
 use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx};
 use crate::types::CheckTransactionResponse;
 use crate::{blocklist_contains, GetTxError};
-use bitcoin::Address;
+use bitcoin::{Address, Network, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
-use std::fmt::Debug;
 
 #[cfg(test)]
 mod tests;
@@ -35,50 +34,33 @@ pub const INITIAL_BUFFER_SIZE: u32 = 4 * 1024;
 /// Retry buffer size is 400kB
 pub const RETRY_BUFFER_SIZE: u32 = 400 * 1024;
 
-pub enum FetchResult<T> {
+pub enum FetchResult {
     RetryWithBiggerBuffer,
     Error(GetTxError),
-    Fetched(FetchedTx<T>),
+    Fetched(FetchedTx),
 }
 
-pub enum TryFetchResult<T, F> {
+pub enum TryFetchResult<F> {
     Pending,
     HighLoad,
     Error(GetTxError),
     NotEnoughCycles,
-    Fetched(FetchedTx<T>),
+    Fetched(FetchedTx),
     ToFetch(F),
 }
 
-pub trait HasOutPoint {
-    fn txid(&self) -> Txid;
-    fn vout(&self) -> u32;
-}
-
-pub trait TransactionLike {
-    type Input;
-    type AddressError;
-
-    fn iter_inputs(&self) -> impl Iterator<Item = &Self::Input>;
-    fn output_address(&self, vout: u32) -> Result<Address, Self::AddressError>;
-}
-
 /// Trait that abstracts over state operations.
-pub trait FetchState<T> {
+pub trait FetchState {
     type FetchGuard;
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus<T>>;
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus<T>);
+    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus>;
+    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus);
     fn set_fetched_address(&self, txid: Txid, index: usize, address: Address);
 }
 
 /// Trait that abstracts over system functions like fetching transaction, calcuating cycles, etc.
-pub trait FetchEnv<I: HasOutPoint, T: Clone + TransactionLike<Input = I>>
-where
-    <T as TransactionLike>::AddressError: Debug,
-    T: Debug,
-{
-    async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<T, GetTxError>;
+pub trait FetchEnv {
+    async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<Transaction, GetTxError>;
     fn cycles_accept(&self, cycles: u128) -> u128;
     fn cycles_available(&self) -> u128;
 
@@ -87,11 +69,11 @@ where
     /// - If it is already pending, return `Pending`.
     /// - If it is pending retry or not found, return a future that calls `fetch_tx`.
     /// - Or return other conditions like `HighLoad` or `Error`.
-    fn try_fetch_tx<State: FetchState<T>>(
+    fn try_fetch_tx<State: FetchState>(
         &self,
         state: &State,
         txid: Txid,
-    ) -> TryFetchResult<T, impl futures::Future<Output = Result<FetchResult<T>, ()>>> {
+    ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, ()>>> {
         let buffer_size = match state.get_fetch_status(txid) {
             None => INITIAL_BUFFER_SIZE,
             Some(FetchTxStatus::PendingRetry { buffer_size, .. }) => buffer_size,
@@ -120,16 +102,16 @@ where
     ///
     /// Note that this function does not return any error, but due to requirements
     /// of `try_join_all` it must return a `Result` type.
-    async fn fetch_tx<State: FetchState<T>>(
+    async fn fetch_tx<State: FetchState>(
         &self,
         state: &State,
         _guard: State::FetchGuard,
         txid: Txid,
         buffer_size: u32,
-    ) -> Result<FetchResult<T>, ()> {
+    ) -> Result<FetchResult, ()> {
         match self.get_tx(txid, buffer_size).await {
             Ok(tx) => {
-                let input_addresses = tx.iter_inputs().map(|_| None).collect();
+                let input_addresses = tx.input.iter().map(|_| None).collect();
                 let fetched = FetchedTx {
                     tx,
                     input_addresses,
@@ -165,14 +147,14 @@ where
     ///   if all of them pass the check. Otherwise return `Failed`.
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
-    async fn check_fetched<State: FetchState<T>>(
+    async fn check_fetched<State: FetchState>(
         &self,
         state: &State,
         txid: Txid,
-        fetched: &FetchedTx<T>,
+        fetched: &FetchedTx,
     ) -> CheckTransactionResponse {
         // Return Passed or Failed when all checks are complete, or None otherwise.
-        fn check_completed<T>(fetched: &FetchedTx<T>) -> Option<CheckTransactionResponse> {
+        fn check_completed(fetched: &FetchedTx) -> Option<CheckTransactionResponse> {
             if fetched.input_addresses.iter().all(|x| x.is_some()) {
                 // We have obtained all input addresses.
                 for address in fetched.input_addresses.iter().flatten() {
@@ -192,18 +174,18 @@ where
 
         let mut futures = vec![];
         let mut jobs = vec![];
-        for (index, input) in fetched.tx.iter_inputs().enumerate() {
+        for (index, input) in fetched.tx.input.iter().enumerate() {
             if fetched.input_addresses[index].is_none() {
                 use TryFetchResult::*;
-                let input_txid = input.txid();
+                let input_txid = Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32]));
                 match self.try_fetch_tx(state, input_txid) {
                     ToFetch(do_fetch) => {
-                        jobs.push((index, input_txid, input.vout()));
+                        jobs.push((index, input_txid, input.previous_output.vout));
                         futures.push(do_fetch)
                     }
                     Fetched(fetched) => {
-                        let vout = input.vout();
-                        match fetched.tx.output_address(vout) {
+                        let vout = input.previous_output.vout;
+                        match transaction_output_address(&fetched.tx, vout) {
                             Ok(address) => state.set_fetched_address(txid, index, address),
                             Err(err) => {
                                 return CheckTransactionResponse::Error(format!(
@@ -237,7 +219,7 @@ where
             match result {
                 FetchResult::Fetched(fetched) => {
                     let (index, input_txid, vout) = jobs[i];
-                    match fetched.tx.output_address(vout) {
+                    match transaction_output_address(&fetched.tx, vout) {
                         Ok(address) => state.set_fetched_address(txid, index, address),
                         Err(err) => {
                             error = Some(format!(
@@ -267,4 +249,9 @@ where
             None => CheckTransactionResponse::Pending,
         }
     }
+}
+
+fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, GetTxError> {
+    let output = &tx.output[vout as usize];
+    Address::from_script(&output.script_pubkey, Network::Bitcoin).map_err(GetTxError::Address)
 }

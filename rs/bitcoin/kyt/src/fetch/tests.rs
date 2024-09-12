@@ -1,53 +1,20 @@
 use super::*;
 use crate::blocklist;
+use bitcoin::{
+    absolute::LockTime, hashes::Hash, transaction::Version, Amount, OutPoint, PubkeyHash,
+    ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+};
 use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Input {
-    txid: Txid,
-    vout: u32,
-}
-
-impl HasOutPoint for Input {
-    fn txid(&self) -> Txid {
-        self.txid
-    }
-    fn vout(&self) -> u32 {
-        self.vout
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct Transaction {
-    inputs: Vec<Input>,
-    outputs: Vec<Address>,
-}
-
-impl TransactionLike for Transaction {
-    type Input = Input;
-    type AddressError = ();
-
-    fn iter_inputs(&self) -> impl Iterator<Item = &Self::Input> {
-        self.inputs.iter()
-    }
-    fn output_address(&self, vout: u32) -> Result<Address, Self::AddressError> {
-        if (vout as usize) < self.outputs.len() {
-            Ok(self.outputs[vout as usize].clone())
-        } else {
-            Err(())
-        }
-    }
-}
-
 struct MockState {
-    statuses: RefCell<BTreeMap<Txid, FetchTxStatus<Transaction>>>,
+    statuses: RefCell<BTreeMap<Txid, FetchTxStatus>>,
     high_load: bool,
 }
 
-impl FetchState<Transaction> for MockState {
+impl FetchState for MockState {
     type FetchGuard = ();
     fn new_fetch_guard(&self, _txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
         if self.high_load {
@@ -56,10 +23,10 @@ impl FetchState<Transaction> for MockState {
             Ok(())
         }
     }
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus<Transaction>> {
+    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus> {
         self.statuses.borrow().get(&txid).cloned()
     }
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus<Transaction>) {
+    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus) {
         self.statuses.borrow_mut().insert(txid, status);
     }
     fn set_fetched_address(&self, txid: Txid, index: usize, address: Address) {
@@ -89,7 +56,7 @@ struct MockEnv {
     accepted_cycles: RefCell<u128>,
 }
 
-impl FetchEnv<Input, Transaction> for MockEnv {
+impl FetchEnv for MockEnv {
     async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
         self.calls.borrow_mut().push_back((txid, buffer_size));
         self.replies
@@ -146,6 +113,46 @@ fn mock_txid(v: u8) -> Txid {
     Txid::from([v; 32])
 }
 
+fn mock_transaction() -> Transaction {
+    Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: Vec::new(),
+        output: Vec::new(),
+    }
+}
+
+fn mock_transaction_with_outputs(num_outputs: usize) -> Transaction {
+    let mut tx = mock_transaction();
+    let output = (0..num_outputs)
+        .map(|i| TxOut {
+            value: Amount::ONE_SAT,
+            script_pubkey: ScriptBuf::new_p2pkh(&PubkeyHash::from_slice(&[i as u8; 20]).unwrap()),
+        })
+        .collect();
+    tx.output = output;
+    tx
+}
+
+fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
+    let mut tx = mock_transaction();
+    let input = input_txids
+        .into_iter()
+        .enumerate()
+        .map(|(i, (txid, vout))| TxIn {
+            previous_output: OutPoint {
+                txid: bitcoin::Txid::from_slice(txid.as_ref()).unwrap(),
+                vout,
+            },
+            script_sig: ScriptBuf::from_bytes(vec![i as u8; 32]),
+            sequence: Sequence::ZERO,
+            witness: Witness::new(),
+        })
+        .collect();
+    tx.input = input;
+    tx
+}
+
 #[tokio::test]
 async fn test_mock_env() {
     // Test cycle mock functions
@@ -167,7 +174,7 @@ async fn test_mock_env() {
     // Test get_tx mock function
     let env = MockEnv::new(0);
     let txid = mock_txid(0);
-    env.expect_get_tx_with_reply(Ok(Transaction::default()));
+    env.expect_get_tx_with_reply(Ok(mock_transaction()));
     let result = env.get_tx(txid, INITIAL_BUFFER_SIZE).await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_BUFFER_SIZE);
@@ -183,7 +190,7 @@ fn test_try_fetch_tx() {
 
     // case Fetched
     let fetched_0 = FetchTxStatus::Fetched(FetchedTx {
-        tx: Transaction::default(),
+        tx: mock_transaction(),
         input_addresses: vec![None],
     });
     state.set_fetch_status(txid_0, fetched_0.clone());
@@ -234,19 +241,7 @@ async fn test_fetch_tx() {
     let txid_2 = mock_txid(2);
 
     // case Fetched
-    let tx_0 = Transaction {
-        inputs: vec![
-            Input {
-                txid: txid_1,
-                vout: 0,
-            },
-            Input {
-                txid: txid_2,
-                vout: 1,
-            },
-        ],
-        outputs: vec![],
-    };
+    let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
     let result = env.fetch_tx(&state, (), txid_0, INITIAL_BUFFER_SIZE).await;
@@ -297,27 +292,9 @@ async fn test_check_fetched() {
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
-    let tx_0 = Transaction {
-        inputs: vec![
-            Input {
-                txid: txid_1,
-                vout: 0,
-            },
-            Input {
-                txid: txid_2,
-                vout: 1,
-            },
-        ],
-        outputs: vec![],
-    };
-    let tx_1 = Transaction {
-        inputs: vec![],
-        outputs: vec![good_address.clone()],
-    };
-    let tx_2 = Transaction {
-        inputs: vec![],
-        outputs: vec![good_address.clone(), good_address.clone()],
-    };
+    let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
+    let tx_1 = mock_transaction_with_outputs(1);
+    let tx_2 = mock_transaction_with_outputs(2);
 
     // case Passed
     let fetched = FetchedTx {
@@ -380,7 +357,7 @@ async fn test_check_fetched() {
     state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        dbg!(env.check_fetched(&state, txid_0, &fetched).await),
         CheckTransactionResponse::Pending
     ));
     // Check remaining cycle: we deduct all remaining cycles when they are not enough
