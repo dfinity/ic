@@ -78,6 +78,39 @@ The deployment name is retrieved from the +deployment.json+ configuration file, 
     }
   }
 
+== Hostname
+
+Since every HostOS and GuestOS are created equal, assigning a human-centric hostname isn't feasible (think pets vs. cattle). Instead, the management MAC address is used as part of the hostname.
+
+There are two different hostname schemas used, depending on the stage of the setup process: *Transient Setup Hostname* and *Persistent Setup Hostname*.
+
+*1. Transient Setup Hostname*
+
+This schema is used during the initial setup, before a replica has joined the IC. The format is:
+
+`<system type>-<management mac address>`
+
+Examples:
+
+  host-3cecef6b3799
+  replica-3cecef6b3799
+  boundary-3cecef6b3799
+
+*2. Persistent Setup Hostname*
+
+[NOTE]
+Currently, the Persistent Setup Hostname feature is not used, but it has been developed.
+
+After a node has successfully joined the IC, the first 5 characters of the node-id are added to the end of the hostname. The orchestrator is used to fetch the node's node-id. The format is:
+
+`<system type>-<management mac address>-<first 5 characters of the node-id>`
+
+Examples:
+
+  host-3cecef6b3799-4wd4u
+  replica--3cecef6b3799-4wd4u
+  boundary-3cecef6b3799-4wd4u
+
 == IPv6 Address 
 
 The IP address can be derived from the MAC address and vice versa: As every virtual machine ends in the same MAC address, the IPv6 address of each node on the same physical machine can be derived, including the hypervisor itself.
