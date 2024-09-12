@@ -65,7 +65,7 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
         url: url.to_string(),
         method: HttpMethod::GET,
         body: None,
-        max_response_bytes: Some(buffer_size as u64), // 400 KiB
+        max_response_bytes: Some(buffer_size as u64),
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: ic_cdk::api::id(),
