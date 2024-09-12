@@ -1107,7 +1107,8 @@ impl SystemState {
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///  * `NonMatchingResponse` if no response is expected, the callback is not
-    ///    found or the respondent does not match.
+    ///    found, the respondent does not match or this is a duplicate guaranteed
+    ///    response.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -1323,18 +1324,18 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Times out requests in the `OutputQueues` of `self.queues`. Returns the number of requests
+    /// Drops expired messages given a current time. Returns the number of messages
     /// that were timed out.
     ///
-    /// See [`CanisterQueues::time_out_requests`] for further details.
-    pub fn time_out_requests(
+    /// See [`CanisterQueues::time_out_messages`] for further details.
+    pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> u64 {
+    ) -> usize {
         self.queues
-            .time_out_requests(current_time, own_canister_id, local_canisters)
+            .time_out_messages(current_time, own_canister_id, local_canisters)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`

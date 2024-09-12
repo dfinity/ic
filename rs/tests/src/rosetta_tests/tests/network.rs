@@ -8,7 +8,7 @@ use rosetta_core::response_types::NetworkListResponse;
 use slog::{debug, Logger};
 
 const PORT: u32 = 8100;
-const VM_NAME: &str = "rosetta-test-network";
+const VM_NAME: &str = "test-network";
 
 pub fn test(env: TestEnv) {
     let client = setup(&env, PORT, VM_NAME, None, None);
