@@ -1,4 +1,4 @@
-use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
+use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
@@ -6,13 +6,15 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
+    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
+    TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
+    canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
+    CallOrigin, Memory, NetworkTopology, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -1365,6 +1367,247 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     assert_eq!(
         subnet_available_memory.get_wasm_custom_sections_memory(),
         wasm_custom_sections_available_memory_before
+    );
+}
+
+const GIB: i64 = 1 << 30;
+
+fn helper_test_on_low_wasm_memory(
+    wasm_memory_threshold: NumBytes,
+    wasm_memory_limit: Option<NumBytes>,
+    memory_allocation: Option<NumBytes>,
+    grow_memory_size: i64,
+    grow_wasm_memory: bool,
+    start_status: OnLowWasmMemoryHookStatus,
+    expected_status: OnLowWasmMemoryHookStatus,
+) {
+    let wasm_page_size = 64 << 10;
+    let subnet_available_memory_bytes = 20 * GIB;
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+
+    let mut state_builder = SystemStateBuilder::default()
+        .wasm_memory_threshold(wasm_memory_threshold)
+        .wasm_memory_limit(wasm_memory_limit)
+        .on_low_wasm_memory_hook_status(start_status.clone())
+        .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
+
+    if let Some(memory_allocation) = memory_allocation {
+        state_builder = state_builder.memory_allocation(memory_allocation);
+    };
+
+    let mut system_state = state_builder.build();
+
+    let api_type = ApiTypeBuilder::build_update_api();
+    let mut execution_parameters = execution_parameters(api_type.execution_mode());
+    execution_parameters.memory_allocation = system_state.memory_allocation;
+    execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
+
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        CyclesAccountManagerBuilder::new().build(),
+        &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters.compute_allocation,
+        RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
+        api_type.call_context_id(),
+    );
+
+    let mut api = SystemApiImpl::new(
+        api_type,
+        sandbox_safe_system_state,
+        CANISTER_CURRENT_MEMORY_USAGE,
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
+        execution_parameters,
+        subnet_available_memory,
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
+        Memory::new_for_testing(),
+        Memory::new_for_testing().size,
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
+        no_op_logger(),
+    );
+
+    let additional_wasm_pages = (grow_memory_size as u64).div_ceil(wasm_page_size as u64);
+
+    if grow_wasm_memory {
+        api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
+    } else {
+        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
+            .unwrap();
+    }
+
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes
+        .apply_changes(
+            UNIX_EPOCH,
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        *system_state.get_on_low_wasm_memory_hook_status(),
+        expected_status
+    );
+}
+
+#[test]
+fn test_on_low_wasm_memory_grow_wasm_memory_all_status_changes() {
+    let wasm_memory_threshold = NumBytes::new(GIB as u64);
+    let wasm_memory_limit = Some(NumBytes::new(3 * GIB as u64));
+    let memory_allocation = None;
+    // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
+    let max_allowed_wasm_memory = 2 * GIB;
+    let grow_wasm_memory = true;
+
+    // Hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+
+    // Hook condition is satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::Ready,
+    );
+
+    // Hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::Ready,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+
+    // Hook condition is satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::Ready,
+        OnLowWasmMemoryHookStatus::Ready,
+    );
+
+    // Hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::Executed,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+
+    // Hook condition is satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::Executed,
+        OnLowWasmMemoryHookStatus::Executed,
+    );
+}
+
+#[test]
+fn test_on_low_wasm_memory_grow_stable_memory() {
+    // When memory_allocation is provided, hook condition can be triggered if:
+    // memory_allocation - used_stable_memory - used_wasm_memory < wasm_memory_threshold
+    // Hence growing stable memory can trigger hook condition.
+    let wasm_memory_threshold = NumBytes::new(GIB as u64);
+    let wasm_memory_limit = None;
+    let memory_allocation = Some(NumBytes::new(3 * GIB as u64));
+    let max_allowed_memory_size = 2 * GIB;
+    let grow_wasm_memory = false;
+
+    // Hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_memory_size,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+
+    // Hook condition is satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_memory_size + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::Ready,
+    );
+
+    // Without `memory_allocation`, hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        None,
+        max_allowed_memory_size + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+}
+
+#[test]
+fn test_on_low_wasm_memory_without_memory_limitn() {
+    // When memory limit is not set, the default Wasm memory limit is 4 GIB.
+    let wasm_memory_threshold = NumBytes::new(GIB as u64);
+    // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
+    let max_allowed_wasm_memory = 3 * GIB as i64;
+    let wasm_memory_limit = None;
+    let memory_allocation = None;
+    let grow_wasm_memory = true;
+
+    // Hook condition is not satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+    );
+
+    // Hook condition is satisfied.
+    helper_test_on_low_wasm_memory(
+        wasm_memory_threshold,
+        wasm_memory_limit,
+        memory_allocation,
+        max_allowed_wasm_memory + 1,
+        grow_wasm_memory,
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+        OnLowWasmMemoryHookStatus::Ready,
     );
 }
 
