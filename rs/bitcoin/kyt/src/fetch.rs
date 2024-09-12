@@ -4,6 +4,7 @@ use crate::{blocklist_contains, GetTxError};
 use bitcoin::{Address, Network, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
+use std::convert::Infallible;
 
 #[cfg(test)]
 mod tests;
@@ -73,7 +74,7 @@ pub trait FetchEnv {
         &self,
         state: &State,
         txid: Txid,
-    ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, ()>>> {
+    ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
         let buffer_size = match state.get_fetch_status(txid) {
             None => INITIAL_BUFFER_SIZE,
             Some(FetchTxStatus::PendingRetry { buffer_size, .. }) => buffer_size,
@@ -108,7 +109,7 @@ pub trait FetchEnv {
         _guard: State::FetchGuard,
         txid: Txid,
         buffer_size: u32,
-    ) -> Result<FetchResult, ()> {
+    ) -> Result<FetchResult, Infallible> {
         match self.get_tx(txid, buffer_size).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
