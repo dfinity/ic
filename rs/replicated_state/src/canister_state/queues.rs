@@ -386,16 +386,6 @@ impl CanisterQueues {
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        fn non_matching_response(message: &str, response: &Response) -> StateError {
-            StateError::NonMatchingResponse {
-                err_str: message.to_string(),
-                originator: response.originator,
-                callback_id: response.originator_reply_callback,
-                respondent: response.respondent,
-                deadline: response.deadline,
-            }
-        }
-
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -423,7 +413,10 @@ impl CanisterQueues {
                             // This is a critical error for guaranteed responses.
                             if response.deadline == NO_DEADLINE {
                                 return Err((
-                                    non_matching_response("Duplicate response", response),
+                                    StateError::non_matching_response(
+                                        "Duplicate response",
+                                        response,
+                                    ),
                                     msg,
                                 ));
                             } else {
@@ -438,7 +431,10 @@ impl CanisterQueues {
                     // Queue does not exist or has no reserved slot for this response.
                     _ => {
                         return Err((
-                            non_matching_response("No reserved response slot", response),
+                            StateError::non_matching_response(
+                                "No reserved response slot",
+                                response,
+                            ),
                             msg,
                         ));
                     }

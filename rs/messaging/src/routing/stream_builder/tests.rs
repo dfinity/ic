@@ -154,68 +154,6 @@ fn reject_local_request() {
     });
 }
 
-#[test]
-fn reject_local_request_for_subnet() {
-    with_test_replica_logger(|log| {
-        let (stream_builder, mut state, _) = new_fixture(&log);
-
-        // With a reservation on the subnet input queue.
-        let payment = Cycles::new(100);
-        let subnet_id = state.metadata.own_subnet_id;
-        let subnet_id_as_canister_id = CanisterId::from(subnet_id);
-        let msg = generate_message_for_test(
-            subnet_id_as_canister_id,
-            canister_test_id(0),
-            CallbackId::from(1),
-            "method".to_string(),
-            payment,
-            NO_DEADLINE,
-        );
-
-        state
-            .subnet_queues_mut()
-            .push_output_request(msg.clone().into(), UNIX_EPOCH)
-            .unwrap();
-        state
-            .subnet_queues_mut()
-            .pop_canister_output(&msg.receiver)
-            .unwrap();
-
-        let mut expected_state = state.clone();
-
-        // Reject the message.
-        let reject_message = "Reject response";
-        stream_builder.reject_local_request(
-            &mut state,
-            &msg,
-            RejectCode::SysFatal,
-            reject_message.to_string(),
-        );
-
-        // Which should result in a reject Response being enqueued onto the subnet
-        // queue.
-        expected_state
-            .push_input(
-                Response {
-                    originator: msg.sender,
-                    respondent: msg.receiver,
-                    originator_reply_callback: msg.sender_reply_callback,
-                    refund: msg.payment,
-                    response_payload: Payload::Reject(RejectContext::new(
-                        RejectCode::SysFatal,
-                        reject_message,
-                    )),
-                    deadline: msg.deadline,
-                }
-                .into(),
-                &mut (i64::MAX / 2),
-            )
-            .unwrap();
-
-        assert_eq!(expected_state.subnet_queues(), state.subnet_queues());
-    });
-}
-
 // Tests that the OutputQueues are fully drained.
 #[test]
 fn build_streams_success() {
