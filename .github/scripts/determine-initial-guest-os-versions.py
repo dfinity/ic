@@ -126,7 +126,7 @@ def fetch_versions_from_rollout_dashboard(): # type: () -> list[str] | None
     # finish date for the revision.  Let's fish the latest
     # revision for each subnet, and get that.
     return list(set([
-        list(sorted(datestring_revision_tuple))[-1][1]
+        [revision for unused_date, revision in sorted(datestring_revision_tuple)][-1]
         for datestring_revision_tuple in subnet_to_revision.values()
     ]))
 
