@@ -111,7 +111,7 @@ pub fn main() -> Result<()> {
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
 
             println!(
-                "SetuposConfig has been written to {}",
+                "SetupOSConfig has been written to {}",
                 setupos_config_json_path.display()
             );
 
