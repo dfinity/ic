@@ -2,7 +2,7 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        Mutations, IngressPool, IngressPoolThrottler, PoolSection, UnvalidatedIngressArtifact,
+        IngressPool, IngressPoolThrottler, Mutations, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
     },
     p2p::consensus::{ArtifactTransmits, MutablePool, UnvalidatedArtifact},

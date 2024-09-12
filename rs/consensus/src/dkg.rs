@@ -14,7 +14,7 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
-    dkg::{ChangeAction, Mutations, DkgPool},
+    dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_registry::RegistryClient;

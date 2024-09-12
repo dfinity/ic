@@ -10,7 +10,7 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, Mutations as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
     idkg::{IDkgChangeAction, IDkgChangeSet},
-    p2p::consensus::{PoolMutationsProducer, MutablePool},
+    p2p::consensus::{MutablePool, PoolMutationsProducer},
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -27,12 +27,15 @@ impl<'a> ConsensusDriver<'a> {
     pub fn new(
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
+        consensus: Box<
+            dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>,
+        >,
         consensus_bouncer: ConsensusBouncer,
         dkg: ic_consensus::dkg::DkgImpl,
         idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, Mutations = IDkgChangeSet>>,
         certifier: Box<
-            dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations> + 'a,
+            dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations>
+                + 'a,
         >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         dkg_pool: Arc<RwLock<DkgPoolImpl>>,

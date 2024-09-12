@@ -13,7 +13,7 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, Mutations, IngressPool},
+    ingress_pool::{ChangeAction, IngressPool, Mutations},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };

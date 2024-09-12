@@ -37,7 +37,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{
-        ChangeAction, Mutations, ConsensusPool, ConsensusPoolCache, ValidatedConsensusArtifact,
+        ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
     },
     dkg::DkgPool,
     idkg::IDkgPool,

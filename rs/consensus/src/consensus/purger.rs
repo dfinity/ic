@@ -21,7 +21,7 @@
 use crate::consensus::metrics::PurgerMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, Mutations, HeightRange, PurgeableArtifactType},
+    consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
 };
 use ic_interfaces_registry::RegistryClient;

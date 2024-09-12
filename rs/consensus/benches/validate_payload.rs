@@ -21,7 +21,7 @@ use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, Mutations, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,

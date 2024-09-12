@@ -308,8 +308,9 @@ pub struct ComponentModifier {
     pub(crate) idkg: Box<
         dyn Fn(
             idkg::IDkgImpl,
-        )
-            -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
+        ) -> Box<
+            dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>,
+        >,
     >,
 }
 
@@ -349,7 +350,8 @@ pub struct ConsensusDriver<'a> {
         Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
     pub(crate) consensus_bouncer: ConsensusBouncer,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) idkg: Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
+    pub(crate) idkg:
+        Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = Mutations> + 'a>,
     pub(crate) logger: ReplicaLogger,

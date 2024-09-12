@@ -6,7 +6,7 @@ use crate::consensus::{
     notary::Notary,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, Mutations, HeightRange};
+use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{
