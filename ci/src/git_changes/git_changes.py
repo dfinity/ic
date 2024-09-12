@@ -23,7 +23,7 @@ import git
 
 def target_branch() -> str:
     default_branch = os.getenv("CI_DEFAULT_BRANCH", "master")
-    return os.getenv("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", default_branch)
+    return os.getenv("CI_PULL_REQUEST_TARGET_BRANCH_NAME", default_branch)
 
 
 def git_fetch_target_branch(git_repo, max_attempts=10):

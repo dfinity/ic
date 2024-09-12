@@ -279,6 +279,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
+        additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 

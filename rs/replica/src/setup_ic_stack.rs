@@ -254,7 +254,7 @@ pub fn construct_ic_stack(
     let message_router = Arc::new(message_router);
     let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_http.clone(),
+        rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
