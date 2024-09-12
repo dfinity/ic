@@ -19,7 +19,7 @@ scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${key_component
 
 # Send over the tools
 if [ "${tools}" != "" ]; then
-    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${key_component[@]}" ${tools[@]} "admin@[${ip_address}]:"
+    scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${key_component[@]}" "${tools[@]}" "admin@[${ip_address}]:"
 fi
 
 # Run benchmarking
