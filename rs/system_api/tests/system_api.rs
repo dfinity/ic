@@ -1583,7 +1583,7 @@ fn test_on_low_wasm_memory_without_memory_limitn() {
     // When memory limit is not set, the default Wasm memory limit is 4 GIB.
     let wasm_memory_threshold = NumBytes::new(GIB as u64);
     // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
-    let max_allowed_wasm_memory = 3 * GIB as i64;
+    let max_allowed_wasm_memory = 3 * GIB;
     let wasm_memory_limit = None;
     let memory_allocation = None;
     let grow_wasm_memory = true;
