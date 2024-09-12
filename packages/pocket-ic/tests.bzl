@@ -37,14 +37,18 @@ TEST_DEPENDENCIES = [
 
 def pocket_ic_tests(name_suffix, pocket_ic_server):
     """
-        Declares a number of rust_test_suites that test the pocket-ic library against the given pocket_ic_server.
+    Declares a number of rust_test_suites that test the pocket-ic library against the given pocket_ic_server.
 
-        Args:
-            name_suffix: to differentiate the declared rust_test_suites from other invocations of this macro the names of the tests are suffixed with this string.
-            pocket_ic_server: which pocket-ic server to use. For example "//rs/pocket_ic_server:pocket-ic-server" or "//:mainnet_pocket_ic".
+    Args:
+      name_suffix: to differentiate the declared rust_test_suites from other invocations
+        of this macro the names of the tests are suffixed with this string.
+      pocket_ic_server: which pocket-ic server to use.
+        For example "//rs/pocket_ic_server:pocket-ic-server" or "//:mainnet_pocket_ic".
     """
+
+    suffix = "_pocket_ic_server_" + name_suffix
     rust_test_suite(
-        name = "test" + name_suffix,
+        name = "test" + suffix,
         size = "small",
         srcs = ["tests/tests.rs"],
         data = [
@@ -65,7 +69,7 @@ def pocket_ic_tests(name_suffix, pocket_ic_server):
     )
 
     rust_test_suite(
-        name = "restart" + name_suffix,
+        name = "restart" + suffix,
         size = "medium",
         srcs = ["tests/restart.rs"],
         data = [
@@ -80,7 +84,7 @@ def pocket_ic_tests(name_suffix, pocket_ic_server):
     )
 
     rust_test_suite(
-        name = "slow" + name_suffix,
+        name = "slow" + suffix,
         size = "medium",
         srcs = ["tests/slow.rs"],
         data = [
