@@ -12,7 +12,7 @@ component_files = {
     Label("setupos-scripts/guestos.sh"): "/opt/ic/bin/guestos.sh",
     Label("setupos-scripts/check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
     Label("setupos-scripts/hostos.sh"): "/opt/ic/bin/hostos.sh",
-    Label("setupos-scripts/network.sh"): "/opt/ic/bin/network.sh",
+    Label("setupos-scripts/check-network.sh"): "/opt/ic/bin/check-network.sh",
     Label("setupos-scripts/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("setupos-scripts/setupos.sh"): "/opt/ic/bin/setupos.sh",
     Label("setupos-scripts/config.service"): "/etc/systemd/system/config.service",
