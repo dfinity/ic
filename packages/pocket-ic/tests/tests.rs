@@ -1448,8 +1448,9 @@ fn test_canister_http_with_diverging_responses() {
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
+    // Now the test canister will receive an error
+    // and reply to the ingress message from the test driver
+    // relaying the error.
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
