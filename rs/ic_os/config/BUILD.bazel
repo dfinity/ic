@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -8,12 +8,16 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:once_cell",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
-    "@crate_index//:tempfile",
     "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:once_cell",
+    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -39,4 +43,11 @@ rust_binary(
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":config_lib"] + DEPENDENCIES,
+)
+
+rust_test(
+    name = "config_lib_test",
+    crate = ":config_lib",
+    # You may add other deps that are specific to the test configuration
+    deps = DEV_DEPENDENCIES,
 )
