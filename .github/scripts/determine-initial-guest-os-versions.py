@@ -1,10 +1,8 @@
 import json
 import sys
-from enum import StrEnum
-
-import requests
-from requests.adapters import HTTPAdapter, Retry
-from typing_extensions import Any, Dict, List, Tuple, TypedDict, cast
+from enum import Enum
+from typing import Any, Dict, List, Optional, TypedDict, cast
+from urllib.request import urlopen
 
 ROLLOUT_DASHBOARD_ENDPOINT='https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts'
 PUBLIC_DASHBOARD_ENDPOINT='https://ic-api.internetcomputer.org/api/v3/subnets?format=json'
@@ -18,7 +16,7 @@ SUBNETS = 'subnets'
 # Minimal subset of API structure needed for rollout dashboard.
 # Always keep me in sync with https://github.com/dfinity/dre-airflow/blob/main/rollout-dashboard/server/src/types.rs
 # We do not expect to change the API in ways that break code.
-class SubnetRolloutState(StrEnum):
+class SubnetRolloutState(Enum):
     error = "error"
     predecessor_failed = "predecessor_failed"
     pending = "pending"
@@ -40,10 +38,10 @@ class Batch(TypedDict):
     # The following three are dates but they are ISO UTF Z,
     # so they sort alphabetically.  Heh.
     planned_start_time: str
-    actual_start_time: str | None
-    end_time: str | None
+    actual_start_time: Optional[str]
+    end_time: Optional[str]
 
-class RolloutState(StrEnum):
+class RolloutState(Enum):
     complete = "complete"
     failed = "failed"
     preparing = "preparing"
@@ -64,17 +62,17 @@ def eprint_fmt(str, *args):
     return # remove me to get some real action
     print((str % args) if args else str, file=sys.stderr)
 
-def session_retry():
-    s = requests.Session()
-    retries = Retry(
-        total=7,
-        backoff_factor=0.1,
-        status_forcelist=[500, 502, 503, 504],
-    )
-    s.mount('http://', HTTPAdapter(max_retries=retries))
-    return s
+def request_json(url: str) -> Any:
+    resp = urlopen(url, timeout=15)
+    if resp.status != 200:
+        try:
+            data = resp.read()
+        except Exception:
+            data = None
+        raise RuntimeError("Non-200 HTTP response (%s) from %s: %s" % (resp.status, url, data[:160] if data else "(no data in response)"))
+    return json.load(resp)
 
-def fetch_versions_from_rollout_dashboard() -> list[str] | None:
+def fetch_versions_from_rollout_dashboard(): # type: () -> list[str] | None
     """
     Fetch data from rollout dashboard
 
@@ -83,15 +81,13 @@ def fetch_versions_from_rollout_dashboard() -> list[str] | None:
     """
     url = ROLLOUT_DASHBOARD_ENDPOINT
     try:
-        r = session_retry().get(url, timeout=15)
-        r.raise_for_status()
-        rollouts = cast(List[Rollout], r.json())
+        rollouts = cast(List[Rollout], request_json(url))
     except Exception as e:
         eprint(f"Error fetching / decoding data from {url}: {e}.  Returning no versions.")
         return []
 
     # The value of the dict entry is datestring, git revision.
-    subnet_to_revision: Dict[str, List[Tuple[str, str]]] = {}
+    subnet_to_revision = {} # type: dict[str, list[tuple[str, str]]]
 
     for rollout in reversed(rollouts):  # Oldest to newest
         for batch_num_ignored, batch in rollout["batches"].items():
@@ -134,12 +130,12 @@ def fetch_versions_from_rollout_dashboard() -> list[str] | None:
         for datestring_revision_tuple in subnet_to_revision.values()
     ]))
 
-def maybe_executed_timestamp(x : Any) -> int:
+def maybe_executed_timestamp(x) -> int:
     if x.get(EXECUTED_TIMESTAMP_SECONDS, None) is None:
         raise Exception(f"Expected '{EXECUTED_TIMESTAMP_SECONDS}' in 'replica_version'")
     return int(x.get(EXECUTED_TIMESTAMP_SECONDS))
 
-def fetch_versions_from_public_dashboard() -> list[str] | None:
+def fetch_versions_from_public_dashboard(): # type: () -> list[str] | None
     """
     Fetch data from public dashboard
 
@@ -148,9 +144,7 @@ def fetch_versions_from_public_dashboard() -> list[str] | None:
     """
     url = PUBLIC_DASHBOARD_ENDPOINT
     try:
-        r = session_retry().get(url, timeout=30)
-        r.raise_for_status()
-        data = r.json()
+        data = request_json(url)
     except Exception as e:
         eprint(f"Error fetching / decoding data from {url}: {e}.  Returning no versions.")
         return []
