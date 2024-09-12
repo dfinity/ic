@@ -5,7 +5,7 @@ use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus::idkg::{malicious_pre_signer, IDkgImpl};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction::*, Mutations, ConsensusPool, ValidatedConsensusArtifact},
     idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::PoolMutationsProducer,
 };
@@ -22,8 +22,8 @@ pub struct InvalidNotaryShareSignature {
 }
 
 impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature {
-    type ChangeSet = ChangeSet;
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    type Mutations = Mutations;
+    fn on_state_change(&self, pool: &T) -> Mutations {
         let mut change_set = self.consensus.on_state_change(pool);
         for action in change_set.iter_mut() {
             if let AddToValidated(msg) = action {
@@ -66,8 +66,8 @@ pub struct AbsentNotaryShare {
 }
 
 impl<T: ConsensusPool> PoolMutationsProducer<T> for AbsentNotaryShare {
-    type ChangeSet = ChangeSet;
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    type Mutations = Mutations;
+    fn on_state_change(&self, pool: &T) -> Mutations {
         self.consensus
             .on_state_change(pool)
             .into_iter()
@@ -96,8 +96,8 @@ pub struct ConsensusWithMaliciousFlags {
 }
 
 impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusWithMaliciousFlags {
-    type ChangeSet = ChangeSet;
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    type Mutations = Mutations;
+    fn on_state_change(&self, pool: &T) -> Mutations {
         let changeset = self.consensus.on_state_change(pool);
         let pool_reader = PoolReader::new(pool);
         if self.malicious_flags.is_consensus_malicious() {
@@ -124,7 +124,7 @@ pub struct IDkgWithMaliciousFlags {
 }
 
 impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgWithMaliciousFlags {
-    type ChangeSet = IDkgChangeSet;
+    type Mutations = IDkgChangeSet;
     fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
         let changeset = IDkgImpl::on_state_change(&self.idkg.borrow(), pool);
         if self.malicious_flags.is_idkg_malicious() {

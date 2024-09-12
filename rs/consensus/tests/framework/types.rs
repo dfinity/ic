@@ -11,8 +11,8 @@ use ic_consensus::{
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    certification::ChangeSet,
-    consensus_pool::ChangeSet as ConsensusChangeSet,
+    certification::Mutations,
+    consensus_pool::Mutations as ConsensusChangeSet,
     idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -303,13 +303,13 @@ pub struct ComponentModifier {
         dyn Fn(
             ConsensusImpl,
         )
-            -> Box<dyn PoolMutationsProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+            -> Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
     >,
     pub(crate) idkg: Box<
         dyn Fn(
             idkg::IDkgImpl,
         )
-            -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+            -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
     >,
 }
 
@@ -325,7 +325,7 @@ impl Default for ComponentModifier {
 pub fn apply_modifier_consensus(
     modifier: &Option<ComponentModifier>,
     consensus: ConsensusImpl,
-) -> Box<dyn PoolMutationsProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>> {
+) -> Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>> {
     match modifier {
         Some(f) => (f.consensus)(consensus),
         _ => Box::new(consensus),
@@ -335,7 +335,7 @@ pub fn apply_modifier_consensus(
 pub fn apply_modifier_idkg(
     modifier: &Option<ComponentModifier>,
     idkg: idkg::IDkgImpl,
-) -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
+) -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.idkg)(idkg),
         _ => Box::new(idkg),
@@ -346,12 +346,12 @@ pub fn apply_modifier_idkg(
 /// consensus artifact pool and timer.
 pub struct ConsensusDriver<'a> {
     pub(crate) consensus:
-        Box<dyn PoolMutationsProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+        Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
     pub(crate) consensus_bouncer: ConsensusBouncer,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) idkg: Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+    pub(crate) idkg: Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>>,
     pub(crate) certifier:
-        Box<dyn PoolMutationsProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
+        Box<dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = Mutations> + 'a>,
     pub(crate) logger: ReplicaLogger,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,

@@ -4,7 +4,7 @@ use ic_interfaces::{
         ChangeAction::{
             MoveToValidated, PurgeBelowExpiry, RemoveFromUnvalidated, RemoveFromValidated,
         },
-        ChangeSet, IngressPool, IngressPoolObject,
+        IngressPool, IngressPoolObject, Mutations,
     },
     p2p::consensus::PoolMutationsProducer,
 };
@@ -18,15 +18,15 @@ use ic_types::{
 use ic_validator::RequestValidationError;
 
 impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> Mutations {
         // Skip on_state_change when ingress_message_setting is not available in
         // registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
-            return ChangeSet::new();
+            return Mutations::new();
         };
 
         let _timer = self.metrics.ingress_handler_time.start_timer();
@@ -34,7 +34,7 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
 
         // Do not run on_state_change if consensus_time is not initialized yet.
         let Some(consensus_time) = self.consensus_time.consensus_time() else {
-            return ChangeSet::new();
+            return Mutations::new();
         };
 
         let mut change_set = Vec::new();

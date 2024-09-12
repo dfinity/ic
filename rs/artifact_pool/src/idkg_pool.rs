@@ -13,7 +13,7 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::{
-    ArtifactTransmit, ArtifactWithOpt, ArtifactTransmits, MutablePool, UnvalidatedArtifact,
+    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
     ValidatedPoolReader,
 };
 use ic_interfaces::{
@@ -415,7 +415,7 @@ impl IDkgPool for IDkgPoolImpl {
 }
 
 impl MutablePool<IDkgMessage> for IDkgPoolImpl {
-    type ChangeSet = IDkgChangeSet;
+    type Mutations = IDkgChangeSet;
 
     fn insert(&mut self, artifact: UnvalidatedArtifact<IDkgMessage>) {
         let mut ops = IDkgPoolSectionOps::new();

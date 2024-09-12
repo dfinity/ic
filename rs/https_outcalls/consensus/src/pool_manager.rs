@@ -421,7 +421,7 @@ impl CanisterHttpPoolManagerImpl {
 }
 
 impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerImpl {
-    type ChangeSet = CanisterHttpChangeSet;
+    type Mutations = CanisterHttpChangeSet;
 
     fn on_state_change(&self, canister_http_pool: &T) -> CanisterHttpChangeSet {
         if let Ok(subnet_features) = self.registry_client.get_features(

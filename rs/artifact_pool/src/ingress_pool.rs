@@ -8,11 +8,11 @@ use crate::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolThrottler, PoolSection,
+        ChangeAction, IngressPool, IngressPoolObject, IngressPoolThrottler, Mutations, PoolSection,
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactWithOpt, ArtifactTransmits, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
@@ -226,7 +226,7 @@ impl IngressPool for IngressPoolImpl {
 }
 
 impl MutablePool<SignedIngress> for IngressPoolImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
@@ -262,7 +262,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<SignedIngress> {
+    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
         let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
@@ -601,7 +601,7 @@ mod tests {
                 let mut ingress_pool =
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let nodes = 10;
-                let mut changeset = ChangeSet::new();
+                let mut changeset = Mutations::new();
                 let ingress_size = 10;
                 let mut rng = rand::thread_rng();
                 let now = time_source.get_relative_time();

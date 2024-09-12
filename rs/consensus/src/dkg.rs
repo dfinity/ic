@@ -14,7 +14,7 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
-    dkg::{ChangeAction, ChangeSet, DkgPool},
+    dkg::{ChangeAction, Mutations, DkgPool},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -196,7 +196,7 @@ impl DkgImpl {
         configs: &BTreeMap<NiDkgId, NiDkgConfig>,
         dkg_start_height: Height,
         messages: Vec<&Message>,
-    ) -> ChangeSet {
+    ) -> Mutations {
         // Because dealing generation is not entirely deterministic, it is
         // actually possible to receive multiple dealings from an honest dealer.
         // As such, we simply try validating the first message in the list, and
@@ -205,11 +205,11 @@ impl DkgImpl {
         let message = if let Some(message) = messages.first() {
             message
         } else {
-            return ChangeSet::new();
+            return Mutations::new();
         };
 
         if check_protocol_version(&message.content.version).is_err() {
-            return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
+            return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
         let message_dkg_id = message.content.dkg_id;
@@ -217,7 +217,7 @@ impl DkgImpl {
         // If the dealing refers to a DKG interval starting at a different height,
         // we skip it.
         if message_dkg_id.start_block_height != dkg_start_height {
-            return ChangeSet::new();
+            return Mutations::new();
         }
 
         // If the dealing refers a config which is not among the ongoing DKGs,
@@ -240,7 +240,7 @@ impl DkgImpl {
 
         // If the validated pool already contains this exact message, we skip it.
         if dkg_pool.get_validated().any(|item| item.eq(message)) {
-            return ChangeSet::new();
+            return Mutations::new();
         }
 
         // If the dealing comes from a non-dealer, reject it.
@@ -259,7 +259,7 @@ impl DkgImpl {
         // has already sent out a dealing. See
         // https://dfinity.atlassian.net/browse/CON-534 for more details.
         if contains_dkg_messages(dkg_pool, config, *dealer_id) {
-            return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
+            return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
         // Verify the signature and reject if it's invalid, or skip, if there was an error.
@@ -278,7 +278,7 @@ impl DkgImpl {
                     "Couldn't verify the signature of a DKG dealing: {}", err
                 );
 
-                return ChangeSet::new();
+                return Mutations::new();
             }
         }
 
@@ -299,7 +299,7 @@ impl DkgImpl {
             Err(err) => {
                 error!(self.logger, "Couldn't verify a DKG dealing: {}", err);
 
-                ChangeSet::new()
+                Mutations::new()
             }
         }
     }
@@ -316,9 +316,9 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
 }
 
 impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
-    fn on_state_change(&self, dkg_pool: &T) -> ChangeSet {
+    fn on_state_change(&self, dkg_pool: &T) -> Mutations {
         // This timer will make an entry in the metrics histogram automatically, when
         // it's dropped.
         let _timer = self.metrics.on_state_change_duration.start_timer();
@@ -330,7 +330,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             return ChangeAction::Purge(start_height).into();
         }
 
-        let change_set: ChangeSet = dkg_summary
+        let change_set: Mutations = dkg_summary
             .configs
             .par_iter()
             .filter_map(|(_id, config)| self.create_dealing(dkg_pool, config))
@@ -365,10 +365,10 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                     dealings.to_vec(),
                 )
             })
-            .collect::<Vec<ChangeSet>>()
+            .collect::<Vec<Mutations>>()
             .into_iter()
             .flatten()
-            .collect::<ChangeSet>();
+            .collect::<Mutations>();
 
         self.metrics
             .on_state_change_processed

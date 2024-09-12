@@ -3,9 +3,9 @@ use crate::{
     pool_common::{HasLabel, PoolSection},
 };
 use ic_interfaces::{
-    dkg::{ChangeAction, ChangeSet, DkgPool},
+    dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{
-        ArtifactTransmit, ArtifactWithOpt, ArtifactTransmits, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
@@ -79,7 +79,7 @@ impl DkgPoolImpl {
 }
 
 impl MutablePool<dkg::Message> for DkgPoolImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     /// Inserts an unvalidated artifact into the unvalidated section.
     fn insert(&mut self, artifact: UnvalidatedArtifact<consensus::dkg::Message>) {
@@ -99,7 +99,7 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<dkg::Message> {
+    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<dkg::Message> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
         for action in change_set {

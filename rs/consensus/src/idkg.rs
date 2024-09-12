@@ -374,7 +374,7 @@ impl IDkgImpl {
 }
 
 impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
-    type ChangeSet = IDkgChangeSet;
+    type Mutations = IDkgChangeSet;
 
     fn on_state_change(&self, idkg_pool: &T) -> IDkgChangeSet {
         let metrics = self.metrics.clone();

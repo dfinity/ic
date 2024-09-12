@@ -26,12 +26,12 @@ pub enum ArtifactTransmit<T: IdentifiableArtifact> {
 
 /// Produces mutations to be applied on the artifact pool.
 pub trait PoolMutationsProducer<Pool>: Send {
-    type ChangeSet;
+    type Mutations;
 
-    /// Inspect the input `Pool` to build a `ChangeSet` of actions to
+    /// Inspect the input `Pool` to build a `Mutations` of actions to
     /// be executed.
     ///
-    /// The caller is then expected to apply the returned `ChangeSet` to the
+    /// The caller is then expected to apply the returned `Mutations` to the
     /// input of this call, namely a mutable version of the `Pool`. The reason
     /// that P2P clients (e.g. consensus) do not directly mutate the objects are:
     ///
@@ -44,7 +44,7 @@ pub trait PoolMutationsProducer<Pool>: Send {
     ///
     /// 3. The call can take long time, hence the pool should _not_ be guarded
     ///    by a write lock which prevents other accesses to the pool.
-    fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
+    fn on_state_change(&self, pool: &Pool) -> Self::Mutations;
 }
 
 pub struct ArtifactTransmits<T: IdentifiableArtifact> {
@@ -59,7 +59,7 @@ pub struct ArtifactTransmits<T: IdentifiableArtifact> {
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
 pub trait MutablePool<T: IdentifiableArtifact> {
-    type ChangeSet;
+    type Mutations;
 
     /// Inserts a message into the unvalidated part of the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<T>);
@@ -68,7 +68,7 @@ pub trait MutablePool<T: IdentifiableArtifact> {
     fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ArtifactTransmits<T>;
+    fn apply_changes(&mut self, mutations: Self::Mutations) -> ArtifactTransmits<T>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact

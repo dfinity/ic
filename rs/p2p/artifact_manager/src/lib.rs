@@ -249,7 +249,7 @@ pub fn create_ingress_handlers<
     ingress_handler: Arc<
         dyn PoolMutationsProducer<
                 PoolIngress,
-                ChangeSet = <PoolIngress as MutablePool<SignedIngress>>::ChangeSet,
+                Mutations = <PoolIngress as MutablePool<SignedIngress>>::Mutations,
             > + Send
             + Sync,
     >,
@@ -273,7 +273,7 @@ pub fn create_ingress_handlers<
 pub fn create_artifact_handler<
     Artifact: IdentifiableArtifact + Send + Sync + 'static,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
-    C: PoolMutationsProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
+    C: PoolMutationsProducer<Pool, Mutations = <Pool as MutablePool<Artifact>>::Mutations> + 'static,
 >(
     send_advert: Sender<ArtifactTransmit<Artifact>>,
     change_set_producer: C,
@@ -306,7 +306,7 @@ pub struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A>,
-        C: PoolMutationsProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > Processor<A, P, C>
 {
     pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
@@ -321,7 +321,7 @@ impl<
 impl<
         A: IdentifiableArtifact + Send,
         P: MutablePool<A> + Send + Sync + 'static,
-        C: PoolMutationsProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
     > ArtifactProcessor<A> for Processor<A, P, C>
 {
     #[instrument(skip_all)]
@@ -360,7 +360,7 @@ pub(crate) struct IngressProcessor<P: MutablePool<SignedIngress>> {
     ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
     client: Arc<
-        dyn PoolMutationsProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+        dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
             + Send
             + Sync,
     >,
@@ -370,7 +370,7 @@ impl<P: MutablePool<SignedIngress>> IngressProcessor<P> {
     pub fn new(
         ingress_pool: Arc<RwLock<P>>,
         client: Arc<
-            dyn PoolMutationsProducer<P, ChangeSet = <P as MutablePool<SignedIngress>>::ChangeSet>
+            dyn PoolMutationsProducer<P, Mutations = <P as MutablePool<SignedIngress>>::Mutations>
                 + Send
                 + Sync,
         >,

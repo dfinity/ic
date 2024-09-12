@@ -12,8 +12,8 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
+        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
+        ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
@@ -682,7 +682,7 @@ impl ConsensusPool for ConsensusPoolImpl {
 }
 
 impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
@@ -697,7 +697,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<ConsensusMessage> {
+    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();

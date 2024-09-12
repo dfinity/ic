@@ -13,7 +13,7 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, ChangeSet, IngressPool},
+    ingress_pool::{ChangeAction, Mutations, IngressPool},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
@@ -138,7 +138,7 @@ fn prepare(
     num: usize,
     canisters: &[CanisterId],
 ) -> Time {
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     let ingress_size = 1024;
     let mut rng = rand::thread_rng();
     let mut pool = pool.write().unwrap();

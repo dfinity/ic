@@ -4,7 +4,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
-    ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
+    ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
@@ -51,7 +51,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
         .next()
         .unwrap();
     let parent = cup.content.block.as_ref();
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     for i in 0..num {
         let mut block = Block::from_parent(parent);
         block.rank = Rank(i as u64);

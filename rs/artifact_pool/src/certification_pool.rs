@@ -4,7 +4,7 @@ use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, ChangeSet},
+    certification::{CertificationPool, ChangeAction, Mutations},
     consensus_pool::HeightIndexedPool,
     p2p::consensus::{
         ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
@@ -166,7 +166,7 @@ impl CertificationPoolImpl {
 }
 
 impl MutablePool<CertificationMessage> for CertificationPoolImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
         let label = msg.message.label().to_owned();
@@ -202,7 +202,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<CertificationMessage> {
+    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<CertificationMessage> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
 

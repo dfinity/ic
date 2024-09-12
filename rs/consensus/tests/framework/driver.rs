@@ -7,7 +7,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusBouncer;
 use ic_interfaces::{
     certification,
-    consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
+    consensus_pool::{ChangeAction, Mutations as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
     idkg::{IDkgChangeAction, IDkgChangeSet},
     p2p::consensus::{PoolMutationsProducer, MutablePool},
@@ -27,12 +27,12 @@ impl<'a> ConsensusDriver<'a> {
     pub fn new(
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: Box<dyn PoolMutationsProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+        consensus: Box<dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>>,
         consensus_bouncer: ConsensusBouncer,
         dkg: ic_consensus::dkg::DkgImpl,
-        idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+        idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, Mutations = IDkgChangeSet>>,
         certifier: Box<
-            dyn PoolMutationsProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
+            dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations> + 'a,
         >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         dkg_pool: Arc<RwLock<DkgPoolImpl>>,

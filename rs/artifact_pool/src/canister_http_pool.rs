@@ -100,7 +100,7 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
 }
 
 impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
-    type ChangeSet = CanisterHttpChangeSet;
+    type Mutations = CanisterHttpChangeSet;
 
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
         self.unvalidated.insert(artifact.message, ());

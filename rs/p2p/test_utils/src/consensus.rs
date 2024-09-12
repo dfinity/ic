@@ -113,7 +113,7 @@ pub struct TestConsensusInner<Artifact: IdentifiableArtifact> {
 }
 
 impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
-    type ChangeSet = (Vec<u64>, Vec<u64>);
+    type Mutations = (Vec<u64>, Vec<u64>);
 
     fn insert(&mut self, msg: UnvalidatedArtifact<U64Artifact>) {
         let mut inner = self.inner.lock().unwrap();
@@ -135,7 +135,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ArtifactTransmits<U64Artifact> {
+    fn apply_changes(&mut self, mut change_set: Self::Mutations) -> ArtifactTransmits<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -160,8 +160,8 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
 }
 
 impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    type ChangeSet = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::ChangeSet;
-    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::ChangeSet {
+    type Mutations = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::Mutations;
+    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::Mutations {
         let mut inner = self.inner.lock().unwrap();
         let purged: Vec<_> = inner.purge.drain(..).collect();
         let mut advert = Vec::new();

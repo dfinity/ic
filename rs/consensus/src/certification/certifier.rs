@@ -6,7 +6,7 @@ use ic_consensus_utils::{
     active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
+    certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationError,
@@ -123,10 +123,10 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
 /// 5. Whenever the catch-up package height increases, remove all certification
 ///    artifacts below this height.
 impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     /// Should be called on every change of the certification pool and timeouts.
-    fn on_state_change(&self, certification_pool: &T) -> ChangeSet {
+    fn on_state_change(&self, certification_pool: &T) -> Mutations {
         // This timer will make an entry in the metrics histogram automatically, when
         // it's dropped.
         let _timer = self.metrics.execution_time.start_timer();
@@ -410,7 +410,7 @@ impl CertifierImpl {
         &self,
         certification_pool: &dyn CertificationPool,
         state_hashes: &[(Height, CryptoHashOfPartialState)],
-    ) -> ChangeSet {
+    ) -> Mutations {
         // Iterate over all state hashes, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures.
 

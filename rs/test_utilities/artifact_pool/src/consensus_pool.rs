@@ -4,7 +4,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ChangeAction, Mutations, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
@@ -795,7 +795,7 @@ impl ConsensusPool for TestConsensusPool {
 }
 
 impl MutablePool<ConsensusMessage> for TestConsensusPool {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
@@ -805,7 +805,7 @@ impl MutablePool<ConsensusMessage> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ArtifactTransmits<ConsensusMessage> {
+    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
         self.pool.apply_changes(change_set)
     }
 }
