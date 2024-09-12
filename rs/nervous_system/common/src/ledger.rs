@@ -240,7 +240,7 @@ impl IcpLedger for IcpLedgerCanister {
             if let Ok(balance) = result {
                 tla::TlaValue::Variant {
                     tag: "TransferOk".to_string(),
-                    value: Box::new(balance.to_tla_value()),
+                    value: Box::new(balance.e8s.to_tla_value()),
                 }
             } else {
                 tla::TlaValue::Variant {
