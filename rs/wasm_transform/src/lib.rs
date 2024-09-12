@@ -594,6 +594,8 @@ pub struct NameSection<'a> {
     pub function_names: Vec<(u32, &'a str)>,
     pub type_names: Vec<(u32, &'a str)>,
     pub memory_names: Vec<(u32, &'a str)>,
+    pub global_names: Vec<(u32, &'a str)>,
+    pub table_names: Vec<(u32, &'a str)>,
     pub local_names: Vec<(u32, Vec<(u32, &'a str)>)>,
     pub label_names: Vec<(u32, Vec<(u32, &'a str)>)>,
 }
@@ -627,6 +629,8 @@ impl<'a> NameSection<'a> {
         let mut function_names = vec![];
         let mut type_names = vec![];
         let mut memory_names = vec![];
+        let mut global_names = vec![];
+        let mut table_names = vec![];
         let mut local_names = vec![];
         let mut label_names = vec![];
         for subsection_reader in name_section.into_iter() {
@@ -634,6 +638,8 @@ impl<'a> NameSection<'a> {
                 Name::Function(name_map) => add_names(name_map, &mut function_names)?,
                 Name::Type(name_map) => add_names(name_map, &mut type_names)?,
                 Name::Memory(name_map) => add_names(name_map, &mut memory_names)?,
+                Name::Global(name_map) => add_names(name_map, &mut global_names)?,
+                Name::Table(name_map) => add_names(name_map, &mut table_names)?,
                 Name::Local(indirect_name_map) => {
                     add_indirect_names(indirect_name_map, &mut local_names)?
                 }
@@ -648,6 +654,8 @@ impl<'a> NameSection<'a> {
             function_names,
             type_names,
             memory_names,
+            global_names,
+            table_names,
             local_names,
             label_names,
         })
@@ -684,6 +692,14 @@ impl<'a> NameSection<'a> {
 
         if !self.memory_names.is_empty() {
             name_section.memories(&make_name_map(&self.memory_names));
+        }
+
+        if !self.global_names.is_empty() {
+            name_section.globals(&make_name_map(&self.global_names));
+        }
+
+        if !self.table_names.is_empty() {
+            name_section.tables(&make_name_map(&self.table_names));
         }
 
         if !self.local_names.is_empty() {
