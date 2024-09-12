@@ -246,7 +246,7 @@ fn correct_charging_source_canister_for_a_request() {
     // execute_canister_response()
     sandbox_safe_system_state
         .system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -383,7 +383,7 @@ fn call_increases_cycles_consumed_metric() {
 
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -464,7 +464,7 @@ fn test_inter_canister_call(
 
     sandbox_safe_system_state
         .system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             topo,

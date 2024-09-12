@@ -1122,7 +1122,7 @@ fn certified_data_set() {
 
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -1298,7 +1298,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     }
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -1468,7 +1468,7 @@ fn push_output_request_respects_memory_limits() {
     // Ensure that exactly one output request was pushed.
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -1582,7 +1582,7 @@ fn push_output_request_oversized_request_memory_limits() {
     // Ensure that exactly one output request was pushed.
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
@@ -1618,7 +1618,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
-        .apply(
+        .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),

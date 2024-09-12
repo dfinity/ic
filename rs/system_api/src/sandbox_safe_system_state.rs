@@ -289,7 +289,7 @@ impl SystemStateChanges {
 
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    pub fn apply(
+    pub fn apply_changes(
         self,
         time: Time,
         system_state: &mut SystemState,
