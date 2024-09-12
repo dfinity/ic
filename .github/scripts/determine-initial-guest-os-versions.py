@@ -98,6 +98,12 @@ def fetch_versions_from_rollout_dashboard() -> list[str] | None:
             for subnet in batch["subnets"]:
                 if subnet["state"] in (SubnetRolloutState.error, SubnetRolloutState.predecessor_failed):
                     # This subnet failed?  We ignore it, because it could not have been upgraded.
+                    # There is a minor corner case where the subnet may be in error (not predecessor_failed)
+                    # but a proposal has been filed *and* approved, which means the subnet is in fact
+                    # already carrying the git revision stated by the subnet object.
+                    # We could expose the proposal number and its state in the rollout dashboard API
+                    # (this information is stored by Airflow and known to it) to settle this uncertainty,
+                    # but I'm not sure it's worth the effort.
                     eprint_fmt(
                         "Version %s targeting subnet %s in rollout %s is %s, disregarding",
                         subnet["git_revision"],
