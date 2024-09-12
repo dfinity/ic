@@ -8,7 +8,7 @@ use ic_nervous_system_common::{
 };
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
-    TransferArgs,
+    TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
@@ -77,7 +77,7 @@ impl IcpLedger for IcpLedgerCanister {
         // this method, make sure that the staked amount
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
-        let result: Result<u64, (Option<i32>, String)> = call(
+        let result: Result<Result<u64, TransferError>, (Option<i32>, String)> = call(
             self.id,
             "transfer",
             candid_one,
@@ -92,12 +92,18 @@ impl IcpLedger for IcpLedgerCanister {
         )
         .await;
 
-        result.map_err(|(code, msg)| {
-            NervousSystemError::new_with_message(format!(
-                "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
-                code, msg
-            ))
-        })
+        result
+            .map_err(|(code, msg)| {
+                NervousSystemError::new_with_message(format!(
+                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
+                    code, msg
+                ))
+            })
+            .and_then(|inner_result| {
+                inner_result.map_err(|e: TransferError| {
+                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+                })
+            })
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
