@@ -55,6 +55,20 @@ class Rollout(TypedDict):
     state: RolloutState
     batches: Dict[str, Batch]
 
+# Minimal subset of API structure needed for public dashboard.
+# Swagger for the public dashboard API: https://ic-api.internetcomputer.org/api/v3/swagger .
+class PDReplicaVersion(TypedDict):
+    executed_timestamp_seconds: Optional[int]
+    proposal_id: str  # really an int
+    replica_version_id: str
+
+class PDSubnet(TypedDict):
+    replica_versions: List[PDReplicaVersion]
+    subnet_id: str
+
+class PDSubnetsResponse(TypedDict):
+    subnets: List[PDSubnet]
+
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
@@ -130,11 +144,6 @@ def fetch_versions_from_rollout_dashboard(): # type: () -> list[str] | None
         for datestring_revision_tuple in subnet_to_revision.values()
     ]))
 
-def maybe_executed_timestamp(x) -> int:
-    if x.get(EXECUTED_TIMESTAMP_SECONDS, None) is None:
-        raise Exception(f"Expected '{EXECUTED_TIMESTAMP_SECONDS}' in 'replica_version'")
-    return int(x.get(EXECUTED_TIMESTAMP_SECONDS))
-
 def fetch_versions_from_public_dashboard(): # type: () -> list[str] | None
     """
     Fetch data from public dashboard
@@ -144,33 +153,25 @@ def fetch_versions_from_public_dashboard(): # type: () -> list[str] | None
     """
     url = PUBLIC_DASHBOARD_ENDPOINT
     try:
-        data = request_json(url)
+        data = cast(PDSubnetsResponse, request_json(url))
     except Exception as e:
         eprint(f"Error fetching / decoding data from {url}: {e}.  Returning no versions.")
         return []
 
+    subnets = data["subnets"]
     versions = set()
-    # Manuel: I'm not modifying this because I do not know the shape
-    # of this data structure.
-    # Swagger for the public dashboard API: https://ic-api.internetcomputer.org/api/v3/swagger
-    try:
-        if data.get(SUBNETS, None) is None:
-            raise Exception(f"Expected '{SUBNETS}' in response")
-        subnets = data.get(SUBNETS)
-        for subnet in subnets:
-            if subnet.get(REPLICA_VERSIONS, None) is None:
-                raise Exception(f"Expected '{REPLICA_VERSIONS}' in 'subnet'")
-            replica_versions = subnet.get(REPLICA_VERSIONS)
-            replica_version = sorted(replica_versions, key=maybe_executed_timestamp, reverse=True)[0]
-            if replica_version.get(REPLICA_VERSION_ID, None) is None:
-                raise Exception(f"Expected '{REPLICA_VERSION_ID}' in 'replica_version'")
-            versions.add(replica_version.get(REPLICA_VERSION_ID))
-    except Exception as e:
-        # Public dashboard returned json but the format changed. Likely an
-        # API change that is not retriable and requires investigation.
-        eprint(f"Error while parsing response from {PUBLIC_DASHBOARD_ENDPOINT}: {e}")
-        eprint(f"JSON response received:\n{data}")
-        exit(1)
+    for subnet in subnets:
+        try:
+            latest_replica_version = list(
+                sorted(
+                    [r for r in subnet["replica_versions"] if r.get("executed_timestamp_seconds")],
+                    key=lambda rr: rr.get("executed_timestamp_seconds") or 0 # the or 0 to satisfy py3.8 typechecking
+                )
+            )[-1]
+            versions.add(latest_replica_version["replica_version_id"])
+        except IndexError:
+            raise RuntimeWarning("Subnet %s does not have any executed version proposals" % subnet["subnet_id"])
+
     return list(versions)
 
 def main():
