@@ -92,7 +92,7 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
-    # If present - decompress `upload_img` and inject this into config.ini
+    # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
