@@ -12,72 +12,11 @@ Not all configuration files and directories are required for GuestOS to run in p
 
 The following files and directories *are* required for GuestOS to run in production.
 
-=== CONFIGURED
-
-This file serves as a tag to indicate that the one-time bootstrap configuration has been completed. If the `/boot/config/CONFIGURED` file is not present, the boot sequence will search for a virtual USB stick (the bootstrap config image) containing the injected configuration files, and create the file.
-
 === store.keyfile
 
 This file contains the key material used to derive the wrapping key for all block device encryption. The `store.keyfile` is created during the first boot, and encrypted partitions are configured with it.
 
 In the absence of a sealing key (which will be available in SEV-protected trusted execution environments), the `store.keyfile` is stored as plain-text. Once a sealing key becomes available, it should be used to wrap the contents of this file.
-
-=== ssh/
-
-This directory contains SSH host keys. These keys must be persisted across upgrades and are transferred to `/etc/ssh` during the boot process.
-
-=== node_exporter/
-
-This directory contains the Node Exporter TLS keys. These keys must be persisted across upgrades and are transferred to `/etc/node_exporter` during the boot process.
-
-=== accounts_ssh_authorized_keys/
-
-This directory contains individual files named `admin`, `backup`, `readonly` and `root`. The contents of these files serve as `authorized_keys` for their respective role account. This means that, for example, `accounts_ssh_authorized_keys/admin` is transferred to `~admin/.ssh/authorized_keys` on the target system.
-
-* *admin*: ...
-* *backup / readonly*: These files can only be modified via an NNS proposal, and are in place for subnet recovery or issue debugging purposes.
-* *root*: Used for development/debug builds only.
-
-This directory and any file in it is optional. By default, no authorized key is installed for any account, meaning no one has SSH access to the GuestOS.
-
-=== node_operator_private_key.pem
-
-This file contains the Node Operator private key, which is registered with the NNS and used to sign the IC join request. The private key can be generated using one of the following commands:
-
-    dfx identity new --disable-encryption node_operator
-    cp ~/.config/dfx/identity/node_operator/identity.pem ./node_operator_private_key.pem
-
-Or
-
-    quill generate --pem-file node_operator_private_key.pem
-
-=== network.conf
-
-Network configuration parameters.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- *ipv6_address*: The IPv6 address of the node, used for the node to "identify" itself (via the registry). All public IC services are offered through this address, which will be assigned to the enp1s0 interface. It is used as the "private" management access to the node. If left blank, SLAAC is used on the interface.
-
-- *ipv6_gateway*: The default IPv6 gateway, only meaningful if ipv6_address is also provided.
-
-- *hostname*: The hostname, which can be any text in principle but is generally derived from the ID of the physical host (e.g., MAC address).
-
-Note: if this file is not given, the system will fall back to network auto configuration.
-
-=== nns.conf
-
-The IP address(es) of NNS node(s).
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- *nns_url*: The URL (HTTP) of the NNS node(s). If multiple URLs are provided, separate them with whitespace. If this key is not specified, http://127.0.0.1:8080 is assumed by default (which only works for nodes that do not require registration).
-
-This configuration is used when generating the replica configuration to fill in the nns_url placeholder.
-
-=== nns_public_key.pem
-
-This file must be a text file containing the public key of the NNS to be used.
 
 == Development configuration files
 
@@ -94,35 +33,6 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 - *backup_purging_interval_secs*: The interval at which the backup spool directory will be scanned for files to delete.
 
 This configuration file should only be used for testnet deployments (to achieve shorter retention times) and must be missing for production deployments, where suitable production default values are assumed.
-
-=== filebeat.conf
-
-Configures filebeat to export logs out of the system.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- elasticsearch_hosts: Space-separated lists of hosts to ship logs to.
-- elasticsearch_tags: Space-separated list of tags to apply to exported log records.
-
-If left unspecified, filebeat will be left unconfigured and no logs are exported.
-
-=== socks_proxy.conf
-
-Configuration for socks proxy.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- socks_proxy: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080
-
-=== bitcoin_addr.conf
-
-Configuration for bitcoin adapter.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- bitcoind_addr: Address of the bitcoind to be contacted by bitcoin adapter service.
-
-If left unspecified, the bitcoin adapter will not work properly due to lack of external system to contact.
 
 == Injecting external state
 
@@ -141,14 +51,3 @@ This behavior is suitable for the following use cases:
 
 - Externally controlled join of a node to a subnet: In this case, ic-prep is used to prepare key material to the node, while ic-admin is used to modify the target NNS such that it "accepts" the new node as part of the IC.
 
-=== ic_crypto
-
-Externally generated cryptographic keys.
-
-Must be a directory with contents matching the internal representation of the ic_crypto directory. When given, this provides the private keys of the node. If not given, the node will generate its own private/public key pair.
-
-=== ic_registry_local_store 
-
-Initial registry state.
-
-Must be a directory with contents matching the internal representation of the ic_registry_local_store. When given, this provides the initial state of the registry. If not given, the node will fetch (initial) registry state from the NNS.
