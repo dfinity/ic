@@ -263,7 +263,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
 
     /// Apply changeset to the Ingress Pool
     fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
-        let mut mutations = vec![];
+        let mut transmits = vec![];
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated(message_id) => {
@@ -272,7 +272,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     match self.unvalidated.remove(&message_id) {
                         Some(unvalidated_artifact) => {
                             if unvalidated_artifact.peer_id == self.node_id {
-                                mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                                transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
                                 }));
@@ -299,7 +299,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
                         Some(artifact) => {
-                            mutations.push(ArtifactTransmit::Abort(message_id));
+                            transmits.push(ArtifactTransmit::Abort(message_id));
                             let size = artifact.msg.signed_ingress.count_bytes();
                             debug!(
                                 self.log,
@@ -316,7 +316,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
-                    mutations.extend(
+                    transmits.extend(
                         self.validated
                             .purge_below(expiry)
                             .map(|i| (&i.msg.signed_ingress).into())
@@ -328,7 +328,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         }
 
         ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately: false,
         }
     }
@@ -570,9 +570,9 @@ mod tests {
                 let result = ingress_pool.apply(changeset);
 
                 // Check moved message is returned as an advert
-                assert_eq!(result.mutations.len(), 1);
+                assert_eq!(result.transmits.len(), 1);
                 assert!(
-                    matches!(&result.mutations[0], ArtifactTransmit::Deliver(artifact) if
+                    matches!(&result.transmits[0], ArtifactTransmit::Deliver(artifact) if
                         IdentifiableArtifact::id(&artifact.artifact) == message_id0
                     )
                 );
@@ -632,12 +632,12 @@ mod tests {
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply(changeset);
                 assert!(!result
-                    .mutations
+                    .transmits
                     .iter()
                     .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
 
                 // artifacts_with_opt are only created for own node id
-                assert_eq!(result.mutations.len(), initial_count / nodes);
+                assert_eq!(result.transmits.len(), initial_count / nodes);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
@@ -645,10 +645,10 @@ mod tests {
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply(changeset);
                 assert!(!result
-                    .mutations
+                    .transmits
                     .iter()
                     .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
-                assert_eq!(result.mutations.len(), initial_count - non_expired_count);
+                assert_eq!(result.transmits.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })

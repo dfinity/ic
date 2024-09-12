@@ -204,11 +204,11 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
     fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<CertificationMessage> {
         let changed = !change_set.is_empty();
-        let mut mutations = vec![];
+        let mut transmits = vec![];
 
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
-                mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                     artifact: msg.clone(),
                     is_latency_sensitive: true,
                 }));
@@ -221,7 +221,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
-                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: msg.clone(),
                         // relayed
                         is_latency_sensitive: false,
@@ -252,7 +252,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::RemoveAllBelow(height) => {
                 self.remove_all_unvalidated_below(height);
-                mutations.extend(
+                transmits.extend(
                     self.persistent_pool
                         .purge_below(height)
                         .drain(..)
@@ -275,7 +275,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
 
         ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately: changed,
         }
     }
@@ -577,9 +577,9 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.mutations.len(), 2);
+            assert_eq!(result.transmits.len(), 2);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
             assert!(result.poll_immediately);
@@ -613,9 +613,9 @@ mod tests {
             ]);
             let expected = cert_msg.id();
             assert!(
-                matches!(&result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == expected)
+                matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == expected)
             );
-            assert_eq!(result.mutations.len(), 1);
+            assert_eq!(result.transmits.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
@@ -693,10 +693,10 @@ mod tests {
                 }
             }
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
-            assert_eq!(result.mutations.len(), 2);
+            assert_eq!(result.transmits.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
@@ -738,7 +738,7 @@ mod tests {
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
-            assert!(result.mutations.is_empty());
+            assert!(result.transmits.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
@@ -810,9 +810,9 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.mutations.len(), 2);
+            assert_eq!(result.transmits.len(), 2);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
             assert!(result.poll_immediately);

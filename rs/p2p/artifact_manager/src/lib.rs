@@ -224,13 +224,13 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
             }
         };
         let ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately,
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
 
         // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
-        for mutation in mutations {
+        for mutation in transmits {
             let _ = send_advert.blocking_send(mutation);
         }
         last_on_state_change_result = poll_immediately;
@@ -464,7 +464,7 @@ mod tests {
                 _: Vec<UnvalidatedArtifactMutation<DummyArtifact>>,
             ) -> ArtifactTransmits<DummyArtifact> {
                 ArtifactTransmits {
-                    mutations: vec![],
+                    transmits: vec![],
                     poll_immediately: false,
                 }
             }

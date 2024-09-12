@@ -25,7 +25,7 @@ pub enum ArtifactTransmit<T: IdentifiableArtifact> {
     Abort(T::Id),
 }
 
-/// Produces mutations to be applied on the artifact pool.
+/// Produces transmits to be applied on the artifact pool.
 pub trait PoolMutationsProducer<Pool>: Send {
     type Mutations;
 
@@ -49,8 +49,8 @@ pub trait PoolMutationsProducer<Pool>: Send {
 }
 
 pub struct ArtifactTransmits<T: IdentifiableArtifact> {
-    /// The list of replication mutations returned by the client. Mutations are applied in order by P2P-replication.
-    pub mutations: Vec<ArtifactTransmit<T>>,
+    /// The list of replication transmits returned by the client. Mutations are applied in order by P2P-replication.
+    pub transmits: Vec<ArtifactTransmit<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
@@ -73,7 +73,7 @@ pub trait MutablePool<T: IdentifiableArtifact> {
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
-/// with the validated portion of an artifact pool without resulting in any mutations.
+/// with the validated portion of an artifact pool without resulting in any transmits.
 /// Every pool needs to implement this trait.
 pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// Get a validated artifact by its identifier
@@ -135,8 +135,7 @@ pub trait BouncerFactory<Id, Pool>: Send + Sync {
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
 
     /// The period at which the bouncer should be refreshed.
-    /// Implementors fo the bouncer are well suited for determing the
-    /// refresh period.
+    /// Implementors of the bouncer are well suited for determing the refresh period.
     fn refresh_period(&self) -> Duration;
 }
 

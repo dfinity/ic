@@ -143,17 +143,17 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
-        let mut mutations = vec![];
-        mutations.extend(change_set.0.drain(..).map(|m| {
+        let mut transmits = vec![];
+        transmits.extend(change_set.0.drain(..).map(|m| {
             ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: self.id_to_msg(m).into(),
                 is_latency_sensitive: self.latency_sensitive,
             })
         }));
 
-        mutations.extend(change_set.1.drain(..).map(ArtifactTransmit::Abort));
+        transmits.extend(change_set.1.drain(..).map(ArtifactTransmit::Abort));
         ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately,
         }
     }

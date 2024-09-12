@@ -702,7 +702,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut mutations = vec![];
+        let mut transmits = vec![];
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -710,7 +710,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
                     }));
@@ -721,7 +721,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                        transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                             artifact: to_move.clone(),
                             is_latency_sensitive: false,
                         }));
@@ -790,7 +790,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        mutations.extend(
+        transmits.extend(
             self.apply_changes_validated(validated_ops)
                 .drain(..)
                 .map(ArtifactTransmit::Abort),
@@ -805,7 +805,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         }
 
         ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately: changed,
         }
     }
@@ -1187,27 +1187,27 @@ mod tests {
                 }),
             ];
             let result = pool.apply(changeset);
-            assert_eq!(result.mutations.len(), 2);
+            assert_eq!(result.transmits.len(), 2);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_2.get_id()));
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_2.get_id()));
             assert!(matches!(
-                &result.mutations[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
+                &result.transmits[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
-            assert_eq!(result.mutations.len(), 3);
-            assert!(result.mutations.iter().any(
+            assert_eq!(result.transmits.len(), 3);
+            assert!(result.transmits.iter().any(
                 |x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_2.get_id())
             ));
             assert!(result.poll_immediately);
 
             let result = pool.apply(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert_eq!(result.mutations.len(), 0);
+            assert_eq!(result.transmits.len(), 0);
             assert!(result.poll_immediately);
 
             let result = pool.apply(vec![]);
@@ -1266,21 +1266,21 @@ mod tests {
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert_eq!(result.mutations.len(), 1);
+            assert_eq!(result.transmits.len(), 1);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
             ));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
-            assert_eq!(result.mutations.len(), 4);
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_3.get_id())));
+            assert_eq!(result.transmits.len(), 4);
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }

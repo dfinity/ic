@@ -115,11 +115,11 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
         change_set: CanisterHttpChangeSet,
     ) -> ArtifactTransmits<CanisterHttpResponseShare> {
         let changed = !change_set.is_empty();
-        let mut mutations = vec![];
+        let mut transmits = vec![];
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
-                    mutations.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: share.clone(),
                         is_latency_sensitive: true,
                     }));
@@ -134,7 +134,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
                     if self.validated.remove(&id).is_some() {
-                        mutations.push(ArtifactTransmit::Abort(id));
+                        transmits.push(ArtifactTransmit::Abort(id));
                     }
                 }
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
@@ -154,7 +154,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
             }
         }
         ArtifactTransmits {
-            mutations,
+            transmits,
             poll_immediately: changed,
         }
     }
@@ -253,11 +253,11 @@ mod tests {
         ]);
 
         assert!(
-            matches!(&result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == id)
+            matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == id)
         );
-        assert!(matches!(&result.mutations[1], ArtifactTransmit::Deliver(_)));
+        assert!(matches!(&result.transmits[1], ArtifactTransmit::Deliver(_)));
         assert!(result.poll_immediately);
-        assert_eq!(result.mutations.len(), 2);
+        assert_eq!(result.transmits.len(), 2);
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get(&id).unwrap());
         assert_eq!(
@@ -270,9 +270,9 @@ mod tests {
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
 
-        assert_eq!(result.mutations.len(), 1);
+        assert_eq!(result.transmits.len(), 1);
         assert!(result.poll_immediately);
-        assert!(matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == id));
+        assert!(matches!(&result.transmits[0], ArtifactTransmit::Abort(x) if *x == id));
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);
@@ -297,7 +297,7 @@ mod tests {
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
         assert!(!result
-            .mutations
+            .transmits
             .iter()
             .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
@@ -318,7 +318,7 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.mutations.is_empty());
+        assert!(result.transmits.is_empty());
     }
 
     #[test]
@@ -337,6 +337,6 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.mutations.is_empty());
+        assert!(result.transmits.is_empty());
     }
 }
