@@ -1104,8 +1104,7 @@ impl SystemState {
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-                    // TODO(MR-552): Use SysUnknown instead.
-                    RejectCode::SysTransient,
+                    RejectCode::SysUnknown,
                     message,
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
                 )),
