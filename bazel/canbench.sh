@@ -15,7 +15,7 @@ set -eEuo pipefail
 RUNFILES="$PWD"
 REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
-CANBENCH_OUTPUT=/tmp/canbench_output.txt
+CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 
 # Generates a canbench.yml dynamically to be used by canbench.
 CANBENCH_YML="${RUNFILES}/canbench.yml"
