@@ -4,8 +4,8 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 load("mainnet-binaries.bzl", "mainnet_binary_gzs")
+load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
     name = "aspect_rules_sol",
