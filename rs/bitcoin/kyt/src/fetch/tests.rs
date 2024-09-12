@@ -466,7 +466,7 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
     assert!(matches!(
             env.check_fetched(&state, txid_0, &fetched).await,
-            Err(CheckTransactionError::ResponseTooLarge { txid }) if txid_2.as_ref() == &txid));
+            Err(CheckTransactionError::ResponseTooLarge { txid }) if txid_2.as_ref() == txid));
     // Check remaining cycle
     assert_eq!(
         env.cycles_available(),
