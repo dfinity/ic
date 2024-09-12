@@ -55,6 +55,7 @@ fn polynomial_matching_function_viability_test() {
         let f = assert_matches!(PolynomialMatchingFunction::new(
             *total_maturity_equivalent_icp_e8s,
             neurons_fund_participation_limits,
+            true
         ), Ok(f) => f);
         // Check that the function can be serialized / deserialized.
         let f1: Box<PolynomialMatchingFunction> = assert_matches!(

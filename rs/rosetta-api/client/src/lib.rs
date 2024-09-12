@@ -10,8 +10,6 @@ use ic_rosetta_api::request_types::RequestType;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
-use icrc_ledger_types::icrc1::transfer;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;

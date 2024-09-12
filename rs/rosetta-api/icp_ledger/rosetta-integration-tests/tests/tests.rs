@@ -12,8 +12,7 @@ use ic_rosetta_api::models::{
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use ic_sender_canister_lib::{SendArg, SendResult};
 use icp_ledger::{
-    AccountIdentifier, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo, Operation,
-    TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Memo, Operation, TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
 };
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
 use icrc_ledger_types::icrc1::account::Account;
@@ -568,7 +567,6 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
         .block
         .unwrap();
     env.rosetta.wait_until_synced_up_to(1).await.unwrap();
-    println!("synced up to 2");
     // Enabling Rosetta Blocks Mode should not change blocks before
     // the first rosetta index, in this case block 0
     let block0 = env

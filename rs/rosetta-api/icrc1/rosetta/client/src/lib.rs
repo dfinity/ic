@@ -181,13 +181,7 @@ impl RosettaClient {
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
         while tries < 10 {
-            let transaction = self
-                .search_transactions(
-                    &SearchTransactionsRequest::builder(network_identifier.clone())
-                        .with_transaction_identifier(submit_response.transaction_identifier.clone())
-                        .build(),
-                )
-                .await?;
+            let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
