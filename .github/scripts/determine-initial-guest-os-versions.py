@@ -3,6 +3,7 @@ import sys
 from enum import StrEnum
 
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from typing_extensions import Any, Dict, List, Tuple, TypedDict, cast
 
 ROLLOUT_DASHBOARD_ENDPOINT='https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts'
@@ -63,6 +64,16 @@ def eprint_fmt(str, *args):
     return # remove me to get some real action
     print((str % args) if args else str, file=sys.stderr)
 
+def session_retry():
+    s = requests.Session()
+    retries = Retry(
+        total=7,
+        backoff_factor=0.1,
+        status_forcelist=[500, 502, 503, 504],
+    )
+    s.mount('http://', HTTPAdapter(max_retries=retries))
+    return s
+
 def fetch_versions_from_rollout_dashboard() -> list[str] | None:
     """
     Fetch data from rollout dashboard
@@ -70,9 +81,9 @@ def fetch_versions_from_rollout_dashboard() -> list[str] | None:
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
     """
+    url = ROLLOUT_DASHBOARD_ENDPOINT
     try:
-        url = ROLLOUT_DASHBOARD_ENDPOINT
-        r =requests.get(url, timeout=30)
+        r = session_retry().get(url, timeout=15)
         r.raise_for_status()
         rollouts = cast(List[Rollout], r.json())
     except Exception as e:
@@ -129,9 +140,9 @@ def fetch_versions_from_public_dashboard() -> list[str] | None:
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
     """
+    url = PUBLIC_DASHBOARD_ENDPOINT
     try:
-        url = PUBLIC_DASHBOARD_ENDPOINT
-        r =requests.get(url, timeout=30)
+        r = session_retry().get(url, timeout=30)
         r.raise_for_status()
         data = r.json()
     except Exception as e:
