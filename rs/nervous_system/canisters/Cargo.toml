@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }

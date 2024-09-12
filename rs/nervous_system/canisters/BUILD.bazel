@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
+    "@crate_index//:candid",
 ]
 
 MACRO_DEPENDENCIES = [

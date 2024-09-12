@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use candid::Nat;
 use dfn_candid::candid_one;
 use dfn_core::{call, CanisterId};
 use ic_ledger_core::block::BlockIndex;
@@ -110,7 +111,10 @@ impl IcpLedger for IcpLedgerCanister {
         let result: Result<Tokens, (Option<i32>, String)> =
             call(self.id, "icrc1_total_supply", candid_one, ())
                 .await
-                .map(Tokens::from_e8s);
+                .map(|e8s: Nat| {
+                    Tokens::try_from(e8s)
+                        .expect("Should always succeed, as ICP ledger internally stores u64")
+                });
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
