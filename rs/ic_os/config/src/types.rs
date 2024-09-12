@@ -64,13 +64,21 @@ pub struct GuestOSSettings {
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GuestosDevConfig {
-    pub backup_retention_time_seconds: Option<String>,
-    pub backup_purging_interval_seconds: Option<String>,
+    pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
     pub query_stats_epoch_length: Option<String>,
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
+}
+
+/// Configures the usage of the backup spool directory.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+pub struct BackupSpoolSettings {
+    /// The maximum age of any file or directory kept in the backup spool.
+    pub backup_retention_time_seconds: Option<String>,
+    /// The interval at which the backup spool directory will be scanned for files to delete.
+    pub backup_purging_interval_seconds: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

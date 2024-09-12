@@ -22,18 +22,6 @@ In the absence of a sealing key (which will be available in SEV-protected truste
 
 These configuration files should only be used for development and testing purposes.
 
-=== backup.conf
-
-This file configures the usage of the backup spool directory.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- *backup_retention_time_secs*: The maximum age of any file or directory kept in the backup spool.
-
-- *backup_purging_interval_secs*: The interval at which the backup spool directory will be scanned for files to delete.
-
-This configuration file should only be used for testnet deployments (to achieve shorter retention times) and must be missing for production deployments, where suitable production default values are assumed.
-
 == Injecting external state
 
 *Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS. 
