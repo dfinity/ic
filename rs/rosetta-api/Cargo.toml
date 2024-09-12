@@ -39,7 +39,7 @@ on_wire = { path = "../rust_canisters/on_wire" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-rolling-file = "0.2.0"
+rolling-file = { workspace = true }
 rosetta-core = { path = "rosetta_core" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
