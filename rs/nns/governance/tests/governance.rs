@@ -80,11 +80,11 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
         GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, KnownNeuron,
-        KnownNeuronData, ListNeurons, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron,
-        NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
-        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
-        ProposalDataChange,
+        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
+        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
+        ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -92,7 +92,6 @@ use ic_nns_governance::{
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
 };
@@ -2019,6 +2018,116 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
         .with_neuron_management_voting_period(1)
         .with_wait_for_quiet_threshold(10)
         .build()
+}
+
+/// Legacy behavior.
+#[test]
+fn test_get_neuron_when_private_neuron_enforcement_disabled() {
+    // Step 1: Prepare the world.
+
+    // This is the only difference (in step 1) compared to the previous test.
+    let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
+
+    let driver = fake::FakeDriver::default();
+    let governance = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call code under test.
+    let neuron_id = NeuronId { id: 1 };
+    let key = NeuronIdOrSubaccount::NeuronId(neuron_id);
+    let controller = principal(1);
+
+    let neuron_info = governance
+        .get_neuron_info_by_id_or_subaccount(&key, *RANDOM_PRINCIPAL_ID)
+        .unwrap();
+
+    let full_neuron = governance
+        .get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(neuron_id),
+            &controller,
+        )
+        .unwrap();
+
+    let list_neurons_response = governance.list_neurons(
+        &ListNeurons {
+            neuron_ids: vec![1],
+            ..Default::default()
+        },
+        controller,
+    );
+
+    // Step 3: Inspect results.
+    assert_eq!(neuron_info.visibility, None);
+    assert_eq!(full_neuron.visibility, None);
+
+    assert_eq!(
+        list_neurons_response,
+        ListNeuronsResponse {
+            neuron_infos: hashmap! {
+                1 => neuron_info,
+            },
+            full_neurons: vec![full_neuron],
+        },
+    );
+}
+
+/// Behavior of glorious future.
+#[test]
+fn test_get_neuron_when_private_neuron_enforcement_enabled() {
+    // Step 1: Prepare the world.
+
+    // This is the only difference (in step 1) compared to the previous test.
+    let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
+
+    let driver = fake::FakeDriver::default();
+    let governance = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call code under test. (Same as previous test.)
+    let neuron_id = NeuronId { id: 1 };
+    let key = NeuronIdOrSubaccount::NeuronId(neuron_id);
+    let controller = principal(1);
+
+    let neuron_info = governance
+        .get_neuron_info_by_id_or_subaccount(&key, *RANDOM_PRINCIPAL_ID)
+        .unwrap();
+
+    let full_neuron = governance
+        .get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(neuron_id),
+            &controller,
+        )
+        .unwrap();
+
+    let list_neurons_response = governance.list_neurons(
+        &ListNeurons {
+            neuron_ids: vec![1],
+            ..Default::default()
+        },
+        controller,
+    );
+
+    // Step 3: Inspect results.
+    assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
+    assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
+
+    assert_eq!(
+        list_neurons_response,
+        ListNeuronsResponse {
+            neuron_infos: hashmap! {
+                1 => neuron_info,
+            },
+            full_neurons: vec![full_neuron],
+        },
+    );
 }
 
 /// Test authorization for calls to `get_neuron_info` and
@@ -4204,6 +4313,11 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     );
 
     // Make sure the neuron was created with the right details.
+    let visibility = if is_private_neuron_enforcement_enabled() {
+        Some(Visibility::Private as i32)
+    } else {
+        None
+    };
     assert_eq!(
         gov.get_full_neuron(&id, &from).unwrap(),
         Neuron {
@@ -4215,6 +4329,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
+            visibility,
             ..Default::default()
         }
     );
@@ -9829,17 +9944,25 @@ fn test_include_public_neurons_in_full_neurons() {
 
     // Step 3: Inspect results.
 
-    assert_eq!(
-        list_neurons_response.full_neurons,
-        vec![
-            known_neuron,
-            explicitly_public_neuron,
-            // In particular, legacy and explicitly_private are NOT in the result.
+    let mut expected_full_neurons = vec![
+        known_neuron,
+        explicitly_public_neuron,
+        // In particular, legacy and explicitly_private are NOT in the result.
 
-            // This behavior already existed. This just makes sure that we did not break it.
-            caller_controlled_neuron,
-        ],
-    );
+        // This behavior already existed. This just makes sure that we did not break it.
+        caller_controlled_neuron,
+    ];
+
+    if is_private_neuron_enforcement_enabled() {
+        for neuron in &mut expected_full_neurons {
+            let visibility = &mut neuron.visibility;
+            if visibility.is_none() {
+                *visibility = Some(Visibility::Private as i32);
+            }
+        }
+    }
+
+    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons,);
 }
 
 /// Struct to help with the wait for quiet tests.
@@ -11229,7 +11352,7 @@ lazy_static! {
     };
 
     static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
-        PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS).unwrap().serialize()
+        PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS, false).unwrap().serialize()
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> =
@@ -11723,15 +11846,51 @@ lazy_static! {
         ..Default::default()
     };
 
-    static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
-        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-        create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-        proposal_id: 1,
-        random_swap_start_time: GlobalTimeOfDay {
-            seconds_after_utc_midnight: Some(RANDOM_U64)
-        },
-        neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
-    }).unwrap();
+    static ref SNS_INIT_PAYLOAD: SnsInitPayload = {
+        let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+
+        // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+        // is inlined from `Governance::make_sns_init_payload`.
+        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+            let random_swap_start_time = GlobalTimeOfDay {
+                seconds_after_utc_midnight: Some(RANDOM_U64)
+            };
+
+            let start_time = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.start_time);
+
+            let duration = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.duration);
+
+            CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                start_time.unwrap_or(random_swap_start_time),
+                duration.unwrap_or_default(),
+                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+            )
+            .expect(
+                "Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds \
+                 for SNS_INIT_PAYLOAD."
+            )
+        };
+
+        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)
+            .expect(
+                "Cannot build SNS_INIT_PAYLOAD from \
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."
+            );
+
+        SnsInitPayload {
+            neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
+            nns_proposal_id: Some(1),
+            swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+            swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+            ..sns_init_payload
+        }
+    };
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {

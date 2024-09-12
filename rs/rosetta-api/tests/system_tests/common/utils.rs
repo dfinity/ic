@@ -104,7 +104,7 @@ pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
     Some(value)
 }
 
-/// This function calls the 'query_blocks' endpoint on the ledger canister.
+/// This function calls the 'query_encoded_blocks' endpoint on the ledger canister.
 /// The user can specify the minimum block height and the number of blocks to query.
 /// If the minimum block height is greater than the current chain tip index, the function will cap the start index to the current chain tip index.
 /// If the number of blocks to query is greater than the chain length, the function will cap the length to the chain length.

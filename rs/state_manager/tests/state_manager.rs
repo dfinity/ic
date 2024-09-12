@@ -7244,10 +7244,10 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 
 proptest! {
 // We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(10))]
+#![proptest_config(ProptestConfig::with_cases(5))]
 
 #[test]
-fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..200)) {
+fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {

@@ -36,7 +36,9 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{
+        ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache, ValidatedConsensusArtifact,
+    },
     dkg::DkgPool,
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
@@ -135,7 +137,7 @@ impl ConsensusImpl {
     pub fn new(
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
-        membership: Arc<Membership>,
+        consensus_cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
@@ -153,6 +155,12 @@ impl ConsensusImpl {
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
+        let membership = Arc::new(Membership::new(
+            consensus_cache,
+            registry_client.clone(),
+            replica_config.subnet_id,
+        ));
+
         let stable_registry_version_age =
             POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
@@ -634,7 +642,6 @@ mod tests {
     ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
-            membership,
             registry,
             crypto,
             time_source,
@@ -662,7 +669,7 @@ mod tests {
         let consensus_impl = ConsensusImpl::new(
             replica_config,
             registry,
-            membership,
+            pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
             Arc::new(FakeXNetPayloadBuilder::new()),

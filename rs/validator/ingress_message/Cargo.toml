@@ -20,7 +20,7 @@ ic-validator = { path = "../../validator" }
 assert_matches = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-crypto-test-utils-canister-sigs = { path = "../../crypto/test_utils/canister_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../../crypto/test_utils/root_of_trust" }

@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create medium --lifetime-mins=180 --output-dir=./medium -- --test_tmpdir=./medium
 //
 // The --output-dir=./medium will store the debug output of the test driver in the specified directory.

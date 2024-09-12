@@ -19,7 +19,7 @@ chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
-deterministic_ips = { path = "../../ic_os/deterministic_ips" }
+deterministic_ips = { path = "../../ic_os/dev_test_tools/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ed25519-dalek = { workspace = true }
@@ -38,7 +38,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }

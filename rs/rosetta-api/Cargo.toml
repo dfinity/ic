@@ -7,8 +7,8 @@ edition = "2021"
 default-run = "ic-rosetta-api"
 
 [dependencies]
-actix-rt = "2.10.0"
-actix-web = "4.9.0"
+actix-rt = { workspace = true }
+actix-web = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
@@ -19,7 +19,7 @@ dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-sha2 = { path = "../crypto/sha2/" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -39,7 +39,7 @@ on_wire = { path = "../rust_canisters/on_wire" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-rolling-file = "0.2.0"
+rolling-file = { workspace = true }
 rosetta-core = { path = "rosetta_core" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
@@ -63,7 +63,7 @@ ic-types = { path = "../types/types" }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }
 ic-icp-rosetta-runner = { path = "runner" }
-ic-icp-rosetta-client ={ path = "client" }
+ic-icp-rosetta-client = { path = "client" }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-ledger-test-utils = { path = "./icp_ledger/test_utils" }
 ic-icrc1-test-utils = { path = "./icrc1/test_utils" }

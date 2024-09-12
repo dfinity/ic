@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
     CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
@@ -1278,8 +1278,8 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
