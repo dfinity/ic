@@ -152,6 +152,7 @@ def fetch_versions_from_public_dashboard(): # type: () -> list[str] | None
     versions = set()
     # Manuel: I'm not modifying this because I do not know the shape
     # of this data structure.
+    # Swagger for the public dashboard API: https://ic-api.internetcomputer.org/api/v3/swagger
     try:
         if data.get(SUBNETS, None) is None:
             raise Exception(f"Expected '{SUBNETS}' in response")
