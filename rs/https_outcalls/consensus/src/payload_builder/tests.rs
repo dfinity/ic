@@ -891,7 +891,7 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
     }
 }
 
@@ -901,7 +901,7 @@ pub(crate) fn add_own_share_to_pool(
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
-    pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+    pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
         content.clone(),
     )]);

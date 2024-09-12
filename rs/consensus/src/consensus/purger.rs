@@ -589,7 +589,7 @@ mod tests {
             );
 
             // No more purge action when called again
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);

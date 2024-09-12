@@ -55,7 +55,7 @@ impl MutablePool<SignedIngress> for TestIngressPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
-        self.pool.apply_changes(change_set)
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
+        self.pool.apply(change_set)
     }
 }

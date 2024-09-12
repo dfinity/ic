@@ -99,7 +99,7 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<dkg::Message> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<dkg::Message> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
         for action in change_set {
@@ -243,7 +243,7 @@ mod test {
         let last_dkg_id_start_height = Height::from(10);
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
-        let result = pool.apply_changes(
+        let result = pool.apply(
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -276,7 +276,7 @@ mod test {
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
+        let result = pool.apply(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.mutations.len(), 1);
         assert!(!result
             .mutations
@@ -287,7 +287,7 @@ mod test {
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        let result = pool.apply_changes(vec![ChangeAction::Purge(
+        let result = pool.apply(vec![ChangeAction::Purge(
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.mutations.len(), 1);

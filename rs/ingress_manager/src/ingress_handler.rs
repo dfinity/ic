@@ -382,7 +382,7 @@ mod tests {
                         timestamp: time,
                     });
                     let change_set = ingress_manager.on_state_change(ingress_pool);
-                    ingress_pool.apply_changes(change_set);
+                    ingress_pool.apply(change_set);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 

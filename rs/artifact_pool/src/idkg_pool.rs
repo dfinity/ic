@@ -429,7 +429,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, change_set: IDkgChangeSet) -> ArtifactTransmits<IDkgMessage> {
+    fn apply(&mut self, change_set: IDkgChangeSet) -> ArtifactTransmits<IDkgMessage> {
         let mut unvalidated_ops = IDkgPoolSectionOps::new();
         let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
@@ -629,7 +629,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::DealingSupport(support.clone()),
                 )];
-                let result = idkg_pool.apply_changes(change_set);
+                let result = idkg_pool.apply(change_set);
                 assert!(!result
                     .mutations
                     .iter()
@@ -840,7 +840,7 @@ mod tests {
                     let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                         dealing,
                     ))];
-                    idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply(change_set);
                     msg_id
                 };
                 let msg_id_2 = {
@@ -871,7 +871,7 @@ mod tests {
                     let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                         dealing,
                     ))];
-                    idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply(change_set);
                     msg_id
                 };
                 let (msg_id_2, msg_2) = {
@@ -921,7 +921,7 @@ mod tests {
                 };
                 check_state(&idkg_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
-                let result = idkg_pool.apply_changes(vec![
+                let result = idkg_pool.apply(vec![
                     IDkgChangeAction::MoveToValidated(msg_2),
                     IDkgChangeAction::MoveToValidated(msg_3),
                     IDkgChangeAction::MoveToValidated(msg_4),
@@ -945,7 +945,7 @@ mod tests {
                     let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                         dealing,
                     ))];
-                    idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply(change_set);
                     msg_id
                 };
                 let msg_id_2 = {
@@ -954,7 +954,7 @@ mod tests {
                     let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                         dealing,
                     ))];
-                    idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply(change_set);
                     msg_id
                 };
                 let msg_id_3 = {
@@ -973,8 +973,8 @@ mod tests {
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
-                let result = idkg_pool
-                    .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
+                let result =
+                    idkg_pool.apply(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
                     matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == msg_id_1)
@@ -982,8 +982,8 @@ mod tests {
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
-                let result = idkg_pool
-                    .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
+                let result =
+                    idkg_pool.apply(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
                     matches!(&result.mutations[0], ArtifactTransmit::Abort(x) if *x == msg_id_2)
@@ -991,7 +991,7 @@ mod tests {
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3], &[]);
 
-                let result = idkg_pool.apply_changes(vec![]);
+                let result = idkg_pool.apply(vec![]);
                 assert!(!result.poll_immediately);
             })
         })
@@ -1014,8 +1014,7 @@ mod tests {
                 };
                 check_state(&idkg_pool, &[msg_id.clone()], &[]);
 
-                let result =
-                    idkg_pool.apply_changes(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
+                let result = idkg_pool.apply(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.mutations.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[]);
@@ -1040,7 +1039,7 @@ mod tests {
                 };
                 check_state(&idkg_pool, &[msg_id.clone()], &[]);
 
-                idkg_pool.apply_changes(vec![IDkgChangeAction::HandleInvalid(
+                idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
                     "test".to_string(),
                 )]);
@@ -1061,12 +1060,12 @@ mod tests {
                     let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                         dealing,
                     ))];
-                    idkg_pool.apply_changes(change_set);
+                    idkg_pool.apply(change_set);
                     msg_id
                 };
                 check_state(&idkg_pool, &[], &[msg_id.clone()]);
 
-                idkg_pool.apply_changes(vec![IDkgChangeAction::HandleInvalid(
+                idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
                     "test".to_string(),
                 )]);

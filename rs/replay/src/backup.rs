@@ -88,7 +88,7 @@ pub(crate) fn insert_cup_at_height(
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
     if let Some(cup) = read_cup_file(file) {
-        pool.apply_changes(
+        pool.apply(
             ChangeAction::AddToValidated(ValidatedConsensusArtifact {
                 msg: cup.into_message(),
                 timestamp: UNIX_EPOCH,

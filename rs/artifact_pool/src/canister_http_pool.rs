@@ -110,7 +110,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
         self.unvalidated.remove(id);
     }
 
-    fn apply_changes(
+    fn apply(
         &mut self,
         change_set: CanisterHttpChangeSet,
     ) -> ArtifactTransmits<CanisterHttpResponseShare> {
@@ -247,7 +247,7 @@ mod tests {
         let response = fake_response(123);
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
-        let result = pool.apply_changes(vec![
+        let result = pool.apply(vec![
             CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
@@ -265,7 +265,7 @@ mod tests {
             pool.get_response_content_by_hash(&content_hash).unwrap()
         );
 
-        let result = pool.apply_changes(vec![
+        let result = pool.apply(vec![
             CanisterHttpChangeAction::RemoveValidated(id.clone()),
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
@@ -289,7 +289,7 @@ mod tests {
 
         pool.insert(to_unvalidated(share1.clone()));
 
-        let result = pool.apply_changes(vec![
+        let result = pool.apply(vec![
             CanisterHttpChangeAction::MoveToValidated(share2.clone()),
             CanisterHttpChangeAction::MoveToValidated(share1.clone()),
         ]);
@@ -312,7 +312,7 @@ mod tests {
         pool.insert(to_unvalidated(share.clone()));
         assert_eq!(share, pool.lookup_unvalidated(&id).unwrap());
 
-        let result = pool.apply_changes(vec![CanisterHttpChangeAction::RemoveUnvalidated(
+        let result = pool.apply(vec![CanisterHttpChangeAction::RemoveUnvalidated(
             id.clone(),
         )]);
 
@@ -330,7 +330,7 @@ mod tests {
         pool.insert(to_unvalidated(share.clone()));
         assert_eq!(share, pool.lookup_unvalidated(&id).unwrap());
 
-        let result = pool.apply_changes(vec![CanisterHttpChangeAction::HandleInvalid(
+        let result = pool.apply(vec![CanisterHttpChangeAction::HandleInvalid(
             id.clone(),
             "TEST REASON".to_string(),
         )]);

@@ -166,7 +166,7 @@ fn prepare(
         });
         changeset.push(ChangeAction::MoveToValidated(message_id));
     }
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
     assert_eq!(pool.unvalidated().size(), 0);
     assert_eq!(pool.validated().size(), num);
     now + 5 * MAX_INGRESS_TTL

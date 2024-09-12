@@ -135,7 +135,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, mut change_set: Self::Mutations) -> ArtifactTransmits<U64Artifact> {
+    fn apply(&mut self, mut change_set: Self::Mutations) -> ArtifactTransmits<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;

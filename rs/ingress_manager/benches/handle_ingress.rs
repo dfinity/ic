@@ -302,7 +302,7 @@ fn setup(
 fn on_state_change(pool: &mut IngressPoolImpl, manager: &IngressManager) -> usize {
     let changeset = manager.on_state_change(pool);
     let n = changeset.len();
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
     n
 }
 

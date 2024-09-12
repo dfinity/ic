@@ -202,7 +202,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<CertificationMessage> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<CertificationMessage> {
         let changed = !change_set.is_empty();
         let mut mutations = vec![];
 
@@ -573,7 +573,7 @@ mod tests {
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
-            let result = pool.apply_changes(vec![
+            let result = pool.apply(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
@@ -607,7 +607,7 @@ mod tests {
             let cert_msg = fake_cert(20);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            let result = pool.apply_changes(vec![
+            let result = pool.apply(vec![
                 ChangeAction::MoveToValidated(share_msg.clone()),
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
@@ -656,7 +656,7 @@ mod tests {
             let cert_msg = fake_cert(10);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 ChangeAction::MoveToValidated(share_msg),
                 ChangeAction::MoveToValidated(cert_msg),
             ]);
@@ -678,7 +678,7 @@ mod tests {
                 1
             );
 
-            let result = pool.apply_changes(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
+            let result = pool.apply(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
             let mut back_off_factor = 1;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(
@@ -734,7 +734,7 @@ mod tests {
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
             );
-            let result = pool.apply_changes(vec![ChangeAction::HandleInvalid(
+            let result = pool.apply(vec![ChangeAction::HandleInvalid(
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
@@ -745,7 +745,7 @@ mod tests {
                 0
             );
 
-            let result = pool.apply_changes(vec![]);
+            let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
             // INVARIANT: The sizes the unvalidated pool and the height index must be equal
             assert_eq!(
@@ -806,7 +806,7 @@ mod tests {
                 .get(&CertificationMessageId::from(&cert_msg))
                 .is_none());
 
-            let result = pool.apply_changes(vec![
+            let result = pool.apply(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
@@ -862,7 +862,7 @@ mod tests {
                 }
             }
 
-            pool.apply_changes(messages);
+            pool.apply(messages);
 
             let get_signer = |m: &CertificationMessage| match m {
                 CertificationMessage::CertificationShare(x) => x.signed.signature.signer,

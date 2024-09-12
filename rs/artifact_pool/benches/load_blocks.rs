@@ -77,7 +77,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             timestamp: UNIX_EPOCH,
         }));
     }
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
 }
 
 fn sum_block_heights(pool: &dyn ConsensusPool) -> u64 {

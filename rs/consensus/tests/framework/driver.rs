@@ -99,10 +99,7 @@ impl<'a> ConsensusDriver<'a> {
                     _ => (),
                 }
             }
-            self.consensus_pool
-                .write()
-                .unwrap()
-                .apply_changes(changeset);
+            self.consensus_pool.write().unwrap().apply(changeset);
         }
         loop {
             let changeset = self.dkg.on_state_change(&*self.dkg_pool.read().unwrap());
@@ -117,7 +114,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply_changes(changeset);
+                dkg_pool.apply(changeset);
             }
         }
         loop {
@@ -138,7 +135,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply_changes(changeset);
+                certification_pool.apply(changeset);
             }
         }
         loop {
@@ -160,7 +157,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut idkg_pool = self.idkg_pool.write().unwrap();
-                idkg_pool.apply_changes(changeset);
+                idkg_pool.apply(changeset);
             }
         }
         to_deliver

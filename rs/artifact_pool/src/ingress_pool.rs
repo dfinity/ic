@@ -262,7 +262,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
         let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
@@ -567,7 +567,7 @@ mod tests {
                     ChangeAction::MoveToValidated(message_id0.clone()),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                let result = ingress_pool.apply_changes(changeset);
+                let result = ingress_pool.apply(changeset);
 
                 // Check moved message is returned as an advert
                 assert_eq!(result.mutations.len(), 1);
@@ -630,7 +630,7 @@ mod tests {
                     changeset.push(ChangeAction::MoveToValidated(message_id));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                let result = ingress_pool.apply_changes(changeset);
+                let result = ingress_pool.apply(changeset);
                 assert!(!result
                     .mutations
                     .iter()
@@ -643,7 +643,7 @@ mod tests {
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                let result = ingress_pool.apply_changes(changeset);
+                let result = ingress_pool.apply(changeset);
                 assert!(!result
                     .mutations
                     .iter()

@@ -2349,7 +2349,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // share_3 now validates
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2445,7 +2445,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Insert random tape at height 4, check if it is ignored
             let content = RandomTapeContent::new(Height::from(4));
@@ -2468,7 +2468,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
             let content = RandomTapeContent::new(Height::from(3));
@@ -2713,7 +2713,7 @@ pub mod test {
                 .unwrap();
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&valid_results, &test_block);
-            pool.apply_changes(valid_results);
+            pool.apply(valid_results);
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
@@ -2791,7 +2791,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_invalid(&results, &test_block);
-            pool.apply_changes(results);
+            pool.apply(results);
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
@@ -2923,7 +2923,7 @@ pub mod test {
 
             // after we finalize a block with time `block_time`, the validator should reject
             // a child block with a smaller time
-            pool.apply_changes(results);
+            pool.apply(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -3029,7 +3029,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
@@ -3037,7 +3037,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Finally, changeset should be empty.
             assert!(validator
@@ -3083,7 +3083,7 @@ pub mod test {
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
             );
             assert_eq!(changeset.len(), 1);
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Next run does not consider the extra Finalization.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3308,7 +3308,7 @@ pub mod test {
                 )),
             );
 
-            pool.apply_changes(results);
+            pool.apply(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -3412,7 +3412,7 @@ pub mod test {
                     ChangeAction::MoveToValidated(block.into_message())
                 ]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
         })
     }
 
@@ -3686,7 +3686,7 @@ pub mod test {
                     ConsensusMessage::BlockProposal(_)
                 )]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             let mut second_block = block.clone();
             second_block.content.as_mut().context.time += Duration::from_nanos(1);
@@ -3702,7 +3702,7 @@ pub mod test {
                     timestamp: _,
                 })] if &e.hash1 == second_block.content.get_hash() && &e.hash2 == block.content.get_hash()
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Make sure we create exactly one equivocation proof for a
             // combination of height and rank.
@@ -3850,7 +3850,7 @@ pub mod test {
                     timestamp: _,
                 })]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Now that rank 1 is disqualified, we should be able to validate
             // a rank 2 block.

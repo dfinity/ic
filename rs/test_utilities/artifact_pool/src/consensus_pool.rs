@@ -718,7 +718,7 @@ impl TestConsensusPool {
     pub fn insert_random_tape(&mut self, height: Height) {
         let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -728,13 +728,13 @@ impl TestConsensusPool {
 
     pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
+        self.apply(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -744,7 +744,7 @@ impl TestConsensusPool {
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
+        self.apply(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -805,7 +805,7 @@ impl MutablePool<ConsensusMessage> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
-        self.pool.apply_changes(change_set)
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
+        self.pool.apply(change_set)
     }
 }

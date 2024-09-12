@@ -290,7 +290,7 @@ fn add_past_blocks(
             timestamp: UNIX_EPOCH,
         }));
     }
-    consensus_pool.apply_changes(changeset);
+    consensus_pool.apply(changeset);
     parent
 }
 

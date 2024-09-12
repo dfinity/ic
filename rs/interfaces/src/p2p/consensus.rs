@@ -69,7 +69,7 @@ pub trait MutablePool<T: IdentifiableArtifact> {
     fn remove(&mut self, id: &T::Id);
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, mutations: Self::Mutations) -> ArtifactTransmits<T>;
+    fn apply(&mut self, mutations: Self::Mutations) -> ArtifactTransmits<T>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact

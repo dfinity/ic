@@ -722,7 +722,7 @@ mod tests {
                 }
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
                 for (height, prio) in &[
@@ -797,7 +797,7 @@ mod tests {
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // if the minimum chain length is outside of the interval (60, 120),
                 // then you need to adjust the test values below.
@@ -842,7 +842,7 @@ mod tests {
                 let height = Height::from(1);
                 assert!(cert_pool.certification_at_height(height).is_some());
 
-                cert_pool.apply_changes(vec![ChangeAction::RemoveAllBelow(purge_height)]);
+                cert_pool.apply(vec![ChangeAction::RemoveAllBelow(purge_height)]);
 
                 let mut back_off_factor = 1;
                 loop {
@@ -923,7 +923,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // emulates a call from inside on_state_change
                 let mut messages = vec![];
@@ -1006,7 +1006,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
                 assert_eq!(
@@ -1162,7 +1162,7 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 assert_eq!(change_set.len(), 1);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_some());
             })
@@ -1265,7 +1265,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1289,7 +1289,7 @@ mod tests {
                     "Both items should be RemoveFromUnvalidated"
                 );
 
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // At level 4, we find a certification
                 assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);

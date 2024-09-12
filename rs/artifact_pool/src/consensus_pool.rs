@@ -697,7 +697,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
@@ -1123,7 +1123,7 @@ mod tests {
                 ChangeAction::MoveToValidated(msg_0),
                 ChangeAction::RemoveFromUnvalidated(msg_1),
             ];
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Check timestamp is carried over for msg_0.
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
@@ -1186,7 +1186,7 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
+            let result = pool.apply(changeset);
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert!(matches!(
@@ -1194,8 +1194,7 @@ mod tests {
             assert!(matches!(
                 &result.mutations[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
                 .mutations
                 .iter()
@@ -1207,12 +1206,11 @@ mod tests {
             ));
             assert!(result.poll_immediately);
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
+            let result = pool.apply(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
             assert_eq!(result.mutations.len(), 0);
             assert!(result.poll_immediately);
 
-            let result = pool.apply_changes(vec![]);
+            let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
         })
     }
@@ -1264,7 +1262,7 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
+            let result = pool.apply(changeset);
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
@@ -1274,8 +1272,7 @@ mod tests {
                 &result.mutations[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
             ));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
                 .mutations
                 .iter()
@@ -1441,7 +1438,7 @@ mod tests {
                 .into_message(),
             );
 
-            pool.apply_changes(
+            pool.apply(
                 messages
                     .into_iter()
                     .map(|msg| {
@@ -1553,7 +1550,7 @@ mod tests {
             //
             let block = fake_block(Height::new(3), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1569,7 +1566,7 @@ mod tests {
             let block1 = fake_block(Height::new(4), Rank(0));
             let block2 = fake_block(Height::new(4), Rank(1));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block1),
                 fake_notarization(&block1),
                 fake_block_proposal(&block2),
@@ -1586,7 +1583,7 @@ mod tests {
             //
             let block = fake_block(Height::new(5), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1759,7 +1756,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
             pool.backup.as_ref().unwrap().sync_backup();
@@ -1920,7 +1917,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
 
             // Make sure the subnet directory is empty, as we purged everything.
@@ -1933,7 +1930,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
             assert!(!path.exists());
         })
@@ -2049,7 +2046,7 @@ mod tests {
                 .collect();
 
             // Apply changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2082,7 +2079,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2099,7 +2096,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2115,7 +2112,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2131,7 +2128,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2148,7 +2145,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2286,11 +2283,11 @@ mod tests {
             assert!(pool.message_instant(&random_beacon_id).is_some());
 
             // Check that purging of instants respects PurgeValidatedBelow semantics
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height)]);
             assert!(pool.message_instant(&cup_id).is_some());
             assert!(pool.message_instant(&notarization_id).is_some());
             assert!(pool.message_instant(&random_beacon_id).is_some());
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
             assert!(pool.message_instant(&cup_id).is_none());
             assert!(pool.message_instant(&notarization_id).is_none());
             assert!(pool.message_instant(&random_beacon_id).is_none());

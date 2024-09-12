@@ -662,9 +662,9 @@ pub mod test {
                     };
 
                     let content = empty_canister_http_response(7);
-                    canister_http_pool.apply_changes(vec![
-                        CanisterHttpChangeAction::AddToValidated(share, content),
-                    ]);
+                    canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                        share, content,
+                    )]);
                 }
 
                 // Insert the second share as unvalidated.
@@ -783,7 +783,7 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share, content,
                 )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
@@ -956,7 +956,7 @@ pub mod test {
                     signature,
                 };
 
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share, content,
                 )]);
 
