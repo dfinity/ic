@@ -7,8 +7,13 @@
 
 # The overhead is computed as (Wasm64 Time - Wasm32 Time) / Wasm32 Time * 100.
 
-WASM32_FILE="WASM_BENCHMARKS.md"
-WASM64_FILE="WASM64_BENCHMARKS.md"
+BENCHMARKS_FILE="WASM_BENCHMARKS.md"
+# The file has the results of the last benchmark, which look like these:
+# wasm32/memop/i32.load                    |    2993245 |    1 | 
+# wasm64/memop/i32.load                    |    5098896 |    2 | 
+# wasm32/memop/i64.load                    |    3111268 |    1 | 
+# wasm64/memop/i64.load                    |    4794852 |    2 | 
+
 
 # The opcodes that are of most interest for computing the overhead.
 # One can add other operations, like `memop`, `ibinop`, `fbinop`, etc.
@@ -24,14 +29,15 @@ printf "| %-40s | %-18s | %-18s | %-18s |\n" "Instruction" "Wasm32 Time (ns)" "W
 printf "| %-40s | %-18s | %-18s | %-18s |\n" $forty_dashes $eighteen_dashes $eighteen_dashes $eighteen_dashes
 
 for op in $OP_TYPES; do
-    cat "${WASM64_FILE}" | grep $op | while read -r line; do
-        # Extract the opcode
-        opcode=$(echo $line | awk '{print $1}')
+    cat "${BENCHMARKS_FILE}" | grep $op | grep "wasm64" | while read -r line; do
+        # Extract the opcode and remove the "wasm64/" prefix.
+        opcode=$(echo $line | awk '{print $1}' | sed 's/wasm64\///')
+    
         # Extract the Wasm64 time
         wasm64_time=$(echo $line | awk '{print $3}')
         # Extract the Wasm32 time
         # Some operations are named "memop/i32.load8_s", we need to differentiate these from "memop/i32.load" when grepping.
-        wasm32_time=$(cat "${WASM32_FILE}" | grep -w "${opcode}" | awk '{print $4}')
+        wasm32_time=$(cat "${BENCHMARKS_FILE}" | grep "wasm32" | grep -w "${opcode}" | awk '{print $3}')
         # Compute the overhead
         overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc)
         # Print the results
