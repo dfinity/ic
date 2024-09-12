@@ -85,4 +85,4 @@ In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped
 
 When the corresponding IPv6 address is assigned, the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format is followed. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
 
-The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.json+ configuration file. The host part is the EUI-64 formatted address.
+The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.ini+ configuration file. The host part is the EUI-64 formatted address.
