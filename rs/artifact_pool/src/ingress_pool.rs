@@ -339,8 +339,8 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 
-    fn get_all_validated<'a>(&'a self) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
-        Box::new(vec![].into_iter())
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = SignedIngress>> {
+        Box::new(std::iter::empty())
     }
 }
 
@@ -518,7 +518,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_for_broadcast);
+                let filtered_msgs = ingress_pool.get_all_for_broadcast();
                 assert!(filtered_msgs.count() == 0);
             })
         })

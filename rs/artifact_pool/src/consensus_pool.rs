@@ -834,7 +834,7 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
         self.validated.get(id)
     }
 
-    fn get_all_for_broadcast&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -1462,7 +1462,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_for_broadcast).for_each(|m| {
+            pool.get_all_for_broadcast().for_each(|m| {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
@@ -1472,7 +1472,7 @@ mod tests {
             });
 
             assert_eq!(
-                pool.get_all_for_broadcast).count(),
+                pool.get_all_for_broadcast().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
