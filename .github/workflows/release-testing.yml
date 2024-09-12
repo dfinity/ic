@@ -226,13 +226,18 @@ jobs:
     outputs:
       matrix: ${{ steps.generate.outputs.output }}
     steps:
+      - name: Sparse checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          sparse-checkout: ".github/scripts/determine-initial-guest-os-versions.py"
       - id: generate
         name: Fetch beginning versions for qualification
         shell: bash
         run: |
-          UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
-          echo "Will qualify, starting from versions: ${UNIQUE_VERSIONS}"
-          echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          OUTPUT=$(python .github/scripts/determine-initial-guest-os-versions.py)
+          echo "output=$OUTPUT" >> $GITHUB_OUTPUT
   guest-os-qualification:
     name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
     needs: setup-guest-os-qualification
