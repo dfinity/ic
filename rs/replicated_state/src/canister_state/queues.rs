@@ -101,6 +101,9 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///    queue is at capacity. See https://github.com/dfinity/ic/pull/1293 for an
 ///    attempted implementation.
 ///
+///  * `callbacks_with_enqueued_response` contains the precise set of
+///    `CallbackIds` of all inbound responses.
+///
 /// # Soft invariants
 ///
 ///  * `QueueStats`' input / output queue slot reservation stats are consistent
