@@ -44,7 +44,7 @@ main() {
     /opt/ic/bin/disk.sh
     /opt/ic/bin/hostos.sh
     /opt/ic/bin/guestos.sh
-    /opt/ic/bin/devices.sh
+    /opt/ic/bin/setup-hostos-config.sh
     reboot_setupos
     log_end "$(basename $0)"
 }

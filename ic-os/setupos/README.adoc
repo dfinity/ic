@@ -30,12 +30,12 @@ The installation process consists of multiple Shell and Python scripts, which ar
 
 The sequence of the scripts is defined in the main installation script, `setupos.sh`. The order of execution is as follows:
 
-  hardware.sh  # Verifies the system's hardware components
-  network.sh   # Tests network connectivity and reachability of the NNS
-  disk.sh      # Purges existing LVM configurations and partitions
-  hostos.sh    # Installs and configures the HostOS operating system
-  guestos.sh   # Installs and configures the GuestOS operating system
-  devices.sh   # Handles the HSM
+  hardware.sh              # Verifies the system's hardware components
+  network.sh               # Tests network connectivity and reachability of the NNS
+  disk.sh                  # Purges existing LVM configurations and partitions
+  hostos.sh                # Installs and configures the HostOS operating system
+  guestos.sh               # Installs and configures the GuestOS operating system
+  setup-hostos-config.sh   # Sets up the HostOS config partition
 
 == Node Providers, Node Technicians, and Node Operators
 
