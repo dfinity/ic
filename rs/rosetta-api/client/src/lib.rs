@@ -134,9 +134,7 @@ impl RosettaClient {
             related_operations: None,
             type_: "TRANSACTION".to_string(),
             status: None,
-            account: Some(to_model_account_identifier(&AccountIdentifier::from(
-                to_account,
-            ))),
+            account: Some(to_model_account_identifier(&to_account.into())),
             amount: Some(Amount::new(BigInt::from(amount), currency.clone())),
             coin_change: None,
             metadata: None,
@@ -161,9 +159,10 @@ impl RosettaClient {
                     num_bigint::Sign::Minus,
                     Nat::try_from(suggested_fee)
                         .map_err(|e| anyhow::anyhow!("Failed to convert fee: {:?}", e))?
-                        .0,
+                        .0
+                        .clone(),
                 ),
-                currency,
+                currency.clone(),
             )),
             coin_change: None,
             metadata: None,
@@ -366,7 +365,6 @@ impl RosettaClient {
                 signatures,
             )
             .await?;
-
         let submit_response = self
             .construction_submit(
                 network_identifier.clone(),
@@ -376,11 +374,14 @@ impl RosettaClient {
 
         // We need to wait for the transaction to be added to the blockchain
         let mut tries = 0;
-        let request = SearchTransactionsRequest::builder(network_identifier.clone())
-            .with_transaction_identifier(submit_response.transaction_identifier.clone())
-            .build();
         while tries < 10 {
-            let transaction = self.search_transactions(&request).await?;
+            let transaction = self
+                .search_transactions(
+                    &SearchTransactionsRequest::builder(network_identifier.clone())
+                        .with_transaction_identifier(submit_response.transaction_identifier.clone())
+                        .build(),
+                )
+                .await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
@@ -512,5 +513,115 @@ impl RosettaClient {
             },
         )
         .await
+    }
+
+    pub async fn transfer<T>(
+        &self,
+        transfer_args: RosettaTransferArgs,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: T,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let transfer_operations = self
+            .build_transfer_operations(
+                signer_keypair.generate_principal_id()?.0,
+                transfer_args.from_subaccount,
+                transfer_args.to,
+                transfer_args.amount,
+                network_identifier.clone(),
+            )
+            .await?;
+
+        // This submit wrapper will also wait for the transaction to be finalized
+        self.make_submit_and_wait_for_transaction(
+            &signer_keypair,
+            network_identifier,
+            transfer_operations,
+            // We don't care about the specific memo, only that there exists a memo
+            transfer_args.memo,
+            transfer_args.created_at_time,
+        )
+        .await
+    }
+}
+
+pub struct RosettaTransferArgs {
+    pub from_subaccount: Option<[u8; 32]>,
+    pub to: Account,
+    pub amount: Nat,
+    pub memo: Option<u64>,
+    pub fee: Option<Nat>,
+    pub created_at_time: Option<u64>,
+}
+
+impl RosettaTransferArgs {
+    pub fn new(to: Account, amount: Nat) -> Self {
+        Self {
+            from_subaccount: None,
+            to,
+            amount,
+            memo: None,
+            fee: None,
+            created_at_time: None,
+        }
+    }
+
+    pub fn builder(to: Account, amount: Nat) -> RosettaTransferArgsBuilder {
+        RosettaTransferArgsBuilder::new(to, amount)
+    }
+}
+
+pub struct RosettaTransferArgsBuilder {
+    from_subaccount: Option<[u8; 32]>,
+    to: Account,
+    amount: Nat,
+    memo: Option<u64>,
+    fee: Option<Nat>,
+    created_at_time: Option<u64>,
+}
+
+impl RosettaTransferArgsBuilder {
+    pub fn new(to: Account, amount: Nat) -> Self {
+        Self {
+            from_subaccount: None,
+            to,
+            amount,
+            memo: None,
+            fee: None,
+            created_at_time: None,
+        }
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn with_memo(mut self, memo: u64) -> Self {
+        self.memo = Some(memo);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, created_at_time: u64) -> Self {
+        self.created_at_time = Some(created_at_time);
+        self
+    }
+
+    pub fn with_fee(mut self, fee: Nat) -> Self {
+        self.fee = Some(fee);
+        self
+    }
+
+    pub fn build(self) -> RosettaTransferArgs {
+        RosettaTransferArgs {
+            from_subaccount: self.from_subaccount,
+            to: self.to,
+            amount: self.amount,
+            memo: self.memo,
+            fee: self.fee,
+            created_at_time: self.created_at_time,
+        }
     }
 }

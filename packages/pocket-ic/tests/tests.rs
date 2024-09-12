@@ -1316,7 +1316,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
-        additional_responses: None,
+        additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1378,7 +1378,7 @@ fn test_canister_http_with_transform() {
             headers: vec![],
             body: body.clone(),
         }),
-        additional_responses: None,
+        additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1444,12 +1444,13 @@ fn test_canister_http_with_diverging_responses() {
         subnet_id: canister_http_request.subnet_id,
         request_id: canister_http_request.request_id,
         response: response(0),
-        additional_responses: Some((1..13).map(response).collect()),
+        additional_responses: (1..13).map(response).collect(),
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
-    // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
+    // Now the test canister will receive an error
+    // and reply to the ingress message from the test driver
+    // relaying the error.
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
@@ -1508,13 +1509,11 @@ fn test_canister_http_with_one_additional_response() {
             headers: vec![],
             body: body.clone(),
         }),
-        additional_responses: Some(vec![CanisterHttpResponse::CanisterHttpReply(
-            CanisterHttpReply {
-                status: 200,
-                headers: vec![],
-                body: body.clone(),
-            },
-        )]),
+        additional_responses: vec![CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        })],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 }
