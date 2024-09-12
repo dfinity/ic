@@ -14,8 +14,6 @@ use ic_types::{
     messages::CanisterMessageOrTask,
 };
 
-use crate::common::Wasm64;
-
 pub fn execute_update_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
@@ -389,7 +387,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        Wasm64::Disabled,
     );
 }
 
