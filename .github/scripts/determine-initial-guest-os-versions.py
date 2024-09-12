@@ -1,8 +1,9 @@
 import json
-from typing_extensions import Any
-from urllib.request import Request, urlopen
-import urllib.error
 import sys
+import urllib.error
+from urllib.request import Request, urlopen
+
+from typing_extensions import Any
 
 ROLLOUT_DASHBOARD_ENDPOINT='https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts'
 PUBLIC_DASHBOARD_ENDPOINT='https://ic-api.internetcomputer.org/api/v3/subnets?format=json'
@@ -22,7 +23,8 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 def maybe_fetch_data(url : str, timeout : float) -> str | None:
-    """Try fetch data from `url`.
+    """
+    Try fetch data from `url`.
 
     Will try to fetch data and return `None` if the resource is unavailable for some.
     If this call fails other resources should be considered.
@@ -58,7 +60,8 @@ def ensure_json_response(url : str, timeout : float = 10) -> Any | None:
         exit(1)
 
 def fetch_versions_from_rollout_dashboard() -> list[str] | None:
-    """Fetch data from rollout dashboard
+    """
+    Fetch data from rollout dashboard
 
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
@@ -98,7 +101,8 @@ def maybe_exectued_timestamp(x : Any) -> int:
     return int(x.get(EXECUTED_TIMESTAMP_SECONDS))
 
 def fetch_versions_from_public_dashboard() -> list[str] | None:
-    """Fetch data from public dashboard
+    """
+    Fetch data from public dashboard
 
     Panics if the parsed data is not in the expected format.
     Returns an empty list if the action is retriable.
