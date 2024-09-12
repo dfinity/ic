@@ -121,22 +121,22 @@ members = [
     "rs/http_endpoints/public",
     "rs/http_endpoints/metrics",
     "rs/http_utils",
-    "rs/ic_os/deterministic_ips",
-    "rs/ic_os/dflate",
-    "rs/ic_os/diroid",
+    "rs/ic_os/dev_test_tools/deterministic_ips",
+    "rs/ic_os/build_tools/dflate",
+    "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
     "rs/ic_os/fstrim_tool",
-    "rs/ic_os/guestos_tool",
-    "rs/ic_os/hostos_tool",
-    "rs/ic_os/inject_files",
-    "rs/ic_os/launch-single-vm",
+    "rs/ic_os/os_tools/guestos_tool",
+    "rs/ic_os/os_tools/hostos_tool",
+    "rs/ic_os/build_tools/inject_files",
+    "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
-    "rs/ic_os/setupos-inject-configuration",
-    "rs/ic_os/partition_tools",
-    "rs/ic_os/setupos-disable-checks",
-    "rs/ic_os/setupos_tool",
+    "rs/ic_os/dev_test_tools/setupos-inject-configuration",
+    "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/dev_test_tools/setupos-disable-checks",
+    "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
@@ -481,7 +481,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
+cloudflare = { git = "https://github.com/cloudflare/cloudflare-rs.git", rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae", default-features = false, feature = [
     "rustls-tls",
 ] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
@@ -608,7 +608,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.10.6"
-reqwest = { version = "0.12.5", default-features = false, features = [
+reqwest = { version = "0.12.7", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -622,6 +622,7 @@ rstest = "0.19.0"
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",
+    "brotli",
 ] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
