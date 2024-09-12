@@ -41,7 +41,7 @@ use prometheus::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use tokio::{runtime::Handle, select, sync::watch, time::Interval};
+use tokio::{process::Command, runtime::Handle, select, sync::watch, time::Interval};
 use tokio_rustls::rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, PrivateKeyDer},
@@ -234,12 +234,13 @@ async fn load_generator(
         UnvalidatedArtifactMutation<TestArtifact>,
     >,
     message_size: usize,
-    peers_num: usize,
+    peers: Vec<SocketAddr>,
     mode: Mode,
     relaying: bool,
     metrics: Arc<Metrics>,
     mut rps_rx: watch::Receiver<usize>,
 ) {
+    let peers_num = peers.len();
     let (tx, mut received_artifacts_rx) = tokio::sync::mpsc::channel(1000);
 
     let _join_handle = {
@@ -363,6 +364,7 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
+                set_packet_loss(log.clone(), peers.clone(), node_id).await;
                 info!(log, "Sent artifacts total {}", metrics.sent_artifacts.get());
                 info!(log, "Received artifacts total {}", metrics.received_artifact_count.get());
             }
@@ -485,6 +487,7 @@ async fn main() {
     let mut peers_addrs = args.peers_addrs;
     peers_addrs.insert(args.id as usize, transport_addr);
 
+    info!(log, "peers {:?}", peers_addrs);
     let registry = Arc::new(Mutex::new(prometheus_client::registry::Registry::default()));
 
     if args.libp2p {
@@ -522,7 +525,7 @@ async fn main() {
         artifact_processor_tx,
         cb_rx,
         args.message_size as usize,
-        peers_addrs.len(),
+        peers_addrs,
         if args.oneton {
             Mode::OneToN(args.id)
         } else {
@@ -988,5 +991,96 @@ impl RegistryClient for MockReg {
         _registry_version: ic_types::RegistryVersion,
     ) -> Option<ic_types::Time> {
         todo!()
+    }
+}
+
+async fn set_packet_loss(log: ReplicaLogger, peers: Vec<SocketAddr>, node_id: u64) {
+    //
+    // sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true
+    // sudo tc qdisc add dev {DEVICE_NAME} root handle 1: htb default 10
+    // sudo tc qdisc add dev {DEVICE_NAME} parent 1:10 handle 10: netem delay {latency_ms}ms loss {packet_loss_percentage}% limit 10000000
+    // sudo tc filter add dev {DEVICE_NAME} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
+    // sudo tc qdisc show dev {DEVICE_NAME}
+
+    let output = Command::new("sudo")
+        .args(&["tc", "qdisc", "del", "dev", "enp39s0", "root"])
+        .output()
+        .await
+        .unwrap();
+    info!(log, "tc delete out {:?}", output);
+    let output = Command::new("sudo")
+        .args(&[
+            "tc", "qdisc", "add", "dev", "enp39s0", "root", "handle", "1:", "prio",
+        ])
+        .output()
+        .await
+        .unwrap();
+    info!(log, "tc add out {:?}", output);
+
+    let f = peers.len() / 3;
+    for (i, p) in peers.iter().enumerate() {
+        if i > 0 && i < f {
+            info!(
+                log,
+                "Setting packetloss for {} on peer {}",
+                peers[i].ip(),
+                node_id
+            );
+            set_loss(log.clone(), 1, p.ip(), i as u64 + 1).await;
+        } else {
+            set_loss(log.clone(), 0, p.ip(), i as u64 + 1).await;
+        }
+    }
+
+    async fn set_loss(log: ReplicaLogger, loss_percentage: u64, ip: IpAddr, id: u64) {
+        let output = Command::new("sudo")
+            .args(&[
+                "tc",
+                "qdisc",
+                "add",
+                "dev",
+                "enp39s0",
+                "parent",
+                &format!("1:{id}"),
+                "handle",
+                &format!("{id}0:"),
+                "netem",
+                "limit",
+                "10000000",
+                "loss",
+                &format!("{loss_percentage}%"),
+                "delay",
+                &format!("50ms"),
+            ])
+            .output()
+            .await
+            .unwrap();
+        info!(log, "tc parent {id} out {:?}", output);
+        //sudo tc filter add dev enp1s0 protocol ip parent 1:0 prio {destination_node} u32 match ip6 src {source_ip} match ip6 dst {destination_ip} flowid 1:{destination_node} \n
+        let output = Command::new("sudo")
+            .args(&[
+                "tc",
+                "filter",
+                "add",
+                "dev",
+                "enp39s0",
+                "protocol",
+                "ip",
+                "parent",
+                "1:0",
+                "prio",
+                &id.to_string(),
+                "u32",
+                "match",
+                "ip",
+                "dst",
+                &ip.to_string(),
+                "flowid",
+                &format!("1:{id}"),
+            ])
+            .output()
+            .await
+            .unwrap();
+        info!(log, "tc match {id} out {:?}", output);
     }
 }

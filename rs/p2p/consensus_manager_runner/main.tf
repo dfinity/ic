@@ -224,7 +224,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-0" {
-  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1]
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
 
   provisioner "remote-exec" {
     connection {
@@ -237,7 +237,7 @@ resource "null_resource" "deletable-prov-0" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 0 --message-size 500000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100  --oneton"
+      "/tmp/binary --id 0 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
     ]
   }
 }
@@ -276,7 +276,7 @@ EOF
 
 
 resource "null_resource" "deletable-prov-1" {
-  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1]
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
 
   provisioner "remote-exec" {
     connection {
@@ -289,8 +289,379 @@ resource "null_resource" "deletable-prov-1" {
       "sleep 30",
       "ip addr show",
       "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
-      "/tmp/binary --id 1 --message-size 500000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100  --oneton"
+      "/tmp/binary --id 1 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
     ]
   }
 }
 
+resource "aws_instance" "deletable-instance-2" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-2" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-2.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 2 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-3" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-3" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-3.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 3 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-4" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-4" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-4.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 4 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-5" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-5" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-5.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 5 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-6" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-6" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-6.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 6 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-7" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-7" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-7.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 7 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-8.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "aws_instance" "deletable-instance-8" {
+  provider        = aws.eu_central_1
+  ami             = "ami-0faab6bdbac9486fb"
+  instance_type   = "m7i.4xlarge"
+  monitoring = true
+  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
+
+  tags = {
+    Name = "experiment"
+  }
+  user_data = <<EOF
+#!/bin/bash
+
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -w net.core.rmem_default=500000000
+sudo sysctl -w net.core.wmem_default=500000000
+sudo sysctl -w net.ipv4.tcp_window_scaling = 1
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+
+# Download the binary from the pre-signed S3 URL
+curl -o /tmp/binary "${var.runner_url}"
+
+# Make binary executable
+chmod +x /tmp/binary
+EOF
+}
+
+
+resource "null_resource" "deletable-prov-8" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "remote-exec" {
+    connection {
+      host        = aws_instance.deletable-instance-8.public_ip
+      user        = "ubuntu"
+      private_key = tls_private_key.experiment.private_key_pem
+    }
+
+    inline = [
+      "sleep 30",
+      "ip addr show",
+      "sudo tc qdisc add dev enp39s0 root netem limit 50000000 delay 50ms",
+      "/tmp/binary --id 8 --message-size 200000 --message-rate 10 --port 4100 --metrics-port 9090 --peers-addrs ${aws_instance.deletable-instance-0.private_ip}:4100 ${aws_instance.deletable-instance-1.private_ip}:4100 ${aws_instance.deletable-instance-2.private_ip}:4100 ${aws_instance.deletable-instance-3.private_ip}:4100 ${aws_instance.deletable-instance-4.private_ip}:4100 ${aws_instance.deletable-instance-5.private_ip}:4100 ${aws_instance.deletable-instance-6.private_ip}:4100 ${aws_instance.deletable-instance-7.private_ip}:4100  "
+    ]
+  }
+}
+
+resource "null_resource" "deletable-local-prov-REGION" {
+  depends_on = [aws_instance.deletable-instance-0, aws_instance.deletable-instance-1, aws_instance.deletable-instance-2, aws_instance.deletable-instance-3, aws_instance.deletable-instance-4, aws_instance.deletable-instance-5, aws_instance.deletable-instance-6, aws_instance.deletable-instance-7, aws_instance.deletable-instance-8]
+
+  provisioner "local-exec" {
+    command = "python3 metrics-collector.py ${aws_instance.deletable-instance-0.public_ip} ${aws_instance.deletable-instance-1.public_ip} ${aws_instance.deletable-instance-2.public_ip} ${aws_instance.deletable-instance-3.public_ip} ${aws_instance.deletable-instance-4.public_ip} ${aws_instance.deletable-instance-5.public_ip} ${aws_instance.deletable-instance-6.public_ip} ${aws_instance.deletable-instance-7.public_ip} ${aws_instance.deletable-instance-8.public_ip}"
+  }
+}

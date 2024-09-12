@@ -40,6 +40,13 @@ resource "aws_key_pair" "deletable-key-eu_central_1" {
 """
 
 local_template = """
+resource "null_resource" "deletable-local-prov-REGION" {
+  depends_on = DEPENDS_ON
+
+  provisioner "local-exec" {
+    command = "python3 metrics-collector.py ALL_ADDRS"
+  }
+}
 """
 
 instance_template = """
