@@ -97,7 +97,7 @@ where
         spender: &Self::AccountId,
     ) -> Option<Allowance<Self::Tokens>> {
         let key = K::from((from, spender));
-        self.allowances.get(&key).map(|allowance| allowance.clone())
+        self.allowances.get(&key).cloned()
     }
 
     fn process_approve(
