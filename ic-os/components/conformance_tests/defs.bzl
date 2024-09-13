@@ -1,6 +1,6 @@
 """ Rules for component conformance tests. """
 
-def component_file_references_test(name, component_files, image):
+def component_file_references_test(name, component_files, image, tags = None):
     """
     Verifies that the `component_files` only reference file paths that are accessible within the provided `image`.
 
@@ -8,6 +8,7 @@ def component_file_references_test(name, component_files, image):
         name: The name of the test rule (must end in _test).
         component_files: A list of Labels that reference components.
         image: The compressed image where the referenced file paths can be found.
+        tags: Tags to apply to the generated test target.
     """
 
     deps = [image]
@@ -25,6 +26,7 @@ def component_file_references_test(name, component_files, image):
             ",".join(component_paths),
             "--image $(location %s)" % image,
         ],
+        tags = tags,
     )
 
 def _check_unused_components_test_impl(ctx):

@@ -284,12 +284,14 @@ fn test_canister_http() {
     pic.mock_canister_http_response(mock_canister_http_response);
 
     // Now the test canister will receive the http outcall response
-    // and reply to the ingress message from the test driver.
+    // and reply to the ingress message from the test driver
+    // relaying the received http outcall response.
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: HttpResponse = decode_one(&data).unwrap();
-            assert_eq!(http_response.body, body);
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            assert_eq!(http_response.unwrap().body, body);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
@@ -301,6 +303,48 @@ fn test_canister_http() {
 ```
 
 Note that the URL of the canister HTTP outcall must either start with `https://` or target `localhost`.
+
+It is also possible to mock additional (diverging) responses resulting in an error
+to test how your canisters handles such an error.
+The above example could be updated as follows:
+
+*Warning.* If additional responses are provided, then the total number of responses (one plus the number of additional responses)
+must be equal to the size of the subnet on which the canister making the HTTP outcall is deployed,
+e.g., 13 for a regular application subnet.
+
+```rust
+    let response = |i: u64| {
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: format!("hello{}", i / 2).as_bytes().to_vec(),
+        })
+    };
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: response(0),
+        additional_responses: (1..13).map(response).collect(),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
+
+    // Now the test canister will receive an error
+    // and reply to the ingress message from the test driver
+    // relaying the error.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            let (reject_code, err) = http_response.unwrap_err();
+            assert_eq!(reject_code, RejectionCode::SysTransient);
+            assert!(
+                err.contains("No consensus could be reached. Replicas had different responses.")
+            );
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+```
 
 In the live mode (see the section "Live Mode" for more details), the canister HTTP outcalls are processed
 by actually making an HTTP request to the URL specified in the canister HTTP outcall.
@@ -363,5 +407,81 @@ async fn test_canister_http_live() {
         .unwrap();
     let http_response = Decode!(&res, HttpResponse).unwrap();
     assert_eq!(http_response.body, b"...");
+}
+```
+
+## Query statistics from the management canister
+
+Similarly to the ICP mainnet, PocketIC collects query call statistics (the number of query calls,
+the total amount of instructions executed, and the total request and response payload size)
+and makes them available via the `canister_status` endpoint of the management canister.
+
+*Warning.* PocketIC collects query call statistics using the same logic as on the ICP mainnet.
+Consequently, please be aware of the following implementation details:
+- query calls served from the cache are not accounted for in the statistics (an easy way to bypass
+  the cache is to alter the input arguments to your query calls);
+- query call statistics are collected as if query calls were evenly (discarding remainders) distributed
+  to all nodes of the subnet to which the canister receiving the query calls is deployed
+  (e.g., if the number of query calls is less than the number of nodes on the corresponding subnet,
+  then the reported number of query calls in the statistics is equal to zero);
+- query call statistics are delayed by 2 epochs (one epoch is equal to 60 rounds in PocketIC) and thus
+  you need to make sure to execute enough rounds to see query call statistics.
+
+Here is a sketch of a test for collecting query statistics:
+
+```rust
+#[test]
+fn test_query_stats() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create PocketIC instance with a single app subnet.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // We create a test canister on the app subnet.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let test_wasm = [...];
+    pic.install_canister(canister_id, test_wasm, vec![], None);
+
+    // The query stats are still at zero.
+    let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
+    let zero: candid::Nat = 0_u64.into();
+    assert_eq!(query_stats.num_calls_total, zero);
+    assert_eq!(query_stats.num_instructions_total, zero);
+    assert_eq!(query_stats.request_payload_bytes_total, zero);
+    assert_eq!(query_stats.response_payload_bytes_total, zero);
+
+    // Execute 13 query calls (one per each app subnet node) on the test canister in each of 4 query stats epochs.
+    // Every single query call has different arguments so that query calls are not cached.
+    let mut n: u64 = 0;
+    for _ in 0..4 {
+        for _ in 0..13 {
+            pic.query_call(
+                canister_id,
+                Principal::anonymous(),
+                "read",
+                n.to_le_bytes().to_vec(),
+            )
+            .unwrap();
+            n += 1;
+        }
+        // Execute one epoch.
+        for _ in 0..60 {
+            pic.tick();
+        }
+    }
+
+    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs) due to a delay in query stats aggregation.
+    let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
+    assert_eq!(query_stats.num_calls_total, candid::Nat::from(26_u64));
+    assert_ne!(query_stats.num_instructions_total, candid::Nat::from(0_u64));
+    assert_eq!(
+        query_stats.request_payload_bytes_total,
+        candid::Nat::from(208_u64)
+    ); // we sent 8 bytes per call
+    assert_eq!(
+        query_stats.response_payload_bytes_total,
+        candid::Nat::from(104_u64)
+    ); // the test canister responds with 4 bytes per call
 }
 ```
