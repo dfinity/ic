@@ -21,6 +21,7 @@ dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-cdk = { workspace = true }
 ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
