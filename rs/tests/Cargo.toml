@@ -332,46 +332,6 @@ name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes"
-path = "consensus/subnet_recovery/sr_app_same_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes"
-path = "consensus/subnet_recovery/sr_app_failover_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade"
-path = "consensus/subnet_recovery/sr_app_no_upgrade_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
-path = "consensus/subnet_recovery/sr_app_same_nodes_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
-path = "consensus/subnet_recovery/sr_app_failover_nodes_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
-path = "consensus/subnet_recovery/sr_app_no_upgrade_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
-path = "consensus/subnet_recovery/sr_app_same_nodes_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
-path = "consensus/subnet_recovery/sr_app_failover_nodes_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
-path = "consensus/subnet_recovery/sr_app_no_upgrade_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
-path = "consensus/subnet_recovery/sr_app_large_with_tecdsa_test.rs"
-
-[[bin]]
 name = "ic-systest-network-reliability"
 path = "networking/network_reliability_test.rs"
 
