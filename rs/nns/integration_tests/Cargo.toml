@@ -70,6 +70,9 @@ crossbeam-channel = { workspace = true }
 hex = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cbor = { workspace = true }
+ic-certificate-verification = { workspace = true }
+ic-certification = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -102,6 +105,7 @@ registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }

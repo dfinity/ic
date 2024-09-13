@@ -25,7 +25,7 @@ use ic_test_utilities_state::{arb_replicated_state_with_output_queues, Execution
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::RejectContext;
+use ic_types::messages::{CallbackId, RejectContext};
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
@@ -665,10 +665,13 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
     // - one to a another local canister.
     // - one to a remote canister.
     let remote_canister_id = CanisterId::from_u64(123);
-    for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
-        fixture
-            .push_output_request(request_to(receiver), UNIX_EPOCH)
-            .unwrap();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.sender_reply_callback = CallbackId::from(i as u64);
+        fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
     // Time out everything, then check that subnet input schedules are as expected.

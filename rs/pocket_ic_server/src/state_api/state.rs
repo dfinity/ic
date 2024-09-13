@@ -1123,7 +1123,7 @@ impl ApiState {
                 subnet_id,
                 request_id,
                 response,
-                additional_responses: None,
+                additional_responses: vec![],
             };
             mock_canister_http_responses.push(mock_canister_http_response);
         }
