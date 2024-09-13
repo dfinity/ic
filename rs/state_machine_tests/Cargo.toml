@@ -9,11 +9,17 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-btc-adapter = { path = "../bitcoin/adapter" }
+ic-btc-adapter-client = { path = "../bitcoin/client" }
+ic-btc-consensus = { path = "../bitcoin/consensus" }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
+ic-btc-service = { path = "../bitcoin/service" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
@@ -32,6 +38,7 @@ ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }

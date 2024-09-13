@@ -30,4 +30,5 @@ rust_library(
         "@crate_index//:tower",
         "@crate_index//:tracing",
     ],
+    visibility = ["//rs/state_machine_tests:__subpackages__"],
 )

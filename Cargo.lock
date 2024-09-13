@@ -11963,12 +11963,18 @@ dependencies = [
 name = "ic-state-machine-tests"
 version = "0.9.0"
 dependencies = [
+ "bitcoin 0.28.2",
  "candid",
  "ciborium",
  "clap 3.2.25",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
+ "ic-btc-adapter",
+ "ic-btc-adapter-client",
+ "ic-btc-consensus",
+ "ic-btc-replica-types",
+ "ic-btc-service",
  "ic-config",
  "ic-consensus",
  "ic-consensus-utils",
@@ -11986,6 +11992,7 @@ dependencies = [
  "ic-https-outcalls-consensus",
  "ic-ingress-manager",
  "ic-interfaces",
+ "ic-interfaces-adapter-client",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",

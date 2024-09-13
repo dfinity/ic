@@ -61,6 +61,7 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
+    visibility = ["//rs/state_machine_tests:__subpackages__"],
 )
 
 rust_binary(
