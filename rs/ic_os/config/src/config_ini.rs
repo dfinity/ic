@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -137,12 +138,36 @@ pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
     let file_contents = read_to_string(config_file_path)
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
 
-    let normalized_file_contents = file_contents.replace("\r\n", "\n").replace("\r", "\n");
+    let normalized_file_contents = normalize_contents(&file_contents);
 
     Ok(normalized_file_contents
         .lines()
         .filter_map(parse_config_line)
         .collect())
+}
+
+fn normalize_contents(contents: &str) -> String {
+    let mut normalized_contents = contents.replace("\r\n", "\n").replace("\r", "\n");
+
+    let comment_regex = Regex::new(r"#.*$").unwrap();
+    normalized_contents = comment_regex
+        .replace_all(&normalized_contents, "")
+        .to_string();
+
+    normalized_contents = normalized_contents.replace("\"", "").replace("'", "");
+
+    normalized_contents = normalized_contents.to_lowercase();
+
+    let empty_line_regex = Regex::new(r"^\s*$\n?").unwrap();
+    normalized_contents = empty_line_regex
+        .replace_all(&normalized_contents, "")
+        .to_string();
+
+    if !normalized_contents.ends_with('\n') {
+        normalized_contents.push('\n');
+    }
+
+    normalized_contents
 }
 
 #[cfg(test)]
@@ -224,6 +249,10 @@ mod tests {
     fn test_get_config_ini_settings() -> Result<()> {
         // Test valid config.ini
         let mut temp_file = NamedTempFile::new()?;
+        writeln!(temp_file, "\n\t\r")?;
+        writeln!(temp_file, "# COMMENT          ")?;
+        writeln!(temp_file, "BAD INPUT          ")?;
+        writeln!(temp_file, "\n\n\n\n")?;
         writeln!(temp_file, "ipv6_prefix=2a00:fb01:400:200")?;
         writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::/64")?;
         writeln!(temp_file, "ipv6_gateway=2a00:fb01:400:200::1")?;

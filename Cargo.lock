@@ -2372,6 +2372,7 @@ dependencies = [
  "clap 4.5.17",
  "ic-types",
  "once_cell",
+ "regex",
  "serde",
  "serde_json",
  "serde_with 1.14.0",

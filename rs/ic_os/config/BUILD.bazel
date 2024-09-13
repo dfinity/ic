@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
     "@crate_index//:url",
+    "@crate_index//:regex",
 ]
 
 DEV_DEPENDENCIES = [

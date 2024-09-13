@@ -12,6 +12,7 @@ url = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_with = "1.6.2"
+regex = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.8"
