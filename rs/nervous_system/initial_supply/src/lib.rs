@@ -103,36 +103,6 @@ impl InitialSupplyOptions {
             batch_size: 250,
         }
     }
-
-    /*
-    pub fn max_transactions(&self) -> u64 {
-        self.max_transactions
-    }
-
-    pub fn set_max_transactions(&mut self, new_value: u64) -> &mut Self {
-        self.max_transactions = new_value;
-        self
-    }
-
-    pub fn with_max_transactions(mut self, new_value: u64) -> Self {
-        self.max_transactions = new_value;
-        self
-    }
-
-    pub fn batch_size(&self) -> u64 {
-        self.batch_size
-    }
-
-    pub fn set_batch_size(&mut self, new_value: u64) -> &mut Self {
-        self.batch_size = new_value;
-        self
-    }
-
-    pub fn with_batch_size(mut self, new_value: u64) -> Self {
-        self.batch_size = new_value;
-        self
-    }
-    */
 }
 
 impl Default for InitialSupplyOptions {
