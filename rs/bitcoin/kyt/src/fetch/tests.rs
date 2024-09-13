@@ -57,7 +57,11 @@ struct MockEnv {
 }
 
 impl FetchEnv for MockEnv {
-    async fn get_tx(&self, txid: Txid, max_response_bytes: u32) -> Result<Transaction, GetTxError> {
+    async fn http_get_tx(
+        &self,
+        txid: Txid,
+        max_response_bytes: u32,
+    ) -> Result<Transaction, GetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
@@ -177,7 +181,7 @@ async fn test_mock_env() {
     let env = MockEnv::new(0);
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
-    let result = env.get_tx(txid, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env.http_get_tx(txid, INITIAL_MAX_RESPONSE_BYTES).await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
     env.assert_no_more_get_tx_call();

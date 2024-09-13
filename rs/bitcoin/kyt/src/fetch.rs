@@ -61,7 +61,11 @@ pub trait FetchState {
 
 /// Trait that abstracts over system functions like fetching transaction, calcuating cycles, etc.
 pub trait FetchEnv {
-    async fn get_tx(&self, txid: Txid, max_response_bytes: u32) -> Result<Transaction, GetTxError>;
+    async fn http_get_tx(
+        &self,
+        txid: Txid,
+        max_response_bytes: u32,
+    ) -> Result<Transaction, GetTxError>;
     fn cycles_accept(&self, cycles: u128) -> u128;
     fn cycles_available(&self) -> u128;
 
@@ -99,7 +103,7 @@ pub trait FetchEnv {
     /// Fetch a transaction using http outcall by its txid and set its status to:
     /// - `Fetched`, if it is available.
     /// - `PendingRetry`, if the allocated buffer for outcall wasn't enough.
-    /// - `Error`, if an irrecoverable error happened during the outcall of `get_tx`.
+    /// - `Error`, if an irrecoverable error happened during the outcall of `http_get_tx`.
     ///
     /// Return the correponding `FetchResult`.
     ///
@@ -112,7 +116,7 @@ pub trait FetchEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self.get_tx(txid, max_response_bytes).await {
+        match self.http_get_tx(txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
                 let fetched = FetchedTx {
