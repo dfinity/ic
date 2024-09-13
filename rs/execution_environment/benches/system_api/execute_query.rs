@@ -12,37 +12,69 @@ use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
+use crate::common::Wasm64;
+
 pub fn execute_query_bench(c: &mut Criterion) {
     let wasm64_disabled = Wasm64::Disabled;
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
-            "ic0_data_certificate_size()".into(),
+            "wasm32/ic0_data_certificate_size()".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_size",
                 NoParams,
                 Result::I32,
-                wasm64_disabled,
+                Wasm64::Disabled,
             ),
             517000006,
         ),
         common::Benchmark(
-            "ic0_data_certificate_copy()/1B".into(),
+            "wasm64/ic0_data_certificate_size()".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_size",
+                NoParams,
+                Result::I64,
+                Wasm64::Enabled,
+            ),
+            517000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_data_certificate_copy()/1B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
                 Params3(0, 0, 1),
                 Result::No,
-                wasm64_disabled,
+                Wasm64::Disabled,
             ),
             520000006,
         ),
         common::Benchmark(
-            "ic0_data_certificate_copy()/64B".into(),
+            "wasm64/ic0_data_certificate_copy()/1B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0_i64, 0_i64, 1_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            520000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_data_certificate_copy()/64B".into(),
             Module::QueryTest.from_ic0(
                 "data_certificate_copy",
                 Params3(0, 0, 64),
                 Result::No,
-                wasm64_disabled,
+                Wasm64::Disabled,
+            ),
+            583000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_data_certificate_copy()/64B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0_i64, 0_i64, 64_i64),
+                Result::No,
+                Wasm64::Enabled,
             ),
             583000006,
         ),
