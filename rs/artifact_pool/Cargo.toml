@@ -51,7 +51,7 @@ slog-envlogger = "2.2.0"
 slog-term = { workspace = true }
 
 [[bench]]
-name = "load_blocks"
+name = "consensus_pool"
 harness = false
 
 [[bin]]

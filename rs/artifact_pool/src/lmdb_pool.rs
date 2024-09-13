@@ -89,7 +89,6 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 pub(crate) struct PersistentHeightIndexedPool<T> {
     pool_type: PhantomData<T>,
     db_env: Arc<Environment>,
-    meta: Database,
     artifacts: Database,
     indices: Vec<(TypeKey, Database)>,
     log: ReplicaLogger,
@@ -427,15 +426,6 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let db_env = create_db_env(path, read_only, (Artifact::TYPE_KEYS.len() + 2) as c_uint);
 
         // Create all databases.
-        let meta = if read_only {
-            db_env
-                .open_db(Some("META"))
-                .unwrap_or_else(|err| panic!("Error opening db for metadata: {:?}", err))
-        } else {
-            db_env
-                .create_db(Some("META"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err))
-        };
         let artifacts = if read_only {
             db_env
                 .open_db(Some("ARTS"))
@@ -468,40 +458,10 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         Self {
             pool_type: PhantomData,
             db_env: Arc::new(db_env),
-            meta,
             artifacts,
             indices,
             log,
         }
-    }
-
-    /// Update the meta data of the given type_key.
-    fn update_meta(
-        &self,
-        tx: &mut RwTransaction,
-        type_key: &TypeKey,
-        meta: &Meta,
-    ) -> lmdb::Result<()> {
-        if let Some(bytes) = log_err!(
-            bincode::serialize::<Meta>(meta),
-            self.log,
-            "update_meta serialize"
-        ) {
-            tx.put(self.meta, &type_key, &bytes, WriteFlags::empty())
-        } else {
-            Err(lmdb::Error::Panic)
-        }
-    }
-
-    /// Get the meta data of the given type_key.
-    fn get_meta<Tx: Transaction>(&self, tx: &mut Tx, type_key: &TypeKey) -> Option<Meta> {
-        log_err_except!(
-            tx.get(self.meta, &type_key),
-            self.log,
-            lmdb::Error::NotFound,
-            format!("get_meta {:?}", type_key)
-        )
-        .and_then(|bytes| bincode::deserialize::<Meta>(bytes).ok())
     }
 
     /// Get the index database of the given type_key.
@@ -575,19 +535,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             &key.height_key,
             &key.id_key,
             WriteFlags::NO_DUP_DATA,
-        )?;
-        // update meta
-        let meta = self
-            .get_meta(tx, &key.type_key)
-            .map(|meta| Meta {
-                min: meta.min.min(key.height_key),
-                max: meta.max.max(key.height_key),
-            })
-            .unwrap_or(Meta {
-                min: key.height_key,
-                max: key.height_key,
-            });
-        self.update_meta(tx, &key.type_key, &meta)
+        )
     }
 
     /// Remove the pool object of the given type/height/id key.
@@ -602,21 +550,11 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         }
 
         let index_db = self.get_index_db(&key.type_key);
-        tx.del(index_db, &key.height_key, Some(&key.id_key.0))?;
-
-        let min_height = tx_get_key(tx, index_db, GetOp::First)?;
-        let max_height = tx_get_key(tx, index_db, GetOp::Last)?;
-
-        match (min_height, max_height) {
-            (Some(min), Some(max)) => self.update_meta(tx, &key.type_key, &Meta { min, max }),
-            (Some(min), None) => self.update_meta(tx, &key.type_key, &Meta { min, max: min }),
-            _ => tx.del(self.meta, &key.type_key, None),
-        }
+        tx.del(index_db, &key.height_key, Some(&key.id_key.0))
     }
 
     /// Remove all index entries for the given [`TypeKey`] with heights
-    /// less than the given [`HeightKey`]. Update the type's meta table
-    /// if necessary. Return the [`ArtifactKey`]s of deleted entries.
+    /// less than the given [`HeightKey`] and return the [`ArtifactKey`]s of deleted entries.
     fn tx_purge_index_below(
         &self,
         tx: &mut RwTransaction,
@@ -624,44 +562,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         height_key: HeightKey,
     ) -> lmdb::Result<Vec<ArtifactKey>> {
         let mut artifact_ids = Vec::new();
-        // only delete if meta exists
-        if let Some(meta) = self.get_meta(tx, &type_key) {
-            // nothing to delete if min height is already higher
-            if meta.min >= height_key {
-                return Ok(artifact_ids);
+
+        let index_db = self.get_index_db(&type_key);
+        let mut cursor = tx.open_rw_cursor(index_db)?;
+
+        while let Some((key, id)) = cursor.iter().next().transpose()? {
+            if HeightKey::from(key) >= height_key {
+                break;
             }
-
-            let index_db = self.get_index_db(&type_key);
-            {
-                let mut cursor = tx.open_rw_cursor(index_db)?;
-
-                while let Some((key, id)) = cursor.iter().next().transpose()? {
-                    if HeightKey::from(key) >= height_key {
-                        break;
-                    }
-                    artifact_ids.push(ArtifactKey {
-                        type_key,
-                        height_key: HeightKey::from(key),
-                        id_key: IdKey::from(id),
-                    });
-                    cursor.del(WriteFlags::empty())?;
-                }
-            }
-
-            // update meta
-            let meta = if meta.max < height_key {
-                None
-            } else {
-                tx_get_key(tx, index_db, GetOp::First)?.map(|key| Meta {
-                    min: key,
-                    max: meta.max,
-                })
-            };
-
-            match meta {
-                None => tx.del(self.meta, &type_key, None)?,
-                Some(meta) => self.update_meta(tx, &type_key, &meta)?,
-            }
+            artifact_ids.push(ArtifactKey {
+                type_key,
+                height_key: HeightKey::from(key),
+                id_key: IdKey::from(id),
+            });
+            cursor.del(WriteFlags::empty())?;
         }
 
         Ok(artifact_ids)
@@ -787,9 +701,15 @@ where
     <Message as TryFrom<Artifact>>::Error: Debug,
 {
     fn height_range(&self) -> Option<HeightRange> {
-        let mut tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
-        self.get_meta(&mut tx, &Message::type_key())
-            .map(|meta| HeightRange::new(Height::from(meta.min), Height::from(meta.max)))
+        let tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
+        let index_db = self.get_index_db(&Message::type_key());
+        let min_height = tx_get_key(&tx, index_db, GetOp::First).ok().flatten()?;
+        let max_height = tx_get_key(&tx, index_db, GetOp::Last).ok().flatten()?;
+
+        Some(HeightRange::new(
+            Height::from(min_height),
+            Height::from(max_height),
+        ))
     }
 
     fn max_height(&self) -> Option<Height> {
