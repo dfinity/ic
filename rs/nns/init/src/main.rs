@@ -10,7 +10,6 @@ use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     itest_helpers::NnsCanisters,
 };
-use icp_ledger::AccountIdentifier;
 use prost::Message;
 use std::{
     fs,
