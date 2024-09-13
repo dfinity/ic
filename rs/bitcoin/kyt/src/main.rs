@@ -49,7 +49,9 @@ async fn check_transaction(
     ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
     match Txid::try_from(args.txid.as_ref()) {
         Ok(txid) => {
-            if ic_cdk::api::call::msg_cycles_available128() + CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+            if ic_cdk::api::call::msg_cycles_available128()
+                .checked_add(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
+                .unwrap()
                 < CHECK_TRANSACTION_CYCLES_REQUIRED
             {
                 Ok(CheckTransactionResponse::NotEnoughCycles)
