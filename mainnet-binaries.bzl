@@ -7,11 +7,17 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 # This needs to be kept in sync with the git revision of the tdb26-* (NNS) subnet tracked in testnet/mainnet_revisions.json.
 # TODO: read the revision from that file instead of hardcoding it here
 # and automate updating the SHA256s below whenever testnet/mainnet_revisions.json changes.
-MAINNET_REVISION = "afe1a18291987667fdb52dac3ca44b1aebf7176e"
+
+# TODO: currently the pocket-ic lib is incompatible with the pocket-ic server from mainnet.
+# We fix this by using a more recent commit (rc--2024-09-13_01-31) which makes them compatible.
+#MAINNET_REVISION = "afe1a18291987667fdb52dac3ca44b1aebf7176e"
+MAINNET_REVISION = "52ebccfba8855e23dcad9657a8d6e6be01df71f9"
 
 # Hashes of the published binaries. These should be updated whenever MAINNET_REVISION and testnet/mainnet_revisions.json are updated.
 MAINNET_BINARY_SHA256S = {
-    "pocket-ic": "057b323263dbffefc3004ae7485b85c580c294c80eeb49dc14f66590ca14f9cd",
+    # TODO: this is the mainnet hash:
+    #"pocket-ic": "057b323263dbffefc3004ae7485b85c580c294c80eeb49dc14f66590ca14f9cd",
+    "pocket-ic": "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
 }
 
 def mainnet_binary_gzs():
