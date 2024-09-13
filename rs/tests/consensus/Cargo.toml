@@ -11,9 +11,12 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-agent = { workspace = true }
+ic-backup = { path = "../../backup" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-recovery = { path = "../../recovery" }
@@ -25,6 +28,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
 k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -34,6 +38,7 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
