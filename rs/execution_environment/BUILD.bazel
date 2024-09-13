@@ -188,14 +188,6 @@ rust_ic_bench(
 )
 
 rust_ic_bench(
-    name = "execute_inspect_message_bench_wasm64",
-    srcs = ["benches/system_api/execute_inspect_message_wasm64.rs"],
-    data = DATA,
-    env = ENV,
-    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_ic_bench(
     name = "execute_query_bench",
     srcs = ["benches/system_api/execute_query.rs"],
     data = DATA,
@@ -204,24 +196,8 @@ rust_ic_bench(
 )
 
 rust_ic_bench(
-    name = "execute_query_bench_wasm64",
-    srcs = ["benches/system_api/execute_query_wasm64.rs"],
-    data = DATA,
-    env = ENV,
-    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_ic_bench(
     name = "execute_update_bench",
     srcs = ["benches/system_api/execute_update.rs"],
-    data = DATA,
-    env = ENV,
-    deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,
-)
-
-rust_ic_bench(
-    name = "execute_update_bench_wasm64",
-    srcs = ["benches/system_api/execute_update_wasm64.rs"],
     data = DATA,
     env = ENV,
     deps = ["//rs/execution_environment/benches/lib:execution_environment_bench"] + BENCH_DEPENDENCIES,

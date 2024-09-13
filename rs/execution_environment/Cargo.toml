@@ -103,28 +103,13 @@ path = "benches/system_api/execute_inspect_message.rs"
 
 [[bench]]
 harness = false
-name = "execute_inspect_message_wasm64"
-path = "benches/system_api/execute_inspect_message_wasm64.rs"
-
-[[bench]]
-harness = false
 name = "execute_query"
 path = "benches/system_api/execute_query.rs"
 
 [[bench]]
 harness = false
-name = "execute_query_wasm64"
-path = "benches/system_api/execute_query_wasm64.rs"
-
-[[bench]]
-harness = false
 name = "execute_update"
 path = "benches/system_api/execute_update.rs"
-
-[[bench]]
-harness = false
-name = "execute_update_wasm64"
-path = "benches/system_api/execute_update_wasm64.rs"
 
 [[bench]]
 harness = false
