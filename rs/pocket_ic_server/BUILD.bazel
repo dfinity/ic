@@ -41,7 +41,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
-    "@crate_index//:axum_server_0_6_0",
+    "@crate_index//:axum-server",
     "@crate_index//:backoff",
     "@crate_index//:base64",
     "@crate_index//:bytes",
@@ -140,7 +140,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "5.0.0",
+    version = "6.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
