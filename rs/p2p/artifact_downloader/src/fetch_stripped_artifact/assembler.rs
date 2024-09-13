@@ -211,7 +211,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         }
 
         // Only report the metric if we actually downloaded some ingresses from peers
-        if ingress_messages_from_peers == 0 {
+        if ingress_messages_from_peers > 0 {
             timer.stop_and_record();
         } else {
             timer.stop_and_discard();

@@ -41,7 +41,7 @@ impl FetchStrippedConsensusArtifactMetrics {
                     decimal_buckets_with_zero(-2, 1),
             ),
             total_block_assembly_duration: metrics_registry.histogram(
-                    "ic_stripped_consensus_artifact_total_duration",
+                    "ic_stripped_consensus_artifact_total_block_assembly_duration",
                     "Total time to download and assemble a block",
                     decimal_buckets_with_zero(-2, 1),
             ),
