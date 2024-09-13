@@ -98,8 +98,8 @@ impl Setup {
 }
 
 fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
-    match &result {
-        WasmResult::Reply(bytes) => decode_one(&bytes).unwrap(),
+    match result {
+        WasmResult::Reply(bytes) => decode_one(bytes).unwrap(),
         WasmResult::Reject(msg) => panic!("unexpected reject: {}", msg),
     }
 }
