@@ -85,15 +85,17 @@ rust_test(
     #     bazel \
     #         test \
     #         --test_env=SSH_AUTH_SOCK \
+    #         --test_timeout=43200 \
     #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test
     #
     # To run the U256 token version of the test (for ckETH and ckERC20 tokens), use:
     #
     #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test_u256
     #
-    # The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
-    # SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
-    # is run. This authorizes the test to download the test data.
+    # The unusual things in this command are:
+    #  - `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment variable to be "forwarded" from
+    #    your shell to the sandbox where the test is run. This authorizes the test to download the test data.
+    #  - `--test_timeout=43200`: This sets the test timeout to 12 hours (more than currently required).
     #
     # Additionally, the following flags are recommended (but not required):
     #
