@@ -2897,6 +2897,7 @@ fn with_test_setup_and_config(
             LOCAL_SUBNET,
             hypervisor_config,
             &metrics_registry,
+            &MessageRoutingMetrics::new(&metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 &metrics_registry,
             ))),
@@ -3374,7 +3375,7 @@ impl MetricsFixture {
 
     fn assert_eq_critical_errors(&self, counts: CriticalErrorCounts) {
         assert_eq!(
-            metric_vec(&[
+            nonzero_values(metric_vec(&[
                 (
                     &[("error", &CRITICAL_ERROR_INDUCT_RESPONSE_FAILED.to_string())],
                     counts.induct_response_failed
@@ -3401,8 +3402,8 @@ impl MetricsFixture {
                     )],
                     counts.receiver_subnet_mismatch
                 )
-            ]),
-            fetch_int_counter_vec(&self.registry, "critical_errors")
+            ])),
+            nonzero_values(fetch_int_counter_vec(&self.registry, "critical_errors"))
         );
     }
 }
