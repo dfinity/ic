@@ -308,9 +308,9 @@ fn generate_transactions(
     in_memory_ledger: &mut InMemoryLedger<ApprovalKey, Account, Tokens>,
 ) {
     let start = Instant::now();
-    let minter_account = ic_icrc1_ledger_sm_tests::minting_account(&state_machine, canister_id)
+    let minter_account = ic_icrc1_ledger_sm_tests::minting_account(state_machine, canister_id)
         .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
-    let u64_fee = ic_icrc1_ledger_sm_tests::fee(&state_machine, canister_id);
+    let u64_fee = ic_icrc1_ledger_sm_tests::fee(state_machine, canister_id);
     let fee = Tokens::from(u64_fee);
     let burn_amount = Tokens::from(
         u64_fee
@@ -357,7 +357,7 @@ fn generate_transactions(
     println!("minting");
     for to in &accounts {
         send_transfer(
-            &state_machine,
+            state_machine,
             canister_id,
             minter_account.owner,
             &TransferArg {
@@ -376,7 +376,7 @@ fn generate_transactions(
             },
         )
         .expect("should be able to mint");
-        in_memory_ledger.process_mint(&to, &Tokens::from(mint_amount));
+        in_memory_ledger.process_mint(to, &Tokens::from(mint_amount));
         minted += 1;
         if minted >= NUM_TRANSACTIONS_PER_TYPE {
             break;
@@ -431,7 +431,7 @@ fn generate_transactions(
             .unwrap()
             .as_nanos() as u64;
         ic_icrc1_ledger_sm_tests::send_approval(
-            &state_machine,
+            state_machine,
             canister_id,
             from.owner,
             &ApproveArgs {
@@ -475,7 +475,7 @@ fn generate_transactions(
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
         let to = accounts[(i + 2) % NUM_TRANSACTIONS_PER_TYPE];
         ic_icrc1_ledger_sm_tests::send_transfer_from(
-            &state_machine,
+            state_machine,
             canister_id,
             spender.owner,
             &TransferFromArgs {
@@ -505,10 +505,9 @@ fn generate_transactions(
     }
     // Burn
     println!("burning");
-    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
-        let from = accounts[i];
+    for (i, from) in accounts.iter().enumerate().take(NUM_TRANSACTIONS_PER_TYPE) {
         send_transfer(
-            &state_machine,
+            state_machine,
             canister_id,
             from.owner,
             &TransferArg {
