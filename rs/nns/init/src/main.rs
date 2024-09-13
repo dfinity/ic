@@ -306,12 +306,10 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
                 ),
                 None,
             ),
-            icp_ledger::Tokens::from_tokens(u64::MAX/2).expect("Couldn't create icpts"),
+            icp_ledger::Tokens::from_tokens(u64::MAX / 2).expect("Couldn't create icpts"),
         );
 
-    eprintln!(
-    "Minting to iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe"
-);
+    eprintln!("Minting to iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe");
 
     if args.initialize_with_gtc_neurons {
         init_payloads_builder.genesis_token.sr_months_to_release =
