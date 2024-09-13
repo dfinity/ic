@@ -24,7 +24,7 @@ use crate::FetchArtifact;
 
 use super::{
     download::download_ingress,
-    metrics::FetchStrippedConsensusArtifactMetrics,
+    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource},
     stripper::Strippable,
     types::stripped::{
         MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
@@ -87,7 +87,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    _metrics: FetchStrippedConsensusArtifactMetrics,
+    metrics: FetchStrippedConsensusArtifactMetrics,
 }
 
 impl FetchStrippedConsensusArtifact {
@@ -127,7 +127,7 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
-                _metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
+                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
             }
         };
 
@@ -148,6 +148,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
     ) -> Result<(ConsensusMessage, NodeId), Aborted> {
+        let total_timer = self.metrics.total_block_assembly_duration.start_timer();
         // Download the Stripped message if it hasn't been pushed.
         let (stripped_artifact, peer) = self
             .fetch_stripped
@@ -157,12 +158,17 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let stripped_block_proposal = match stripped_artifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
+                total_timer.stop_and_discard();
                 return Ok((unstripped, peer));
             }
         };
 
         let mut join_set = tokio::task::JoinSet::new();
 
+        let timer = self
+            .metrics
+            .download_missing_ingress_messages_duration
+            .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         let missing_ingress_ids = assembler.missing_ingress_messages();
@@ -180,10 +186,19 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
+        let mut ingress_messages_from_ingress_pool = 0;
+        let mut ingress_messages_from_peers = 0;
+
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, _peer_id)) = join_result else {
+            let Ok((ingress, peer_id)) = join_result else {
                 return Err(Aborted {});
             };
+
+            if peer_id == self.node_id {
+                ingress_messages_from_ingress_pool += 1;
+            } else {
+                ingress_messages_from_peers += 1;
+            }
 
             if let Err(err) = assembler.try_insert_ingress_message(ingress) {
                 warn!(
@@ -194,6 +209,21 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 return Err(Aborted {});
             }
         }
+
+        // Only report the metric if we actually downloaded some ingresses from peers
+        if ingress_messages_from_peers == 0 {
+            timer.stop_and_record();
+        } else {
+            timer.stop_and_discard();
+        }
+
+        self.metrics
+            .report_ingress_messages_count(IngressMessageSource::Peer, ingress_messages_from_peers);
+
+        self.metrics.report_ingress_messages_count(
+            IngressMessageSource::IngressPool,
+            ingress_messages_from_ingress_pool,
+        );
 
         let reconstructed_block_proposal = assembler.try_assemble().map_err(|err| {
             warn!(
