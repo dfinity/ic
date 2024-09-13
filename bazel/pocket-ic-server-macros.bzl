@@ -1,34 +1,38 @@
 """
-This module defines the macro rust_test_suite_pocket_ic which declares two rust_test_suites, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
+This module defines macros for running tests using the pocket-ic server from both mainnet and HEAD.
 """
 
-load("@rules_rust//rust:defs.bzl", "rust_test_suite")
-
-def rust_test_suite_using_pocket_ic_server(name, **kwargs):
+def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = [], **kwargs):
     """
-    Declares two rust_test_suites, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
+    Declares two targets as defined by the given test macro, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 
     Args:
-      name: the base name of the rust_test_suites.
+      macro: the bazel macro to run. For example: rust_test_suite or rust_test_suite_with_extra_srcs.
+      name: the base name of the target.
         The name will be suffixed with "-pocket-ic-server-mainnet" and "-pocket-ic-server-HEAD"
-        for the mainnet and HEAD versions of the pocket-ic server respectively,
-      **kwargs: the arguments of the rust_test_suite.
+        for the mainnet and HEAD variants of the pocket-ic server respectively,
+      extra_mainnet_tags: extra tags assigned to the mainnet pocket-ic server variant.
+      extra_HEAD_tags: extra tags assigned to the HEAD pocket-ic server variant.
+      **kwargs: the arguments of the bazel macro.
     """
     data = kwargs.pop("data", [])
     env = kwargs.pop("env", {})
-    rust_test_suite(
+    tags = kwargs.pop("tags", [])
+    macro(
         name = name + "-pocket-ic-server-mainnet",
         data = data + ["//:mainnet-pocket-ic"],
         env = env | {
             "POCKET_IC_BIN": "$(rootpath //:mainnet-pocket-ic)",
         },
+        tags = [tag for tag in tags if tag not in extra_mainnet_tags] + extra_mainnet_tags,
         **kwargs
     )
-    rust_test_suite(
+    macro(
         name = name + "-pocket-ic-server-HEAD",
         data = data + ["//rs/pocket_ic_server:pocket-ic-server"],
         env = env | {
             "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         },
+        tags = [tag for tag in tags if tag not in extra_HEAD_tags] + extra_HEAD_tags,
         **kwargs
     )

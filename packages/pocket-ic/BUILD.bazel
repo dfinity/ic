@@ -1,6 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:pocket-ic-server-macros.bzl", "rust_test_suite_using_pocket_ic_server")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -67,7 +67,7 @@ rust_test(
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
-rust_test_suite_using_pocket_ic_server(
+test_using_pocket_ic_server(
     name = "test",
     size = "small",
     srcs = ["tests/tests.rs"],
@@ -82,24 +82,27 @@ rust_test_suite_using_pocket_ic_server(
         "TEST_WASM": "$(rootpath :test_canister.wasm)",
     },
     flaky = False,
+    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
-rust_test_suite_using_pocket_ic_server(
+test_using_pocket_ic_server(
     name = "restart",
     size = "medium",
     srcs = ["tests/restart.rs"],
     flaky = False,
+    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
-rust_test_suite_using_pocket_ic_server(
+test_using_pocket_ic_server(
     name = "slow",
     size = "medium",
     srcs = ["tests/slow.rs"],
     flaky = False,
+    macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["cpu:8"],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,

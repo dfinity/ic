@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -118,7 +119,6 @@ DEV_DATA = [
     "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
-    "//:mainnet-pocket-ic",
     "//rs/sns/governance:sns-governance-canister",
     "@mainnet_sns-governance-canister//file",
     "//rs/sns/root:sns-root-canister",
@@ -160,7 +160,6 @@ DEV_ENV = {
     "MAINNET_SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-swap-canister//file)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
-    "POCKET_IC_BIN": "$(rootpath //:mainnet-pocket-ic)",
 }
 
 rust_library(
@@ -174,7 +173,7 @@ rust_library(
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
-rust_test_suite_with_extra_srcs(
+test_using_pocket_ic_server(
     name = "integration_tests_test",
     srcs = glob(
         ["tests/**/*.rs"],
@@ -182,8 +181,11 @@ rust_test_suite_with_extra_srcs(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
+    # Run the tests using the mainnet pocket-ic server on PRs but run against the HEAD version every night:
+    extra_HEAD_tags = ["nns_tests_nightly"],
     extra_srcs = [],
     flaky = True,
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:6",
