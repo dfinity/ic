@@ -55,15 +55,9 @@ system_test_nns(
     deps = RUNNER_DEPENDENCIES,
 )
 
-env = dict()
-
-env.update(SETUPOS_ENV)
-
-env.update(HOSTOS_ENV)
-
 system_test_nns(
     name = "upgrade",
-    env = env,
+    env = SETUPOS_ENV | HOSTOS_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
