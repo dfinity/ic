@@ -1,3 +1,7 @@
+"""
+This module defines shared dependency lists for the pocket-ic library and tests and a function to declare pocket-ic tests based on a given pocket-ic server.
+"""
+
 load("@rules_rust//rust:defs.bzl", "rust_test_suite")
 
 DEPENDENCIES = [
