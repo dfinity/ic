@@ -144,9 +144,6 @@ impl ThickLedgerClient {
                 .await
                 .map_err(|err| format!("Failed to call ledger: {:?}", err))?;
 
-        response
-            .archived_transactions
-            .sort_by_key(|archived_range| archived_range.start.clone());
         normalize_get_transactions_response(start, &mut response)?;
 
         let mut result = vec![];
