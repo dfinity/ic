@@ -34,8 +34,10 @@ const MAX_TICKS: usize = 10;
 const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 7_000_000;
 
 struct Setup {
+    // Owner of canisters created for the setup.
     controller: Principal,
-    universal_canister: Principal,
+    // The `caller` canister helps to proxy update calls with cycle payment.
+    caller: Principal,
     kyt_canister: Principal,
     env: PocketIc,
 }
@@ -53,10 +55,10 @@ impl Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         let env = PocketIc::new();
 
-        let universal_canister = env.create_canister_with_settings(Some(controller), None);
-        env.add_cycles(universal_canister, 100_000_000_000_000);
+        let caller = env.create_canister_with_settings(Some(controller), None);
+        env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(
-            universal_canister,
+            caller,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(controller),
@@ -68,7 +70,7 @@ impl Setup {
 
         Setup {
             controller,
-            universal_canister,
+            caller,
             kyt_canister,
             env,
         }
@@ -91,7 +93,7 @@ impl Setup {
             )
             .build();
         self.env
-            .submit_call(self.universal_canister, self.controller, "update", payload)
+            .submit_call(self.caller, self.controller, "update", payload)
     }
 }
 
@@ -165,7 +167,7 @@ fn test_check_address() {
 #[test]
 fn test_check_transaction_passed() {
     let setup = Setup::new();
-    let cycles_before = setup.env.cycle_balance(setup.universal_canister);
+    let cycles_before = setup.env.cycle_balance(setup.caller);
 
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
@@ -243,7 +245,7 @@ fn test_check_transaction_passed() {
         Ok(CheckTransactionResponse::Passed)
     ));
 
-    let cycles_after = env.cycle_balance(setup.universal_canister);
+    let cycles_after = env.cycle_balance(setup.caller);
     let expected_cost =
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
     let actual_cost = cycles_before - cycles_after;
@@ -254,7 +256,7 @@ fn test_check_transaction_passed() {
 #[test]
 fn test_check_transaction_error() {
     let setup = Setup::new();
-    let cycles_before = setup.env.cycle_balance(setup.universal_canister);
+    let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
             .unwrap()
@@ -278,14 +280,14 @@ fn test_check_transaction_error() {
         Ok(CheckTransactionResponse::NotEnoughCycles { .. })
     ));
 
-    let cycles_after = setup.env.cycle_balance(setup.universal_canister);
+    let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
     // Test for malformatted txid
-    let cycles_before = setup.env.cycle_balance(setup.universal_canister);
+    let cycles_before = setup.env.cycle_balance(setup.caller);
     txid.pop();
     let call_id = setup
         .submit_kyt_call(
@@ -303,7 +305,7 @@ fn test_check_transaction_error() {
         Err(CheckTransactionError::Txid { .. })
     ));
 
-    let cycles_after = setup.env.cycle_balance(setup.universal_canister);
+    let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
