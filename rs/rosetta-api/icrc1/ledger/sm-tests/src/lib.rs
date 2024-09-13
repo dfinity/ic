@@ -2683,7 +2683,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
     for a1 in &accounts {
