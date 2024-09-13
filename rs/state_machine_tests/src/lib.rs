@@ -787,7 +787,7 @@ struct PocketBitcoinClient {
 
 impl PocketBitcoinClient {
     fn new(
-        config: &BitcoinClientConfig,
+        config: BitcoinClientConfig,
         metrics_registry: &MetricsRegistry,
         logger: ReplicaLogger,
         rt_handle: Arc<Runtime>,
@@ -795,26 +795,30 @@ impl PocketBitcoinClient {
         let adapter_state = AdapterState::new(config.idle_seconds);
         let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
         let blockchain_state = Arc::new(TokioMutex::new(BlockchainState::new(
-            config,
+            &config,
             metrics_registry,
         )));
         let get_successors_handler = GetSuccessorsHandler::new(
-            config,
+            &config,
             blockchain_state.clone(),
             blockchain_manager_tx,
             metrics_registry,
         );
         let (transaction_manager_tx, transaction_manager_rx) = channel(100);
 
-        start_main_event_loop(
-            config,
-            logger,
-            blockchain_state.clone(),
-            transaction_manager_rx,
-            adapter_state.clone(),
-            blockchain_manager_rx,
-            metrics_registry,
-        );
+        let adapter_state_clone = adapter_state.clone();
+        let metrics_registry = metrics_registry.clone();
+        rt_handle.spawn(async move {
+            start_main_event_loop(
+                &config,
+                logger,
+                blockchain_state.clone(),
+                transaction_manager_rx,
+                adapter_state_clone,
+                blockchain_manager_rx,
+                &metrics_registry,
+            )
+        });
 
         Self {
             adapter_state,
@@ -1368,7 +1372,7 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             Box::new(BrokenConnectionBitcoinClient),
             Box::new(PocketBitcoinClient::new(
-                &bitcoin_client_config,
+                bitcoin_client_config,
                 &sm.metrics_registry,
                 sm.replica_logger.clone(),
                 sm.runtime.clone(),
