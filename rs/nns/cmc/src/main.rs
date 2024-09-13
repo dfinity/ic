@@ -771,13 +771,14 @@ fn convert_data_to_mixed_hash_tree(state: &State) -> WitnessGeneratorImpl {
 /// Candid-encoded IcpXdrConversionRate
 fn convert_conversion_rate_to_payload(
     conversion_rate: &IcpXdrConversionRate,
+    label: Label,
     witness_generator: WitnessGeneratorImpl,
 ) -> Vec<u8> {
     let icp_xdr_conversion_rate_buf = Encode!(&conversion_rate).unwrap();
 
     let mixed_hash_tree = witness_generator
-        .mixed_hash_tree(&LabeledTree::SubTree(flatmap!{
-            Label::from(LABEL_ICP_XDR_CONVERSION_RATE) => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
+        .mixed_hash_tree(&LabeledTree::SubTree(flatmap! {
+            label => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
         }))
         .expect("failed to produce a hash tree");
 
@@ -801,8 +802,11 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
             .as_ref()
             .expect("icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            icp_xdr_conversion_rate,
+            Label::from(LABEL_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         IcpXdrConversionRateCertifiedResponse {
             data: icp_xdr_conversion_rate.clone(),
@@ -827,8 +831,11 @@ fn get_average_icp_xdr_conversion_rate_() {
             .as_ref()
             .expect("average_icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            average_icp_xdr_conversion_rate,
+            Label::from(LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         over(
             candid_one,
