@@ -28,14 +28,14 @@ rust_library(
     name = "initial_supply",
     srcs = LIB_SRCS,
     crate_name = "ic_nervous_system_initial_supply",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
 )
 
 rust_test(
     name = "initial_supply_test",
     srcs = glob(["src/**"]),
-    deps = DEV_DEPENDENCIES + DEPENDENCIES,
     proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
