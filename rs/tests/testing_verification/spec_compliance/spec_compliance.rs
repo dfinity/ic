@@ -6,9 +6,8 @@ use ic_system_test_driver::driver::boundary_node::{BoundaryNode, BoundaryNodeVm}
 use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, NnsCanisterWasmStrategy, NnsInstallationBuilder, SubnetSnapshot,
-    TopologySnapshot,
+    await_boundary_node_healthy, get_dependency_path, HasPublicApiUrl, HasTopologySnapshot,
+    IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_types::SubnetId;
@@ -72,7 +71,6 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .next()
             .unwrap();
         NnsInstallationBuilder::new()
-            .with_canister_wasm_strategy(NnsCanisterWasmStrategy::TakeBuiltFromSources)
             .install(&nns_node, &env)
             .expect("NNS canisters not installed");
         info!(env.logger(), "NNS canisters are installed.");
@@ -93,19 +91,15 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     if http_requests {
         env::set_var(
             "SSL_CERT_FILE",
-            env.get_dependency_path(
-                "ic-os/components/networking/dev-certs/canister_http_test_ca.cert",
-            ),
+            get_dependency_path("ic-os/components/networking/dev-certs/canister_http_test_ca.cert"),
         );
         env::remove_var("NIX_SSL_CERT_FILE");
 
         // Set up Universal VM for httpbin testing service
         UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-            .with_config_img(
-                env.get_dependency_path(
-                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-                ),
-            )
+            .with_config_img(get_dependency_path(
+                "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+            ))
             .start(&env)
             .expect("failed to set up universal VM");
         canister_http::start_httpbin_on_uvm(&env);
@@ -185,8 +179,7 @@ pub fn test_subnet(
     } else {
         None
     };
-    let ic_ref_test_path = env
-        .get_dependency_path("rs/tests/ic-hs/bin/ic-ref-test")
+    let ic_ref_test_path = get_dependency_path("rs/tests/ic-hs/bin/ic-ref-test")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -312,7 +305,7 @@ pub fn with_endpoint(
         httpbin_proto,
         httpbin,
         ic_ref_test_path,
-        env.get_dependency_path("rs/tests/ic-hs/test-data"),
+        get_dependency_path("rs/tests/ic-hs/test-data"),
         endpoint,
         test_subnet_config,
         peer_subnet_config,

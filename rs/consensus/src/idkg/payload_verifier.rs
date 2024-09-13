@@ -1,4 +1,4 @@
-//! This module implements the ECDSA payload verifier.
+//! This module implements the IDKG payload verifier.
 //!
 //! It validates a payload by doing an equality check with a payload
 //! that would have been created by itself, given the same inputs.
@@ -7,7 +7,7 @@
 //!
 //! Therefore, it is important to ensure all inputs are indeed the same
 //! between all replicas in a subnet. Payload creation only reads completed
-//! transcripts, dealings (for xnet resharing), and signatures from ecdsa
+//! transcripts, dealings (for xnet resharing), and signatures from idkg
 //! pool. In payload verification, we do the following:
 //!
 //! 1. Extract newly completed artifacts from the payload to be verified.
@@ -69,7 +69,7 @@ use std::convert::TryFrom;
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Reasons for why an ecdsa payload might be invalid.
+/// Reasons for why an idkg payload might be invalid.
 pub(crate) enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
@@ -79,7 +79,7 @@ pub(crate) enum IDkgPayloadValidationFailure {
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Possible failures which could occur while validating an ecdsa payload. They don't imply that the
+/// Possible failures which could occur while validating an idkg payload. They don't imply that the
 /// payload is invalid.
 pub(crate) enum InvalidIDkgPayloadReason {
     // wrapper of other errors
@@ -196,7 +196,7 @@ pub(crate) fn validate_payload(
                     pool_reader,
                     context,
                     parent_block,
-                    payload.as_summary().ecdsa.as_ref(),
+                    payload.as_summary().idkg.as_ref(),
                 )
             },
             &metrics,
@@ -213,7 +213,7 @@ pub(crate) fn validate_payload(
                     state_manager,
                     context,
                     parent_block,
-                    payload.as_data().ecdsa.as_ref(),
+                    payload.as_data().idkg.as_ref(),
                     &metrics,
                 )
             },
@@ -274,7 +274,7 @@ fn validate_summary_payload(
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Validates a threshold ECDSA data payload.
+/// Validates an IDKG data payload.
 fn validate_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -286,7 +286,7 @@ fn validate_data_payload(
     data_payload: Option<&idkg::IDkgPayload>,
     metrics: &HistogramVec,
 ) -> ValidationResult<IDkgValidationError> {
-    if parent_block.payload.as_ref().as_ecdsa().is_none() {
+    if parent_block.payload.as_ref().as_idkg().is_none() {
         if data_payload.is_some() {
             return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());
         } else {
@@ -296,7 +296,7 @@ fn validate_data_payload(
 
     let block_payload = &parent_block.payload.as_ref();
     let (prev_payload, curr_payload) = if block_payload.is_summary() {
-        match &block_payload.as_summary().ecdsa {
+        match &block_payload.as_summary().idkg {
             None => {
                 if data_payload.is_some() {
                     return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());
@@ -312,7 +312,7 @@ fn validate_data_payload(
             }
         }
     } else {
-        match &block_payload.as_data().ecdsa {
+        match &block_payload.as_data().idkg {
             None => {
                 if data_payload.is_some() {
                     return Err(InvalidIDkgPayloadReason::UnexpectedDataPayload(None).into());

@@ -34,6 +34,8 @@ use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 // Please enable only for debugging.
 // If enabled, will collect and log checksums of execution results.
 // Disabled by default to avoid producing too much data.
@@ -103,7 +105,7 @@ impl WasmExecutorMetrics {
 }
 
 /// Contains information about execution of the current slice.
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
@@ -601,6 +603,7 @@ pub fn process(
         execution_parameters.clone(),
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
+        embedder.config().feature_flags.canister_backtrace,
         embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
         out_of_instructions_handler,
@@ -719,7 +722,7 @@ pub fn process(
     if instance.is_wasm32() {
         let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
         let wasm32_max_pages = NumWasmPages::from(
-            wasmtime_environ::WASM32_MAX_SIZE as usize / wasmtime_environ::WASM_PAGE_SIZE as usize,
+            wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE as usize,
         );
         let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 
@@ -786,11 +789,7 @@ pub fn process(
                 HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
-                canister_log.add_record(
-                    embedder.config().feature_flags.canister_logging == FlagStatus::Enabled,
-                    timestamp_nanos,
-                    log_message.into_bytes(),
-                );
+                canister_log.add_record(timestamp_nanos, log_message.into_bytes());
             }
             None
         }

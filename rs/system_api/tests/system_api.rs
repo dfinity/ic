@@ -2,13 +2,13 @@ use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
     PerformanceCounterType, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1348,6 +1348,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1420,6 +1421,7 @@ fn push_output_request_respects_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1531,6 +1533,7 @@ fn push_output_request_oversized_request_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1704,8 +1707,6 @@ fn test_ic0_cycles_burn() {
     assert_eq!(Cycles::new(0), Cycles::from(&heap));
 }
 
-const CANISTER_LOGGING_IS_ENABLED: bool = true;
-
 #[test]
 fn test_save_log_message_adds_canister_log_records() {
     let messages: Vec<Vec<_>> = vec![
@@ -1723,7 +1724,7 @@ fn test_save_log_message_adds_canister_log_records() {
     let initial_records_number = api.canister_log().records().len();
     // Save several log messages.
     for message in &messages {
-        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, message.len(), message);
+        api.save_log_message(0, message.len(), message);
     }
     let records = api.canister_log().records();
     // Expect increased number of log records and the content to match the messages.
@@ -1745,7 +1746,7 @@ fn test_save_log_message_invalid_message_size() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, invalid_size, message);
+    api.save_log_message(0, invalid_size, message);
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1766,12 +1767,7 @@ fn test_save_log_message_invalid_message_offset() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(
-        CANISTER_LOGGING_IS_ENABLED,
-        invalid_src,
-        message.len(),
-        message,
-    );
+    api.save_log_message(invalid_src, message.len(), message);
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1792,7 +1788,7 @@ fn test_save_log_message_trims_long_message() {
     let initial_records_number = api.canister_log().records().len();
     // Save a long log message.
     let bytes = vec![b'x'; long_message_size];
-    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
+    api.save_log_message(0, bytes.len(), &bytes);
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1812,7 +1808,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Save several long messages.
     for _ in 0..messages_number {
         let bytes = vec![b'x'; long_message_size];
-        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
+        api.save_log_message(0, bytes.len(), &bytes);
     }
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();

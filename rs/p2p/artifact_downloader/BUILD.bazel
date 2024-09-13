@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = [
+    "//rs/p2p:__subpackages__",
+    "//rs/replica:__subpackages__",
+])
+
+DEPENDENCIES = [
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/p2p/quic_transport",
+    "//rs/types/types",
+    "//rs/types/base_types",
+    "@crate_index//:axum",
+    "@crate_index//:backoff",
+    "@crate_index//:bytes",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:rand",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tracing",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/p2p/test_utils",
+    "//rs/test_utilities/consensus",
+    "//rs/test_utilities/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:futures",
+    "@crate_index//:http-body-util",
+    "@crate_index//:mockall",
+    "@crate_index//:tower",
+]
+
+rust_library(
+    name = "artifact_downloader",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_artifact_downloader",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "artifact_downloader_test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_artifact_downloader",
+    version = "0.9.0",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "artifact_downloader_integration",
+    srcs = ["tests/test.rs"],
+    deps = [":artifact_downloader"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

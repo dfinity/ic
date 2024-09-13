@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::{ErrorKind, Write},
+    io::Write,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
@@ -32,11 +32,7 @@ use prometheus::{labels, Encoder, Registry, TextEncoder};
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json as json;
-use tokio::{
-    io::{self},
-    net::TcpListener,
-    task,
-};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 mod metrics;
@@ -184,13 +180,13 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
+#[derive(Clone, PartialEq, Hash, Debug, Deserialize)]
 struct Entry {
     id: String,
     localities: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Clone, Hash)]
+#[derive(Clone, PartialEq, Hash, Debug, Deserialize)]
 struct Entries(Vec<Entry>);
 
 impl Entries {
@@ -472,30 +468,6 @@ impl<T: List> List for WithNormalize<T> {
                 entries
             })
     }
-}
-
-struct WithRecover<T: List>(T);
-
-#[async_trait]
-impl<T: List> List for WithRecover<T> {
-    async fn list(&self) -> Result<Entries, Error> {
-        match self.0.list().await {
-            Err(err) => match io_error_kind(&err) {
-                Some(ErrorKind::NotFound) => Ok(Entries(vec![])),
-                _ => Err(err),
-            },
-            Ok(entries) => Ok(entries),
-        }
-    }
-}
-
-fn io_error_kind(err: &Error) -> Option<ErrorKind> {
-    for cause in err.chain() {
-        if let Some(err) = cause.downcast_ref::<io::Error>() {
-            return Some(err.kind());
-        }
-    }
-    None
 }
 
 #[cfg(test)]

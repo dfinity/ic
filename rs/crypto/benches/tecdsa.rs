@@ -84,7 +84,7 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
 }
 
 fn sign_share(signer: &Node, inputs: &ThresholdEcdsaSigInputs) -> ThresholdEcdsaSigShare {
-    signer.sign_share(inputs).unwrap_or_else(|error| {
+    signer.create_sig_share(inputs).unwrap_or_else(|error| {
         panic!(
             "failed to generate threshold ECDSA signature share for signer {:?} with inputs {:?}: {:?}",
             signer.id(),
@@ -343,7 +343,7 @@ fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
     test_cases
 }
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]

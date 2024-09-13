@@ -17,24 +17,24 @@ bs58 = "=0.5.0"
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
-ic0 = "0.18.9"
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ckbtc-kyt = { path = "../kyt" }
-ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
-icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
+ic0 = "0.18.9"
+icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 minicbor = { workspace = true }
@@ -51,10 +51,13 @@ assert_matches = { workspace = true }
 bitcoin = "0.28.1"
 candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
 ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-ic-bitcoin-canister-mock = { path = "../../mock" }
-proptest = "1.0"
+proptest = { workspace = true }
 simple_asn1 = { workspace = true }
+
+[features]
+self_check = []

@@ -11,6 +11,7 @@ use icrc_ledger_types::icrc1::account::Subaccount;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
+use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
@@ -69,22 +70,46 @@ impl RosettaClient {
             };
 
             // Verify that the signature is correct
-            let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
-                signer_keypair.get_pb_key().as_slice(),
-            )
-            .with_context(|| {
-                format!(
-                    "Failed to convert public key to verification key: {:?}",
-                    signer_keypair.get_pb_key()
-                )
-            })?;
+            match signer_keypair.get_curve_type() {
+                CurveType::Edwards25519 => {
+                    let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
+                        signer_keypair.get_pb_key().as_slice(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to convert public key to verification key: {:?}",
+                            signer_keypair.get_pb_key()
+                        )
+                    })?;
+                    if verification_key
+                        .verify_signature(&signable_bytes, signed_bytes.as_slice())
+                        .is_err()
+                    {
+                        bail!("Signature verification failed")
+                    };
+                }
+                CurveType::Secp256K1 => {
+                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
+                        &signer_keypair.get_pb_key(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to convert public key to verification key: {:?}",
+                            signer_keypair.get_pb_key()
+                        )
+                    })?;
+                    if !verification_key
+                        .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
+                    {
+                        bail!("Signature verification failed")
+                    };
+                }
+                _ => bail!(
+                    "Unsupported curve type: {:?}",
+                    signer_keypair.get_curve_type()
+                ),
+            }
 
-            if verification_key
-                .verify_signature(&signable_bytes, signed_bytes.as_slice())
-                .is_err()
-            {
-                bail!("Signature verification failed")
-            };
             signatures.push(signature);
         }
 
@@ -152,23 +177,11 @@ impl RosettaClient {
 
         // We need to wait for the transaction to be added to the blockchain
         let mut tries = 0;
+        let request = SearchTransactionsRequest::builder(network_identifier.clone())
+            .with_transaction_identifier(submit_response.transaction_identifier.clone())
+            .build();
         while tries < 10 {
-            let transaction = self
-                .search_transactions(
-                    network_identifier.clone(),
-                    Some(submit_response.transaction_identifier.clone()),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-                .await?;
-            println!("Transaction: {:?}", transaction);
-            println!(
-                "Transaction hash looked for: {:?}",
-                submit_response.transaction_identifier
-            );
+            let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
@@ -488,33 +501,9 @@ impl RosettaClient {
 
     pub async fn search_transactions(
         &self,
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-        type_: Option<String>,
-        max_block: Option<i64>,
-        limit: Option<i64>,
-        offset: Option<i64>,
+        request: &SearchTransactionsRequest,
     ) -> Result<SearchTransactionsResponse, Error> {
-        self.call_endpoint(
-            "/search/transactions",
-            &SearchTransactionsRequest {
-                network_identifier,
-                transaction_identifier,
-                account_identifier,
-                coin_identifier: None,
-                address: None,
-                type_,
-                success: None,
-                currency: None,
-                operator: None,
-                status: None,
-                offset,
-                max_block,
-                limit,
-            },
-        )
-        .await
+        self.call_endpoint("/search/transactions", request).await
     }
 
     pub async fn mempool(

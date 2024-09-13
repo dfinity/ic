@@ -38,9 +38,8 @@ use serde::Deserialize;
 use thiserror::Error;
 
 pub type SubnetIndex = u64;
-pub mod constants;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize)]
 pub enum SubnetRunningState {
     #[default]
     Active,
@@ -119,7 +118,7 @@ pub struct SubnetConfig {
     pub initial_height: u64,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeSubnetError {
     #[error("threshold signature public key: {source}")]
     ThresholdSigPublicKey {
@@ -173,7 +172,7 @@ pub fn duration_to_millis(unit_delay: Duration) -> u64 {
 
 pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
     let use_app_config =
-        subnet_type == SubnetType::Application && nodes_num <= constants::SMALL_APP_SUBNET_MAX_SIZE;
+        subnet_type == SubnetType::Application && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 
     struct DynamicConfig {
         pub unit_delay: Duration,
@@ -184,17 +183,17 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
 
     let dynamic_config = if use_app_config {
         DynamicConfig {
-            unit_delay: constants::UNIT_DELAY_APP_SUBNET,
-            initial_notary_delay: constants::INITIAL_NOTARY_DELAY_APP_SUBNET,
-            dkg_interval_length: constants::DKG_INTERVAL_LENGTH_APP_SUBNET,
-            max_ingress_bytes_per_message: constants::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+            unit_delay: ic_limits::UNIT_DELAY_APP_SUBNET,
+            initial_notary_delay: ic_limits::INITIAL_NOTARY_DELAY_APP_SUBNET,
+            dkg_interval_length: ic_limits::DKG_INTERVAL_HEIGHT.into(),
+            max_ingress_bytes_per_message: ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
         }
     } else {
         DynamicConfig {
-            unit_delay: constants::UNIT_DELAY_NNS_SUBNET,
-            initial_notary_delay: constants::INITIAL_NOTARY_DELAY_NNS_SUBNET,
-            dkg_interval_length: constants::DKG_INTERVAL_LENGTH_NNS_SUBNET,
-            max_ingress_bytes_per_message: constants::MAX_INGRESS_BYTES_PER_MESSAGE_NNS_SUBNET,
+            unit_delay: ic_limits::UNIT_DELAY_NNS_SUBNET,
+            initial_notary_delay: ic_limits::INITIAL_NOTARY_DELAY_NNS_SUBNET,
+            dkg_interval_length: ic_limits::DKG_INTERVAL_HEIGHT.into(),
+            max_ingress_bytes_per_message: ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_NNS_SUBNET,
         }
     };
 
@@ -203,9 +202,9 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
         initial_notary_delay: dynamic_config.initial_notary_delay,
         dkg_interval_length: dynamic_config.dkg_interval_length,
         max_ingress_bytes_per_message: dynamic_config.max_ingress_bytes_per_message,
-        max_ingress_messages_per_block: constants::MAX_INGRESS_MESSAGES_PER_BLOCK,
-        max_block_payload_size: constants::MAX_BLOCK_PAYLOAD_SIZE,
-        dkg_dealings_per_block: constants::DKG_DEALINGS_PER_BLOCK,
+        max_ingress_messages_per_block: ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK,
+        max_block_payload_size: ic_limits::MAX_BLOCK_PAYLOAD_SIZE,
+        dkg_dealings_per_block: ic_limits::DKG_DEALINGS_PER_BLOCK,
     }
 }
 
@@ -312,9 +311,6 @@ impl SubnetConfig {
             subnet_type: self.subnet_type.into(),
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
-            max_instructions_per_message: self.max_instructions_per_message,
-            max_instructions_per_round: self.max_instructions_per_round,
-            max_instructions_per_install_code: self.max_instructions_per_install_code,
             features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,

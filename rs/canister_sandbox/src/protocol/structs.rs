@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use super::id::MemoryId;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Round(pub u64);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SandboxExecInput {
     pub func_ref: FuncRef,
     pub api_type: ApiType,
@@ -32,7 +32,7 @@ pub struct SandboxExecInput {
     pub wasm_reserved_pages: NumWasmPages,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SandboxExecOutput {
     pub slice: SliceExecutionOutput,
     pub wasm: WasmExecutionOutput,
@@ -48,13 +48,13 @@ impl SandboxExecOutput {
 }
 
 /// Describes the memory changes performed by execution.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MemoryModifications {
     pub page_delta: PageDeltaSerialization,
     pub size: NumWasmPages,
 }
 
-#[derive(Serialize, Default, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Default, Debug, Deserialize, Clone, PartialEq)]
 pub struct StateModifications {
     /// Modifications in the execution state of the canister.
     ///
@@ -70,7 +70,7 @@ pub struct StateModifications {
     pub system_state_changes: SystemStateChanges,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
 pub struct ExecutionStateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,

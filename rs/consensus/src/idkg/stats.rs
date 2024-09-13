@@ -1,4 +1,4 @@
-//! ECDSA specific stats.
+//! IDKG specific stats.
 
 use crate::idkg::metrics::{
     IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
@@ -109,7 +109,7 @@ impl IDkgStatsImpl {
             .observe(transcript_stats.start_time.elapsed().as_secs_f64());
     }
 
-    /// Called when the quadruple completed building. Reports the accumulated
+    /// Called when the pre-signature completed building. Reports the accumulated
     /// stats.
     fn on_pre_signature_done(&self, pre_signature_stats: &PreSignatureStats) {
         self.pre_signature_metrics

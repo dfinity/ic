@@ -6,7 +6,7 @@ use crate::framework::{
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
 use framework::test_threshold_key_ids;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
@@ -207,7 +207,7 @@ fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
-                    maliciously_corrupt_ecdsa_dealings: true,
+                    maliciously_corrupt_idkg_dealings: true,
                     ..MaliciousFlags::default()
                 };
                 malicious.push(malicious::with_malicious_flags(malicious_flags));
@@ -277,15 +277,9 @@ fn run_test(
             .zip(inst_deps.iter())
             .zip(cryptos.iter())
         {
-            let membership = Membership::new(
-                deps.consensus_pool.read().unwrap().get_cache(),
-                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
-                subnet_id,
-            );
-            let membership = Arc::new(membership);
             let modifier = modifiers.pop();
             runner.add_instance(
-                membership.clone(),
+                deps.consensus_pool.read().unwrap().get_cache(),
                 crypto.clone(),
                 crypto.clone(),
                 modifier,

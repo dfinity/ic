@@ -2,17 +2,20 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId, Status,
+    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
+use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
+use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, Transaction,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
@@ -21,10 +24,8 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
-use on_wire::FromWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -175,126 +176,6 @@ fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response");
     assert_eq!(account_balance, accountidentifier_balance);
     accountidentifier_balance
-}
-
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status).expect("Failed to decode status response")
-}
-
-fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
-    let res = env
-        .query(ledger_id, "tip_of_chain_pb", vec![])
-        .expect("Failed to send tip_of_chain_pb request")
-        .bytes();
-    let tip: icp_ledger::TipOfChainRes = dfn_protobuf::ProtoBuf::from_bytes(res)
-        .map(|c| c.0)
-        .expect("failed to decode tip_of_chain_pb result");
-    tip.tip_index
-}
-
-fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
-    let req = GetBlocksArgs {
-        start: 0u64,
-        length: u32::MAX as usize,
-    };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
-    let res = env
-        .query(ledger_id, "query_encoded_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
-    let res =
-        Decode!(&res, QueryEncodedBlocksResponse).expect("Failed to decode GetBlocksResponse");
-    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
-    // most tests.
-    let blocks_in_ledger = res.chain_length.saturating_sub(res.first_block_index);
-    assert!(
-        blocks_in_ledger <= MAX_BLOCKS_PER_REQUEST as u64,
-        "Chain length: {}, first block index: {}, max blocks per request: {}",
-        res.chain_length,
-        res.first_block_index,
-        MAX_BLOCKS_PER_REQUEST
-    );
-    let mut blocks = vec![];
-    for archived in res.archived_blocks {
-        for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
-            let req = GetBlocksArgs {
-                start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
-            };
-            let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
-            let canister_id = archived.callback.canister_id;
-            let res = env
-                .query(
-                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                    archived.callback.method.clone(),
-                    req,
-                )
-                .expect("Failed to send get_blocks request to archive")
-                .bytes();
-            let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
-                .unwrap()
-                .unwrap();
-            blocks.extend(res);
-        }
-    }
-    blocks.extend(res.blocks);
-    blocks
-        .into_iter()
-        .map(icp_ledger::Block::decode)
-        .collect::<Result<Vec<icp_ledger::Block>, String>>()
-        .unwrap()
-}
-
-fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
-    let req = GetBlocksArgs {
-        start: 0u64,
-        length: u32::MAX as usize,
-    };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
-    let res = env
-        .query(ledger_id, "query_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
-    let res = Decode!(&res, QueryBlocksResponse).expect("Failed to decode QueryBlocksResponse");
-    let mut blocks = vec![];
-    for archived in res.archived_blocks {
-        for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
-            let req = GetBlocksArgs {
-                start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
-            };
-            let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
-            let canister_id = archived.callback.canister_id;
-            let res = env
-                .query(
-                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                    archived.callback.method.clone(),
-                    req,
-                )
-                .expect("Failed to send get_blocks request to archive")
-                .bytes();
-            let res = Decode!(&res, icp_ledger::GetBlocksResult).unwrap().unwrap();
-            blocks.extend(
-                res.blocks
-                    .into_iter()
-                    .map(icp_ledger::Block::try_from)
-                    .collect::<Result<Vec<icp_ledger::Block>, String>>()
-                    .unwrap(),
-            );
-        }
-    }
-    blocks.extend(
-        res.blocks
-            .into_iter()
-            .map(icp_ledger::Block::try_from)
-            .collect::<Result<Vec<icp_ledger::Block>, String>>()
-            .unwrap(),
-    );
-    blocks
 }
 
 fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
@@ -566,26 +447,6 @@ fn get_account_identifier_transactions(
 }
 
 const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
-
-// Helper function that calls tick on env until either
-// the index canister has synced all the blocks up to the
-// last one in the ledger or enough attempts passed and therefore
-// it fails
-fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // no reason for this number
-    let mut num_blocks_synced = u64::MAX;
-    let mut chain_length = u64::MAX;
-    for _i in 0..MAX_ATTEMPTS {
-        env.advance_time(SYNC_STEP_SECONDS);
-        env.tick();
-        num_blocks_synced = status(env, index_id).num_blocks_synced;
-        chain_length = icp_ledger_tip(env, ledger_id) + 1;
-        if num_blocks_synced == chain_length {
-            return;
-        }
-    }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
-}
 
 #[track_caller]
 fn assert_tx_eq(tx1: &SettledTransaction, tx2: &SettledTransaction) {
@@ -1734,7 +1595,15 @@ fn check_block_endpoint_limits() {
         Tokens::from_e8s(1_000_000_000_000),
     );
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        ArchiveOptions {
+            trigger_threshold: MAX_BLOCKS_PER_REQUEST,
+            num_blocks_to_archive: MAX_BLOCKS_PER_REQUEST / 2,
+            ..default_archive_options()
+        },
+    );
     let index_id = install_index(env, ledger_id);
 
     for _ in 0..MAX_BLOCKS_PER_REQUEST {
@@ -1791,6 +1660,24 @@ fn check_block_endpoint_limits() {
         get_account_transactions_update_len(env, index_id, user_principal, &account(2, 0)),
         MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
     );
+}
+
+#[test]
+fn test_index_http_request_decoding_quota() {
+    // check that the index canister rejects large http requests.
+
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(
+        AccountIdentifier::from(account(1, 0)),
+        Tokens::from_e8s(1_000_000_000_000),
+    );
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    test_http_request_decoding_quota(env, index_id);
 }
 
 mod metrics {

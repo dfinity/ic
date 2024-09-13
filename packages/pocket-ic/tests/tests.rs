@@ -1,5 +1,6 @@
-use candid::{decode_one, encode_one, Principal};
+use candid::{decode_one, encode_one, CandidType, Principal};
 use ic_base_types::PrincipalId;
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
@@ -15,6 +16,7 @@ use pocket_ic::{
     },
     update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, io::Read, time::SystemTime};
 
@@ -1056,6 +1058,101 @@ fn test_canister_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
+#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
+pub enum SchnorrAlgorithm {
+    #[serde(rename = "bip340secp256k1")]
+    Bip340Secp256k1,
+    #[serde(rename = "ed25519")]
+    Ed25519,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+struct SchnorrKeyId {
+    pub algorithm: SchnorrAlgorithm,
+    pub name: String,
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+struct SchnorrPublicKeyResponse {
+    pub public_key: Vec<u8>,
+    pub chain_code: Vec<u8>,
+}
+
+#[test]
+fn test_schnorr() {
+    // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet() // this subnet has ECDSA keys
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We define the message, derivation path, and ECDSA key ID to use in this test.
+    let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
+    let derivation_path = vec!["my message".as_bytes().to_vec()];
+    for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+        for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+            let key_id = SchnorrKeyId {
+                algorithm,
+                name: name.to_string(),
+            };
+
+            // We get the Schnorr public key and signature via update calls to the test canister.
+            let schnorr_public_key = update_candid::<
+                (Option<Principal>, _, _),
+                (Result<SchnorrPublicKeyResponse, String>,),
+            >(
+                &pic,
+                canister,
+                "schnorr_public_key",
+                (None, derivation_path.clone(), key_id.clone()),
+            )
+            .unwrap()
+            .0
+            .unwrap();
+            let schnorr_signature = update_candid::<_, (Result<Vec<u8>, String>,)>(
+                &pic,
+                canister,
+                "sign_with_schnorr",
+                (message, derivation_path.clone(), key_id.clone()),
+            )
+            .unwrap()
+            .0
+            .unwrap();
+
+            // We verify the Schnorr signature.
+            match key_id.algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => {
+                    use k256::ecdsa::signature::hazmat::PrehashVerifier;
+                    use k256::schnorr::{Signature, VerifyingKey};
+                    let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
+                    let sig = Signature::try_from(schnorr_signature.as_slice()).unwrap();
+                    vk.verify_prehash(message, &sig).unwrap();
+                }
+                SchnorrAlgorithm::Ed25519 => {
+                    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+                    let pk: [u8; 32] = schnorr_public_key.public_key.try_into().unwrap();
+                    let vk = VerifyingKey::from_bytes(&pk).unwrap();
+                    let signature = Signature::from_slice(&schnorr_signature).unwrap();
+                    vk.verify(message, &signature).unwrap();
+                }
+            };
+        }
+    }
+}
+
 #[test]
 fn test_ecdsa() {
     use k256::ecdsa::signature::hazmat::PrehashVerifier;
@@ -1085,36 +1182,39 @@ fn test_ecdsa() {
     hasher.update(message);
     let message_hash: Vec<u8> = hasher.finalize().to_vec();
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let key_id = "dfx_test_key1".to_string();
 
-    // We get the ECDSA public key and signature via update calls to the test canister.
-    let ecsda_public_key = update_candid::<
-        (Option<Principal>, Vec<Vec<u8>>, String),
-        (Result<EcdsaPublicKeyResponse, String>,),
-    >(
-        &pic,
-        canister,
-        "ecdsa_public_key",
-        (None, derivation_path.clone(), key_id.clone()),
-    )
-    .unwrap()
-    .0
-    .unwrap();
-    let ecdsa_signature =
-        update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
+    for key_id in ["key_1", "test_key_1", "dfx_test_key1"] {
+        let key_id = key_id.to_string();
+
+        // We get the ECDSA public key and signature via update calls to the test canister.
+        let ecsda_public_key = update_candid::<
+            (Option<Principal>, Vec<Vec<u8>>, String),
+            (Result<EcdsaPublicKeyResponse, String>,),
+        >(
             &pic,
             canister,
-            "sign_with_ecdsa",
-            (message_hash.clone(), derivation_path, key_id),
+            "ecdsa_public_key",
+            (None, derivation_path.clone(), key_id.clone()),
         )
         .unwrap()
         .0
         .unwrap();
+        let ecdsa_signature =
+            update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
+                &pic,
+                canister,
+                "sign_with_ecdsa",
+                (message_hash.clone(), derivation_path.clone(), key_id),
+            )
+            .unwrap()
+            .0
+            .unwrap();
 
-    // We verify the ECDSA signature.
-    let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&ecsda_public_key.public_key).unwrap();
-    let sig = k256::ecdsa::Signature::try_from(ecdsa_signature.as_slice()).unwrap();
-    pk.verify_prehash(&message_hash, &sig).unwrap();
+        // We verify the ECDSA signature.
+        let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&ecsda_public_key.public_key).unwrap();
+        let sig = k256::ecdsa::Signature::try_from(ecdsa_signature.as_slice()).unwrap();
+        pk.verify_prehash(&message_hash, &sig).unwrap();
+    }
 }
 
 #[test]
@@ -1216,6 +1316,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
+        additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1224,8 +1325,9 @@ fn test_canister_http() {
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: HttpResponse = decode_one(&data).unwrap();
-            assert_eq!(http_response.body, body);
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            assert_eq!(http_response.unwrap().body, body);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
@@ -1233,6 +1335,19 @@ fn test_canister_http() {
     // There should be no more pending canister http outcalls.
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+fn test_canister_http_with_transform() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
 
     // Submit an update call to the test canister making a canister http outcall
     // with a transform function (clearing http response headers and setting
@@ -1254,6 +1369,7 @@ fn test_canister_http() {
     assert_eq!(canister_http_requests.len(), 1);
     let canister_http_request = &canister_http_requests[0];
 
+    let body = b"hello".to_vec();
     let mock_canister_http_response = MockCanisterHttpResponse {
         subnet_id: canister_http_request.subnet_id,
         request_id: canister_http_request.request_id,
@@ -1262,6 +1378,7 @@ fn test_canister_http() {
             headers: vec![],
             body: body.clone(),
         }),
+        additional_responses: vec![],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
@@ -1283,4 +1400,120 @@ fn test_canister_http() {
     // There should be no more pending canister http outcalls.
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+fn test_canister_http_with_diverging_responses() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock diverging canister http outcall responses.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let response = |i: u64| {
+        CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: format!("hello{}", i / 2).as_bytes().to_vec(),
+        })
+    };
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: response(0),
+        additional_responses: (1..13).map(response).collect(),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
+
+    // Now the test canister will receive an error
+    // and reply to the ingress message from the test driver
+    // relaying the error.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            let (reject_code, err) = http_response.unwrap_err();
+            assert_eq!(reject_code, RejectionCode::SysTransient);
+            let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
+            assert_eq!(err, expected);
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+}
+
+#[test]
+#[should_panic(expected = "InvalidMockCanisterHttpResponses((2, 13))")]
+fn test_canister_http_with_one_additional_response() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock diverging canister http outcall responses.
+    pic.submit_call(
+        can_id,
+        Principal::anonymous(),
+        "canister_http",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let body = b"hello".to_vec();
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        }),
+        additional_responses: vec![CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        })],
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
 }

@@ -208,22 +208,22 @@ fn should_block_deposit_from_blocked_address() {
 #[test]
 fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
-    let (ankr_logs, public_node_logs) = {
-        let ankr_log_entry = deposit_params.eth_log_entry();
-        let mut llama_nodes_log_entry = ankr_log_entry.clone();
+    let (block_pi_logs, public_node_logs) = {
+        let block_pi_log_entry = deposit_params.eth_log_entry();
+        let mut llama_nodes_log_entry = block_pi_log_entry.clone();
         llama_nodes_log_entry.amount += 1;
         (
-            vec![ethers_core::types::Log::from(ankr_log_entry)],
+            vec![ethers_core::types::Log::from(block_pi_log_entry)],
             vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
         )
     };
-    assert_ne!(ankr_logs, public_node_logs);
+    assert_ne!(block_pi_logs, public_node_logs);
 
     CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-            mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
+            mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::LlamaNodes, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -354,7 +354,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .start_processing_withdrawals()
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Ankr,
+                JsonRpcProvider::BlockPi,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740742_u64.into()
                 },
@@ -1069,6 +1069,8 @@ fn should_retrieve_minter_info() {
         .setup;
     let info_after_withdrawal = cketh.get_minter_info();
     let price = cketh.eip_1559_transaction_price_expecting_ok(None);
+    let debited_amount =
+        withdrawal_amount - (price.max_transaction_fee - GAS_USED * EFFECTIVE_GAS_PRICE);
     assert_eq!(
         info_after_withdrawal,
         MinterInfo {
@@ -1077,6 +1079,9 @@ fn should_retrieve_minter_info() {
                 max_priority_fee_per_gas: price.max_priority_fee_per_gas,
                 timestamp: price.timestamp.unwrap(),
             }),
+            eth_balance: info_after_deposit
+                .eth_balance
+                .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
     );

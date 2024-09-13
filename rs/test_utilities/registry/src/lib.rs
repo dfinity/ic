@@ -208,9 +208,6 @@ pub fn test_subnet_record() -> SubnetRecord {
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
-        max_instructions_per_message: 5_000_000_000,
-        max_instructions_per_round: 7_000_000_000,
-        max_instructions_per_install_code: 200_000_000_000,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
@@ -317,6 +314,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
         self.record.max_number_of_canisters = max_number_of_canisters;
+        self
+    }
+
+    pub fn with_dkg_dealings_per_block(mut self, dkg_dealings_per_block: u64) -> Self {
+        self.record.dkg_dealings_per_block = dkg_dealings_per_block;
         self
     }
 

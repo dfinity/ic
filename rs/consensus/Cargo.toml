@@ -15,17 +15,17 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../types/error_types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-replicated-state = { path = "../replicated_state" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
@@ -42,8 +42,9 @@ criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
+ic-consensus = { path = ".", features = ["malicious_code"] }
 ic-consensus-mocks = { path = "./mocks" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
@@ -67,12 +68,14 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
+proptest = { workspace = true }
 prost = { workspace = true }
 serde_cbor = { workspace = true }
-strum = { workspace = true }
 slog-async = { workspace = true }
 slog-envlogger = "2.2.0"
 slog-term = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]
@@ -82,3 +85,4 @@ harness = false
 [features]
 default = []
 malicious_code = []
+proptest = []

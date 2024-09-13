@@ -41,7 +41,6 @@ pub struct HypervisorMetrics {
     largest_function_instruction_count: Histogram,
     compile: Histogram,
     max_complexity: Histogram,
-    num_tables: Histogram,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
@@ -95,11 +94,6 @@ impl HypervisorMetrics {
                 "hypervisor_wasm_max_function_complexity",
                 "The maximum function complexity in a wasm module.",
                 decimal_buckets_with_zero(1, 8), //10 - 100M.
-            ),
-            num_tables: metrics_registry.histogram(
-                "hypervisor_wasm_num_tables",
-                "The number of tables in a wasm module.",
-                decimal_buckets_with_zero(0, 0), // 0, 1, 2, 5
             ),
             sigsegv_count: metrics_registry.histogram_vec(
                 "hypervisor_sigsegv_count",
@@ -190,13 +184,11 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
-            num_tables,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
-        self.num_tables.observe(*num_tables as f64);
     }
 }
 

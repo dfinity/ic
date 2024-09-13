@@ -19,11 +19,9 @@ pub type Message = BasicSigned<DealingContent>;
 impl IdentifiableArtifact for Message {
     const NAME: &'static str = "dkg";
     type Id = DkgMessageId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.into()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for Message {
@@ -31,12 +29,10 @@ impl PbArtifact for Message {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::DkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 /// Identifier of a DKG message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct DkgMessageId {
     pub hash: CryptoHashOf<Message>,
     pub height: Height,
@@ -62,6 +58,7 @@ impl From<DkgMessageId> for pb::DkgMessageId {
 
 impl TryFrom<pb::DkgMessageId> for DkgMessageId {
     type Error = ProxyDecodeError;
+
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
             hash: CryptoHash(id.hash.clone()).into(),
@@ -71,7 +68,7 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
 }
 
 /// Holds the content of a DKG dealing
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DealingContent {
     pub version: ReplicaVersion,
@@ -112,6 +109,7 @@ impl From<Message> for pb::DkgMessage {
 
 impl TryFrom<pb::DkgMessage> for Message {
     type Error = ProxyDecodeError;
+
     fn try_from(message: pb::DkgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
             content: DealingContent {
@@ -136,7 +134,7 @@ impl HasVersion for DealingContent {
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Summary {
     /// The registry version used to create this summary.
@@ -367,20 +365,23 @@ impl From<&Summary> for pb::Summary {
 
 fn build_tagged_transcripts_map(
     transcripts: &[pb::TaggedNiDkgTranscript],
-) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, String> {
+) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
     transcripts
         .iter()
         .map(|tagged_transcript| {
             tagged_transcript
                 .transcript
                 .as_ref()
-                .ok_or_else(|| "Transcript missing".to_string())
+                .ok_or_else(|| ProxyDecodeError::MissingField("TaggedNiDkgTranscript::transcript"))
                 .and_then(|t| {
                     Ok((
                         NiDkgTag::try_from(tagged_transcript.tag).map_err(|e| {
-                            format!("Failed to convert NiDkgTag of transcript: {:?}", e)
+                            ProxyDecodeError::Other(format!(
+                                "Failed to convert NiDkgTag of transcript: {:?}",
+                                e
+                            ))
                         })?,
-                        NiDkgTranscript::try_from(t)?,
+                        NiDkgTranscript::try_from(t).map_err(ProxyDecodeError::Other)?,
                     ))
                 })
         })
@@ -446,7 +447,8 @@ fn build_transcript_result(
 }
 
 impl TryFrom<pb::Summary> for Summary {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(summary: pb::Summary) -> Result<Self, Self::Error> {
         Ok(Self {
             registry_version: RegistryVersion::from(summary.registry_version),
@@ -454,7 +456,8 @@ impl TryFrom<pb::Summary> for Summary {
                 .configs
                 .into_iter()
                 .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id, c)))
-                .collect::<Result<BTreeMap<_, _>, _>>()?,
+                .collect::<Result<BTreeMap<_, _>, _>>()
+                .map_err(ProxyDecodeError::Other)?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
@@ -462,7 +465,8 @@ impl TryFrom<pb::Summary> for Summary {
             height: Height::from(summary.height),
             transcripts_for_new_subnets_with_callback_ids: build_transcripts_vec_from_pb(
                 summary.transcripts_for_new_subnets_with_callback_ids,
-            )?,
+            )
+            .map_err(ProxyDecodeError::Other)?,
             initial_dkg_attempts: build_initial_dkg_attempts_map(&summary.initial_dkg_attempts),
         })
     }
@@ -471,7 +475,7 @@ impl TryFrom<pb::Summary> for Summary {
 /// The DKG payload is either the DKG Summary, if this payload belongs to a
 /// start block of a new DKG interval, or a tuple containing the start height
 /// and the set of valid dealings corresponding to the current interval.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
@@ -484,7 +488,7 @@ pub type DealingMessages = Vec<Message>;
 
 /// Dealings contains dealing messages and the height at which this DKG interval
 /// started
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Dealings {
     /// The height of the DKG interval that this object belongs to
@@ -494,17 +498,16 @@ pub struct Dealings {
 }
 
 impl TryFrom<pb::Dealings> for Dealings {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(dealings: pb::Dealings) -> Result<Self, Self::Error> {
         Ok(Self {
             start_height: Height::from(dealings.summary_height),
             messages: dealings
                 .dealings
                 .into_iter()
-                .map(|protobuf_dealing| {
-                    Message::try_from(protobuf_dealing).expect("Couldn't parse the dealing")
-                })
-                .collect(),
+                .map(Message::try_from)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -563,9 +566,13 @@ impl From<&Dealings> for pb::DkgPayload {
 }
 
 impl TryFrom<pb::DkgPayload> for Payload {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
-        match summary.val.ok_or("Val missing in DkgPayload")? {
+        match summary
+            .val
+            .ok_or(ProxyDecodeError::MissingField("DkgPayload::val"))?
+        {
             pb::dkg_payload::Val::Summary(summary) => {
                 Ok(Payload::Summary(Summary::try_from(summary)?))
             }

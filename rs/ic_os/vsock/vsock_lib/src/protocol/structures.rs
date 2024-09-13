@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 pub type Response = Result<Payload, String>;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Payload {
     HostOSVsockVersion(HostOSVsockVersion),
     HostOSVersion(String),
@@ -19,7 +19,7 @@ impl fmt::Display for Payload {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Request {
     #[serde(rename = "sender_cid")]
     pub guest_cid: u32,
@@ -38,10 +38,8 @@ impl fmt::Display for Request {
 }
 
 /// All commands that can be sent to the Host server
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Command {
-    #[serde(rename = "set-node-id")]
-    SetNodeId(NodeIdData),
     #[serde(rename = "attach-hsm")]
     AttachHSM,
     #[serde(rename = "detach-hsm")]
@@ -57,9 +55,6 @@ pub enum Command {
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Command::SetNodeId(node_id_data) => {
-                write!(f, "Command: Set Node ID\nNode ID: {}", node_id_data.node_id)
-            }
             Command::AttachHSM => write!(f, "Command: Attach HSM"),
             Command::DetachHSM => write!(f, "Command: Detach HSM"),
             Command::Upgrade(upgrade_data) => write!(
@@ -78,7 +73,7 @@ impl fmt::Display for Command {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct HostOSVsockVersion {
     pub major: u32,
     pub minor: u32,
@@ -91,20 +86,14 @@ impl fmt::Display for HostOSVsockVersion {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct NodeIdData {
-    #[serde(rename = "node-id")]
-    pub node_id: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct UpgradeData {
     pub url: String,
     #[serde(rename = "target-hash")]
     pub target_hash: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NotifyData {
     pub count: u32,
     pub message: String,

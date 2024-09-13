@@ -5,7 +5,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
@@ -45,9 +45,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 100,
                 ssh_readonly_access: vec![],
@@ -88,9 +85,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_type: None,
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
-                max_instructions_per_message: None,
-                max_instructions_per_round: Some(8_000_000_000),
-                max_instructions_per_install_code: None,
                 features: None,
                 ecdsa_config: None,
                 ecdsa_key_signing_enable: None,
@@ -172,9 +166,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     subnet_type: SubnetType::Application.into(),
                     is_halted: true,
                     halt_at_cup_height: true,
-                    max_instructions_per_message: 5_000_000_000,
-                    max_instructions_per_round: 8_000_000_000,
-                    max_instructions_per_install_code: 200_000_000_000,
                     features: None,
                     max_number_of_canisters: 200,
                     ssh_readonly_access: vec!["pub_key_0".to_string()],

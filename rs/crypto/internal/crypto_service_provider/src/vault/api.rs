@@ -20,7 +20,7 @@ use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -34,7 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
     SecretKeyNotFound {
         algorithm: AlgorithmId,
@@ -55,14 +55,14 @@ pub enum CspBasicSignatureError {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureKeygenError {
     InternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
     TransientInternalError { internal_error: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspMultiSignatureError {
     SecretKeyNotFound {
         algorithm: AlgorithmId,
@@ -80,7 +80,7 @@ pub enum CspMultiSignatureError {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspMultiSignatureKeygenError {
     MalformedPublicKey {
         algorithm: AlgorithmId,
@@ -98,19 +98,19 @@ pub enum CspMultiSignatureKeygenError {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSignatureKeygenError {
     UnsupportedAlgorithm { algorithm: AlgorithmId },
     InvalidArgument { message: String },
     InternalError { internal_error: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspSecretKeyStoreContainsError {
     TransientInternalError { internal_error: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspPublicKeyStoreError {
     TransientInternalError(String),
 }
@@ -137,7 +137,7 @@ impl From<CspPublicKeyStoreError> for CurrentNodePublicKeysError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspTlsKeygenError {
     InvalidArguments { message: String },
     InternalError { internal_error: String },
@@ -145,7 +145,7 @@ pub enum CspTlsKeygenError {
     TransientInternalError { internal_error: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspTlsSignError {
     SecretKeyNotFound {
         key_id: KeyId,
@@ -165,7 +165,7 @@ pub enum CspTlsSignError {
     },
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct NodeKeysErrors {
     pub node_signing_key_error: Option<NodeKeysError>,
     pub committee_signing_key_error: Option<NodeKeysError>,
@@ -243,7 +243,7 @@ impl From<&NodeKeysErrors> for KeyCounts {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct NodeKeysError {
     pub external_public_key_error: Option<ExternalPublicKeyError>,
     pub local_public_key_error: Option<LocalPublicKeyError>,
@@ -314,7 +314,7 @@ impl From<&NodeKeysError> for KeyCounts {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ExternalPublicKeyError(pub Box<String>);
 
 impl From<KeyIdInstantiationError> for ExternalPublicKeyError {
@@ -323,7 +323,7 @@ impl From<KeyIdInstantiationError> for ExternalPublicKeyError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum LocalPublicKeyError {
     /// No local public key exists.
     NotFound,
@@ -331,7 +331,7 @@ pub enum LocalPublicKeyError {
     Mismatch,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum SecretKeyError {
     /// Unable to compute the key ID using the externally provided public key.
     CannotComputeKeyId,
@@ -339,7 +339,7 @@ pub enum SecretKeyError {
     NotFound,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum PksAndSksContainsErrors {
     /// If one or more keys were missing, or were malformed, or did not match the corresponding
     /// external public key.
@@ -348,7 +348,7 @@ pub enum PksAndSksContainsErrors {
     TransientInternalError(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum ValidatePksAndSksError {
     /// Public key store does not contain any public key
     EmptyPublicKeyStore,
@@ -366,7 +366,7 @@ pub enum ValidatePksAndSksError {
     TransientInternalError(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum ValidatePksAndSksKeyPairError {
     /// Expected public key is missing
     PublicKeyNotFound,
@@ -692,7 +692,7 @@ pub trait PublicAndSecretKeyStoreCspVault {
     ///   and potentially additionally stored public keys, like rotated IDKG dealing encryption public keys)
     ///   have a corresponding secret key in the secret key store,
     /// * all public keys are valid, also with respect to the current time.
-    /// If all check passes, the current node public keys in validated form is returned.
+    ///   If all check passes, the current node public keys in validated form is returned.
     ///
     /// # Errors
     /// The method return on the first encountered error and will not check further any other key pairs.
@@ -836,7 +836,7 @@ pub enum IDkgCreateDealingVaultError {
 pub trait ThresholdEcdsaSignerCspVault {
     /// Generate a signature share.
     #[allow(clippy::too_many_arguments)]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -847,11 +847,11 @@ pub trait ThresholdEcdsaSignerCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError>;
 }
 
 /// Type-safe serialization of [`IDkgTranscriptInternal`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IDkgTranscriptInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<Vec<u8>> for IDkgTranscriptInternalBytes {
@@ -869,7 +869,7 @@ impl AsRef<[u8]> for IDkgTranscriptInternalBytes {
 }
 
 /// Type-safe serialization of [`IDkgDealingInternalBytes`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IDkgDealingInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl IDkgDealingInternalBytes {
@@ -911,7 +911,7 @@ pub trait ThresholdSchnorrSignerCspVault {
 
 /// Type-safe serialization of a threshold Schnorr signature share, e.g., a
 /// threshold BIP340 signature share.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ThresholdSchnorrSigShareBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl ThresholdSchnorrSigShareBytes {
@@ -937,7 +937,7 @@ impl AsRef<[u8]> for ThresholdSchnorrSigShareBytes {
 }
 
 /// Vault-level error for threshold Schnorr signature share creation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdSchnorrCreateSigShareVaultError {
     /// If some arguments are invalid, e.g., the algorithm ID is invalid.
     InvalidArguments(String),
@@ -954,7 +954,7 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum PublicRandomSeedGeneratorError {
     /// Internal error, e.g., an RPC error.
     TransientInternalError { internal_error: String },

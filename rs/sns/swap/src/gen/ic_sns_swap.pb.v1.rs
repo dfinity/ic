@@ -152,8 +152,9 @@ pub struct Swap {
     /// Specified on creation. That is, always specified and immutable.
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
-    /// Specified in the transition from PENDING to OPEN and immutable
-    /// thereafter.
+    /// Derived from `init`, always specified and immutable. In most cases `init`
+    /// should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(message, optional, tag = "4")]
     pub params: ::core::option::Option<Params>,
     /// Neurons' Fund participation.  Specified in the transition from
@@ -173,8 +174,11 @@ pub struct Swap {
     /// to the outcome of the swap.
     #[prost(message, repeated, tag = "7")]
     pub neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
-    /// Gets set to whatever value is in the corresponding field of OpenRequest
-    /// (that field is required at the application level).
+    /// The proposal ID that was used to create the SNS that opened this swap.
+    /// Note: the name is a historical artifact because the swap used to be opened
+    /// with an OpenSnsTokenSwap request.
+    /// This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(uint64, optional, tag = "9")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
     /// A lock stored in Swap state. If set to true, then a finalize_swap
@@ -361,9 +365,6 @@ pub struct Init {
     /// swap.
     #[prost(uint64, optional, tag = "26")]
     pub nns_proposal_id: ::core::option::Option<u64>,
-    /// The Neurons' Fund participants of this SNS decentralization swap.
-    #[prost(message, optional, tag = "27")]
-    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
     /// Controls whether swap finalization should be attempted automatically in the
     /// canister heartbeat. If set to false, `finalize_swap` must be called
     /// manually. Note: it is safe to call `finalize_swap` multiple times
@@ -466,14 +467,6 @@ pub struct LinearScalingCoefficient {
     #[prost(uint64, optional, tag = "5")]
     pub intercept_icp_e8s: ::core::option::Option<u64>,
 }
-/// Represents multiple Neurons' Fund participants.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NeuronsFundParticipants {
-    #[prost(message, repeated, tag = "1")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
-}
 /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -486,6 +479,9 @@ pub struct CfNeuron {
     /// with this neuron.
     #[prost(uint64, tag = "2")]
     pub amount_icp_e8s: u64,
+    /// The principals that can vote, propose, and follow on behalf of this neuron.
+    #[prost(message, optional, tag = "4")]
+    pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     /// Idempotency flag indicating whether the neuron recipes have been created for
     /// the CfNeuron. When set to true, it signifies that the action of creating neuron
     /// recipes has been performed on this structure. If the action is retried, this flag
@@ -498,12 +494,18 @@ pub struct CfNeuron {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfParticipant {
-    /// The principal that can vote on behalf of these Neurons' Fund neurons.
-    #[prost(string, tag = "1")]
-    pub hotkey_principal: ::prost::alloc::string::String,
+    /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    #[prost(message, optional, tag = "3")]
+    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// Information about the participating neurons. Must not be empty.
     #[prost(message, repeated, tag = "2")]
     pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
+    /// The principal that can vote on behalf of these Neurons' Fund neurons.
+    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+    /// TODO(NNS1-3198): Remove
+    #[deprecated]
+    #[prost(string, tag = "1")]
+    pub hotkey_principal: ::prost::alloc::string::String,
 }
 /// The construction parameters for the basket of neurons created for all
 /// investors in the decentralization swap.
@@ -681,10 +683,22 @@ pub struct DirectInvestment {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CfInvestment {
-    #[prost(string, tag = "1")]
-    pub hotkey_principal: ::prost::alloc::string::String,
+    /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+    #[prost(message, optional, tag = "3")]
+    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The principals that can vote, propose, and follow on behalf of this neuron.
+    /// The controller of the corresponding NNS neuron is in the CfParticipant,
+    /// which contains a vector of CfInvestments. This is because the controller
+    /// is the same for all CfInvestments but the hotkeys may differ.
+    #[prost(message, optional, tag = "7")]
+    pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]
     pub nns_neuron_id: u64,
+    /// Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+    /// TODO(NNS1-3198): Remove
+    #[deprecated]
+    #[prost(string, tag = "1")]
+    pub hotkey_principal: ::prost::alloc::string::String,
 }
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Copy,
@@ -812,24 +826,6 @@ pub mod sns_neuron_recipe {
         CommunityFund(super::CfInvestment),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenRequest {
-    /// The parameters of the swap.
-    #[prost(message, optional, tag = "1")]
-    pub params: ::core::option::Option<Params>,
-    /// Neurons' Fund participation.
-    #[prost(message, repeated, tag = "2")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
-    /// The ID of the proposal whose execution consists of calling this method.
-    #[prost(uint64, optional, tag = "3")]
-    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
-}
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenResponse {}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1486,8 +1482,8 @@ pub mod settle_neurons_fund_participation_request {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -1524,10 +1520,6 @@ pub mod settle_neurons_fund_participation_response {
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1549,7 +1541,15 @@ pub mod settle_neurons_fund_participation_response {
 }
 /// The id of a specific neuron, which equals the neuron's subaccount on
 /// the ledger canister (the account that holds the neuron's staked tokens).
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Eq,
+    Ord,
+    PartialOrd,
+)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
@@ -2149,6 +2149,155 @@ pub struct NotifyPaymentFailureRequest {}
 pub struct NotifyPaymentFailureResponse {
     #[prost(message, optional, tag = "1")]
     pub ticket: ::core::option::Option<Ticket>,
+}
+/// TODO(NNS1-3306): Remove this message once SNS Governance uses the same request type.
+/// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronIds {
+    #[prost(message, repeated, tag = "1")]
+    pub neuron_ids: ::prost::alloc::vec::Vec<NeuronId>,
+}
+/// The request for the `claim_swap_neurons` method.
+/// Copied from sns governance.proto. TODO(NNS1-3306): Remove this message once
+/// SNS Governance uses the same request type.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClaimSwapNeuronsRequest {
+    /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
+    /// each NeuronRecipe, one neuron will be created.
+    #[prost(message, optional, tag = "2")]
+    pub neuron_recipes: ::core::option::Option<claim_swap_neurons_request::NeuronRecipes>,
+    /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
+    /// each NeuronParameter, one neuron will be created.
+    /// Deprecated. Use \[`neuron_recipes`\] instead.
+    #[deprecated]
+    #[prost(message, repeated, tag = "1")]
+    pub neuron_parameters: ::prost::alloc::vec::Vec<claim_swap_neurons_request::NeuronParameters>,
+}
+/// Nested message and enum types in `ClaimSwapNeuronsRequest`.
+pub mod claim_swap_neurons_request {
+    /// This type has been replaced by NeuronRecipe and should not be used.
+    /// TODO(NNS1-3198): Remove this message once `NeuronRecipe` is used systematically.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronParameters {
+        /// The PrincipalId that will have permissions when the neuron is created.
+        /// The permissions that are granted are controlled my
+        /// `NervousSystemParameters::neuron_claimer_permissions`. This field
+        /// is required.
+        #[prost(message, optional, tag = "1")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// For Community Fund participants, in addition to the controller (that is
+        /// set to the NNS governance), this is another PrincipalId with permissions.
+        /// Specifically, the PrincipalId who is the controller of the NNS neuron
+        /// that invested in the decentralization sale via the Community Fund will
+        /// be granted the following permissions:
+        ///     - NeuronPermissionType::SubmitProposal
+        ///     - NeuronPermissionType::Vote
+        /// This field is not set for other types of participants, therefore it is optional.
+        #[prost(message, optional, tag = "2")]
+        pub hotkey: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
+        /// created with. This field is required.
+        #[prost(uint64, optional, tag = "3")]
+        pub stake_e8s: ::core::option::Option<u64>,
+        /// The duration in seconds that the neuron's dissolve delay will be set to. Neurons
+        /// that are for Community Fund investors will be automatically set to dissolving,
+        /// while direct investors will be automatically set to non-dissolving.
+        #[prost(uint64, optional, tag = "5")]
+        pub dissolve_delay_seconds: ::core::option::Option<u64>,
+        /// The ID of the NNS neuron whose Community Fund participation resulted in the
+        /// creation of this SNS neuron.
+        #[prost(uint64, optional, tag = "6")]
+        pub source_nns_neuron_id: ::core::option::Option<u64>,
+        /// The ID of the SNS Neuron to be created for the participant. If a Neuron with
+        /// this NeuronId already exists in SNS Governance, the `ClaimSwapNeuronsResponse`
+        /// will return a`ClaimedSwapNeuronStatus::AlreadyExists` for this NeuronId.
+        /// This field is required.
+        #[prost(message, optional, tag = "7")]
+        pub neuron_id: ::core::option::Option<super::NeuronId>,
+        /// The list of NeuronIds that the created Neuron will follow on all SNS Proposal
+        /// Actions known to governance at the time. Additional followees and following
+        /// relations can be added after neuron creation.
+        #[prost(message, repeated, tag = "8")]
+        pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+    }
+    /// Replacement for NeuronParameters. Contains the information needed to set up
+    /// a neuron for a swap participant.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronRecipe {
+        /// The principal that should be the controller of the SNS neuron
+        #[prost(message, optional, tag = "1")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The ID of the SNS neuron
+        #[prost(message, optional, tag = "2")]
+        pub neuron_id: ::core::option::Option<super::NeuronId>,
+        /// The SNS neuron's stake in e8s (10E-8 of a token)
+        #[prost(uint64, optional, tag = "3")]
+        pub stake_e8s: ::core::option::Option<u64>,
+        /// The duration in seconds that the neuron's dissolve delay will be set to.
+        #[prost(uint64, optional, tag = "4")]
+        pub dissolve_delay_seconds: ::core::option::Option<u64>,
+        /// The neurons this neuron should follow
+        #[prost(message, optional, tag = "5")]
+        pub followees: ::core::option::Option<super::NeuronIds>,
+        #[prost(oneof = "neuron_recipe::Participant", tags = "6, 7")]
+        pub participant: ::core::option::Option<neuron_recipe::Participant>,
+    }
+    /// Nested message and enum types in `NeuronRecipe`.
+    pub mod neuron_recipe {
+        /// The info that for a participant in the Neurons' Fund
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct NeuronsFund {
+            /// The neuron ID of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(uint64, optional, tag = "1")]
+            pub nns_neuron_id: ::core::option::Option<u64>,
+            /// The controller of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(message, optional, tag = "2")]
+            pub nns_neuron_controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+            /// The hotkeys of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(message, optional, tag = "3")]
+            pub nns_neuron_hotkeys:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
+        }
+        /// The info that for a direct participant
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct Direct {}
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum Participant {
+            #[prost(message, tag = "6")]
+            Direct(Direct),
+            #[prost(message, tag = "7")]
+            NeuronsFund(NeuronsFund),
+        }
+    }
+    /// Needed to cause prost to generate a type isomorphic to
+    /// Optional<Vec<NeuronRecipe>>.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronRecipes {
+        #[prost(message, repeated, tag = "1")]
+        pub neuron_recipes: ::prost::alloc::vec::Vec<NeuronRecipe>,
+    }
 }
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.

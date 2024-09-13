@@ -1,0 +1,93 @@
+[package]
+name = "ic_consensus_system_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+futures = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-recovery = { path = "../../recovery" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
+ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
+ic_consensus_system_test_utils = { path = "./utils" }
+k256 = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
+reqwest = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[[bin]]
+name = "ic-systest-consensus-performance"
+path = "consensus_performance.rs"
+
+[[bin]]
+name = "ic-systest-adding-nodes-to-subnet-test"
+path = "adding_nodes_to_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-node-graceful-leaving-test"
+path = "node_graceful_leaving_test.rs"
+
+[[bin]]
+name = "ic-systest-replica-determinism-test"
+path = "replica_determinism_test.rs"
+
+[[bin]]
+name = "ic-systest-dual-workload-test"
+path = "dual_workload_test.rs"
+
+[[bin]]
+name = "ic-systest-max-ingress-payload-size-test"
+path = "max_ingress_payload_size_test.rs"
+
+[[bin]]
+name = "ic-systest-max-net-payload-size-test"
+path = "max_xnet_payload_size_test.rs"
+
+[[bin]]
+name = "ic-systest-request-auth-malicious-replica-test"
+path = "request_auth_malicious_replica_test.rs"
+
+[[bin]]
+name = "ic-systest-liveness-with-equivocation-test"
+path = "liveness_with_equivocation_test.rs"
+
+[[bin]]
+name = "ic-systest-safety-test"
+path = "safety_test.rs"
+
+[[bin]]
+name = "ic-systest-catch-up-possible-test"
+path = "catch_up_possible_test.rs"
+
+[[bin]]
+name = "ic-systest-catch-up-loop-prevention-test"
+path = "catch_up_loop_prevention_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-splitting"
+path = "subnet_splitting_test.rs"
+
+[features]
+upload_perf_systest_results = []

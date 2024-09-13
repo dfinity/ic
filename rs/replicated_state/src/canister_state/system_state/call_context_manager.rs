@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Contains all context information related to an incoming call.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// `CallContext` needed to form the eventual reply.
@@ -183,7 +183,7 @@ impl TryFrom<pb::CallContext> for CallContext {
 }
 
 /// The action the caller of `CallContext.on_canister_result` should take.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CallContextAction {
     /// The canister produced a `Reply` for the request which is returned along
     /// with the remaining cycles that the canister did not accept.
@@ -211,7 +211,7 @@ pub enum CallContextAction {
 
 /// Call context and callback stats to initialize and validate `CanisterQueues`
 /// guaranteed response memory reservation and queue capacity stats.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub(crate) struct CallContextManagerStats {
     /// The number of canister update call contexts that have not yet been responded
     /// to.
@@ -411,19 +411,23 @@ impl CallContextManagerStats {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
-    /// Maps call context to its responded status.
+
+    /// Call contexts (including deleted ones) that still have open callbacks.
     call_contexts: BTreeMap<CallContextId, CallContext>,
+
+    /// Callbacks still awaiting response, plus the callback of the currently
+    /// paused or aborted DTS response execution, if any.
     callbacks: BTreeMap<CallbackId, Arc<Callback>>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
     CanisterUpdate(CanisterId, CallbackId, CoarseTime),

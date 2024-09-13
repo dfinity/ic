@@ -1,37 +1,43 @@
 //! This module provides the component responsible for generating and validating
-//! payloads relevant to threshold ECDSA signatures.
+//! payloads relevant to canister threshold signatures.
 //!
-//! # Goal of threshold ECDSA
-//! We want canisters to be able to hold BTC, ETH, and for them to create
-//! bitcoin and ethereum transactions. Since those networks use ECDSA, a
-//! canister must be able to create ECDSA signatures. Since a canister cannot
-//! hold the secret key itself, the secret key will be shared among the replicas
-//! of the subnet, and they must be able to collaboratively create ECDSA
+//! # Goal
+//! We want canisters to be able to hold tokens of other chains, i.e. BTC, ETH, SOL,
+//! and for them to create transactions for these networks, i.e. bitcoin, ethereum,
+//! solana. Since those networks use specific signature schemes such as ECDSA or Schnorr,
+//! a canister must be able to create signatures according to these schemes. Since a
+//! canister cannot hold the secret key itself, the secret key will be shared among the
+//! replicas of the subnet, and they must be able to collaboratively create threshold
 //! signatures.
 //!
 //! # High level implementation design
-//! Each subnet will have a single threshold ECDSA key. From this key, we will
-//! derive per-canister keys. A canister can via a system API request an ECDSA
-//! signature, and this request is stored in the replicated state. Consensus
-//! will observe these requests and store in blocks which signatures should be
-//! created.
+//! Each subnet will have a single threshold key for each scheme deployed to the subnet.
+//! Currently, only threshold ECDSA and threshold Schnorr are supported. From this key,
+//! we will derive per-canister keys. A canister can via a system API request a signature,
+//! and this request is stored in the replicated state. Consensus will observe these
+//! requests and begin working on them by assembling required artifacts in blocks.
 //!
-//! ## Distributed Key Generation & Transcripts
-//! To create threshold ECDSA signatures we need a `Transcript` that gives all
-//! replicas shares of an ECDSA secret key. However, this is not sufficient: we
-//! need additional transcripts to share the ephemeral values used in an ECDSA
-//! signature. The creation of one ECDSA signature requires a transcript that
-//! shares the ECDSA signing key `x`, and additionally four DKG transcripts,
+//! ## Interactive Distributed Key Generation & Transcripts
+//! To create canister threshold signatures we need a `Transcript` that gives all
+//! replicas shares of a secret key. However, this is not sufficient: we need additional
+//! transcripts to share the ephemeral values used in a signature.
+//!
+//! The creation of one ECDSA signature requires a transcript that
+//! shares the ECDSA signing key `x`, and additionally four IDKG transcripts,
 //! with a special structure: we need transcripts `t1`, `t2`, `t3`, `t4`, such
-//! that `t1` and `t2` share a random values `r1` and `r2` respectively, `t3`
+//! that `t1` and `t2` share random values `r1` and `r2` respectively, `t3`
 //! shares the product `r1 * r2`, and `t4` shares `r2 * x`.
 //!
-//! Such transcripts are created via a distributed key generation (DKG)
-//! protocol. The DKG for these transcripts must be computationally efficient,
-//! because we need four transcripts per signature, and we want to be able to
-//! create many signatures. This means that we need interactive DKG for ECDSA
-//! related things, instead of non-interactive DKG like we do for our threshold
-//! BLS signatures.
+//! Similarly, the creation of one Schnorr signature requires a transcript that
+//! shares the Schnorr signing key `x`, and one additional IDKG transcript (blinder) `t`,
+//! such that `t` shares a random value `r`.
+//!
+//! Such transcripts are created via an interactive distributed key generation (IDKG)
+//! protocol. Especially for the ECDSA case, the DKG for these transcripts must be
+//! computationally efficient, because we need four transcripts per signature, and we
+//! want to be able to create many signatures. This means that we need interactive DKG
+//! for canister threshold signatures, instead of non-interactive DKG like we do for
+//! our threshold BLS signatures.
 //!
 //! Consensus orchestrates the creation of these transcripts. Blocks contain
 //! configs (also called params) indicating which transcripts should be created.
@@ -41,22 +47,23 @@
 //! `create_data_payload` and `create_summary_payload`.
 //!
 //! # [IDkgImpl] behavior
-//! The ECDSA component is responsible for adding artifacts to the ECDSA
+//! The IDKG component is responsible for adding artifacts to the IDKG
 //! artifact pool, and validating artifacts in that pool, by exposing a function
 //! `on_state_change`. This function behaves as follows, where `finalized_tip`
-//! denotes the latest finalized consensus block.
+//! denotes the latest finalized consensus block, and `certified_state` denotes
+//! the latest certified state.
 //!
 //! ## add DKG dealings
-//! for every config in `finalized_tip.ecdsa.configs`, do the following: if this
+//! for every config in `finalized_tip.idkg.configs`, do the following: if this
 //! replica is a dealer in this config, and no dealing for this config created
 //! by this replica is in the validated pool, attempt to load the dependencies and,
 //! if successful, create a dealing for this config, and add it to the validated pool.
 //! If loading the dependencies (i.e. t3 depends on t2 and t1) wasn't successful,
 //! we instead send a complaint for the transcript that failed to load.
 //!
-//! ## validate DKG dealings
+//! ## validate IDKG dealings
 //! for every unvalidated dealing d, do the following. If `d.config_id` is an
-//! element of `finalized_tip.ecdsa.configs`, the validated pool does not yet
+//! element of `finalized_tip.idkg.configs`, the validated pool does not yet
 //! contain a dealing from `d.dealer` for `d.config_id`, then do the public
 //! cryptographic validation of the dealing, and move it to the validated pool
 //! if valid, or remove it from the unvalidated pool if invalid.
@@ -71,61 +78,56 @@
 //!
 //! ## Remove stale dealings
 //! for every validated or unvalidated dealing or support d, do the following.
-//! If `d.config_id` is not an element of `finalized_tip.ecdsa.configs`, and
+//! If `d.config_id` is not an element of `finalized_tip.idkg.configs`, and
 //! `d.config_id` is older than `finalized_tip`, remove `d` from the pool.
 //!
 //! ## add signature shares
 //! for every signature request `req` in
-//! `finalized_tip.ecdsa.signature_requests`, do the following: if this replica
+//! `certified_state.signature_requests`, do the following: if this replica
 //! is a signer for `req` and no signature share by this replica is in the
-//! validated pool, load the dependencies (i.e. the quadruple and key transcripts),
+//! validated pool, load the dependencies (i.e. the pre-signature and key transcripts),
 //! then create a signature share for `req` and add it to the validated pool.
 //!
 //! ## validate signature shares
-//! for every unvalidated signature share `s`, do the following: if `s.config_id`
-//! is an element of `finalized_tip.ecdsa.configs`, and there is no signature
-//! share by `s.signer` for `s.config_id` in the validated pool yet, then
-//! cryptographically validate the signature share. If valid, move `s` to
-//! validated, and if invalid, remove `s` from unvalidated.
+//! for every unvalidated signature share `s`, do the following: if `s.request_id`
+//! is an element of `certified_state.signature_requests`, and there is no signature
+//! share by `s.signer` for `s.request_id` in the validated pool yet, then load the
+//! dependencies and cryptographically validate the signature share. If valid, move
+//! `s` to validated, and if invalid, remove `s` from unvalidated.
 //!
-//! ## aggregate ECDSA signatures
+//! ## aggregate signature shares
 //! Signature shares are aggregated into full signatures and included into a block
-//! by the block maker, once enough share are available.
+//! by the block maker, once enough shares are available.
 //!
 //! ## validate complaints
 //! for every unvalidated complaint `c`, do the following: if `c.config_id`
-//! is an element of `finalized_tip.ecdsa.configs`, and there is no complaint
+//! is an element of `finalized_tip.idkg.configs`, and there is no complaint
 //! by `c.complainer` for `c.config_id` in the validated pool yet, then
 //! cryptographically validate the signature of the complaint and the complaint
 //! itself. If valid, move `c` to validated, and if invalid, remove `c` from unvalidated.
 //!
 //! ## send openings
 //! for every validated complaint `c` for which this node has not sent an opening yet and
-//! for which `c.config_id` is an element of `finalized_tip.ecdsa.configs`: create and sign
+//! for which `c.config_id` is an element of `finalized_tip.idkg.configs`: create and sign
 //! the opening, and add it to the validated pool.
 //!
 //!
-//! # ECDSA payload on blocks
-//! The ECDSA payload on blocks serves some purposes: it should ensure that all
-//! replicas are doing DKGs to help create the transcripts required for more
-//! 4-tuples which are used to create ECDSA signatures. In addition, it should
-//! match signature requests to available 4-tuples and generate signatures.
+//! # IDKG payload on blocks
+//! The IDKG payload on blocks serves some purposes: it should ensure that all
+//! replicas are doing IDKGs to help create the transcripts required for more
+//! pre-signatures which are used to create threshold signatures. Additionally, it
+//! should contain newly aggregated signatures that can be delivered back to execution.
 //!
 //! Every block contains
-//! - a set of "4-tuples being created"
-//! - a set of "available 4-tuples"
-//! - a set of "ongoing signing requests", which pair signing requests with
-//!   4-tuples
+//! - a set of "pre-signatures being created"
+//! - a set of "available pre-signatures"
 //! - newly finished signatures to deliver up
 //!
-//! The "4 tuples in creation" contain the following information
-//! - kappa_config: config for 1st masked random transcript
-//! - optionally, kappa_masked: transcript resulting from kappa_config
+//! The ECDSA "pre-signatures in creation" contain the following information
+//! - kappa_config: config for 1st unmasked random transcript
+//! - optionally, kappa_unmasked: transcript resulting from kappa_config
 //! - lambda_config: config for 2nd masked random transcript
-//! - optionally, lambda_masked: transcript resulting from kappa_config
-//! - optionally, unmask_kappa_config: config for resharing as unmasked of
-//!   kappa_masked
-//! - optionally, kappa_unmasked: transcript resulting from unmask_kappa_config
+//! - optionally, lambda_masked: transcript resulting from lambda_config
 //! - optionally, key_times_lambda_config: multiplication of the ECDSA secret
 //!   key and lambda_masked transcript (so masked multiplication of unmasked and
 //!   masked)
@@ -140,39 +142,47 @@
 //! The relation between the different configs/transcripts can be summarized as
 //! follows:
 //! ```text
-//! kappa_masked ────────► kappa_unmasked ─────────►
-//!                                                 kappa_times_lambda
-//!         ┌──────────────────────────────────────►
+//! kappa_unmasked ─────────►
+//!                           kappa_times_lambda
+//!         ┌───────────────►
 //!         │
 //! lambda_masked
 //!         │
-//!         └───────────►
-//!                        key_times_lambda
-//! ecdsa_key  ─────────►
+//!         └───────────────►
+//!                           key_times_lambda
+//! ecdsa_key  ─────────────►
 //! ```
 //! The data transforms like a state machine:
-//! - remove all signature requests from "ongoing signature requests" that are
-//!   no longer present in the replicated state (referenced via the validation
-//!   context)
 //! - when a new transcript is complete, it is added to the corresponding
 //!   "4-tuple being created"
-//!     - when kappa_masked is set, unmask_kappa_config should be set (reshare
-//!       to unmask)
 //!     - when lambda_masked is set, key_times_lambda_config should be set
 //!     - when lambda_masked and kappa_unmasked are set,
 //!       kappa_times_lambda_config must be set
 //!     - when kappa_unmasked, lambda_masked, key_times_lambda,
 //!       kappa_times_lambda are set, the tuple should no longer be in "in
 //!       creation", but instead be moved to the complete 4-tuples.
-//! - whenever the state lists a new signature request (for which no "ongoing
-//!   signing request" is present) and available 4-tuples is not empty, remove
-//!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
-//!   signatures with the signing request and the 4-tuple.
+//!
+//! //! The Schnorr "pre-signatures in creation" contain the following information
+//! - blinder_config: config for unmasked random transcript
+//! - optionally, blinder_unmasked: transcript resulting from blinder_config
+//!
+//! The relation between the different configs/transcripts can be summarized as
+//! follows:
+//! ```text
+//! blinder_unmasked
+//! ```
+//! The data transforms like a state machine:
+//! - when a new transcript is complete, it is added to the corresponding
+//!   "pre-signature being created"
+//!     - when blinder_unmasked is set, the pre-signature should no longer be in "in
+//!       creation", but instead be moved to the complete pre-signatures.
+//!
+//! Completed pre-signatures are delivered to the deterministic state machnine,
+//! where they are matched with incoming signature requests.
 
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, IDkgGossipMetrics,
-    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+    timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -184,24 +194,20 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::idkg::IDkgMessage;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::IDkgMessageId,
-    consensus::idkg::{IDkgBlockReader, IDkgMessageAttribute, RequestId},
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -226,8 +232,6 @@ pub(crate) use payload_verifier::{
 };
 pub use stats::IDkgStatsImpl;
 
-use self::utils::get_context_request_id;
-
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
 
@@ -235,7 +239,7 @@ const LOOK_AHEAD: u64 = 10;
 pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 
 /// `IDkgImpl` is the consensus component responsible for processing threshold
-/// ECDSA payloads.
+/// IDKG payloads.
 pub struct IDkgImpl {
     /// The Pre-Signer subcomponent
     pub pre_signer: Box<IDkgPreSignerImpl>,
@@ -252,7 +256,7 @@ pub struct IDkgImpl {
 }
 
 impl IDkgImpl {
-    /// Builds a new threshold ECDSA component
+    /// Builds a new IDKG component
     pub fn new(
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
@@ -352,11 +356,11 @@ impl IDkgImpl {
                 error!(
                     self.logger,
                     "{}: failed with error = {:?}",
-                    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                    CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
                     error
                 );
                 self.metrics
-                    .critical_error_ecdsa_retain_active_transcripts
+                    .critical_error_idkg_retain_active_transcripts
                     .inc();
             }
             Ok(()) => {
@@ -384,7 +388,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
                 &metrics.on_state_change_duration,
             );
             #[cfg(any(feature = "malicious_code", test))]
-            if self.malicious_flags.is_ecdsa_malicious() {
+            if self.malicious_flags.is_idkg_malicious() {
                 return super::idkg::malicious_pre_signer::maliciously_alter_changeset(
                     changeset,
                     &self.pre_signer,
@@ -428,164 +432,115 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgGossipImpl` implements the priority function and other gossip related
-/// functionality
-pub struct IDkgGossipImpl {
+/// Implements the BouncerFactory interface for IDkg.
+pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    metrics: IDkgGossipMetrics,
 }
 
-impl IDkgGossipImpl {
-    /// Builds a new IDkgGossipImpl component
+impl IDkgBouncer {
+    /// Builds a new IDkgBouncer component
     pub fn new(
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        metrics_registry: MetricsRegistry,
     ) -> Self {
         Self {
             subnet_id,
             consensus_block_cache,
             state_reader,
-            metrics: IDkgGossipMetrics::new(metrics_registry),
         }
     }
 }
 
-struct IDkgPriorityFnArgs {
+struct IDkgBouncerArgs {
     finalized_height: Height,
-    #[allow(dead_code)]
     certified_height: Height,
-    requested_transcripts: BTreeSet<IDkgTranscriptId>,
-    requested_signatures: BTreeSet<RequestId>,
-    active_transcripts: BTreeSet<IDkgTranscriptId>,
 }
 
-impl IDkgPriorityFnArgs {
+impl IDkgBouncerArgs {
     fn new(
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
     ) -> Self {
-        let mut requested_transcripts = BTreeSet::new();
-        for params in block_reader.requested_transcripts() {
-            requested_transcripts.insert(params.transcript_id);
-        }
-
-        let mut active_transcripts = BTreeSet::new();
-        for transcript_ref in block_reader.active_transcripts() {
-            active_transcripts.insert(transcript_ref.transcript_id);
-        }
-
-        let (certified_height, requested_signatures) = state_reader
-            .get_certified_state_snapshot()
-            .map_or(Default::default(), |snapshot| {
-                let request_contexts = snapshot
-                    .get_state()
-                    .signature_request_contexts()
-                    .values()
-                    .flat_map(get_context_request_id)
-                    .collect::<BTreeSet<_>>();
-
-                (snapshot.get_height(), request_contexts)
-            });
-
         Self {
             finalized_height: block_reader.tip_height(),
-            certified_height,
-            requested_transcripts,
-            requested_signatures,
-            active_transcripts,
+            certified_height: state_reader.latest_certified_height(),
         }
     }
 }
 
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_priority_function(
-        &self,
-        _idkg_pool: &Pool,
-    ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
+    fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        let metrics = self.metrics.clone();
-        Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
-            compute_priority(attr, subnet_id, &args, &metrics)
-        })
+        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        Box::new(move |id| compute_bouncer(id, subnet_id, &args))
+    }
+
+    fn refresh_period(&self) -> Duration {
+        Duration::from_secs(3)
     }
 }
 
-fn compute_priority(
-    attr: &IDkgMessageAttribute,
+fn compute_bouncer(
+    id: &IDkgMessageId,
     subnet_id: SubnetId,
-    args: &IDkgPriorityFnArgs,
-    metrics: &IDkgGossipMetrics,
-) -> Priority {
-    match attr {
-        IDkgMessageAttribute::Dealing(transcript_id)
-        | IDkgMessageAttribute::DealingSupport(transcript_id) => {
+    args: &IDkgBouncerArgs,
+) -> BouncerValue {
+    match id {
+        IDkgMessageId::Dealing(_, data) => {
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
+            }
+
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::DealingSupport(_, data) => {
             // For xnet dealings(target side), always fetch the artifacts,
             // as the source_height from different subnet cannot be compared
             // anyways.
-            if *transcript_id.source_subnet() != subnet_id {
-                return Priority::FetchNow;
+            if data.get_ref().subnet_id != subnet_id {
+                return BouncerValue::Wants;
             }
 
-            let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.requested_transcripts.contains(transcript_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageAttribute::EcdsaSigShare(request_id)
-        | IDkgMessageAttribute::SchnorrSigShare(request_id) => {
-            if request_id.height <= args.certified_height {
-                if args.requested_signatures.contains(request_id) {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+        IDkgMessageId::EcdsaSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageAttribute::Complaint(transcript_id)
-        | IDkgMessageAttribute::Opening(transcript_id) => {
-            let height = transcript_id.source_height();
-            if height <= args.finalized_height {
-                if args.active_transcripts.contains(transcript_id)
-                    || args.requested_transcripts.contains(transcript_id)
-                {
-                    Priority::FetchNow
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::FetchNow
+        IDkgMessageId::SchnorrSigShare(_, data) => {
+            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
             } else {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::Complaint(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
+            }
+        }
+        IDkgMessageId::Opening(_, data) => {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+                BouncerValue::Wants
+            } else {
+                BouncerValue::MaybeWantsLater
             }
         }
     }
@@ -594,16 +549,24 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use self::test_utils::{
-        fake_completed_signature_request_context, fake_signature_request_context_with_pre_sig,
-        fake_state_with_signature_requests, TestIDkgBlockReader,
+        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
+        TestIDkgBlockReader,
     };
+    use self::utils::get_context_request_id;
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{IDkgUIDGenerator, PreSigId};
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
-    use test_utils::fake_ecdsa_master_public_key_id;
+    use ic_types::consensus::idkg::IDkgUIDGenerator;
+    use ic_types::consensus::idkg::{
+        complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
+        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
+    };
+    use ic_types::{
+        consensus::idkg::{RequestId, SigShareIdData},
+        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+    };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+
     use tests::test_utils::create_sig_inputs;
 
     #[test]
@@ -615,19 +578,10 @@ mod tests {
         let pre_sig_id = PreSigId(0);
         let context_with_quadruple =
             fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
-        let context_without_quadruple =
-            fake_signature_request_context_with_pre_sig(1, key_id.clone(), None);
-        let snapshot = fake_state_with_signature_requests(
-            height,
-            [
-                context_with_quadruple.clone(),
-                context_without_quadruple.clone(),
-            ],
-        );
         state_manager
             .get_mut()
-            .expect_get_certified_state_snapshot()
-            .returning(move || Some(Box::new(snapshot.clone()) as Box<_>));
+            .expect_latest_certified_height()
+            .returning(move || height);
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
@@ -639,106 +593,114 @@ mod tests {
         );
 
         // Only the context with matched quadruple should be in "requested"
-        let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
-        assert_eq!(args.requested_signatures.len(), 1);
-        assert_eq!(
-            args.requested_signatures.first().unwrap(),
-            &expected_request_id
-        );
     }
 
-    // Tests the priority computation for dealings/support.
+    fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {
+        IDkgArtifactIdData {
+            height: i.source_height(),
+            subnet_id: *i.source_subnet(),
+            hash: CryptoHash(vec![]),
+        }
+    }
+
+    fn get_fake_share_id_data(i: &RequestId) -> SigShareIdData {
+        SigShareIdData {
+            hash: CryptoHash(vec![]),
+            height: i.height,
+        }
+    }
+
+    // Tests the bouncer computation for dealings/support.
     #[test]
     fn test_idkg_priority_fn_dealing_support() {
-        let xnet_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
-        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
-        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
-        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+        let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
+        let local_subnet_id = SUBNET_2;
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
 
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut requested_transcripts = BTreeSet::new();
-        requested_transcripts.insert(transcript_id_fetch_1);
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageAttribute::Dealing(xnet_transcript_id),
-                Priority::FetchNow,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&xnet_transcript_id, &NODE_1),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_fetch_1, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_fetch_2, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_stash),
-                Priority::Stash,
+                IDkgMessageId::Dealing(
+                    dealing_prefix(&transcript_id_stash, &NODE_1),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             // Dealing support
             (
-                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
-                Priority::FetchNow,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
-                Priority::Stash,
+                IDkgMessageId::DealingSupport(
+                    dealing_support_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
-    // Tests the priority computation for sig shares.
+    // Tests the bouncer computation for sig shares.
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let mut uid_generator = IDkgUIDGenerator::new(subnet_id, Height::new(0));
+        let local_subnet_id = SUBNET_2;
+        let mut uid_generator = IDkgUIDGenerator::new(local_subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
             pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
-        };
-        let request_id_drop = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [2; 32],
-            height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
             pre_signature_id: uid_generator.next_pre_signature_id(),
@@ -750,138 +712,138 @@ mod tests {
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
-
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut requested_signatures = BTreeSet::new();
-        requested_signatures.insert(request_id_fetch_1.clone());
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts: BTreeSet::new(),
-            requested_signatures,
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_fetch_1, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
-                Priority::Drop,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_drop.clone()),
-                Priority::Drop,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_fetch_2, &NODE_1),
+                    get_fake_share_id_data(&request_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
-                Priority::FetchNow,
+                IDkgMessageId::EcdsaSigShare(
+                    ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_fetch_2.clone()),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::SchnorrSigShare(request_id_stash.clone()),
-                Priority::Stash,
+                IDkgMessageId::SchnorrSigShare(
+                    schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
+                    get_fake_share_id_data(&request_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
     // Tests the priority computation for complaints/openings.
     #[test]
     fn test_idkg_priority_fn_complaint_opening() {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
-        let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
-        let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
-        let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
-        let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
+        let local_subnet_id = SUBNET_2;
+        let transcript_id_fetch_1 = IDkgTranscriptId::new(local_subnet_id, 1, Height::from(80));
+        let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
+        let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
+        let transcript_id_fetch_3 = IDkgTranscriptId::new(local_subnet_id, 5, Height::from(80));
 
-        let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgGossipMetrics::new(metrics_registry);
-
-        let mut active_transcripts = BTreeSet::new();
-        active_transcripts.insert(transcript_id_fetch_1);
-        let mut requested_transcripts = BTreeSet::new();
-        requested_transcripts.insert(transcript_id_fetch_3);
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts,
         };
 
         let tests = vec![
             // Complaints
             (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_2),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::Complaint(transcript_id_stash),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::Complaint(transcript_id_fetch_3),
-                Priority::FetchNow,
+                IDkgMessageId::Complaint(
+                    complaint_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_3).into(),
+                ),
+                BouncerValue::Wants,
             ),
             // Openings
             (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_1),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_drop),
-                Priority::Drop,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_2).into(),
+                ),
+                BouncerValue::Wants,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_2),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_stash).into(),
+                ),
+                BouncerValue::MaybeWantsLater,
             ),
             (
-                IDkgMessageAttribute::Opening(transcript_id_stash),
-                Priority::Stash,
-            ),
-            (
-                IDkgMessageAttribute::Opening(transcript_id_fetch_3),
-                Priority::FetchNow,
+                IDkgMessageId::Opening(
+                    opening_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
+                    get_fake_artifact_id_data(transcript_id_fetch_3).into(),
+                ),
+                BouncerValue::Wants,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 }

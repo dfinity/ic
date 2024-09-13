@@ -66,7 +66,7 @@ ic_version_or_git_sha(
     tags = ["no-cache"],
     visibility = [
         "__subpackages__",
-        "//gitlab-ci/src/artifacts:uploaders",
+        "//ci/src/artifacts:uploaders",
     ],
 )
 
@@ -95,7 +95,7 @@ exports_files(
 
 BUILDIFIER_EXCLUDES = [
     "./.git/*",
-    "./gitlab-ci/src/git_changes/test_data/**",
+    "./ci/src/git_changes/test_data/**",
 ]
 
 buildifier(
@@ -157,7 +157,6 @@ version_file_path(
     name = "version_file_path",
     visibility = [
         "//rs/tests:__subpackages__",
-        "//scalability:__pkg__",
     ],
 )
 

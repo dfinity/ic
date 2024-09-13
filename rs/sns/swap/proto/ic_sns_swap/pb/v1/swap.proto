@@ -200,8 +200,9 @@ message Swap {
   // Specified on creation. That is, always specified and immutable.
   Init init = 1;
 
-  // Specified in the transition from PENDING to OPEN and immutable
-  // thereafter.
+  // Derived from `init`, always specified and immutable. In most cases `init`
+  // should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   Params params = 4;
 
   // Neurons' Fund participation.  Specified in the transition from
@@ -221,8 +222,11 @@ message Swap {
   // to the outcome of the swap.
   repeated SnsNeuronRecipe neuron_recipes = 7;
 
-  // Gets set to whatever value is in the corresponding field of OpenRequest
-  // (that field is required at the application level).
+  // The proposal ID that was used to create the SNS that opened this swap.
+  // Note: the name is a historical artifact because the swap used to be opened
+  // with an OpenSnsTokenSwap request.
+  // This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   optional uint64 open_sns_token_swap_proposal_id = 9;
 
   // A lock stored in Swap state. If set to true, then a finalize_swap
@@ -406,7 +410,11 @@ message Init {
   optional uint64 nns_proposal_id = 26;
 
   // The Neurons' Fund participants of this SNS decentralization swap.
-  optional NeuronsFundParticipants neurons_fund_participants = 27;
+  //
+  // This field is obsolete, as Neurons' Fund participants are now determined at the end of
+  // a successful swap and cannot be specified during SNS initialization.
+  reserved 27;
+  reserved "neurons_fund_participants";
 
   // Controls whether swap finalization should be attempted automatically in the
   // canister heartbeat. If set to false, `finalize_swap` must be called
@@ -495,11 +503,6 @@ message LinearScalingCoefficient {
   optional uint64 intercept_icp_e8s = 5;
 }
 
-// Represents multiple Neurons' Fund participants.
-message NeuronsFundParticipants {
-  repeated CfParticipant cf_participants = 1;
-}
-
 // Represents one NNS neuron from the Neurons' Fund participating in this swap.
 message CfNeuron {
   // The NNS neuron ID of the participating neuron.
@@ -507,6 +510,8 @@ message CfNeuron {
   // The amount of ICP that the Neurons' Fund invests associated
   // with this neuron.
   uint64 amount_icp_e8s = 2;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 4;
 
   // Idempotency flag indicating whether the neuron recipes have been created for
   // the CfNeuron. When set to true, it signifies that the action of creating neuron
@@ -517,10 +522,15 @@ message CfNeuron {
 
 // Represents a Neurons' Fund participant, possibly with several neurons.
 message CfParticipant {
-  // The principal that can vote on behalf of these Neurons' Fund neurons.
-  string hotkey_principal = 1;
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
   // Information about the participating neurons. Must not be empty.
   repeated CfNeuron cf_neurons = 2;
+
+  // The principal that can vote on behalf of these Neurons' Fund neurons.
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
 }
 
 // The construction parameters for the basket of neurons created for all
@@ -681,8 +691,19 @@ message DirectInvestment {
 // Information about a Neurons' Fund investment. The NNS Governance
 // canister is the controller of these neurons.
 message CfInvestment {
-  string hotkey_principal = 1;
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  // The controller of the corresponding NNS neuron is in the CfParticipant,
+  // which contains a vector of CfInvestments. This is because the controller
+  // is the same for all CfInvestments but the hotkeys may differ.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
+
   fixed64 nns_neuron_id = 2;
+
+  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
 }
 
 message TimeWindow {
@@ -754,17 +775,6 @@ message SnsNeuronRecipe {
 //
 // === Request/Response Messages
 //
-
-message OpenRequest {
-  // The parameters of the swap.
-  Params params = 1;
-  // Neurons' Fund participation.
-  repeated CfParticipant cf_participants = 2;
-  // The ID of the proposal whose execution consists of calling this method.
-  optional uint64 open_sns_token_swap_proposal_id = 3;
-}
-
-message OpenResponse {}
 
 message GetCanisterStatusRequest {}
 
@@ -1163,8 +1173,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
@@ -1184,8 +1194,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.
@@ -1536,4 +1546,112 @@ message NotifyPaymentFailureRequest {}
 // was removed successfully. Returns None if no ticket was found for the caller.
 message NotifyPaymentFailureResponse {
   optional Ticket ticket = 1;
+}
+
+// TODO(NNS1-3306): Remove this message once SNS Governance uses the same request type.
+// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+message NeuronIds {
+  repeated NeuronId neuron_ids = 1;
+}
+
+// The request for the `claim_swap_neurons` method.
+// Copied from sns governance.proto. TODO(NNS1-3306): Remove this message once
+// SNS Governance uses the same request type.
+message ClaimSwapNeuronsRequest {
+  // This type has been replaced by NeuronRecipe and should not be used.
+  // TODO(NNS1-3198): Remove this message once `NeuronRecipe` is used systematically.
+  message NeuronParameters {
+    reserved "memo";
+    reserved 4;
+
+    // The PrincipalId that will have permissions when the neuron is created.
+    // The permissions that are granted are controlled my
+    // `NervousSystemParameters::neuron_claimer_permissions`. This field
+    // is required.
+    ic_base_types.pb.v1.PrincipalId controller = 1;
+
+    // For Community Fund participants, in addition to the controller (that is
+    // set to the NNS governance), this is another PrincipalId with permissions.
+    // Specifically, the PrincipalId who is the controller of the NNS neuron
+    // that invested in the decentralization sale via the Community Fund will
+    // be granted the following permissions:
+    //    - NeuronPermissionType::SubmitProposal
+    //    - NeuronPermissionType::Vote
+    // This field is not set for other types of participants, therefore it is optional.
+    ic_base_types.pb.v1.PrincipalId hotkey = 2;
+
+    // The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
+    // created with. This field is required.
+    optional uint64 stake_e8s = 3;
+
+    // The duration in seconds that the neuron's dissolve delay will be set to. Neurons
+    // that are for Community Fund investors will be automatically set to dissolving,
+    // while direct investors will be automatically set to non-dissolving.
+    optional uint64 dissolve_delay_seconds = 5;
+
+    // The ID of the NNS neuron whose Community Fund participation resulted in the
+    // creation of this SNS neuron.
+    optional uint64 source_nns_neuron_id = 6;
+
+    // The ID of the SNS Neuron to be created for the participant. If a Neuron with
+    // this NeuronId already exists in SNS Governance, the `ClaimSwapNeuronsResponse`
+    // will return a`ClaimedSwapNeuronStatus::AlreadyExists` for this NeuronId.
+    // This field is required.
+    optional NeuronId neuron_id = 7;
+
+    // The list of NeuronIds that the created Neuron will follow on all SNS Proposal
+    // Actions known to governance at the time. Additional followees and following
+    // relations can be added after neuron creation.
+    repeated NeuronId followees = 8;
+  }
+
+  // Replacement for NeuronParameters. Contains the information needed to set up
+  // a neuron for a swap participant.
+  message NeuronRecipe {
+    // The info that for a participant in the Neurons' Fund
+    message NeuronsFund {
+      // The neuron ID of the NNS neuron that participated in the Neurons' Fund.
+      optional uint64 nns_neuron_id = 1;
+      // The controller of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_base_types.pb.v1.PrincipalId nns_neuron_controller = 2;
+      // The hotkeys of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_nervous_system.pb.v1.Principals nns_neuron_hotkeys = 3;
+    }
+
+    // The info that for a direct participant
+    message Direct {}
+
+    // The principal that should be the controller of the SNS neuron
+    optional ic_base_types.pb.v1.PrincipalId controller = 1;
+    // The ID of the SNS neuron
+    optional NeuronId neuron_id = 2;
+
+    // The SNS neuron's stake in e8s (10E-8 of a token)
+    optional uint64 stake_e8s = 3;
+
+    // The duration in seconds that the neuron's dissolve delay will be set to.
+    optional uint64 dissolve_delay_seconds = 4;
+    // The neurons this neuron should follow
+    optional NeuronIds followees = 5;
+
+    oneof participant {
+      Direct direct = 6;
+      NeuronsFund neurons_fund = 7;
+    }
+  }
+
+  // Needed to cause prost to generate a type isomorphic to
+  // Optional<Vec<NeuronRecipe>>.
+  message NeuronRecipes {
+    repeated NeuronRecipe neuron_recipes = 1;
+  }
+
+  // The set of parameters that define the neurons created in `claim_swap_neurons`. For
+  // each NeuronRecipe, one neuron will be created.
+  optional NeuronRecipes neuron_recipes = 2;
+
+  // The set of parameters that define the neurons created in `claim_swap_neurons`. For
+  // each NeuronParameter, one neuron will be created.
+  // Deprecated. Use [`neuron_recipes`] instead.
+  repeated NeuronParameters neuron_parameters = 1 [deprecated = true];
 }

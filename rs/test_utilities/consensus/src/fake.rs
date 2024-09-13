@@ -26,7 +26,7 @@ impl Fake for SummaryPayload {
     fn fake() -> Self {
         Self {
             dkg: ic_types::consensus::dkg::Summary::fake(),
-            ecdsa: None,
+            idkg: None,
         }
     }
 }
@@ -36,7 +36,7 @@ impl Fake for DataPayload {
         Self {
             batch: BatchPayload::default(),
             dealings: dkg::Dealings::new_empty(Height::from(0)),
-            ecdsa: None,
+            idkg: None,
         }
     }
 }
@@ -264,7 +264,7 @@ impl FromParent for Block {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: Dealings::new_empty(dkg_start),
-                    ecdsa: None,
+                    idkg: None,
                 }),
             ),
             parent.height.increment(),
@@ -287,7 +287,7 @@ pub trait FakeVersion {
     fn fake_version(&self, version: ReplicaVersion) -> Self;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 struct FakeBlock {
     version: ReplicaVersion,
     pub parent: CryptoHashOf<Block>,
@@ -316,7 +316,7 @@ fn test_fake_block_is_binary_compatible() {
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
-                ecdsa: None,
+                idkg: None,
             }),
         ),
         Height::from(123),
@@ -343,7 +343,7 @@ fn test_fake_block() {
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: ic_types::consensus::dkg::Dealings::new_empty(Height::from(1)),
-                ecdsa: None,
+                idkg: None,
             }),
         ),
         Height::from(123),

@@ -13,13 +13,14 @@ use candid::{Nat, Principal};
 use itertools::Itertools;
 use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
-use strum;
-use strum::EnumString;
+use strum::IntoEnumIterator;
+use strum::{self, EnumIter};
+use strum::{Display, EnumString};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
 
-#[derive(Debug, EnumString)]
+#[derive(Debug, EnumString, EnumIter, Display)]
 enum Icrc21Function {
     #[strum(serialize = "icrc1_transfer")]
     Transfer,
@@ -51,10 +52,8 @@ impl ConsentMessageBuilder {
         let icrc21_function =
             icrc21_function
                 .parse::<Icrc21Function>()
-                .map_err(|err| Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: format!("Invalid ICRC21 function: {:?}", err),
-                })?;
+                .map_err(|err| Icrc21Error::UnsupportedCanisterCall(ErrorInfo {                    description: format!("The function provided is not supported: {}.\n Supported functions for ICRC-21 are: {:?}.\n Error is: {:?}",icrc21_function,Icrc21Function::iter().map(|f|f.to_string()).collect::<Vec<String>>(),err)})
+                )?;
 
         Ok(Self {
             function: icrc21_function,
@@ -136,21 +135,35 @@ impl ConsentMessageBuilder {
 
     pub fn build(self) -> Result<ConsentMessage, Icrc21Error> {
         let mut message = "".to_string();
+        let extract_subaccount = |account: Account| -> Result<String, Icrc21Error> {
+            Ok(match account.subaccount {
+                None => hex::encode(account.effective_subaccount().as_slice()),
+                Some(_) => account
+                    .to_string()
+                    .split('.')
+                    .last()
+                    .ok_or(Icrc21Error::GenericError {
+                        error_code: Nat::from(500u64),
+                        description: "Subaccount has an unexpected format.".to_owned(),
+                    })?
+                    .to_string(),
+            })
+        };
         match self.function {
             Icrc21Function::Transfer => {
                 message.push_str("# Approve the transfer of funds");
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "From Account has to be specified.".to_owned(),
+                    description: "From account has to be specified.".to_owned(),
                 })?;
                 let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Receiver Account has to be specified.".to_owned(),
+                    description: "Receiver account has to be specified.".to_owned(),
                 })?;
                 let fee = convert_tokens_to_string_representation(
                     self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
-                        description: "Ledger Fee must be specified.".to_owned(),
+                        description: "Ledger fee must be specified.".to_owned(),
                     })?,
                     self.decimals,
                 )?;
@@ -169,14 +182,8 @@ impl ConsentMessageBuilder {
                 message.push_str(&format!("\n\n**Amount:**\n{} {}", amount, token_symbol));
                 if from_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
-                        "\n\n**From Subaccount:**\n{}",
-                        from_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Sender Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        "\n\n**From subaccount:**\n{}",
+                        extract_subaccount(from_account)?
                     ));
                 } else {
                     message.push_str(&format!("\n\n**From:**\n{}", from_account));
@@ -188,22 +195,22 @@ impl ConsentMessageBuilder {
                 message.push_str("# Authorize another address to withdraw from your account");
                 let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Approver Account has to be specified.".to_owned(),
+                    description: "Approver account has to be specified.".to_owned(),
                 })?;
                 let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Spender Account has to be specified.".to_owned(),
+                    description: "Spender account has to be specified.".to_owned(),
                 })?;
                 let fee = convert_tokens_to_string_representation(
                     self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
-                        description: "Ledger Fee must be specified.".to_owned(),
+                        description: "Ledger fee must be specified.".to_owned(),
                     })?,
                     self.decimals,
                 )?;
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Token Symbol must be specified.".to_owned(),
+                    description: "Token symbol must be specified.".to_owned(),
                 })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
@@ -250,14 +257,8 @@ impl ConsentMessageBuilder {
                 ));
                 if approver_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
-                        "\n\n**Your Subaccount:**\n{}",
-                        approver_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Approver Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        "\n\n**Your subaccount:**\n{}",
+                        extract_subaccount(approver_account)?
                     ));
                 } else {
                     message.push_str(&format!("\n\n**Your account:**\n{}", approver_account));
@@ -274,13 +275,7 @@ impl ConsentMessageBuilder {
                 if approver_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
-                        approver_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Approver Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        extract_subaccount(approver_account)?
                     ));
                 } else {
                     message.push_str(&format!(
@@ -293,27 +288,27 @@ impl ConsentMessageBuilder {
                 message.push_str("# Transfer from a withdrawal account");
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "From Account has to be specified.".to_owned(),
+                    description: "From account has to be specified.".to_owned(),
                 })?;
                 let receiver_account = self.receiver.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Receiver Account has to be specified.".to_owned(),
+                    description: "Receiver account has to be specified.".to_owned(),
                 })?;
                 let spender_account = self.spender.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Spender Account has to be specified.".to_owned(),
+                    description: "Spender account has to be specified.".to_owned(),
                 })?;
                 let fee = convert_tokens_to_string_representation(
                     self.ledger_fee.ok_or(Icrc21Error::GenericError {
                         error_code: Nat::from(500u64),
-                        description: "Ledger Fee must be specified.".to_owned(),
+                        description: "Ledger fee must be specified.".to_owned(),
                     })?,
                     self.decimals,
                 )?;
 
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
-                    description: "Token Symbol must be specified.".to_owned(),
+                    description: "Token symbol must be specified.".to_owned(),
                 })?;
                 let amount = convert_tokens_to_string_representation(
                     self.amount.ok_or(Icrc21Error::GenericError {
@@ -323,17 +318,11 @@ impl ConsentMessageBuilder {
                     self.decimals,
                 )?;
 
-                message.push_str(&format!("\n\n**Withdrawal Account:**\n{}", from_account));
+                message.push_str(&format!("\n\n**Withdrawal account:**\n{}", from_account));
                 if spender_account.owner == Principal::anonymous() {
                     message.push_str(&format!(
                         "\n\n**Subaccount sending the transfer request:**\n{}",
-                        spender_account.to_string().split('.').last().ok_or(
-                            Icrc21Error::GenericError {
-                                error_code: Nat::from(500u64),
-                                description: "Spender Subaccount has an unexpected format."
-                                    .to_owned(),
-                            }
-                        )?
+                        extract_subaccount(spender_account)?
                     ));
                 } else {
                     message.push_str(&format!(
@@ -481,8 +470,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         display_message_builder = display_message_builder.with_display_type(display_type);
     }
 
-    let consent_message = match consent_msg_request.method.as_str() {
-        "icrc1_transfer" => {
+    let consent_message = match display_message_builder.function {
+        Icrc21Function::Transfer => {
             let TransferArg {
                 memo,
                 amount,
@@ -509,7 +498,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        "icrc2_transfer_from" => {
+        Icrc21Function::TransferFrom => {
             let TransferFromArgs {
                 memo,
                 amount,
@@ -538,7 +527,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        "icrc2_approve" => {
+        Icrc21Function::Approve => {
             let ApproveArgs {
                 memo,
                 amount,
@@ -577,11 +566,6 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                     display_message_builder.with_expected_allowance(expected_allowance);
             }
             display_message_builder.build()
-        }
-        method => {
-            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!("Unsupported method: {}", method),
-            }))
         }
     }?;
 

@@ -10,7 +10,7 @@
 //
 // You can setup this test by executing the following commands:
 //
-//   $ gitlab-ci/container/container-run.sh
+//   $ ci/container/container-run.sh
 //   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
@@ -41,7 +41,11 @@
 use anyhow::Result;
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
-    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+    rw_message::install_nns_with_customizations_and_check_progress,
+    subnet::enable_chain_key_signing_on_subnet,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    run_chain_key_signature_test, ChainSignatureRequest,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -49,15 +53,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, SshSession};
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
+    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
-    test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
-    },
+    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -67,10 +70,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::orchestrator::utils::subnet_recovery::{
-    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
-};
-use ic_tests::tecdsa::ChainSignatureRequest;
 use ic_types::Height;
 use slog::{error, info};
 use std::fs::create_dir_all;
@@ -91,6 +90,9 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
+const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+    .with_latency(LATENCY)
+    .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
 const PRE_SIGNATURES_TO_CREATE: u32 = 30;
@@ -105,9 +107,9 @@ const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 // Requests will be sent to each key in round robin order.
 fn make_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
-        ic_tests::tecdsa::make_ecdsa_key_id(),
-        // ic_tests::tecdsa::make_bip340_key_id(),
-        // ic_tests::tecdsa::make_eddsa_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
     ]
 }
 
@@ -153,7 +155,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();
@@ -224,17 +225,7 @@ pub fn tecdsa_performance_test(
 
     if apply_network_settings {
         info!(log, "Optional Step: Modify all nodes' traffic using tc");
-        app_subnet.nodes().for_each(|node| {
-            info!(log, "Modifying node {}", node.get_ip_addr());
-            let session = node
-                .block_on_ssh_session()
-                .expect("Failed to ssh into node");
-            node.block_on_bash_script_from_session(
-                &session,
-                &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
-            )
-            .expect("Failed to execute bash script from session");
-        });
+        app_subnet.apply_network_settings(NETWORK_SIMULATION);
     }
 
     // create the runtime that lives until this variable is dropped.

@@ -5,13 +5,14 @@
 # different ICs might have different variations on the registry.
 
 - hosts: localhost
-  any_errors_fatal: yes
+  any_errors_fatal: true
   gather_facts: false
   become: false
 
   tasks:
     - name: Check action
-      fail: msg="'ic_git_revision' not given."
+      fail:
+        msg: "\"'ic_git_revision' not given.\""
       when: ic_git_revision is not defined
 
     - name: Generate scrape configurations for [host_node_exporter, node_exporter, orchestrator, replica]
@@ -25,9 +26,11 @@
           name: "{{ ic }}"
           nns_urls: "{{ groups['nns'] | map('extract', hostvars, ['api_listen_url']) }}"
           public_key: "{{ nns_public_key }}"
-        validate_certs: no
+        validate_certs: false
         headers:
-          Content-Type: "application/json"
+          Content-Type: application/json
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
 
     - name: Generate scrape configurations for [boundary_nodes]
       vars:
@@ -40,14 +43,14 @@
           name: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_ip']) | join(',') }}-{{ item }}"
           ic_name: "{{ ic }}"
           targets: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_addr']) }}"
-          job_type: "node_exporter"
+          job_type: node_exporter
           custom_labels:
             ic: "{{ ic }}"
-            env: "test"
+            env: test
             service: "{{ item }}"
-        validate_certs: no
+        validate_certs: false
         headers:
-          Content-Type: "application/json"
+          Content-Type: application/json
         status_code: 200, 201
       loop:
         - denylist_updater
@@ -56,4 +59,6 @@
         - process_exporter
         - nginx
         - vector
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
       when: "'boundary' in groups"

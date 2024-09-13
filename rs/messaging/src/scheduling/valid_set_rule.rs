@@ -1,21 +1,21 @@
 use ic_base_types::NumBytes;
-use ic_constants::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::IngressHistoryWriter;
-use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_management_canister_types::CanisterStatusType;
-use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    replicated_state::{
+use ic_interfaces::{
+    execution_environment::IngressHistoryWriter,
+    messaging::{
         IngressInductionError, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
         LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
-    ReplicatedState,
 };
+use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_management_canister_types::CanisterStatusType;
+use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -250,11 +250,13 @@ impl ValidSetRuleImpl {
         let effective_canister_id =
             match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
                 Ok(effective_canister_id) => effective_canister_id,
-                Err(
-                    ParseIngressError::UnknownSubnetMethod
-                    | ParseIngressError::SubnetMethodNotAllowed,
-                ) => {
+                Err(ParseIngressError::UnknownSubnetMethod) => {
                     return Err(IngressInductionError::CanisterMethodNotFound(
+                        msg.method_name().to_string(),
+                    ))
+                }
+                Err(ParseIngressError::SubnetMethodNotAllowed) => {
+                    return Err(IngressInductionError::SubnetMethodNotAllowed(
                         msg.method_name().to_string(),
                     ))
                 }

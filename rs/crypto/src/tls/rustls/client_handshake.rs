@@ -3,8 +3,8 @@ use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls::tls_cert_from_registry;
-use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
@@ -17,8 +17,8 @@ use rustls::{
 };
 use std::sync::Arc;
 
-pub fn client_config<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn client_config(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     server: NodeId,
@@ -32,7 +32,7 @@ pub fn client_config<P: CspTlsHandshakeSignerProvider>(
         }
     })?;
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     let server_cert_verifier = NodeServerCertVerifier::new(
         SomeOrAllNodes::new_with_single_node(server),
         registry_client,

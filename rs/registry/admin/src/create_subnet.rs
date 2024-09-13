@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
@@ -22,7 +21,7 @@ use url::Url;
 
 /// Sub-command to submit a proposal to create a new subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     #[allow(dead_code)]
@@ -85,21 +84,6 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// blocks
     #[clap(long)]
     pub is_halted: bool,
-
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_message: Option<u64>,
-
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_round: Option<u64>,
-
-    /// The maximum number of instructions an `install_code` message can
-    /// execute. See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_install_code: Option<u64>,
 
     /// Configuration for chain key:
     /// A list of chain key configurations to be requested from other subnets for this subnet,
@@ -243,16 +227,6 @@ impl ProposeToCreateSubnetCmd {
             self.dkg_interval_length
                 .get_or_insert(subnet_config.dkg_interval_length.get());
         }
-        // Set default scheduler parameters.
-        {
-            let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
-            self.max_instructions_per_message
-                .get_or_insert(scheduler_config.max_instructions_per_message.get());
-            self.max_instructions_per_round
-                .get_or_insert(scheduler_config.max_instructions_per_round.get());
-            self.max_instructions_per_install_code
-                .get_or_insert(scheduler_config.max_instructions_per_install_code.get());
-        }
         // Other default parameters.
         {
             self.replica_version_id
@@ -303,11 +277,7 @@ impl ProposeToCreateSubnetCmd {
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
-            max_instructions_per_message: self.max_instructions_per_message.unwrap_or_default(),
-            max_instructions_per_round: self.max_instructions_per_round.unwrap_or_default(),
-            max_instructions_per_install_code: self
-                .max_instructions_per_install_code
-                .unwrap_or_default(),
+
             features: SubnetFeaturesPb::from(self.features.expect("features must be specified.")),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
@@ -377,9 +347,6 @@ mod tests {
             replica_version_id: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             initial_chain_key_configs_to_request: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,

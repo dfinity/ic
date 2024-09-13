@@ -22,7 +22,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigner};
+use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{new_logger, replica_logger::no_op_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
@@ -1128,7 +1128,9 @@ mod verify_complaint {
 
 mod verify_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        setup_masked_random_params, CorruptBytes, IntoBuilder,
+    };
 
     #[test]
     fn should_run_idkg_successfully_for_random_dealing() {
@@ -1698,6 +1700,76 @@ mod verify_transcript {
     }
 
     #[test]
+    fn should_verify_transcript_reject_transcript_with_insufficient_dealing_signatures() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        for alg in all_canister_threshold_algorithms() {
+            let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
+
+            let verification_threshold = params.verification_threshold().get() as usize;
+            let random_batchsigneddealing_signature_batch = &mut transcript
+                .verified_dealings
+                .values_mut()
+                .choose(rng)
+                .expect("empty verified dealings")
+                .signature
+                .signatures_map;
+
+            *random_batchsigneddealing_signature_batch = random_batchsigneddealing_signature_batch
+                .clone()
+                .into_iter()
+                .choose_multiple(rng, verification_threshold - 1)
+                .into_iter()
+                .collect();
+
+            let r = env
+                .nodes
+                .random_node(rng)
+                .verify_transcript(&params, &transcript);
+
+            assert_matches!(r,
+                Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                if e.contains(&format!("insufficient number of signers ({}<{verification_threshold})", verification_threshold - 1))
+            );
+        }
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_corrupted_dealing_signature() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+
+        for alg in all_canister_threshold_algorithms() {
+            let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
+
+            let some_sig_in_some_dealing = transcript
+                .verified_dealings
+                .values_mut()
+                .choose(rng)
+                .expect("empty verified dealings")
+                .signature
+                .signatures_map
+                .values_mut()
+                .choose(rng)
+                .expect("empty signatures_map");
+
+            *some_sig_in_some_dealing = some_sig_in_some_dealing.clone_with_bit_flipped();
+
+            let r = env
+                .nodes
+                .random_node(rng)
+                .verify_transcript(&params, &transcript);
+
+            assert_matches!(
+                r,
+                Err(IDkgVerifyTranscriptError::InvalidDealingSignatureBatch { error, .. })
+                if error.contains("Invalid basic signature batch")
+            );
+        }
+    }
+
+    #[test]
     fn should_verify_transcript_reject_transcript_with_wrong_registry_version() {
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(4..10);
@@ -1977,7 +2049,7 @@ mod load_transcript_with_openings {
     // dealings from the openings and successfully `sign_share` with threshold ECDSA.
     #[test]
     fn should_ecdsa_sign_share_when_loaded_with_openings() {
-        use ic_interfaces::crypto::ThresholdEcdsaSigVerifier;
+        use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
@@ -2050,7 +2122,9 @@ mod load_transcript_with_openings {
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
 
-            let sig_result = complainer.sign_share(&inputs).expect("signing failed");
+            let sig_result = complainer
+                .create_sig_share(&inputs)
+                .expect("signing failed");
             let verifier = env
                 .nodes
                 .random_filtered_by_receivers_excluding(complainer, &receivers, rng);

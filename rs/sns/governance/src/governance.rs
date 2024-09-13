@@ -23,9 +23,9 @@ use crate::{
             claim_swap_neurons_response::SwapNeuron,
             get_neuron_response, get_proposal_response,
             governance::{
-                self, neuron_in_flight_command,
-                neuron_in_flight_command::Command as InFlightCommand, MaturityModulation,
-                NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                self,
+                neuron_in_flight_command::{self, Command as InFlightCommand},
+                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -459,7 +459,7 @@ impl GovernanceProto {
 
 /// This follows the following pattern:
 /// https://willcrichton.net/rust-api-type-patterns/witnesses.html
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ValidGovernanceProto(GovernanceProto);
 
 impl ValidGovernanceProto {
@@ -1089,6 +1089,7 @@ impl Governance {
     ///   the initial neuron claim that we didn't know about.
     /// - The transfer of funds previously failed for some reason (e.g. the
     ///   ledger was unavailable or broken).
+    ///
     /// The ledger canister still guarantees that a transaction cannot
     /// transfer, i.e., disburse, more than what was in the neuron's account
     /// on the ledger.
@@ -2907,6 +2908,12 @@ impl Governance {
             .expect("NervousSystemParameters must have max_followees_per_function")
     }
 
+    fn max_number_of_principals_per_neuron_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .max_number_of_principals_per_neuron
+            .expect("NervousSystemParameters must have max_followees_per_function")
+    }
+
     /// Inserts a proposals that has already been validated in the state.
     ///
     /// This is a low-level function that makes no verification whatsoever.
@@ -3828,9 +3835,9 @@ impl Governance {
     /// Preconditions:
     /// - The caller must be the Sale canister deployed along with this SNS Governance
     ///   canister.
-    /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
+    /// - Each NeuronRecipe's `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
-    /// - Each NeuronParameters' `followees` does not exceed max_followees_per_function
+    /// - Each NeuronRecipe's `followees` does not exceed max_followees_per_function
     ///   as defined in the `NervousSystemParameters`
     /// - There is available memory in the Governance canister for the newly created
     ///   Neuron.
@@ -3873,30 +3880,44 @@ impl Governance {
         // Safe to do with the validation step above
         let neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s_or_panic();
         let max_followees_per_function = self.max_followees_per_function_or_panic();
+        let max_number_of_principals_per_neuron =
+            self.max_number_of_principals_per_neuron_or_panic();
         let neuron_claimer_permissions = self.neuron_claimer_permissions_or_panic();
 
         let mut swap_neurons = vec![];
 
-        for neuron_parameter in &request.neuron_parameters {
-            match neuron_parameter.validate(neuron_minimum_stake_e8s, max_followees_per_function) {
+        let Some(neuron_recipes) = request.neuron_recipes else {
+            log!(
+                ERROR,
+                "Swap called claim_swap_neurons, but did not populate `neuron_recipes`."
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        };
+
+        for neuron_recipe in Vec::<_>::from(neuron_recipes) {
+            match neuron_recipe.validate(
+                neuron_minimum_stake_e8s,
+                max_followees_per_function,
+                max_number_of_principals_per_neuron,
+            ) {
                 Ok(_) => (),
                 Err(err) => {
-                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
-                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                        neuron_parameter,
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
                         ClaimedSwapNeuronStatus::Invalid,
                     ));
                     continue;
                 }
             }
 
-            // Its safe to get all fields in NeuronParameters because of the previous validation.
-            let neuron_id = neuron_parameter.get_neuron_id_or_panic();
+            // It's safe to get all fields in NeuronRecipe because of the previous validation.
+            let neuron_id = neuron_recipe.get_neuron_id_or_panic();
 
-            // This neuron was claimed previously.
+            // Skip this neuron if it was previously claimed.
             if self.proto.neurons.contains_key(&neuron_id.to_string()) {
-                swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                    neuron_parameter,
+                swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
                     ClaimedSwapNeuronStatus::AlreadyExists,
                 ));
                 continue;
@@ -3904,38 +3925,38 @@ impl Governance {
 
             let neuron = Neuron {
                 id: Some(neuron_id.clone()),
-                permissions: neuron_parameter
+                permissions: neuron_recipe
                     .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
-                cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s_or_panic(),
+                cached_neuron_stake_e8s: neuron_recipe.get_stake_e8s_or_panic(),
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_parameter.construct_followees(),
+                followees: neuron_recipe.construct_followees(),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    neuron_parameter.get_dissolve_delay_seconds_or_panic(),
+                    neuron_recipe.get_dissolve_delay_seconds_or_panic(),
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-                source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
+                source_nns_neuron_id: neuron_recipe.source_nns_neuron_id(),
                 staked_maturity_e8s_equivalent: None,
-                auto_stake_maturity: neuron_parameter.construct_auto_staking_maturity(),
+                auto_stake_maturity: neuron_recipe.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
             };
 
             // Add the neuron to the various data structures and indexes to support neurons. This
             // method may fail if the memory limits of Governance have been reached, which is a
-            // recoverable error. The sale canister can retry claiming after GC or manual upgrades
+            // recoverable error. The swap canister can retry claiming after GC or upgrades
             // of SNS Governance.
             match self.add_neuron(neuron) {
-                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                    neuron_parameter,
+                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                    neuron_recipe,
                     ClaimedSwapNeuronStatus::Success,
                 )),
                 Err(err) => {
-                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
-                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
-                        neuron_parameter,
+                    log!(ERROR, "Failed to claim Swap Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_recipe(
+                        neuron_recipe,
                         ClaimedSwapNeuronStatus::MemoryExhausted,
                     ))
                 }
@@ -4329,45 +4350,46 @@ impl Governance {
 
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        // Filter all the neurons that have some disbursing maturity in progress.
-        let neurons_with_disbursal: Vec<Neuron> = self
+        // Filter all the neurons that are ready to disburse.
+        let neuron_id_and_disbursements: Vec<(NeuronId, DisburseMaturityInProgress)> = self
             .proto
             .neurons
             .values()
-            .filter(|n| !n.disburse_maturity_in_progress.is_empty())
-            .cloned()
-            .collect();
-        for neuron in neurons_with_disbursal {
-            // The first entry is the oldest one, check whether it can be completed.
-            let disbursement = match neuron.disburse_maturity_in_progress.first() {
-                Some(disbursement) => disbursement.clone(),
-                None => continue,
-            };
-
-            match disbursement.finalize_disbursement_timestamp_seconds {
-                Some(finalize_disbursement_timestamp_seconds) => {
-                    if now_seconds < finalize_disbursement_timestamp_seconds {
-                        // It's not time to disbuse yet
-                        continue;
+            .filter_map(|neuron| {
+                let id = match neuron.id.as_ref() {
+                    Some(id) => id,
+                    None => {
+                        log!(
+                            ERROR,
+                            "NeuronId is not set for neuron. This should never happen. \
+                             Cannot disburse."
+                        );
+                        return None;
                     }
+                };
+                // The first entry is the oldest one, check whether it can be completed.
+                let first_disbursement = neuron.disburse_maturity_in_progress.first()?;
+                let finalize_disbursement_timestamp_seconds =
+                    match first_disbursement.finalize_disbursement_timestamp_seconds {
+                        Some(finalize_disbursement_timestamp_seconds) => {
+                            finalize_disbursement_timestamp_seconds
+                        }
+                        None => {
+                            log!(
+                                ERROR,
+                                "Finalize disbursement timestamp is not set. Cannot disburse."
+                            );
+                            return None;
+                        }
+                    };
+                if now_seconds >= finalize_disbursement_timestamp_seconds {
+                    Some((id.clone(), first_disbursement.clone()))
+                } else {
+                    None
                 }
-                None => {
-                    log!(
-                        ERROR,
-                        "Finalize disbursement timestamp is not set. Cannot disburse."
-                    );
-                    continue;
-                }
-            }
-
-            let neuron_id = match neuron.id.as_ref() {
-                None => {
-                    log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
-                    continue;
-                }
-                Some(id) => id,
-            };
-
+            })
+            .collect();
+        for (neuron_id, disbursement) in neuron_id_and_disbursements.into_iter() {
             let maturity_to_disburse_after_modulation_e8s: u64 = match apply_maturity_modulation(
                 disbursement.amount_e8s,
                 maturity_modulation_basis_points,
@@ -4395,7 +4417,7 @@ impl Governance {
                     fdm,
                 )),
             };
-            let _neuron_lock = match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+            let _neuron_lock = match self.lock_neuron_for_command(&neuron_id, in_flight_command) {
                 Ok(neuron_lock) => neuron_lock,
                 Err(_) => continue, // if locking fails, try next neuron
             };
@@ -4441,7 +4463,7 @@ impl Governance {
                                 "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
                                 disbursement, neuron_id, block_index
                             );
-                    let neuron = match self.get_neuron_result_mut(neuron_id) {
+                    let neuron = match self.get_neuron_result_mut(&neuron_id) {
                         Ok(neuron) => neuron,
                         Err(e) => {
                             log!(
@@ -4692,8 +4714,8 @@ impl Governance {
     ///
     /// This method:
     /// * collects all proposals in state ReadyToSettle, that is, proposals that
-    /// can no longer accept votes for the purpose of rewards and that have
-    /// not yet been considered in a reward event
+    ///   can no longer accept votes for the purpose of rewards and that have
+    ///   not yet been considered in a reward event
     /// * associates those proposals to the new reward event and cleans their ballots
     fn distribute_rewards(&mut self, supply: Tokens) {
         log!(INFO, "distribute_rewards. Supply: {:?}", supply);
@@ -5490,7 +5512,7 @@ fn err_if_another_upgrade_is_in_progress(
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }
@@ -9637,14 +9659,14 @@ mod tests {
 
     /// Main Narrative:
     ///
-    ///   1. There are three neurons. One votes directly. The other two follow the (direct) voter.
-    ///   2. The difference between the two follower neurons is what they follow on:
-    ///     a. catch-all/fallback: This neuron does nothing on critical proposals.
-    ///     b. TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
-    ///   3. There are two proposals that the (direct) voter neuron votes on:
-    ///     A. Motion: Here, only the first follower neuron follows.
-    ///     B. TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
-    ///        the first follower neuron uses catch-all/fallback following.
+    /// 1. There are three neurons. One votes directly. The other two follow the (direct) voter.
+    /// 2. The difference between the two follower neurons is what they follow on:
+    ///   * catch-all/fallback: This neuron does nothing on critical proposals.
+    ///   * TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
+    /// 3. There are two proposals that the (direct) voter neuron votes on:
+    ///   * Motion: Here, only the first follower neuron follows.
+    ///   * TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
+    ///     the first follower neuron uses catch-all/fallback following.
     ///
     /// What the first follower neuron does is the most interesting, because what we are trying to
     /// demonstrate here is that catch-all/fallback following applies iff the proposal is

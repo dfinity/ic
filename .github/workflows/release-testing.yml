@@ -1,13 +1,14 @@
 name: Release Testing
 on:
-  workflow_run:
-    workflows: ["CI Main"]
-    types:
-      - completed
+  push:
     branches:
-      - 'hotfix-*-rc--*'
-      - 'rc--*'
+      - "hotfix-*"
+      - "rc--*"
   workflow_dispatch:
+# new commits interrupt any running workflow on the same branch
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -16,37 +17,26 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
-  ci-main-failure:
-    name: Check CI Main Failure
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
-    steps:
-      - run: |
-          echo 'CI Main workflow failed'
-          echo "CI Main URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
-          exit 1
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,7 +45,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -63,8 +60,19 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//rs/tests/..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly --deleted_packages=gitlab-ci/src/gitlab_config"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
     continue-on-error: True
@@ -72,11 +80,10 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,7 +92,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -93,19 +107,29 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//rs/tests/..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging --deleted_packages=gitlab-ci/src/gitlab_config"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,7 +138,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -122,15 +153,26 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//rs/tests/..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS_RULES: "--test_tag_filters=system_test_hotfix --deleted_packages=gitlab-ci/src/gitlab_config"
+          BAZEL_EXTRA_ARGS_RULES: "--test_tag_filters=system_test_hotfix"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   dependency-scan-release-cut:
-    name: Dependency Scan for Release builds
+    name: Dependency Scan for Release
     runs-on:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -150,7 +192,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
@@ -161,6 +210,63 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
+  setup-guest-os-qualification:
+    name: Setting up guest os qualification pipeline
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 180 # 3 hours
+    outputs:
+      matrix: ${{ steps.generate.outputs.output }}
+    steps:
+      - id: generate
+        name: Fetch beginning versions for qualification
+        shell: bash
+        run: |
+          UNIQUE_VERSIONS=$(curl https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts | jq -r '.[] | select (.state != "failed") | select (.state != "complete") | .batches | to_entries[] | "\(.value)"' | jq '.subnets[].git_revision' |  sort | uniq | jq -s )
+          echo "Will qualify, starting from versions: ${UNIQUE_VERSIONS}"
+          echo "output=$(jq -cn --argjson versions "$UNIQUE_VERSIONS" '{version: $versions}')" >> $GITHUB_OUTPUT
+  guest-os-qualification:
+    name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
+    needs: setup-guest-os-qualification
+    strategy:
+      matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 180 # 3 hours
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Login to Dockerhub
+        shell: bash
+        run: ./ci/scripts/docker-login.sh
+        env:
+          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+      - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
+          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
+          BAZEL_EXTRA_ARGS_RULES: "--test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}

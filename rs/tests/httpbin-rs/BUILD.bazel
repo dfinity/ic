@@ -3,7 +3,7 @@ load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file"
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -23,6 +23,10 @@ rust_binary(
     name = "httpbin",
     srcs = ["src/main.rs"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/pocket_ic_server:__pkg__",
+    ],
     deps = DEPENDENCIES,
 )
 
@@ -63,6 +67,9 @@ container_image(
     name = "httpbin_image_base",
     base = "@ubuntu_test_runtime//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
     ],
@@ -81,6 +88,9 @@ container_image(
         ":httpbin",
     ],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "httpbin",
     workdir = "/home/httpbin",
 )

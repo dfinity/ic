@@ -48,6 +48,7 @@ use rosetta_core::identifiers::*;
 use rosetta_core::miscellaneous::OperationStatus;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
+pub use rosetta_core::models::Secp256k1KeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::BlockResponse;
@@ -197,6 +198,7 @@ struct RosettaTestingEnvironmentBuilder {
     transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     offline: bool,
     port: u16,
+    icrc1_symbol: Option<String>,
 }
 
 impl RosettaTestingEnvironmentBuilder {
@@ -207,6 +209,7 @@ impl RosettaTestingEnvironmentBuilder {
             transfer_args_for_block_generating: None,
             offline: false,
             port: setup.port,
+            icrc1_symbol: None,
         }
     }
 
@@ -217,6 +220,11 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub fn with_offline_rosetta(mut self, offline: bool) -> Self {
         self.offline = offline;
+        self
+    }
+
+    pub fn with_icrc1_symbol(mut self, symbol: String) -> Self {
+        self.icrc1_symbol = Some(symbol);
         self
     }
 
@@ -254,6 +262,7 @@ impl RosettaTestingEnvironmentBuilder {
                 });
             }
         }
+
         // Create a testing agent
         let icrc1_agent = Arc::new(Icrc1Agent {
             agent: local_replica::get_testing_agent(self.port).await,
@@ -266,6 +275,11 @@ impl RosettaTestingEnvironmentBuilder {
                 ledger_id: self.icrc1_ledger_canister_id,
                 network_url: Some(replica_url),
                 offline: self.offline,
+                symbol: Some(
+                    self.icrc1_symbol
+                        .clone()
+                        .unwrap_or(DEFAULT_TOKEN_SYMBOL.to_string()),
+                ),
                 ..RosettaOptions::default()
             },
         )
@@ -350,6 +364,26 @@ async fn assert_rosetta_balance(
         .clone()
         .value;
     assert_eq!(rosetta_balance, balance.to_string());
+}
+
+#[test]
+fn test_ledger_symbol_check() {
+    let result = std::panic::catch_unwind(|| {
+        let rt = Runtime::new().unwrap();
+        let setup = Setup::builder().build();
+        rt.block_on(async {
+            RosettaTestingEnvironmentBuilder::new(&setup)
+                .with_icrc1_symbol("WRONG_SYMBOL".to_string())
+                .build()
+                .await;
+        });
+    });
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .downcast_ref::<String>()
+        .unwrap()
+        .contains("Provided symbol does not match symbol retrieved in online mode."));
 }
 
 #[test]
@@ -1077,7 +1111,6 @@ fn test_construction_submit() {
                             )
                             .await
                             .unwrap();
-                        println!("Transaction submitted and confirmed");
                         for (account, expected_balance) in expected_balances.into_iter() {
                             let actual_balance = env
                                 .icrc1_agent
@@ -1096,8 +1129,8 @@ fn test_construction_submit() {
 
 #[test]
 fn test_rosetta_client_construction_api_flow() {
-    let sender_keypair = EdKeypair::generate(0);
-    let receiver_keypair = EdKeypair::generate(1);
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let receiver_keypair = Secp256k1KeyPair::generate(1);
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
         .with_initial_balance(
@@ -1448,15 +1481,7 @@ fn test_search_transactions() {
 
                         let search_transactions_response = env
                             .rosetta_client
-                            .search_transactions(
-                                search_transactions_request.network_identifier,
-                                search_transactions_request.transaction_identifier,
-                                search_transactions_request.account_identifier,
-                                search_transactions_request.type_,
-                                search_transactions_request.max_block,
-                                search_transactions_request.limit,
-                                search_transactions_request.offset,
-                            )
+                            .search_transactions(&search_transactions_request)
                             .await
                             .expect("Unable to call search_transactions");
 

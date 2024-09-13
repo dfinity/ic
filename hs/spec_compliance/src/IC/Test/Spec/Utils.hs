@@ -222,7 +222,7 @@ install ecid prog = do
   return cid
 
 create :: (HasCallStack, HasAgentConfig) => Blob -> IO Blob
-create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) empty
+create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) Nothing
 
 upgrade' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
 upgrade' cid prog = do

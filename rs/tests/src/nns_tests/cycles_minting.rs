@@ -26,11 +26,12 @@ use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
 use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
     TEST_USER2_KEYPAIR,
@@ -39,7 +40,7 @@ use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
 };
@@ -51,14 +52,12 @@ use icp_ledger::{
     BlockArg, BlockIndex, BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation,
     Subaccount, TipOfChainRes, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
+use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use rand::{rngs::StdRng, SeedableRng};
 use slog::info;
 use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
-
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 
 fn make_user_ed25519(seed: u64) -> (ic_canister_client_sender::Ed25519KeyPair, PrincipalId) {
     let mut rng = StdRng::seed_from_u64(seed);
@@ -97,15 +96,9 @@ pub fn config_with_multiple_app_subnets(env: TestEnv) {
     });
 }
 
-// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
 fn scale_cycles(cycles: Cycles) -> Cycles {
-    match USE_COST_SCALING_FLAG {
-        false => cycles,
-        true => {
-            let subnet_size: usize = 1; // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
-            (cycles * subnet_size) / SMALL_APP_SUBNET_MAX_SIZE
-        }
-    }
+    let subnet_size: usize = 1; // Subnet has only a single node, see usage of `add_fast_single_node_subnet` in `config()`.
+    (cycles * subnet_size) / SMALL_APP_SUBNET_MAX_SIZE
 }
 
 pub fn test(env: TestEnv) {
@@ -201,6 +194,17 @@ pub fn test(env: TestEnv) {
             )
             .await
             .unwrap();
+
+        let cmc_canister_status: RootCanisterStatusResult = Canister::new(&nns, ROOT_CANISTER_ID)
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(CYCLES_MINTING_CANISTER_ID),
+                &Sender::Anonymous,
+            )
+            .await
+            .unwrap();
+        let cmc_initial_cycles_balance = cmc_canister_status.cycles.0.to_u64().unwrap();
 
         let icp_xdr_conversion_rate = conversion_rate_response.data;
         // Check that the first call changed the value but not the second one
@@ -932,11 +936,8 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        let total_icpts = small_amount
-            .checked_add(&tiny_amount)
-            .unwrap()
-            .checked_add(&initial_amount)
-            .unwrap()
+        // Total ICPs successfully minted.
+        let total_icpts = initial_amount
             .checked_add(&top_up_amount)
             .unwrap()
             .checked_add(&nns_amount)
@@ -944,8 +945,13 @@ pub fn test(env: TestEnv) {
             .checked_add(&nns_amount)
             .unwrap();
 
+        // Cycles are only minted when the amount needed exceeds the cycles balance of the CMC, so
+        // the total amount of cylces is the sum of the minted cycles and the initial cycles
+        // balance.
+        let total_cycles = cycles_minted + cmc_initial_cycles_balance;
+
         assert_eq!(
-            Cycles::from(cycles_minted / 2),
+            Cycles::from(total_cycles / 2),
             icpts_to_cycles.to_cycles(total_icpts)
         );
     });

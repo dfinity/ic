@@ -268,7 +268,6 @@ pub fn cert_state_makes_no_progress_with_retries(
 
 pub fn install_nns_with_customizations_and_check_progress(
     topology: TopologySnapshot,
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     customizations: NnsCustomizations,
 ) {
     let logger = topology.test_env().logger();
@@ -306,7 +305,6 @@ pub fn install_nns_with_customizations_and_check_progress(
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     NnsInstallationBuilder::new()
         .with_customizations(customizations)
-        .with_canister_wasm_strategy(canister_wasm_strategy)
         .install(&nns_node, &topology.test_env())
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
@@ -341,9 +339,5 @@ pub fn install_nns_with_customizations_and_check_progress(
 }
 
 pub fn install_nns_and_check_progress(topology: TopologySnapshot) {
-    install_nns_with_customizations_and_check_progress(
-        topology,
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
-        NnsCustomizations::default(),
-    );
+    install_nns_with_customizations_and_check_progress(topology, NnsCustomizations::default());
 }

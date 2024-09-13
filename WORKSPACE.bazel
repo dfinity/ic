@@ -4,8 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("mainnet-canisters.bzl", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
+load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
     name = "aspect_rules_sol",
@@ -81,8 +80,8 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.79.0",
-        "nightly/2024-04-25",
+        "1.80.0",
+        "nightly/2024-06-06",
     ],
 )
 
@@ -215,15 +214,15 @@ load(
 
 container_pull(
     name = "static-file-server",
-    digest = "sha256:c21bed6db05fe08f2da128fe96f5f5a06633348fb5bb37bf3581e6501c6b528a",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    digest = "sha256:c387c31ffb55ac5b6b4654bc9924f73eb8fb5214ebb8552a7eeffc8849f0e7dd",
+    registry = "docker.io",
     repository = "halverneus/static-file-server",
 )
 
 container_pull(
     name = "bitcoind",
     digest = "sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    registry = "docker.io",
     repository = "kylemanna/bitcoind",
 )
 
@@ -237,7 +236,7 @@ container_pull(
 container_pull(
     name = "minica",
     digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    registry = "docker.io",
     repository = "ryantk/minica",
 )
 
@@ -297,7 +296,7 @@ container_pull(
 #
 # The reason we can't directly depend on //rs/tests:ubuntu_test_runtime_image is that
 # the target //rs/tests/httpbin-rs:httpbin_image_base
-# fails to build in our container (gitlab-ci/container/container-run.sh).
+# fails to build in our container (ci/container/container-run.sh).
 container_pull(
     name = "ubuntu_test_runtime",
     digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",
@@ -305,19 +304,9 @@ container_pull(
     repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
 
-# URL: registry.gitlab.com/dfinity-lab/open/public-docker-registry/nns-dapp-specs:latest
-container_pull(
-    name = "nns-dapp-specs",
-    digest = "sha256:9e003fe2740f2813bf9e776b9cabd5cdb1fbe15581fc4b78876708fdf3791b3f",
-    registry = "registry.gitlab.com",
-    repository = "dfinity-lab/open/public-docker-registry/nns-dapp-specs",
-)
-
 # Third party dependencies that require special treatment
 
 lmdb_repository()
-
-lmdb_rkv_repository(name = "lmdb_rkv")
 
 http_archive(
     name = "pigz",
@@ -467,6 +456,24 @@ http_jar(
     url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-deps-202302091937.jar",
 )
 
+# Apalache model checker for TLA+
+http_archive(
+    name = "tla_apalache",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+  name = "contents",
+  srcs = [
+    "bin/apalache-mc",
+    "lib/apalache.jar",
+  ],
+)
+    """,
+    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
+    strip_prefix = "apalache-0.44.11",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+)
+
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
@@ -482,6 +489,8 @@ http_archive(
 )
 
 mainnet_core_nns_canisters()
+
+mainnet_ck_canisters()
 
 mainnet_sns_canisters()
 
@@ -508,8 +517,8 @@ http_file(
 http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
-    sha256 = "8cc43d3f40bb734a0c87f42ae19eee70c360f2d66a0c88c631f0f0e785505133",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2023-06-12/ic-btc-canister.wasm.gz",
+    sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2024-07-28/ic-btc-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -667,9 +676,9 @@ http_file(
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "cc0c8690cc619121aa247332e700ce60c25cb27924ba06b1845404aae42a6fa1",
-    strip_prefix = "rules_haskell-759e4f5215cf8771e8f738357aefde52a22d0d2d",
-    url = "https://github.com/tweag/rules_haskell/archive/759e4f5215cf8771e8f738357aefde52a22d0d2d.tar.gz",
+    sha256 = "0aa541a4278cbcc39d4c92af25f0860b745e5ce5408e9aed641d307d4267c609",
+    strip_prefix = "rules_haskell-96e231409b772859926914e76296e894982db600",
+    url = "https://github.com/tweag/rules_haskell/archive/96e231409b772859926914e76296e894982db600.tar.gz",
 )
 
 # Load the rules_haskell dependencies necessary for loading the toolchains
@@ -687,7 +696,7 @@ load(
 )
 
 rules_haskell_toolchains(
-    version = "9.6.2",
+    version = "9.6.6",
 )
 
 load(
@@ -799,15 +808,15 @@ stack_snapshot(
         "word8",
         "zlib",
     ],
-    snapshot = "nightly-2023-07-29",
+    snapshot = "lts-22.30",
     stack_snapshot_json = "//:stackage_snapshot.json",
 )
 
 http_archive(
     name = "haskell-candid",
-    sha256 = "df5116a59502da272d261a772cd7019486f9ddc47361d43a195316ccb8500f84",
-    strip_prefix = "haskell-candid-a682fca78f5770d3ec0c1184ecf7de866dc5ae77",
-    urls = ["https://github.com/nomeata/haskell-candid/archive/a682fca78f5770d3ec0c1184ecf7de866dc5ae77.tar.gz"],
+    sha256 = "bd9d67c3f719ac4cfb5ba339b52dd8ee985b11029a53e97b3cd555334f28d1e3",
+    strip_prefix = "haskell-candid-b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222",
+    urls = ["https://github.com/nomeata/haskell-candid/archive/b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222.tar.gz"],
 )
 
 http_archive(

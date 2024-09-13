@@ -86,7 +86,7 @@ thread_local! {
     });
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
@@ -128,7 +128,7 @@ impl Storable for State {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 enum AccountIdentifierDataType {
     #[default]
     Balance = 0,
@@ -658,7 +658,7 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
 }
 
 #[candid_method(query)]
-#[query]
+#[query(decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

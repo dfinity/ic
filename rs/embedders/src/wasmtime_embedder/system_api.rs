@@ -1,8 +1,9 @@
+use crate::wasm_utils::instrumentation::WasmMemoryType;
 use crate::wasmtime_embedder::{
     system_api_complexity::{overhead, overhead_native},
     StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
-
+use crate::InternalErrorCode;
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -14,16 +15,12 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
-use ic_wasm_types::WasmEngineError;
-
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
-
-use crate::InternalErrorCode;
-use std::convert::TryFrom;
-
-use crate::wasm_utils::instrumentation::WasmMemoryType;
 use ic_system_api::SystemApiImpl;
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_wasm_types::WasmEngineError;
+use num_traits::ops::saturating::SaturatingAdd;
+use std::convert::TryFrom;
+use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -84,7 +81,7 @@ fn store_value(
 /// Updates heap bytemap marking which pages have been written to dst and size
 /// need to have valid values (need to pass checks performed by the function
 /// that actually writes to the heap)
-#[inline(never)]
+#[inline(always)]
 fn mark_writes_on_bytemap(
     caller: &mut Caller<'_, StoreData>,
     dst: usize,
@@ -116,6 +113,7 @@ fn mark_writes_on_bytemap(
 }
 
 /// Charge for system api call that doesn't involve touching memory
+#[inline(always)]
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -124,6 +122,7 @@ fn charge_for_cpu(
 }
 
 /// Charge for system api call that involves writing/reading heap
+#[inline(always)]
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -134,7 +133,7 @@ fn charge_for_cpu_and_mem(
 
 /// Charge for system api call that involves writing/reading stable memory
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_stable_write(
     caller: &mut Caller<'_, StoreData>,
     mut overhead: NumInstructions,
@@ -148,32 +147,17 @@ fn charge_for_stable_write(
 
     let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
 
-    overhead = overhead
-        .get()
-        .checked_add(dirty_page_cost.get())
-        .ok_or(unexpected_err(format!(
-            "Overflow while calculating charge for stable write:\
-             overhead: {}, dirty page cost: {}",
-            overhead, dirty_page_cost
-        )))?
-        .into();
-
-    #[allow(non_upper_case_globals)]
-    const KiB: u64 = 1024;
+    overhead = overhead.saturating_add(&dirty_page_cost);
 
     let stable_dirty_pages = &mut caller
         .data_mut()
         .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = NumOsPages::from(
-        stable_dirty_pages
-            .get()
-            .saturating_add(new_stable_dirty_pages.get()),
-    );
+    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
 
     if total_pages > dirty_page_limit {
         let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
                             ),
                         );
         return Err(error);
@@ -199,39 +183,24 @@ fn charge_for_stable_write(
 //
 // Note: marked not for inlining as we don't want to spill this code into every system API call.
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
+    overhead: NumInstructions,
     num_bytes: usize,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
-    if num_bytes > 0 {
-        let bytes_charge =
-            system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
-        overhead = overhead
-            .get()
-            .checked_add(bytes_charge.get())
-            .ok_or(unexpected_err(format!(
-                "Overflow while calculating charge for System API call:\
-             overhead: {}, bytes charge: {}",
-                overhead, bytes_charge
-            )))?
-            .into();
-    }
-
+    let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
+    let overhead = overhead.saturating_add(&bytes_charge);
     charge_direct_fee(caller, overhead)
 }
 
 // TODO: RUN-841: Cover with tests
+#[inline(always)]
 fn charge_direct_fee(
     caller: &mut Caller<'_, StoreData>,
     fee: NumInstructions,
 ) -> HypervisorResult<()> {
-    if fee == NumInstructions::from(0) {
-        return Ok(());
-    }
-
     let num_instructions_global = get_num_instructions_global(caller)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller)?;
     // Assert the current instruction counter is sane
@@ -348,6 +317,10 @@ pub(crate) fn syscalls<
                     })
             })
             .and_then(|mem| {
+                // False positive clippy lint.
+                // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+                // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
                 f(store.system_api_mut()?, mem)
             })
@@ -616,11 +589,7 @@ pub(crate) fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
                 let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
-                let canister_logging_is_enabled =
-                    feature_flags.canister_logging == FlagStatus::Enabled;
-                if canister_logging_is_enabled {
-                    num_bytes += logging_charge_bytes(&mut caller, length)?
-                }
+                num_bytes += logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
@@ -629,12 +598,7 @@ pub(crate) fn syscalls<
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.save_log_message(
-                        canister_logging_is_enabled,
-                        offset,
-                        length,
-                        memory,
-                    );
+                    system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
                         system_api.ic0_debug_print(offset, length, memory)
                     } else {
@@ -685,22 +649,8 @@ pub(crate) fn syscalls<
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     // A valid function index should be much smaller than u32::max
-                    let reply_fun: u32 = reply_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reply function index out of bounds: {}",
-                                reply_fun
-                            ),
-                        }
-                    })?;
-                    let reject_fun: u32 = reject_fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_new: reject function index out of bounds: {}",
-                                reject_fun
-                            ),
-                        }
-                    })?;
+                    let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
+                    let reject_fun: u32 = reject_fun.try_into().unwrap_or(u32::MAX);
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -741,14 +691,7 @@ pub(crate) fn syscalls<
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
                 with_system_api(&mut caller, |s| {
                     // A valid function index should be much smaller than u32::max
-                    let fun: u32 = fun.try_into().map_err(|_| {
-                        HypervisorError::ToolchainContractViolation {
-                            error: format!(
-                                "ic0_call_on_cleanup: function index out of bounds: {}",
-                                fun
-                            ),
-                        }
-                    })?;
+                    let fun: u32 = fun.try_into().unwrap_or(u32::MAX);
                     s.ic0_call_on_cleanup(fun, env)
                 })
             }
@@ -788,10 +731,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size()).and_then(|s| {
-                    i32::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable_size())
             }
         })
         .unwrap();
@@ -843,10 +783,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable64_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size()).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable64_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable64_size())
             }
         })
         .unwrap();
@@ -954,11 +891,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE)?;
-                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_canister_cycle_balance failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())
             }
         })
         .unwrap();
@@ -984,11 +917,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_available failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available())
             }
         })
         .unwrap();
@@ -1014,11 +943,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_refunded", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_refunded failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded())
             }
         })
         .unwrap();
@@ -1231,10 +1156,7 @@ pub(crate) fn syscalls<
     linker
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount)).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
             }
         })
         .unwrap();
@@ -1260,10 +1182,8 @@ pub(crate) fn syscalls<
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1278,10 +1198,8 @@ pub(crate) fn syscalls<
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }

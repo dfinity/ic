@@ -13,20 +13,20 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 /// A payload, that contains information needed during a regular round.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
     pub dealings: dkg::Dealings,
-    pub ecdsa: idkg::Payload,
+    pub idkg: idkg::Payload,
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
-    pub ecdsa: idkg::Summary,
+    pub idkg: idkg::Summary,
 }
 
 impl SummaryPayload {
@@ -40,12 +40,12 @@ impl SummaryPayload {
     /// Note that this function should generally be called on the CUP instead.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         let dkg_version = self.dkg.get_oldest_registry_version_in_use();
-        if let Some(ecdsa_version) = self
-            .ecdsa
+        if let Some(idkg_version) = self
+            .idkg
             .as_ref()
             .and_then(|payload| payload.get_oldest_registry_version_in_use())
         {
-            dkg_version.min(ecdsa_version)
+            dkg_version.min(idkg_version)
         } else {
             dkg_version
         }
@@ -53,7 +53,7 @@ impl SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary
@@ -68,7 +68,7 @@ impl BlockPayload {
     pub fn is_empty(&self) -> bool {
         match self {
             BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.ecdsa.is_none()
+                data.batch.is_empty() && data.dealings.messages.is_empty() && data.idkg.is_none()
             }
             _ => false,
         }
@@ -114,10 +114,10 @@ impl BlockPayload {
     }
 
     /// Returns a reference to IDkgPayload if it exists.
-    pub fn as_ecdsa(&self) -> Option<&idkg::IDkgPayload> {
+    pub fn as_idkg(&self) -> Option<&idkg::IDkgPayload> {
         match self {
-            BlockPayload::Data(data) => data.ecdsa.as_ref(),
-            BlockPayload::Summary(data) => data.ecdsa.as_ref(),
+            BlockPayload::Data(data) => data.idkg.as_ref(),
+            BlockPayload::Summary(data) => data.idkg.as_ref(),
         }
     }
 
@@ -138,7 +138,7 @@ impl BlockPayload {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PayloadType {
     Summary,
@@ -162,7 +162,7 @@ impl std::fmt::Display for PayloadType {
 /// pointer so that it is cheap to clone.
 ///
 /// It serializes to both the crypto hash and value of a `BlockPayload`.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct Payload {
     payload_type: PayloadType,
     // It is not crucial that Arc used here is unique, because the data referenced remains
@@ -242,12 +242,12 @@ impl From<dkg::Payload> for BlockPayload {
         match payload {
             dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
-                ecdsa: None,
+                idkg: None,
             }),
             dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings,
-                ecdsa: idkg::Payload::default(),
+                idkg: idkg::Payload::default(),
             }),
         }
     }

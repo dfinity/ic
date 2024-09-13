@@ -11,8 +11,8 @@ ic_disk_path: ""
 
 ic_media_path: ""
 
-ic_media_branch: "master"
+ic_media_branch: master
 
 ic_nodes: "{{ groups['nodes'] }}"
 
-ic_git_revision: "git-revision-is-not-set"
+ic_git_revision: git-revision-is-not-set

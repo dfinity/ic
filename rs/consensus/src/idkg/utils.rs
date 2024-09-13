@@ -1,4 +1,4 @@
-//! Common utils for the ECDSA implementation.
+//! Common utils for the IDKG implementation.
 
 use crate::idkg::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
 use crate::idkg::metrics::IDkgPayloadMetrics;
@@ -43,7 +43,7 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(crate) struct InvalidChainCacheError(String);
 
 impl Display for InvalidChainCacheError {
@@ -72,7 +72,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .tip()
             .payload
             .as_ref()
-            .as_ecdsa()
+            .as_idkg()
             .map_or(Box::new(std::iter::empty()), |idkg_payload| {
                 Box::new(idkg_payload.iter_transcript_configs_in_creation())
             })
@@ -81,7 +81,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
     fn pre_signatures_in_creation(
         &self,
     ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
-        self.chain.tip().payload.as_ref().as_ecdsa().map_or(
+        self.chain.tip().payload.as_ref().as_idkg().map_or(
             Box::new(std::iter::empty()),
             |idkg_payload| {
                 Box::new(
@@ -99,7 +99,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .tip()
             .payload
             .as_ref()
-            .as_ecdsa()
+            .as_idkg()
             .and_then(|idkg_payload| idkg_payload.available_pre_signatures.get(id))
     }
 
@@ -108,7 +108,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .tip()
             .payload
             .as_ref()
-            .as_ecdsa()
+            .as_idkg()
             .map_or(BTreeSet::new(), |payload| payload.active_transcripts())
     }
 
@@ -119,7 +119,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .tip()
             .payload
             .as_ref()
-            .as_ecdsa()
+            .as_idkg()
             .map_or(Box::new(std::iter::empty()), |idkg_payload| {
                 Box::new(idkg_payload.iter_xnet_transcripts_source_subnet())
             })
@@ -132,7 +132,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .tip()
             .payload
             .as_ref()
-            .as_ecdsa()
+            .as_idkg()
             .map_or(Box::new(std::iter::empty()), |idkg_payload| {
                 Box::new(idkg_payload.iter_xnet_transcripts_target_subnet())
             })
@@ -144,7 +144,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
         let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
-                if let Some(idkg_payload) = block.payload.as_ref().as_ecdsa() {
+                if let Some(idkg_payload) = block.payload.as_ref().as_idkg() {
                     idkg_payload
                 } else {
                     return Err(format!(
@@ -359,7 +359,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
     }
 }
 
-/// Inspect ecdsa_initializations field in the CUPContent.
+/// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
 pub(crate) fn inspect_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
@@ -471,23 +471,23 @@ pub(crate) fn get_chain_key_config_if_enabled(
     }
 }
 
-/// Return the set of quadruple IDs to be delivered in the batch of this block.
-/// We deliver IDs of all available quadruples that were created using the current key transcript.
+/// Return the set of pre-signature IDs to be delivered in the batch of this block.
+/// We deliver IDs of all available pre-signatures that were created using the current key transcript.
 pub(crate) fn get_pre_signature_ids_to_deliver(
     block: &Block,
 ) -> BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> {
-    let Some(ecdsa) = block.payload.as_ref().as_ecdsa() else {
+    let Some(idkg) = block.payload.as_ref().as_idkg() else {
         return BTreeMap::new();
     };
 
     let mut pre_sig_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
-    for key_id in ecdsa.key_transcripts.keys() {
+    for key_id in idkg.key_transcripts.keys() {
         pre_sig_ids.insert(key_id.clone(), BTreeSet::default());
     }
 
-    for (pre_sig_id, pre_signature) in &ecdsa.available_pre_signatures {
+    for (pre_sig_id, pre_signature) in &idkg.available_pre_signatures {
         let key_id = pre_signature.key_id();
-        if ecdsa
+        if idkg
             .current_key_transcript(&key_id)
             .is_some_and(|current_key_transcript| {
                 current_key_transcript.transcript_id()
@@ -506,6 +506,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// - The block contains an IDKG payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
 /// - we can extract the threshold master public key from the transcript.
+///
 /// Otherwise `Ok(None)` is returned.
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
@@ -515,7 +516,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
 ) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
-    let Some(idkg_payload) = block.payload.as_ref().as_ecdsa() else {
+    let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
         return Ok(BTreeMap::new());
     };
 
@@ -877,7 +878,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
-                    ecdsa: idkg_payload,
+                    idkg: idkg_payload,
                 }),
             ),
             Height::from(123),
@@ -955,7 +956,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block_without_ecdsa_should_not_deliver_quadruples() {
+    fn test_block_without_idkg_should_not_deliver_quadruples() {
         let block = make_block(None);
         let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 

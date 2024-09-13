@@ -114,18 +114,18 @@ fn should_install_and_upgrade_with_valid_values() {
 
 #[test]
 fn should_install_and_upgrade_without_build_index_interval_field_set() {
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     enum OldIndexArg {
         Init(OldInitArg),
         Upgrade(OldUpgradeArg),
     }
 
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     struct OldInitArg {
         pub ledger_id: Principal,
     }
 
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     struct OldUpgradeArg {
         pub ledger_id: Option<Principal>,
     }
@@ -237,8 +237,8 @@ fn should_consume_expected_amount_of_cycles() {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 57_473_930;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 207_959_396;
+                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 124_445_767;
+                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 449_388_554;
                 for ledger_consumption in [initial.ledger, upgrade.ledger] {
                     assert!(
                         abs_relative_difference(

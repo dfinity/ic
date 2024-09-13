@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
     CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
@@ -33,7 +33,7 @@ use std::str::FromStr;
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterStatusView {
     Running,
     Stopping,
@@ -50,14 +50,14 @@ impl CanisterStatusView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
     Unregister(CallbackId),
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
@@ -249,13 +249,13 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinGetSuccessors)
             | Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::DeleteChunks)
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
@@ -545,7 +545,7 @@ impl SystemStateChanges {
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SandboxSafeSystemState {
     /// Only public for tests
     #[doc(hidden)]
@@ -557,6 +557,7 @@ pub struct SandboxSafeSystemState {
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
@@ -587,6 +588,7 @@ impl SandboxSafeSystemState {
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
@@ -616,6 +618,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            wasm_memory_threshold,
             compute_allocation,
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
@@ -700,6 +703,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            system_state.wasm_memory_threshold,
             compute_allocation,
             system_state.balance(),
             system_state.reserved_balance(),
@@ -1232,12 +1236,10 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
-        self.system_state_changes.canister_log.add_record(
-            is_enabled,
-            time.as_nanos_since_unix_epoch(),
-            content,
-        );
+    pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
     }
 
     /// Takes collected canister log records.
@@ -1275,15 +1277,16 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
         time::CoarseTime,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        Time,
     };
 
     use crate::{
@@ -1361,6 +1364,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            NumBytes::new(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),

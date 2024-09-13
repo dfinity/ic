@@ -48,6 +48,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
@@ -89,7 +90,7 @@ component_files = {
     Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.service"): "/etc/systemd/system/deploy-updated-ssh-account-keys.service",
 
     # upgrade
-    Label("upgrade/manageboot/hostos/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",

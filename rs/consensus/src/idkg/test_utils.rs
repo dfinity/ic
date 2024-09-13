@@ -460,9 +460,6 @@ impl TestIDkgBlockReader {
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdSigInputsRef)> + '_> {
         Box::new(
-            // False positive `map_identity` warning.
-            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-            #[allow(clippy::map_identity)]
             self.requested_signatures
                 .iter()
                 .map(|(id, sig_inputs)| (id, sig_inputs)),
@@ -1818,12 +1815,12 @@ pub(crate) trait IDkgPayloadTestHelper {
         rng: &mut ReproducibleRng,
     ) -> (IDkgTranscript, idkg::UnmaskedTranscript);
 
-    /// Retrieves the only key transcript in the ecdsa payload.
+    /// Retrieves the only key transcript in the idkg payload.
     ///
     /// Panics if there are multiple or no keys.
     fn single_key_transcript(&self) -> &MasterKeyTranscript;
 
-    /// Retrieves the only key transcript in the ecdsa payload.
+    /// Retrieves the only key transcript in the idkg payload.
     ///
     /// Panics if there are multiple or no keys.
     fn single_key_transcript_mut(&mut self) -> &mut MasterKeyTranscript;

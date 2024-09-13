@@ -1,8 +1,8 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId,
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
+    SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -13,7 +13,7 @@ use ic_replicated_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
         system_state::CyclesUseCase,
-        testing::new_canister_queues_for_test,
+        testing::new_canister_output_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
         BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
@@ -57,6 +57,16 @@ pub use history::MockIngressHistory;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+
+/// Valid, but minimal wasm code.
+const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
+
+pub fn empty_wasm() -> Arc<WasmBinary> {
+    WasmBinary::new(CanisterModule::new(EMPTY_WASM.to_vec()))
+}
 
 pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
@@ -202,6 +212,7 @@ pub struct CanisterStateBuilder {
     stable_memory: Option<Vec<u8>>,
     wasm: Option<Vec<u8>>,
     memory_allocation: MemoryAllocation,
+    wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
     ingress_queue: Vec<Ingress>,
     status: CanisterStatusType,
@@ -210,7 +221,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
 }
 
 impl CanisterStateBuilder {
@@ -246,6 +257,11 @@ impl CanisterStateBuilder {
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
         self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self
+    }
+
+    pub fn with_wasm_memory_threshold<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
+        self.wasm_memory_threshold = num_bytes.into();
         self
     }
 
@@ -294,7 +310,7 @@ impl CanisterStateBuilder {
         self
     }
 
-    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibilityV2) -> Self {
         self.log_visibility = log_visibility;
         self
     }
@@ -402,6 +418,7 @@ impl Default for CanisterStateBuilder {
             stable_memory: None,
             wasm: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
             status: CanisterStatusType::Running,
@@ -410,7 +427,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
         }
     }
 }
@@ -457,6 +474,11 @@ impl SystemStateBuilder {
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
         self.system_state.memory_allocation =
             MemoryAllocation::try_from(memory_allocation).unwrap();
+        self
+    }
+
+    pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
+        self.system_state.wasm_memory_threshold = wasm_memory_threshold;
         self
     }
 
@@ -542,7 +564,6 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState {
                 canister_root: "NOT_USED".into(),
-                session_nonce: None,
                 wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
                 wasm_memory: Memory::new_for_testing(),
                 stable_memory: Memory::new_for_testing(),
@@ -563,6 +584,11 @@ impl ExecutionStateBuilder {
 
     pub fn with_wasm_metadata(mut self, metadata: WasmMetadata) -> Self {
         self.execution_state.metadata = metadata;
+        self
+    }
+
+    pub fn with_wasm_binary(mut self, wasm_binary: Arc<WasmBinary>) -> Self {
+        self.execution_state.wasm_binary = wasm_binary;
         self
     }
 
@@ -762,20 +788,38 @@ pub fn new_canister_state(
     CanisterState::new(system_state, None, scheduler_state)
 }
 
+pub fn new_canister_state_with_execution(
+    canister_id: CanisterId,
+    controller: PrincipalId,
+    initial_cycles: Cycles,
+    freeze_threshold: NumSeconds,
+) -> CanisterState {
+    let scheduler_state = SchedulerState::default();
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
+    let execution_state = ExecutionStateBuilder::default()
+        .with_wasm_binary(empty_wasm())
+        .build();
+    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+}
+
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
     originator: CanisterId,
     respondent: CanisterId,
-    callback_id: CallbackId,
     deadline: CoarseTime,
-) {
+) -> CallbackId {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(originator, callback_id, deadline),
+        CallOrigin::SystemTask,
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
@@ -792,7 +836,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         None,
         deadline,
-    ));
+    ))
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -886,9 +930,7 @@ prop_compose! {
             max_size,
             min_signal_count,
             max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream
@@ -1024,7 +1066,6 @@ prop_compose! {
         update_transactions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
-        ecdsa_signature_agreements in any::<u64>(),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
@@ -1035,7 +1076,6 @@ prop_compose! {
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
-        metrics.ecdsa_signature_agreements = ecdsa_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
             metrics.observe_consumed_cycles_with_use_case(
@@ -1055,7 +1095,7 @@ prop_compose! {
 ///
 /// Returns the generated `ReplicatedState`; the requests grouped by canister,
 /// in expected iteration order; and the total number of requests.
-fn new_replicated_state_for_test(
+fn new_replicated_state_with_output_queues(
     own_subnet_id: SubnetId,
     mut output_requests: Vec<Vec<Request>>,
     num_receivers: usize,
@@ -1068,8 +1108,11 @@ fn new_replicated_state_for_test(
     let mut requests = VecDeque::new();
 
     let subnet_queues = if let Some(reqs) = output_requests.pop() {
-        let (queues, raw_requests) =
-            new_canister_queues_for_test(reqs, CanisterId::from(own_subnet_id), num_receivers);
+        let (queues, raw_requests) = new_canister_output_queues_for_test(
+            reqs,
+            CanisterId::from(own_subnet_id),
+            num_receivers,
+        );
         total_requests += raw_requests.len();
         requests.push_back(raw_requests);
         Some(queues)
@@ -1085,8 +1128,11 @@ fn new_replicated_state_for_test(
             let mut canister = CanisterStateBuilder::new()
                 .with_canister_id(canister_id)
                 .build();
-            let (queues, raw_requests) =
-                new_canister_queues_for_test(reqs, canister_test_id(i as u64), num_receivers);
+            let (queues, raw_requests) = new_canister_output_queues_for_test(
+                reqs,
+                canister_test_id(i as u64),
+                num_receivers,
+            );
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
@@ -1117,7 +1163,7 @@ fn new_replicated_state_for_test(
 }
 
 prop_compose! {
-     pub fn arb_replicated_state_with_queues(
+     pub fn arb_replicated_state_with_output_queues(
         own_subnet_id: SubnetId,
         max_canisters: usize,
         max_requests_per_canister: usize,
@@ -1130,7 +1176,7 @@ prop_compose! {
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
 
-        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_with_output_queues(own_subnet_id, request_queues, num_receivers);
 
         // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
         // Note that subnet queues are always at the front which is why we need to pop them

@@ -1,0 +1,34 @@
+load("//publish:defs.bzl", "release_strip_binary")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+OBJECTS = {
+    "fstrim_tool": "//rs/ic_os/fstrim_tool:fstrim_tool_bin",
+    "guestos_tool": "//rs/ic_os/os_tools/guestos_tool:guestos_tool",
+    "hostos_tool": "//rs/ic_os/os_tools/hostos_tool:hostos_tool",
+    "nft-exporter": "//rs/ic_os/nft_exporter:nft-exporter",
+    "setupos_tool": "//rs/ic_os/os_tools/setupos_tool:setupos_tool",
+    "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
+    "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
+    "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
+    "nss_icos": "//rs/ic_os/nss_icos",
+}
+
+[release_strip_binary(
+    name = name + "_stripped",
+    binary = OBJECTS[name],
+) for name in OBJECTS]
+
+[
+    genrule(
+        name = name + "_cleaned",
+        srcs = [name + "_stripped"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+    )
+    for name in OBJECTS
+]

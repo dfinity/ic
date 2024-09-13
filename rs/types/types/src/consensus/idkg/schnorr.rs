@@ -21,7 +21,7 @@ use super::{
 };
 
 /// Schnorr pre-signature in creation.
-#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptInCreation {
     pub key_id: SchnorrKeyId,
@@ -113,7 +113,7 @@ impl TryFrom<&pb::TranscriptInCreation> for TranscriptInCreation {
 
 /// Counterpart of PreSignatureTranscript that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureTranscriptRef {
     pub key_id: SchnorrKeyId,
@@ -201,7 +201,7 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
@@ -243,7 +243,7 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
         resolver: &dyn IDkgBlockReader,

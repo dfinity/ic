@@ -5,7 +5,7 @@ Rules for system-tests.
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -18,14 +18,18 @@ def _run_system_test(ctx):
         is_executable = True,
         content = """#!/bin/bash
             set -eEuo pipefail
-            RUNFILES="$PWD"
+            # We export RUNFILES such that the from_location_specified_by_env_var() function in
+            # rs/rust_canisters/canister_test/src/canister.rs can find canisters
+            # relative to the $RUNFILES directory.
+            export RUNFILES="$PWD"
             KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
-            VERSION_FILE="$(cat $VERSION_FILE_PATH)"
-            cd "$TEST_TMPDIR"
-            mkdir root_env
-            cp -Rs "$RUNFILES" root_env/dependencies/
-            cp -v "$VERSION_FILE" root_env/dependencies/volatile-status.txt
-            "$RUNFILES/{test_executable}" --working-dir . {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
+            mkdir "$TEST_TMPDIR/root_env"
+            "$RUNFILES/{test_executable}" \
+              --working-dir "$TEST_TMPDIR" \
+              {k8s} \
+              --group-base-name {group_base_name} \
+              {no_summary_report} \
+              "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
             k8s = "--k8s" if k8s else "",
@@ -105,6 +109,7 @@ default_vm_resources = {
 
 def system_test(
         name,
+        test_driver_target = None,
         runtime_deps = [],
         tags = [],
         test_timeout = "long",
@@ -126,6 +131,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
+      test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
@@ -153,20 +159,24 @@ def system_test(
       the external environment when the test is executed by bazel test.
       additional_colocate_tags: additional tags to pass to the colocated test.
       **kwargs: additional arguments to pass to the rust_binary rule.
+
+    Returns:
+      This macro declares 3 bazel targets:
+        * If test_driver_target == None, a rust_binary <name>_bin which is the test driver.
+        * A test target <name> which runs the test.
+        * A test target <name>_colocate which runs the test in a colocated way.
+      It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
 
-    # Names are used as part of domain names; thus, limit their length
-    if len(name) > 50:
-        fail("Name of system test group too long (max 50): " + name)
-
-    bin_name = name + "_bin"
-
-    rust_binary(
-        name = bin_name,
-        testonly = True,
-        srcs = [name + ".rs"],
-        **kwargs
-    )
+    if test_driver_target == None:
+        bin_name = name + "_bin"
+        rust_binary(
+            name = bin_name,
+            testonly = True,
+            srcs = [name + ".rs"],
+            **kwargs
+        )
+        test_driver_target = bin_name
 
     # Automatically detect system tests that use guestos dev for back compatibility.
     for _d in runtime_deps:
@@ -196,8 +206,8 @@ def system_test(
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
@@ -213,13 +223,14 @@ def system_test(
 
     run_system_test(
         name = name,
-        src = bin_name,
+        src = test_driver_target,
         runtime_deps = runtime_deps,
         env_deps = _env_deps,
         env = env,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
     )
@@ -229,7 +240,7 @@ def system_test(
         if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
             deps.append(dep)
 
-    env = {
+    env = env | {
         "COLOCATED_TEST": name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
@@ -244,18 +255,64 @@ def system_test(
     run_system_test(
         name = name + "_colocate",
         src = "//rs/tests/testing_verification:colocate_test_bin",
-        colocated_test_bin = bin_name,
+        colocated_test_bin = test_driver_target,
         runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
             "//rs/tests:colocate_uvm_config_image",
-            bin_name,
+            test_driver_target,
         ],
         env_deps = _env_deps,
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+               (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
+               additional_colocate_tags,
+        target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
+    )
+    return struct(test_driver_target = test_driver_target)
+
+def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwargs):
+    """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
+
+    Declares two system-tests:
+
+    * One with the given name which uses the NNS from mainnet as specified by mainnet-canisters.bzl.
+    * One with the given name suffixed with "_head_nns" which uses the NNS from the HEAD of the repo.
+
+    The latter one is additionally tagged with "system_test_nightly" such that it only runs daily and not on PRs.
+    You can override the latter behaviour by specifying different `extra_head_nns_tags`.
+    If you set `extra_head_nns_tags` to `[]` the head_nns variant will have the same tags as the default variant.
+
+    The idea being that for most system-tests which test the replica it's more realistic to test against the
+    mainnet NNS since that version would be active when the replica would be released.
+
+    However it's still useful to see if the HEAD replica works against the HEAD NNS which is why this macro
+    introduces the <name>_head_nns variant which only runs daily if not overriden.
+
+    Args:
+        name: the name of the system-tests.
+        extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
+        **kwargs: the arguments of the system-tests.
+    """
+    runtime_deps = kwargs.pop("runtime_deps", [])
+    env = kwargs.pop("env", {})
+
+    mainnet_nns_systest = system_test(
+        name,
+        env = env | MAINNET_NNS_CANISTER_ENV,
+        runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        **kwargs
+    )
+
+    original_tags = kwargs.pop("tags", [])
+    system_test(
+        name + "_head_nns",
+        test_driver_target = mainnet_nns_systest.test_driver_target,
+        env = env | NNS_CANISTER_ENV,
+        runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
+        tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
+        **kwargs
     )
 
 def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
@@ -275,6 +332,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -288,6 +346,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
         """,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -297,6 +356,7 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         fs = ":" + name + "_vfat",
         remap_paths = remap_paths,
         tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
     )
 
@@ -312,5 +372,6 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         name = name,
         actual = name + ".zst",
         tags = tags,
+        target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
     )

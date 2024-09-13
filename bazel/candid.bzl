@@ -8,16 +8,16 @@ def _did_git_test_impl(ctx):
 
 set -xeuo pipefail
 
-readonly mr_title=${{CI_MERGE_REQUEST_TITLE:-NONE}}
+readonly mr_title=${{CI_PULL_REQUEST_TITLE:-NONE}}
 if [[ $mr_title == *"[override-didc-check]"* ]]; then
     echo "Found [override-didc-check] in merge request title. Skipping didc_check."
     exit 0
 fi
 
-# https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
-# The HEAD SHA of the target branch of the merge request. The variable is empty in merge request pipelines. 
-# The SHA is present only in merged results pipelines.
-readonly merge_base=${{CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
+# Note that CI_PULL_REQUEST_TARGET_BRANCH_SHA is only set on Pull Requests.
+# On other events we set the merge_base to HEAD which means we compare the
+# did interface file against itself.
+readonly merge_base=${{CI_PULL_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -39,7 +39,7 @@ echo DID_PATH={did_path}
 echo "{did_path} passed candid checks"
 
 # In addition to the usual `didc check after.did before.did` it can be helpful to check the reverse as well.
-# This is This is useful when it is expected that clients will "jump the gun", i.e. upgrade before servers. 
+# This is This is useful when it is expected that clients will "jump the gun", i.e. upgrade before servers.
 # This is an unusual (but not unheard of) use case.
 if [ {enable_also_reverse} = True ]; then
     echo "running also-reverse check"
@@ -54,7 +54,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_MERGE_REQUEST_TARGET_BRANCH_SHA", "CI_MERGE_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["CI_PULL_REQUEST_TARGET_BRANCH_SHA", "CI_PULL_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(

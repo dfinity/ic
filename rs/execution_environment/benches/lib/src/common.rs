@@ -2,11 +2,10 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
@@ -16,6 +15,7 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -262,7 +262,10 @@ where
     ));
     let config = Config {
         embedders_config: EmbeddersConfig {
-            metering_type: MeteringType::New,
+            feature_flags: FeatureFlags {
+                best_effort_responses: FlagStatus::Enabled,
+                ..FeatureFlags::default()
+            },
             ..EmbeddersConfig::default()
         },
         ..Default::default()
@@ -306,6 +309,9 @@ where
         subnet_configs
             .scheduler_config
             .upload_wasm_chunk_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(

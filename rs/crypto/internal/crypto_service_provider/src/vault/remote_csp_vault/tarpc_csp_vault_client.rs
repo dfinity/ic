@@ -40,7 +40,7 @@ use ic_logger::{debug, new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -83,7 +83,7 @@ pub struct RemoteCspVault {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum RemoteCspVaultError {
     TransportError {
         server_address: String,
@@ -749,7 +749,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
     #[instrument(skip_all)]
     #[inline]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -760,8 +760,8 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_ecdsa_sig_share(
             context_with_timeout(self.rpc_timeout),
             derivation_path,
             ByteBuf::from(hashed_message),
@@ -774,7 +774,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
             algorithm_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(ThresholdEcdsaSignShareError::TransientInternalError {
+            Err(ThresholdEcdsaCreateSigShareError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })

@@ -1,3 +1,5 @@
+use ic_error_types::UserError;
+use ic_management_canister_types::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
@@ -7,7 +9,7 @@ use ic_types::{
     NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
@@ -15,6 +17,8 @@ pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
+
+pub const SUCCESS_STATUS_LABEL: &str = "success";
 
 #[derive(Clone)]
 pub struct IngressFilterMetrics {
@@ -147,6 +151,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub evaluated_canisters: Histogram,
     /// The number of transient errors.
     pub transient_errors: IntCounter,
+    /// Duration of a subnet query message execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
+    pub subnet_query_messages: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -268,7 +274,30 @@ impl QueryHandlerMetrics {
                 "The total number of transient errors accumulated \
                         during the query execution",
             ),
+            subnet_query_messages: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_duration_seconds",
+                "Duration of a subnet query message execution, in seconds.",
+                decimal_buckets(-3, 2),
+                &["method_name", "status"],
+            ),
         }
+    }
+
+    pub fn observe_subnet_query_message<T>(
+        &self,
+        query_method: QueryMethod,
+        duration: f64,
+        result: &Result<T, UserError>,
+    ) {
+        let method_name_label = &format!("query_ic00_{}", query_method);
+        let status_label = match result {
+            Ok(_) => SUCCESS_STATUS_LABEL,
+            Err(user_error) => &format!("{:?}", user_error.code()),
+        };
+
+        self.subnet_query_messages
+            .with_label_values(&[method_name_label, status_label])
+            .observe(duration);
     }
 }
 
@@ -279,6 +308,7 @@ impl QueryHandlerMetrics {
 /// - the number of instructions executed in the phase,
 /// - the number of slices executed in the phase,
 /// - the number of messages executed in the phase.
+///
 /// Use `MeasurementScope` instead of observing the metrics manually.
 #[derive(Debug)]
 pub(crate) struct ScopedMetrics {
@@ -302,6 +332,7 @@ pub(crate) struct ScopedMetrics {
 /// 2) Add `let scope = MeasurementScope::root(...)` in the top-most phase.
 /// 3) Add `let scope = MeasurementScope::nested(...)` in a sub-phase.
 /// 4) Tell the scopes about executed instructions using `scope.add()`.
+///
 /// See the `example_usage()` test below for details.
 #[must_use = "Keep the scope in a local variable"]
 #[derive(Debug)]
@@ -444,37 +475,40 @@ pub fn cycles_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
 }
 
-/// Returns buckets appropriate for Wasm and Stable memories
-fn memory_buckets() -> Vec<f64> {
-    const K: u64 = 1024;
-    const M: u64 = K * 1024;
-    const G: u64 = M * 1024;
-    let mut buckets: Vec<_> = [
-        0,
-        4 * K,
-        64 * K,
-        M,
-        10 * M,
-        50 * M,
-        100 * M,
-        500 * M,
-        G,
-        2 * G,
-        3 * G,
-        4 * G,
-        5 * G,
-        6 * G,
-        7 * G,
-        8 * G,
-    ]
-    .iter()
-    .chain([MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES].iter())
-    .cloned()
-    .collect();
+/// Returns unique and sorted buckets.
+pub fn unique_sorted_buckets(buckets: &[u64]) -> Vec<f64> {
     // Ensure that all buckets are unique
+    let mut buckets = buckets.to_vec();
     buckets.sort_unstable();
     buckets.dedup();
     buckets.into_iter().map(|x| x as f64).collect()
+}
+
+/// Returns buckets appropriate for Wasm and Stable memories
+fn memory_buckets() -> Vec<f64> {
+    const KIB: u64 = 1024;
+    const MIB: u64 = 1024 * KIB;
+    const GIB: u64 = 1024 * MIB;
+    unique_sorted_buckets(&[
+        0,
+        4 * KIB,
+        64 * KIB,
+        MIB,
+        10 * MIB,
+        50 * MIB,
+        100 * MIB,
+        500 * MIB,
+        GIB,
+        2 * GIB,
+        3 * GIB,
+        4 * GIB,
+        5 * GIB,
+        6 * GIB,
+        7 * GIB,
+        8 * GIB,
+        MAX_STABLE_MEMORY_IN_BYTES,
+        MAX_WASM_MEMORY_IN_BYTES,
+    ])
 }
 
 /// Returns a histogram with buckets appropriate for Canister memory.

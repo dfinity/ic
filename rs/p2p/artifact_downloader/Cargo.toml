@@ -1,0 +1,38 @@
+[package]
+name = "ic-artifact-downloader"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = { workspace = true }
+backoff = { workspace = true }
+bytes = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-consensus-manager = { path = "../consensus_manager" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../quic_transport" }
+ic-types = { path = "../../types/types" }
+phantom_newtype = { path = "../../phantom_newtype" }
+prometheus = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+http-body-util = { workspace = true }
+ic-p2p-test-utils = { path = "../test_utils" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+mockall = { workspace = true }
+tower = { workspace = true }

@@ -76,3 +76,5 @@ repos:
           (?x)^(
               testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
           )$
+      # To be uncommented upon moving to new ansible-lint
+      # args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']

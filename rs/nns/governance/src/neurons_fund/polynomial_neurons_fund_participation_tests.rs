@@ -57,7 +57,6 @@ fn get_swap_participation_limits_for_tests() -> impl Iterator<Item = SwapPartici
 
 fn get_neuron_sets_for_tests() -> impl Iterator<Item = Vec<NeuronsFundNeuron>> {
     let controller = PrincipalId::default();
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     vec![
         // No neurons.

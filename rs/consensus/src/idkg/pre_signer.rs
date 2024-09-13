@@ -31,7 +31,7 @@ use std::sync::Arc;
 use super::utils::update_purge_height;
 
 pub(crate) trait IDkgPreSigner: Send {
-    /// The on_state_change() called from the main ECDSA path.
+    /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
         &self,
         idkg_pool: &dyn IDkgPool,
@@ -858,7 +858,7 @@ impl IDkgPreSignerImpl {
         in_progress: &BTreeSet<IDkgTranscriptId>,
         target_subnet_xnet_transcripts: &BTreeSet<IDkgTranscriptId>,
     ) -> bool {
-        // It is possible the ECDSA component runs and tries to purge the initial
+        // It is possible the IDKG component runs and tries to purge the initial
         // dealings before the finalized tip has the next_key_transcript_creation
         // set up. Avoid this by keeping the initial dealings until the initial
         // resharing completes.
@@ -976,11 +976,11 @@ impl IDkgPreSigner for IDkgPreSignerImpl {
 
 pub(crate) trait IDkgTranscriptBuilder {
     /// Returns the specified transcript if it can be successfully
-    /// built from the current entries in the ECDSA pool
+    /// built from the current entries in the IDKG pool
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
 
     /// Returns the validated dealings for the given transcript Id from
-    /// the ECDSA pool
+    /// the IDKG pool
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
 }
 
@@ -1446,7 +1446,7 @@ mod tests {
                     create_transcript_id(5),
                 );
 
-                // Set up the ECDSA pool. Pool has dealings for transcripts 1, 2, 3.
+                // Set up the IDKG pool. Pool has dealings for transcripts 1, 2, 3.
                 // Only dealing for transcript 1 is issued by us.
                 let dealing_1 = create_dealing(id_1, NODE_1);
                 let dealing_2 = create_dealing(id_2, NODE_2);
@@ -1849,7 +1849,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Validated pool has: {transcript 2, dealer = NODE_2}
                 let dealing = create_dealing(id_2, NODE_2);
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
@@ -1894,7 +1894,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id_2 = create_transcript_id_with_height(2, Height::from(100));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100, internal_dealing_raw = vec[1]}
                 let mut dealing = create_dealing(id_2, NODE_2);
                 dealing.content.internal_dealing_raw = vec![1];
@@ -2286,7 +2286,7 @@ mod tests {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
@@ -2314,7 +2314,7 @@ mod tests {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
@@ -2337,7 +2337,7 @@ mod tests {
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
@@ -2368,7 +2368,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(100));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Validated pool has: support {transcript 2, dealer = NODE_2, signer = NODE_3}
                 let (dealing, support) = create_support(id, NODE_2, NODE_3);
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
@@ -2442,7 +2442,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
@@ -2481,7 +2481,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);
@@ -2520,7 +2520,7 @@ mod tests {
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // A dealing for a transcript that is requested by finalized block,
                 // and we already have the dealing(share accepted)
                 let (dealing, mut support) = create_support(id, NODE_2, NODE_3);

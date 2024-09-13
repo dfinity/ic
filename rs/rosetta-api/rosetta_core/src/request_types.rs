@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// A MetadataRequest is utilized in any request where the only argument is
 /// optional metadata.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct MetadataRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Object>,
@@ -18,7 +17,7 @@ impl MetadataRequest {
 }
 
 /// A NetworkRequest is utilized to retrieve some data specific exclusively to a NetworkIdentifier.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -37,8 +36,7 @@ impl NetworkRequest {
 }
 
 /// A BlockRequest is utilized to make a block request on the /block endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BlockRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -61,8 +59,7 @@ impl BlockRequest {
 
 /// A BlockTransactionRequest is used to fetch a Transaction included in a block
 /// that is not returned in a BlockResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BlockTransactionRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -90,8 +87,7 @@ impl BlockTransactionRequest {
 
 /// A MempoolTransactionRequest is utilized to retrieve a transaction from the
 /// mempool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MempoolTransactionRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     #[serde(rename = "network_identifier")]
@@ -119,8 +115,7 @@ impl MempoolTransactionRequest {
 /// address formats for different networks. Metadata is provided in the request
 /// because some blockchains allow for multiple address types (i.e. different
 /// address for validators vs normal accounts).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionDeriveRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -146,8 +141,7 @@ impl ConstructionDeriveRequest {
 }
 
 /// ConstructionPreprocessRequest is passed to the /construction/preprocess endpoint so that a Rosetta implementation can determine which metadata it needs to request for construction. Metadata provided in this object should NEVER be a product of live data (i.e. the caller must follow some network-specific data fetching strategy outside of the Construction API to populate required Metadata). If live data is required for construction, it MUST be fetched in the call to /construction/metadata.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionPreprocessRequest {
     // The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -177,8 +171,7 @@ impl ConstructionPreprocessRequest {
 /// implementers.  Optionally, the request can also include an array of
 /// PublicKeys associated with the AccountIdentifiers returned in
 /// ConstructionPreprocessResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionMetadataRequest {
     // The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -197,13 +190,47 @@ pub struct ConstructionMetadataRequest {
     pub public_keys: Option<Vec<PublicKey>>,
 }
 
+impl ConstructionMetadataRequest {
+    pub fn builder(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder::new(network_identifier)
+    }
+}
+
+pub struct ConstructionMetadataRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    options: Option<ObjectMap>,
+    public_keys: Option<Vec<PublicKey>>,
+}
+
+impl ConstructionMetadataRequestBuilder {
+    pub fn new(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder {
+            network_identifier,
+            options: None,
+            public_keys: None,
+        }
+    }
+
+    pub fn with_options(mut self, options: ObjectMap) -> Self {
+        self.options = Some(options);
+        self
+    }
+
+    pub fn build(self) -> ConstructionMetadataRequest {
+        ConstructionMetadataRequest {
+            network_identifier: self.network_identifier,
+            options: self.options,
+            public_keys: self.public_keys,
+        }
+    }
+}
+
 /// ConstructionPayloadsRequest is the request to `/construction/payloads`. It
 /// contains the network, a slice of operations, and arbitrary metadata that was
 /// returned by the call to `/construction/metadata`.  Optionally, the request
 /// can also include an array of PublicKeys associated with the
 /// AccountIdentifiers returned in ConstructionPreprocessResponse.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionPayloadsRequest {
     pub network_identifier: NetworkIdentifier,
 
@@ -232,8 +259,7 @@ impl ConstructionPayloadsRequest {
 
 /// ConstructionParseRequest is the input to the `/construction/parse` endpoint.
 /// It allows the caller to parse either an unsigned or signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionParseRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -265,8 +291,7 @@ impl ConstructionParseRequest {
 /// endpoint. It contains the unsigned transaction blob returned by
 /// `/construction/payloads` and all required signatures to create a network
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionCombineRequest {
     /// The network_identifier specifies which network a particular object is associated with.
     pub network_identifier: NetworkIdentifier,
@@ -278,8 +303,7 @@ pub struct ConstructionCombineRequest {
 }
 
 /// The transaction submission request includes a signed transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionSubmitRequest {
     pub network_identifier: NetworkIdentifier,
 
@@ -302,8 +326,7 @@ impl ConstructionSubmitRequest {
 /// An AccountBalanceRequest is utilized to make a balance request on the
 /// /account/balance endpoint. If the block_identifier is populated, a
 /// historical balance query should be performed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct AccountBalanceRequest {
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,
@@ -320,9 +343,60 @@ pub struct AccountBalanceRequest {
     pub metadata: Option<ObjectMap>,
 }
 
+impl AccountBalanceRequest {
+    pub fn builder(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder::new(network_identifier, account_identifier)
+    }
+}
+
+pub struct AccountBalanceRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    account_identifier: AccountIdentifier,
+    block_identifier: Option<PartialBlockIdentifier>,
+}
+
+impl AccountBalanceRequestBuilder {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder {
+            network_identifier,
+            account_identifier,
+            block_identifier: None,
+        }
+    }
+
+    pub fn with_block_index(mut self, block_index: u64) -> Self {
+        match self.block_identifier {
+            Some(ref mut block_identifier) => {
+                block_identifier.index = Some(block_index);
+            }
+            None => {
+                self.block_identifier = Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                });
+            }
+        }
+        self
+    }
+
+    pub fn build(self) -> AccountBalanceRequest {
+        AccountBalanceRequest {
+            network_identifier: self.network_identifier,
+            account_identifier: self.account_identifier,
+            block_identifier: self.block_identifier,
+            metadata: None,
+        }
+    }
+}
+
 /// ConstructionHashRequest is the input to the `/construction/hash` endpoint.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ConstructionHashRequest {
     pub network_identifier: NetworkIdentifier,
 
@@ -332,8 +406,7 @@ pub struct ConstructionHashRequest {
 /// SearchTransactionsRequest models a small subset of the /search/transactions
 /// endpoint. Currently we only support looking up a transaction given its hash;
 /// this functionality is desired by our crypto exchanges partners.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SearchTransactionsRequest {
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,
@@ -376,19 +449,37 @@ pub struct SearchTransactionsRequest {
 }
 
 impl SearchTransactionsRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-    ) -> SearchTransactionsRequest {
-        SearchTransactionsRequest {
+    pub fn builder(network_identifier: NetworkIdentifier) -> SearchTransactionsRequestBuilder {
+        SearchTransactionsRequestBuilder::new(network_identifier)
+    }
+}
+
+pub struct SearchTransactionsRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    operator: Option<Operator>,
+    max_block: Option<i64>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+    transaction_identifier: Option<TransactionIdentifier>,
+    account_identifier: Option<AccountIdentifier>,
+    coin_identifier: Option<CoinIdentifier>,
+    currency: Option<Currency>,
+    status: Option<String>,
+    type_: Option<String>,
+    address: Option<String>,
+    success: Option<bool>,
+}
+
+impl SearchTransactionsRequestBuilder {
+    pub fn new(network_identifier: NetworkIdentifier) -> SearchTransactionsRequestBuilder {
+        SearchTransactionsRequestBuilder {
             network_identifier,
             operator: None,
             max_block: None,
             offset: None,
             limit: None,
-            transaction_identifier,
-            account_identifier,
+            transaction_identifier: None,
+            account_identifier: None,
             coin_identifier: None,
             currency: None,
             status: None,
@@ -397,12 +488,42 @@ impl SearchTransactionsRequest {
             success: None,
         }
     }
+
+    pub fn with_transaction_identifier(
+        mut self,
+        transaction_identifier: TransactionIdentifier,
+    ) -> Self {
+        self.transaction_identifier = Some(transaction_identifier);
+        self
+    }
+
+    pub fn with_account_identifier(mut self, account_identifier: AccountIdentifier) -> Self {
+        self.account_identifier = Some(account_identifier);
+        self
+    }
+
+    pub fn build(self) -> SearchTransactionsRequest {
+        SearchTransactionsRequest {
+            network_identifier: self.network_identifier,
+            operator: self.operator,
+            max_block: self.max_block,
+            offset: self.offset,
+            limit: self.limit,
+            transaction_identifier: self.transaction_identifier,
+            account_identifier: self.account_identifier,
+            coin_identifier: self.coin_identifier,
+            currency: self.currency,
+            status: self.status,
+            type_: self.type_,
+            address: self.address,
+            success: self.success,
+        }
+    }
 }
 
 /// CallRequest is the input to the `/call`
 /// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CallRequest {
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,

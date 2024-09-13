@@ -61,7 +61,7 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
@@ -432,9 +432,6 @@ impl Ledger {
     }
 
     pub fn upgrade(&mut self, args: UpgradeArgs) {
-        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts;
-        }
         if let Some(icrc1_minting_account) = args.icrc1_minting_account {
             if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
                 trap_with(

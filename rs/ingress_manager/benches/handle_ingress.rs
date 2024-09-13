@@ -16,7 +16,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
@@ -26,6 +25,7 @@ use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;

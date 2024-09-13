@@ -1056,21 +1056,33 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    let mut state = Sha256::new();
-    state.write(new_canister_wasm);
-    let sha = state.finish();
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(new_canister_wasm);
+        let sha = state.finish();
+        hex::encode(sha)
+    };
+
+    let upgrade_args_sha_256 = canister_upgrade_arg
+        .as_ref()
+        .map(|arg| {
+            let mut state = Sha256::new();
+            state.write(arg);
+            let sha = state.finish();
+            format!("Upgrade arg sha256: {}", hex::encode(sha))
+        })
+        .unwrap_or_else(|| "No upgrade arg".to_string());
 
     Ok(format!(
         r"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: {:?}
+## Canister id: {canister_id:?}
 
-## Canister wasm sha256: {}
+## Canister wasm sha256: {canister_wasm_sha256}
 
-## Mode: {:?}",
-        canister_id,
-        hex::encode(sha),
-        mode
+## Mode: {mode:?}
+
+## {upgrade_args_sha_256}",
     ))
 }
 
@@ -2033,6 +2045,7 @@ impl ProposalData {
     /// - 'no': Amount of voting power voting 'no'.
     /// - 'total': Total voting power.
     /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    ///
     /// The function returns a `Vote`:
     /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
     /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
@@ -2646,7 +2659,34 @@ mod tests {
 
 ## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 
-## Mode: Upgrade"#
+## Mode: Upgrade
+
+## No upgrade arg"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
                 .to_string()
         );
     }
@@ -3062,6 +3102,7 @@ mod tests {
             0,
             0,
             Some(0),
+            0,
             0,
             0,
         )

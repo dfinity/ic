@@ -10,6 +10,9 @@ icos_build(
     ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
     upload_prefix = "host-os",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     vuln_scan = False,
 )

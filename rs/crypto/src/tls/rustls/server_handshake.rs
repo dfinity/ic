@@ -3,8 +3,8 @@ use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
 use crate::tls::tls_cert_from_registry;
-use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
@@ -17,8 +17,8 @@ use rustls::{
 };
 use std::sync::Arc;
 
-pub fn server_config<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn server_config(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     allowed_clients: SomeOrAllNodes,
@@ -37,7 +37,7 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
         registry_version,
     );
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     Ok(
         server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
             Arc::new(client_cert_verifier),
@@ -47,8 +47,8 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
     )
 }
 
-pub fn server_config_without_client_auth<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn server_config_without_client_auth(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
@@ -60,7 +60,7 @@ pub fn server_config_without_client_auth<P: CspTlsHandshakeSignerProvider>(
         }
     })?;
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         Arc::new(NoClientAuth),
         self_tls_cert,

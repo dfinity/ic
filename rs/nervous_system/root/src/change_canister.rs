@@ -15,18 +15,16 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
     /// The value depend on the canister. For instance:
     /// * Canisters that don't emit any inter-canister call, such as the
-    ///   registry canister,
-    /// have no reason to be stopped before being upgraded.
+    ///   registry canister, have no reason to be stopped before being upgraded.
     /// * Canisters that emit inter-canister call are at risk of undefined
-    ///   behavior if
-    /// a callback is delivered to them after the upgrade.
+    ///   behavior if a callback is delivered to them after the upgrade.
     pub stop_before_installing: bool,
 
     // -------------------------------------------------------------------- //
@@ -127,7 +125,7 @@ impl ChangeCanisterRequest {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(Clone, CandidType, Deserialize, Serialize)]
 pub struct AddCanisterRequest {
     /// A unique name for this canister.
     pub name: String,
@@ -181,14 +179,14 @@ impl std::fmt::Display for AddCanisterRequest {
 }
 
 // The action to take on the canister.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
