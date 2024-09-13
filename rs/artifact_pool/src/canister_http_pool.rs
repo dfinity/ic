@@ -7,8 +7,8 @@ use crate::{
 use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Retransmittable,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -164,8 +164,10 @@ impl ValidatedPoolReader<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseShare> {
         self.validated.get(id).map(|()| id.clone())
     }
+}
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
+impl Retransmittable<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
+    fn get_retransmissions(&self) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         Box::new(std::iter::empty())
     }
 }

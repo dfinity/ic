@@ -2,7 +2,7 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::p2p::consensus::ArtifactWithOpt;
+use ic_interfaces::p2p::consensus::{ArtifactWithOpt, Retransmittable};
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
@@ -392,8 +392,10 @@ impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
             }
         }
     }
+}
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
+impl Retransmittable<CertificationMessage> for CertificationPoolImpl {
+    fn get_retransmissions(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         let certification_range = self.persistent_pool.certifications().height_range();
         let share_range = self.persistent_pool.certification_shares().height_range();
 
@@ -870,7 +872,7 @@ mod tests {
             };
 
             let mut heights = HashSet::new();
-            pool.get_all_validated().for_each(|m| {
+            pool.get_retransmissions().for_each(|m| {
                 if m.height().get() % 2 == 0 {
                     assert!(!m.is_share());
                 }
@@ -883,7 +885,7 @@ mod tests {
                 assert!(heights.insert(m.height()));
             });
             assert_eq!(heights.len(), 20);
-            assert_eq!(pool.get_all_validated().count(), 20);
+            assert_eq!(pool.get_retransmissions().count(), 20);
         });
     }
 }

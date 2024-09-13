@@ -9,7 +9,7 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::p2p::consensus::ArtifactWithOpt;
+use ic_interfaces::p2p::consensus::{ArtifactWithOpt, Retransmittable};
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -833,8 +833,10 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
+}
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+impl Retransmittable<ConsensusMessage> for ConsensusPoolImpl {
+    fn get_retransmissions(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -1462,7 +1464,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_validated().for_each(|m| {
+            pool.get_retransmissions().for_each(|m| {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
@@ -1472,7 +1474,7 @@ mod tests {
             });
 
             assert_eq!(
-                pool.get_all_validated().count(),
+                pool.get_retransmissions().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );

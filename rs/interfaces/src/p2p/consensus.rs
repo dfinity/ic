@@ -81,12 +81,11 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// - 'Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
+}
 
-    /// Get all validated artifacts.
-    ///
-    /// #Returns:
-    /// A iterator over all the validated artifacts.
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T> + '_>;
+pub trait Retransmittable<T: IdentifiableArtifact> {
+    /// Get all validated artifacts which need to be retransmitted after the replica restarts.
+    fn get_retransmissions(&self) -> Box<dyn Iterator<Item = T> + '_>;
 }
 
 /// Unvalidated artifact
