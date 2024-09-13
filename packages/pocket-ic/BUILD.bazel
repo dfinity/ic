@@ -39,5 +39,5 @@ pocket_ic_tests(
 
 pocket_ic_tests(
     name_suffix = "mainnet",
-    pocket_ic_server = "//:mainnet_pocket_ic",
+    pocket_ic_server = "//:mainnet-pocket-ic",
 )

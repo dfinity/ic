@@ -50,19 +50,23 @@ def pocket_ic_tests(name_suffix, pocket_ic_server):
         For example "//rs/pocket_ic_server:pocket-ic-server" or "//:mainnet_pocket_ic".
     """
 
-    suffix = "_pocket_ic_server_" + name_suffix
+    suffix = "-pocket-ic-server-" + name_suffix
+
+    data = [pocket_ic_server]
+    env = {
+        "POCKET_IC_BIN": "$(rootpath " + pocket_ic_server + ")",
+    }
+
     rust_test_suite(
         name = "test" + suffix,
         size = "small",
         srcs = ["tests/tests.rs"],
-        data = [
+        data = data + [
             "tests/counter.wasm",
             "tests/icp_ledger.wasm",
             ":test_canister.wasm",
-            pocket_ic_server,
         ],
-        env = {
-            "POCKET_IC_BIN": "$(rootpath " + pocket_ic_server + ")",
+        env = env | {
             "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
             "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
             "TEST_WASM": "$(rootpath :test_canister.wasm)",
@@ -76,12 +80,8 @@ def pocket_ic_tests(name_suffix, pocket_ic_server):
         name = "restart" + suffix,
         size = "medium",
         srcs = ["tests/restart.rs"],
-        data = [
-            pocket_ic_server,
-        ],
-        env = {
-            "POCKET_IC_BIN": "$(rootpath " + pocket_ic_server + ")",
-        },
+        data = data,
+        env = env,
         flaky = False,
         proc_macro_deps = MACRO_DEPENDENCIES,
         deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
@@ -91,12 +91,8 @@ def pocket_ic_tests(name_suffix, pocket_ic_server):
         name = "slow" + suffix,
         size = "medium",
         srcs = ["tests/slow.rs"],
-        data = [
-            pocket_ic_server,
-        ],
-        env = {
-            "POCKET_IC_BIN": "$(rootpath " + pocket_ic_server + ")",
-        },
+        data = data,
+        env = env,
         flaky = False,
         proc_macro_deps = MACRO_DEPENDENCIES,
         tags = ["cpu:8"],
