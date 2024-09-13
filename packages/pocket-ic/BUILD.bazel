@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("tests.bzl", "rust_test_suite_using_pocket_ic_server")
+load("//bazel:pocket-ic-server-macros.bzl", "rust_test_suite_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
