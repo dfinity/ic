@@ -136,8 +136,8 @@ write_metric_attr "guestos_boot_action" \
     "gauge"
 
 # /boot/config/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
-# If the `/boot/config/CONFIGURED` file is not present, the boot sequence will 
-# search for a virtual USB stick (the bootstrap config image) 
+# If the `/boot/config/CONFIGURED` file is not present, the boot sequence will
+# search for a virtual USB stick (the bootstrap config image)
 # containing the injected configuration files, and create the file.
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"

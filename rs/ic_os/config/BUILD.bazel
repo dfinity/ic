@@ -8,11 +8,11 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
     "@crate_index//:url",
-    "@crate_index//:regex",
 ]
 
 DEV_DEPENDENCIES = [
