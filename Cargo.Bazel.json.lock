@@ -1,5 +1,5 @@
 {
-  "checksum": "9720cc8acc4631be0712d005f92ada5d2f0a48086a3d12f44dc447bf56eac023",
+  "checksum": "98ea12803644002a5d4464b8555eef6d9f871a310f1fa24bbdf2987295a5df9f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17964,6 +17964,10 @@
             {
               "id": "ic-cdk-timers 0.7.0",
               "target": "ic_cdk_timers"
+            },
+            {
+              "id": "ic-certificate-verification 2.6.0",
+              "target": "ic_certificate_verification"
             },
             {
               "id": "ic-certification 2.6.0",
@@ -79139,6 +79143,7 @@
     "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
+    "ic-certificate-verification 2.6.0",
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
     "ic-http-certification 2.6.0",

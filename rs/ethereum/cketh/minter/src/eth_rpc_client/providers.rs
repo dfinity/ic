@@ -2,7 +2,7 @@ use crate::lifecycle::EthereumNetwork;
 use evm_rpc_client::types::candid::{RpcService as EvmRpcService, RpcServices as EvmRpcServices};
 
 pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
-    RpcNodeProvider::Ethereum(EthereumProvider::Pokt),
+    RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
     RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
     RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
 ];
@@ -34,8 +34,8 @@ impl RpcNodeProvider {
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum EthereumProvider {
-    // https://eth-pokt.nodies.app/
-    Pokt,
+    // https://blockpi.io/
+    BlockPi,
     // https://publicnode.com/
     PublicNode,
     // https://llamanodes.com/
@@ -45,7 +45,7 @@ pub(crate) enum EthereumProvider {
 impl EthereumProvider {
     fn ethereum_mainnet_endpoint_url(&self) -> &str {
         match self {
-            EthereumProvider::Pokt => "https://eth-pokt.nodies.app",
+            EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             EthereumProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             EthereumProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
