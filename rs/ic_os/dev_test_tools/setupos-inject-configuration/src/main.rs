@@ -34,6 +34,9 @@ struct Cli {
 
     #[command(flatten)]
     deployment: DeploymentConfig,
+
+    #[command(flatten)]
+    firewall: FirewallConfig,
 }
 
 #[derive(Args)]
@@ -79,6 +82,15 @@ struct DeploymentConfig {
     mgmt_mac: Option<String>,
 }
 
+#[derive(Args)]
+struct FirewallConfig {
+    #[arg(long)]
+    /// Optional text to place into SetupOS' firewall.json alongside config.ini
+    /// If unspecified, an empty rule list is injected.
+    /// See Network-Configuration.adoc for format.
+    firewall_json: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
@@ -114,6 +126,21 @@ async fn main() -> Result<(), Error> {
             .await
             .context("failed to copy private-key")?;
     }
+
+    // Update firewall rules
+    // If no firewall rules are provided, we inject an empty set
+    // These rules go alongside config.ini
+    let firewall_text = match cli.firewall.firewall_json {
+        Some(text) => text,
+        None => "[]".to_string(),
+    };
+    let src = NamedTempFile::new()?;
+    write!(&src, "{firewall_text}")?;
+    fs::set_permissions(src.path(), Permissions::from_mode(0o644))?;
+    config
+        .write_file(src.path(), Path::new("/firewall.json"))
+        .await
+        .context("failed to write firewall JSON")?;
 
     // Print previous public keys
     println!("Previous ssh_authorized_keys/admin:\n---");
