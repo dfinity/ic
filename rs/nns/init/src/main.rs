@@ -291,26 +291,6 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
         );
     }
 
-    init_payloads_builder
-        .ledger
-        .init_args()
-        .unwrap()
-        .initial_values
-        .insert(
-            AccountIdentifier::new(
-                PrincipalId(
-                    candid::Principal::from_text(
-                        "iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe",
-                    )
-                    .unwrap(),
-                ),
-                None,
-            ),
-            icp_ledger::Tokens::from_tokens(u64::MAX / 2).expect("Couldn't create icpts"),
-        );
-
-    eprintln!("Minting to iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe");
-
     if args.initialize_with_gtc_neurons {
         init_payloads_builder.genesis_token.sr_months_to_release =
             args.months_to_release_seed_round_gtc_neurons;
