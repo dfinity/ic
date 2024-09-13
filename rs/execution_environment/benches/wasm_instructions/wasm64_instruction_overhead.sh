@@ -38,7 +38,7 @@ for op in $OP_TYPES; do
         # Some operations are named "memop/i32.load8_s", we need to differentiate these from "memop/i32.load" when grepping.
         wasm32_time=$(cat "${BENCHMARKS_FILE}" | grep "wasm32" | grep -w "${opcode}" | awk '{print $3}')
         # Compute the overhead
-        overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc)
+        overhead=$(echo "scale=2; (($wasm64_time - $wasm32_time) / $wasm32_time) * 100" | bc -l)
         # Print the results
         printf "| %-40s | %-18s | %-18s | %-18s |\n" "$opcode" "$wasm32_time" "$wasm64_time" "$overhead"
     done

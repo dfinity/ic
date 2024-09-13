@@ -220,7 +220,7 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        //println!("    WAT: {}", wat.as_ref());
+                        println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
