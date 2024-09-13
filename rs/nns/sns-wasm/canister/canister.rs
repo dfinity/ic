@@ -15,7 +15,7 @@ use ic_nervous_system_clients::{
     canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_constants::{DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -30,7 +30,7 @@ use ic_sns_wasm::{
         GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
         GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
         InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterType, SnsWasmError,
+        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsWasmError,
         UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
         UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
     },
@@ -64,17 +64,16 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     /// See CanisterApi::create_canister
-    async fn create_sns_canister(
+    async fn create_canister(
         &self,
         target_subnet: SubnetId,
         controller_id: PrincipalId,
         cycles: Cycles,
-        canister_type: SnsCanisterType,
+        wasm_memory_limit: Option<u64>,
     ) -> Result<CanisterId, String> {
         let mut settings = CanisterSettingsArgsBuilder::new().with_controllers(vec![controller_id]);
-        if canister_type == SnsCanisterType::Governance {
-            settings =
-                settings.with_wasm_memory_limit(DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT);
+        if let Some(wasm_memory_limit) = wasm_memory_limit {
+            settings = settings.with_wasm_memory_limit(wasm_memory_limit);
         }
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
             target_subnet.into(),
