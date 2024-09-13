@@ -148,8 +148,6 @@ impl ThickLedgerClient {
 
         let mut result = vec![];
         // Fetch transactions from archive.
-        // TODO: Make these calls concurrently. We only need to do this if
-        // serial is too slow.
         for archived_range in response.archived_transactions {
             let mut transactions = self
                 .follow_get_transactions_redirect::<MyRuntime>(archived_range)
