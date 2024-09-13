@@ -919,7 +919,7 @@ impl CanisterQueues {
             self.pool = MessagePool::default();
             self.input_schedule = InputSchedule::default();
 
-            // Trust but verify. Ensure that everything is actually set to default.
+            // Trust but verify. Ensure that the `CanisterQueues` now encodes to zero bytes.
             debug_assert_eq!(
                 0,
                 pb_queues::CanisterQueues::from(self as &Self).encoded_len()
