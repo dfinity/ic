@@ -33,7 +33,7 @@ build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 # Build everything ic-os without sandbox
-build --strategy_regexp=ic-os/.*=local
+build --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 

@@ -296,6 +296,17 @@ where
     }
 }
 
+impl<Unit, Repr> num_traits::SaturatingAdd for AmountOf<Unit, Repr>
+where
+    Repr: num_traits::SaturatingAdd,
+{
+    /// Saturating addition. Computes `self + other`, saturating
+    /// at the relevant high or low boundary of the type.
+    fn saturating_add(&self, rhs: &Self) -> Self {
+        Self(self.0.saturating_add(&rhs.0), PhantomData)
+    }
+}
+
 impl<Unit, Repr> AddAssign for AmountOf<Unit, Repr>
 where
     Repr: AddAssign,

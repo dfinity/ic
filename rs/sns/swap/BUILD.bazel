@@ -15,6 +15,7 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/neurons_fund",

@@ -43,6 +43,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }

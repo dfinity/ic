@@ -575,10 +575,12 @@ fn configure_setupos_image(
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
     let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs =
-        get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
-    let setupos_disable_checks =
-        get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+    let setupos_inject_configs = get_dependency_path(
+        "rs/ic_os/dev_test_tools/setupos-inject-configuration/setupos-inject-configuration",
+    );
+    let setupos_disable_checks = get_dependency_path(
+        "rs/ic_os/dev_test_tools/setupos-disable-checks/setupos-disable-checks",
+    );
 
     let nested_vm = env.get_nested_vm(name)?;
 
