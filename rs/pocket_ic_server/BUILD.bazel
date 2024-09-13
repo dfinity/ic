@@ -171,6 +171,8 @@ test_using_pocket_ic_server(
     },
     # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
     extra_HEAD_tags = [],
+    # Override the default [] extra_mainnet_tags to skip this test on CI.
+    extra_mainnet_tags = ["manual"],
     macro = rust_test,
     tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
@@ -194,6 +196,8 @@ test_using_pocket_ic_server(
     },
     # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
     extra_HEAD_tags = [],
+    # Override the default [] extra_mainnet_tags to skip this test on CI.
+    extra_mainnet_tags = ["manual"],
     macro = rust_test,
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
