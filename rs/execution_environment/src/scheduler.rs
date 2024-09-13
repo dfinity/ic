@@ -762,8 +762,7 @@ impl SchedulerImpl {
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
-            round_executed_canister_ids
-                .extend(executed_canisters.iter().map(|c| c.canister_id()));
+            round_executed_canister_ids.extend(executed_canisters.iter().map(|c| c.canister_id()));
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
