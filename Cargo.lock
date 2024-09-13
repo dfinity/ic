@@ -2369,7 +2369,7 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.4.6",
+ "clap 4.5.17",
  "ic-types",
  "once_cell",
  "serde",
