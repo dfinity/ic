@@ -50,9 +50,9 @@ async fn test_initial_supply() {
     );
     thread_local! {
         static EXPECTED_CALLS: RefCell<VecDeque<Call>> = {
-            let ledger_request_1: &[u8] = &*LEDGER_REQUEST_1;
-            let archive_request_1: &[u8] = &*ARCHIVE_REQUEST_1;
-            let ledger_request_2: &[u8] = &*LEDGER_REQUEST_2;
+            let ledger_request_1: &[u8] = &LEDGER_REQUEST_1;
+            let archive_request_1: &[u8] = &ARCHIVE_REQUEST_1;
+            let ledger_request_2: &[u8] = &LEDGER_REQUEST_2;
 
             let mut garbage = 531_157_996;
             let mut new_mint = |amount: u64| {
@@ -81,13 +81,15 @@ async fn test_initial_supply() {
             fn increase_timestamp(mut transaction: Transaction, nanoseconds: u64) -> Transaction {
                 transaction.timestamp += nanoseconds;
 
-                transaction
+                if let Some(created_at_time) = transaction
                     .mint
                     .as_mut()
                     .unwrap()
                     .created_at_time
                     .as_mut()
-                    .map(|created_at_time| *created_at_time += nanoseconds);
+                {
+                    *created_at_time += nanoseconds;
+                }
 
                 transaction
             }
@@ -136,19 +138,19 @@ async fn test_initial_supply() {
             RefCell::new(VecDeque::from([
                 // 1
                 (
-                    (LEDGER_CANISTER_ID.clone(), "get_transactions", ledger_request_1),
+                    (*LEDGER_CANISTER_ID, "get_transactions", ledger_request_1),
                     Ok(ledger_response_1),
                 ),
 
                 // 2
                 (
-                    (ARCHIVE_CANISTER_ID.clone(), "foo", archive_request_1),
+                    (*ARCHIVE_CANISTER_ID, "foo", archive_request_1),
                     Ok(archive_response_1)
                 ),
 
                 // 3
                 (
-                    (LEDGER_CANISTER_ID.clone(), "get_transactions", ledger_request_2),
+                    (*LEDGER_CANISTER_ID, "get_transactions", ledger_request_2),
                     Ok(ledger_response_2),
                 ),
             ]))
@@ -197,7 +199,7 @@ async fn test_initial_supply() {
                 })
             });
 
-            let args: &[u8] = &call_arguments.2;
+            let args: &[u8] = call_arguments.2;
             let call_arguments = (call_arguments.0, call_arguments.1, args);
             assert_eq!((callee, method, args), call_arguments,);
 
@@ -213,7 +215,7 @@ async fn test_initial_supply() {
     // Step 2: Call the code under test.
 
     let total_e8s: u64 = initial_supply_e8s::<MockRuntime>(
-        LEDGER_CANISTER_ID.clone(),
+        *LEDGER_CANISTER_ID,
         InitialSupplyOptions {
             batch_size: BATCH_SIZE,
             ..Default::default()

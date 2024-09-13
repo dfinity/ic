@@ -71,7 +71,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
             result.add_assign(mint.amount);
             transaction_count = transaction_count
                 .checked_add(1)
-                .ok_or_else(|| format!("Transaction count overflowed u64."))?;
+                .ok_or_else(|| "Transaction count overflowed u64.".to_string())?;
         }
     }
 
