@@ -9694,6 +9694,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-initial-supply"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-base-types",
+ "ic-nervous-system-runtime",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [

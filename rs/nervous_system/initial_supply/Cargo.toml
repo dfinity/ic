@@ -1,0 +1,17 @@
+# This probably is not the right place, but it's more convenient for me, because
+# I am in OWNERS.
+
+[package]
+name = "ic-nervous-system-initial-supply"
+version = "0.0.1"
+edition = { workspace = true }
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-nervous-system-runtime = { path = "../runtime" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+lazy_static = { workspace = true }
+num-bigint = "0.4"
+tokio = { workspace = true }

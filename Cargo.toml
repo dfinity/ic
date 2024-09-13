@@ -170,6 +170,7 @@ members = [
     "rs/nervous_system/common/test_utils",
     "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/initial_supply",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
