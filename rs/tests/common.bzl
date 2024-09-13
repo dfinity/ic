@@ -346,6 +346,7 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        MAINNET_REVISION_RUNTIME_DEPS + \
                                        GRAFANA_RUNTIME_DEPS + [
     "//rs/sns/cli:sns",
+    "//rs/tests:recovery/binaries",
     "//rs/tests/nns:secret_key.pem",
     "@dfx",
     "@idl2json",
