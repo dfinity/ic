@@ -5391,6 +5391,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "slog",
+ "thiserror",
  "tokio",
  "tower 0.4.13",
  "tracing",

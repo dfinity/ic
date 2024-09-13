@@ -219,7 +219,18 @@ message GetIngressMessageInBlockResponse {
   bytes ingress_message = 1;
 }
 
-message StrippedBlockProposal {}
+message StrippedBlockProposal {
+  BlockProposal block_proposal_without_ingress_payload = 1;
+  repeated StrippedIngressMessage ingress_messages = 2;
+  ConsensusMessageId unstripped_consensus_message_id = 3;
+}
+
+message StrippedIngressMessage {
+  oneof msg {
+    bytes full = 1;
+    IngressMessageId stripped = 2;
+  }
+}
 
 message StrippedConsensusMessage {
   oneof msg {

@@ -2,15 +2,19 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
     Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
+    batch::IngressPayload,
     consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
     NodeId,
@@ -23,7 +27,8 @@ use super::{
     metrics::FetchStrippedConsensusArtifactMetrics,
     stripper::Strippable,
     types::stripped::{
-        MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+        MaybeStrippedConsensusMessage, MaybeStrippedIngress, StrippedBlockProposal,
+        StrippedConsensusMessageId,
     },
 };
 
@@ -83,7 +88,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    _metrics: FetchStrippedConsensusArtifactMetrics,
+    metrics: FetchStrippedConsensusArtifactMetrics,
 }
 
 impl FetchStrippedConsensusArtifact {
@@ -123,7 +128,7 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
-                _metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
+                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
             }
         };
 
@@ -160,6 +165,10 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut join_set = tokio::task::JoinSet::new();
 
         let missing_ingress_ids = stripped_block_proposal.missing_ingress_messages();
+        let timer = self
+            .metrics
+            .download_missing_ingress_messages_duration
+            .start_timer();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
         for missing_ingress_id in missing_ingress_ids {
@@ -174,15 +183,50 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
+        let mut found_stripped_ingress_messages = 0;
+        let mut missing_stripped_ingress_messages = 0;
+        let total_ingresses_count = stripped_block_proposal
+            .stripped_ingress_payload
+            .ingress_messages
+            .len();
+
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, _peer_id)) = join_result else {
+            let Ok((ingress, peer_id)) = join_result else {
                 return Err(Aborted {});
             };
+
+            // the ingress comes from our own ingress pool
+            if peer_id == self.node_id {
+                found_stripped_ingress_messages += 1;
+            }
+            // otherwise the ingress was downloaded from a peer
+            else {
+                missing_stripped_ingress_messages += 1;
+            }
 
             stripped_block_proposal
                 .try_insert_ingress_message(ingress)
                 .map_err(|_| Aborted {})?;
         }
+
+        // Only report the metric if we actually downloaded some ingresses from peers
+        if missing_stripped_ingress_messages > 0 {
+            timer.stop_and_record();
+        } else {
+            timer.stop_and_discard();
+        }
+
+        if total_ingresses_count > 0 {
+            self.metrics
+                .found_stripped_ingress_messages
+                .observe(found_stripped_ingress_messages as f64);
+            self.metrics
+                .missing_stripped_ingress_messages
+                .observe(missing_stripped_ingress_messages as f64);
+        }
+        self.metrics
+            .total_ingress_messages
+            .observe(total_ingresses_count as f64);
 
         let reconstructed_block_proposal = stripped_block_proposal
             .try_assemble()
@@ -222,33 +266,222 @@ async fn get_or_fetch<P: Peers>(
     .await
 }
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum InsertionError {}
+#[derive(Debug, PartialEq, Error)]
+pub(crate) enum InsertionError {
+    #[error("Trying to an ingress message which was never missing")]
+    NotNeeded,
+    #[error("Trying to an ingress message which was already inserted")]
+    AlreadyInserted,
+}
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum AssemblyError {}
+#[derive(Debug, Error)]
+pub(crate) enum AssemblyError {
+    #[error("The block proposal is missing ingress message with id {0}")]
+    Missing(IngressMessageId),
+    #[error("The block proposal cannot be deserialized {0}")]
+    DeserializationFailed(ProxyDecodeError),
+}
 
 impl StrippedBlockProposal {
     /// Returns the list of [`IngressMessageId`]s which have been stripped from the block.
-    // TODO(kpop): Implement this
     pub(crate) fn missing_ingress_messages(&self) -> Vec<IngressMessageId> {
-        unimplemented!()
+        self.stripped_ingress_payload
+            .ingress_messages
+            .iter()
+            .filter_map(|maybe_ingress| match maybe_ingress {
+                MaybeStrippedIngress::Full(_, _) => None,
+                MaybeStrippedIngress::Stripped(ingress_message_id) => Some(ingress_message_id),
+            })
+            .cloned()
+            .collect()
     }
 
     /// Tries to insert a missing ingress message into the block.
-    // TODO(kpop): Implement this
     pub(crate) fn try_insert_ingress_message(
         &mut self,
-        _ingress_message: SignedIngress,
+        ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
-        unimplemented!()
+        let ingress_message_id = IngressMessageId::from(&ingress_message);
+
+        let ingress = self
+            .stripped_ingress_payload
+            .ingress_messages
+            .iter_mut()
+            .find(|ingress| match ingress {
+                MaybeStrippedIngress::Full(id, _) => *id == ingress_message_id,
+                MaybeStrippedIngress::Stripped(id) => *id == ingress_message_id,
+            })
+            .ok_or(InsertionError::NotNeeded)?;
+
+        match &ingress {
+            MaybeStrippedIngress::Full(_, _) => Err(InsertionError::AlreadyInserted),
+            MaybeStrippedIngress::Stripped(_) => {
+                *ingress = MaybeStrippedIngress::Full(ingress_message_id, ingress_message);
+                Ok(())
+            }
+        }
     }
 
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some ingress messages missing.
-    // TODO(kpop): Implement this
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        unimplemented!()
+        let Self {
+            block_proposal_without_ingresses_proto: mut reconstructed_block_proposal_proto,
+            stripped_ingress_payload,
+            ..
+        } = self;
+
+        let ingresses = stripped_ingress_payload
+            .ingress_messages
+            .into_iter()
+            .map(|msg| match msg {
+                MaybeStrippedIngress::Full(_, message) => Ok(message),
+                MaybeStrippedIngress::Stripped(id) => Err(AssemblyError::Missing(id)),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let reconstructed_ingress_payload = IngressPayload::from(ingresses);
+
+        let reconstructed_ingress_payload_proto =
+            pb::IngressPayload::from(&reconstructed_ingress_payload);
+
+        if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
+            block.ingress_payload = Some(reconstructed_ingress_payload_proto);
+        }
+
+        reconstructed_block_proposal_proto
+            .try_into()
+            .map_err(AssemblyError::DeserializationFailed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::fetch_stripped_artifact::test_utils::{
+        fake_block_proposal_with_ingresses, fake_ingress_message,
+        fake_ingress_message_with_arg_size, fake_stripped_block_proposal_with_ingresses,
+    };
+
+    use super::*;
+
+    #[test]
+    fn strip_assemble_roundtrip_test() {
+        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
+        let block_proposal =
+            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+
+        // strip the block
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        // insert back the missing messages
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_1)
+            .unwrap();
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_2)
+            .unwrap();
+
+        // try to reassemble the block
+        let assembled_block = stripped_block_proposal.try_assemble().unwrap();
+
+        assert_eq!(assembled_block, block_proposal);
+    }
+
+    #[test]
+    fn strip_assemble_fails_when_still_missing_ingress_test() {
+        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
+        let block_proposal =
+            fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+
+        // strip the block
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        // insert back only one missing messages
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_1)
+            .unwrap();
+
+        // try to reassemble the block
+        let assembly_error = stripped_block_proposal.try_assemble().unwrap_err();
+
+        match assembly_error {
+            AssemblyError::Missing(_) => (),
+            _ => panic!("Wrong error"),
+        }
+    }
+
+    #[test]
+    fn missing_ingress_messages_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1),
+            MaybeStrippedIngress::Stripped(ingress_2_id.clone()),
+        ]);
+
+        assert_eq!(
+            stripped_block_proposal.missing_ingress_messages(),
+            vec![ingress_2_id]
+        );
+    }
+
+    #[test]
+    fn ingress_payload_insertion_works_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1),
+            MaybeStrippedIngress::Stripped(ingress_2_id),
+        ]);
+
+        stripped_block_proposal
+            .try_insert_ingress_message(ingress_2)
+            .expect("Should successfully insert the missing ingress");
+
+        assert!(stripped_block_proposal
+            .missing_ingress_messages()
+            .is_empty());
+    }
+
+    #[test]
+    fn ingress_payload_insertion_existing_fails_test() {
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+            MaybeStrippedIngress::Full(ingress_1_id, ingress_1.clone()),
+            MaybeStrippedIngress::Stripped(ingress_2_id),
+        ]);
+
+        assert_eq!(
+            stripped_block_proposal.try_insert_ingress_message(ingress_1),
+            Err(InsertionError::AlreadyInserted)
+        );
+    }
+
+    #[test]
+    fn ingress_payload_insertion_unknown_fails_test() {
+        let (ingress_1, _ingress_1_id) = fake_ingress_message("fake_1");
+        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let mut stripped_block_proposal =
+            fake_stripped_block_proposal_with_ingresses(vec![MaybeStrippedIngress::Stripped(
+                ingress_2_id,
+            )]);
+
+        assert_eq!(
+            stripped_block_proposal.try_insert_ingress_message(ingress_1),
+            Err(InsertionError::NotNeeded)
+        );
     }
 }
