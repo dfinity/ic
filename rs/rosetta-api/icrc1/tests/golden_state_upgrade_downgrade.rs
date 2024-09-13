@@ -5,7 +5,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
     verify_ledger_state, ApprovalKey, InMemoryLedger, InMemoryLedgerState,
 };
-use ic_icrc1_ledger_sm_tests::{get_all_ledger_and_archive_blocks, send_transfer};
+use ic_icrc1_ledger_sm_tests::{
+    get_all_ledger_and_archive_blocks, send_approval, send_transfer, send_transfer_from,
+};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
@@ -387,8 +389,8 @@ fn generate_transactions(
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let to = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        ic_icrc1_ledger_sm_tests::send_transfer(
-            &state_machine,
+        send_transfer(
+            state_machine,
             canister_id,
             from.owner,
             &TransferArg {
@@ -430,7 +432,7 @@ fn generate_transactions(
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        ic_icrc1_ledger_sm_tests::send_approval(
+        send_approval(
             state_machine,
             canister_id,
             from.owner,
@@ -474,7 +476,7 @@ fn generate_transactions(
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
         let to = accounts[(i + 2) % NUM_TRANSACTIONS_PER_TYPE];
-        ic_icrc1_ledger_sm_tests::send_transfer_from(
+        send_transfer_from(
             state_machine,
             canister_id,
             spender.owner,
@@ -527,7 +529,7 @@ fn generate_transactions(
         )
         .expect("should be able to transfer");
         in_memory_ledger.process_transfer(
-            &from,
+            from,
             &minter_account,
             &None,
             &Tokens::from(burn_amount),
