@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 #[cfg(test)]
 mod tests;
 
+/// We store in state the `FetchStatus` for every `Txid` we fetch.
+/// It transitions from `PendingOutcall` to any one of the three
+/// possible outcomes: `PendingRetry`, `Error`, or `Fetched`.
 #[derive(Debug, Clone)]
 pub enum FetchTxStatus {
     PendingOutcall,
@@ -15,11 +18,14 @@ pub enum FetchTxStatus {
     Fetched(FetchedTx),
 }
 
+/// Once the transaction data is successfully fetched, we create
+/// a list of `input_addresses` (matching the number of inputs)
+/// that is initialized as `None`. Once a corresponding input
+/// transaction is fetched (see function `check_fetched`), its
+/// input address will be computed and filled in.
 #[derive(Debug, Clone)]
 pub struct FetchedTx {
     pub tx: Transaction,
-    /// The address at a certain index, when fetched, corresponds to
-    ///  the address of the input at the same index in the transaction `tx`.
     pub input_addresses: Vec<Option<Address>>,
 }
 

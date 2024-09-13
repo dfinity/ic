@@ -154,6 +154,21 @@ impl FetchEnv for KytCanisterEnv {
     }
 }
 
+/// Check the input addresses of a transaction given its txid.
+/// It consists of the following steps:
+///
+/// 1. Call `try_fetch_tx` to find if the transaction has already
+///    been fetched, or if another fetch is already pending, or
+///    if we are experiencing high load, or we need to retry the
+///    fetch (when the previous max_response_bytes setting wasn't
+///    enough).
+///
+/// 2. If we need to fetch this tranction, call the function `do_fetch`.
+///
+/// 3. For fetched transaction, call `check_fetched`, which further
+///    checks if the input addresses of this transaction are available.
+///    If not, we need to additionally fetch those input transactions
+///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(
     txid: Txid,
 ) -> Result<CheckTransactionResponse, CheckTransactionError> {
