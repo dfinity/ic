@@ -1223,3 +1223,110 @@ fn metering_wasm64_load_store_canister() {
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
     assert!(total_cost > total_cost_wasm32);
 }
+
+#[test]
+fn test_wasm64_costs_similar_to_wasm32_for_arithmetic_instructions() {
+    let wat = r#"
+        (module
+            (func $test (export "canister_update test")
+                (drop (i64.add (i64.const 1) (i64.const 2)))
+                (drop (i64.sub (i64.const 1) (i64.const 2)))
+                (drop (i64.mul (i64.const 1) (i64.const 2)))
+                (drop (i64.div_s (i64.const 1) (i64.const 2)))
+                (drop (i64.rem_s (i64.const 1) (i64.const 2)))
+                (drop (i64.and (i64.const 1) (i64.const 2)))
+                (drop (i64.or (i64.const 1) (i64.const 2)))
+            )
+            (memory i64 1000)
+        )"#;
+
+    let mut embedder_config = EmbeddersConfig::default();
+    embedder_config.feature_flags.wasm64 = FlagStatus::Enabled;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(embedder_config)
+        .with_wat(wat)
+        .with_num_instructions(NumInstructions::new(10000))
+        .build();
+
+    instance.run(func_ref("test")).unwrap();
+    let instr_used_wasm64 = instr_used(&mut instance);
+
+    let const_1 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm64,
+    );
+    let const_2 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 2 },
+        WasmMemoryType::Wasm64,
+    );
+    let add = instruction_to_cost(&wasmparser::Operator::I64Add, WasmMemoryType::Wasm64);
+    let sub = instruction_to_cost(&wasmparser::Operator::I64Sub, WasmMemoryType::Wasm64);
+    let mul = instruction_to_cost(&wasmparser::Operator::I64Mul, WasmMemoryType::Wasm64);
+    let div_s = instruction_to_cost(&wasmparser::Operator::I64DivS, WasmMemoryType::Wasm64);
+    let rem_s = instruction_to_cost(&wasmparser::Operator::I64RemS, WasmMemoryType::Wasm64);
+    let and = instruction_to_cost(&wasmparser::Operator::I64And, WasmMemoryType::Wasm64);
+    let or = instruction_to_cost(&wasmparser::Operator::I64Or, WasmMemoryType::Wasm64);
+    let drop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm64);
+    let total_cost =
+        1 + 7 * const_1 + 7 * const_2 + add + sub + mul + div_s + rem_s + and + or + 7 * drop;
+
+    assert_eq!(instr_used_wasm64, total_cost);
+
+    // Compute cost in Wasm32 mode and compare.
+    let wat_wasm32 = r#"
+        (module
+            (func $test (export "canister_update test")
+                (drop (i64.add (i64.const 1) (i64.const 2)))
+                (drop (i64.sub (i64.const 1) (i64.const 2)))
+                (drop (i64.mul (i64.const 1) (i64.const 2)))
+                (drop (i64.div_s (i64.const 1) (i64.const 2)))
+                (drop (i64.rem_s (i64.const 1) (i64.const 2)))
+                (drop (i64.and (i64.const 1) (i64.const 2)))
+                (drop (i64.or (i64.const 1) (i64.const 2)))
+            )
+            (memory 1000)
+        )"#;
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(EmbeddersConfig::default())
+        .with_wat(wat_wasm32)
+        .with_num_instructions(NumInstructions::new(10000))
+        .build();
+
+    instance.run(func_ref("test")).unwrap();
+    let wasm_32_instructions = instr_used(&mut instance);
+
+    let const_1_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let const_2_wasm32 = instruction_to_cost(
+        &wasmparser::Operator::I64Const { value: 2 },
+        WasmMemoryType::Wasm32,
+    );
+    let add_wasm32 = instruction_to_cost(&wasmparser::Operator::I64Add, WasmMemoryType::Wasm32);
+    let sub_wasm32 = instruction_to_cost(&wasmparser::Operator::I64Sub, WasmMemoryType::Wasm32);
+    let mul_wasm32 = instruction_to_cost(&wasmparser::Operator::I64Mul, WasmMemoryType::Wasm32);
+    let div_s_wasm32 = instruction_to_cost(&wasmparser::Operator::I64DivS, WasmMemoryType::Wasm32);
+    let rem_s_wasm32 = instruction_to_cost(&wasmparser::Operator::I64RemS, WasmMemoryType::Wasm32);
+    let and_wasm32 = instruction_to_cost(&wasmparser::Operator::I64And, WasmMemoryType::Wasm32);
+    let or_wasm32 = instruction_to_cost(&wasmparser::Operator::I64Or, WasmMemoryType::Wasm32);
+    let drop_wasm32 = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32);
+    let total_cost_wasm32 = 1
+        + 7 * const_1_wasm32
+        + 7 * const_2_wasm32
+        + add_wasm32
+        + sub_wasm32
+        + mul_wasm32
+        + div_s_wasm32
+        + rem_s_wasm32
+        + and_wasm32
+        + or_wasm32
+        + 7 * drop_wasm32;
+
+    assert_eq!(wasm_32_instructions, total_cost_wasm32);
+
+    // Check that the cost in Wasm64 mode is similar to Wasm32 mode.
+    assert_eq!(total_cost, total_cost_wasm32);
+}

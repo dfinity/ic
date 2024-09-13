@@ -173,78 +173,13 @@ impl InjectedImports {
     }
 }
 
+// Gets the cost of an instruction.
 pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
-    match mem_type {
-        WasmMemoryType::Wasm32 => instruction_to_cost_wasm32(i),
-        WasmMemoryType::Wasm64 => instruction_to_cost_wasm64(i),
-    }
-}
-
-// Gets the cost of an instruction in 64-bit mode.
-pub fn instruction_to_cost_wasm64(i: &Operator) -> u64 {
-    // There are only a subset of instructions that are more expensive in 64-bit mode.
-    // The rest of the instructions are the same as in 32-bit mode.
-    match i {
-        // Load/store are more expensive in 64-bit mode.
-        Operator::I32Load { .. }
-        | Operator::I64Load { .. }
-        | Operator::F32Load { .. }
-        | Operator::F64Load { .. }
-        | Operator::I32Load8S { .. }
-        | Operator::I32Load8U { .. }
-        | Operator::I32Load16S { .. }
-        | Operator::I32Load16U { .. }
-        | Operator::I64Load8S { .. }
-        | Operator::I64Load8U { .. }
-        | Operator::I64Load16S { .. }
-        | Operator::I64Load16U { .. }
-        | Operator::I64Load32S { .. }
-        | Operator::I64Load32U { .. }
-        | Operator::I32Store { .. }
-        | Operator::I64Store { .. }
-        | Operator::F32Store { .. }
-        | Operator::F64Store { .. }
-        | Operator::I32Store8 { .. }
-        | Operator::I32Store16 { .. }
-        | Operator::I64Store8 { .. }
-        | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 2,
-
-        // Load/store for SIMD are more expensive in 64-bit mode.
-        Operator::V128Load { .. }
-        | Operator::V128Load8x8S { .. }
-        | Operator::V128Load8x8U { .. }
-        | Operator::V128Load16x4S { .. }
-        | Operator::V128Load16x4U { .. }
-        | Operator::V128Load32x2S { .. }
-        | Operator::V128Load32x2U { .. }
-        | Operator::V128Load8Splat { .. }
-        | Operator::V128Load16Splat { .. }
-        | Operator::V128Load32Splat { .. }
-        | Operator::V128Load64Splat { .. }
-        | Operator::V128Load32Zero { .. }
-        | Operator::V128Load64Zero { .. }
-        | Operator::V128Store { .. }
-        | Operator::V128Load8Lane { .. }
-        | Operator::V128Load16Lane { .. }
-        | Operator::V128Load32Lane { .. }
-        | Operator::V128Load64Lane { .. }
-        | Operator::V128Store8Lane { .. }
-        | Operator::V128Store16Lane { .. }
-        | Operator::V128Store32Lane { .. }
-        | Operator::V128Store64Lane { .. } => 2,
-
-        // The rest of the instructions are the same as in 32-bit mode.
-        _ => instruction_to_cost_wasm32(i),
-    }
-}
-
-// Gets the cost of an instruction in 32-bit mode.
-pub fn instruction_to_cost_wasm32(i: &Operator) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
-    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // The exceptions are: atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
     // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    // Cost for certain instructions differ based on the memory type (Wasm32 vs. Wasm64).
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -424,7 +359,7 @@ pub fn instruction_to_cost_wasm32(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 1.
+        // All load/store instructions are of cost 1 in Wasm32 mode.
         // Validated in benchmarks.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
@@ -448,7 +383,10 @@ pub fn instruction_to_cost_wasm32(i: &Operator) -> u64 {
         | Operator::I32Store16 { .. }
         | Operator::I64Store8 { .. }
         | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 1,
+        | Operator::I64Store32 { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
 
         // Global get/set operations are similarly expensive to loads/stores.
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
@@ -520,28 +458,34 @@ pub fn instruction_to_cost_wasm32(i: &Operator) -> u64 {
 
         ////////////////////////////////////////////////////////////////
         // Wasm SIMD Operators
-        Operator::V128Load { .. } => 1,
-        Operator::V128Load8x8S { .. } => 1,
-        Operator::V128Load8x8U { .. } => 1,
-        Operator::V128Load16x4S { .. } => 1,
-        Operator::V128Load16x4U { .. } => 1,
-        Operator::V128Load32x2S { .. } => 1,
-        Operator::V128Load32x2U { .. } => 1,
-        Operator::V128Load8Splat { .. } => 1,
-        Operator::V128Load16Splat { .. } => 1,
-        Operator::V128Load32Splat { .. } => 1,
-        Operator::V128Load64Splat { .. } => 1,
-        Operator::V128Load32Zero { .. } => 1,
-        Operator::V128Load64Zero { .. } => 1,
-        Operator::V128Store { .. } => 1,
-        Operator::V128Load8Lane { .. } => 2,
-        Operator::V128Load16Lane { .. } => 2,
-        Operator::V128Load32Lane { .. } => 1,
-        Operator::V128Load64Lane { .. } => 1,
-        Operator::V128Store8Lane { .. } => 1,
-        Operator::V128Store16Lane { .. } => 1,
-        Operator::V128Store32Lane { .. } => 1,
-        Operator::V128Store64Lane { .. } => 1,
+
+        // Load/store for SIMD cost 1 in Wasm32 mode and 2 in Wasm64 mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
+
         Operator::V128Const { .. } => 1,
         Operator::I8x16Shuffle { .. } => 3,
         Operator::I8x16ExtractLaneS { .. } => 1,
