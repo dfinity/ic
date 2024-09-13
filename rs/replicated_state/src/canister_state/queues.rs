@@ -652,7 +652,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(
+    //
+    // NOTE: DO NOT CHANGE THE VISIBILITY OF THIS METHOD. IT IS ONLY SUPPOSED TO BE
+    // CALLED FOR CANISTERS (I.E. NOT FOR THE SUBNET QUEUES).
+    pub(super) fn push_output_request(
         &mut self,
         request: Arc<Request>,
         time: Time,

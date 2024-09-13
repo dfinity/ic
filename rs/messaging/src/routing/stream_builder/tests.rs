@@ -1,3 +1,5 @@
+use crate::message_routing::MessageRoutingMetrics;
+
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
@@ -865,6 +867,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
         &metrics_registry,
+        MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
