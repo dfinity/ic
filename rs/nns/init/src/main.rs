@@ -295,17 +295,22 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
         .ledger
         .init_args()
         .unwrap()
-        .minting_account = AccountIdentifier::new(
-        PrincipalId(
-            candid::Principal::from_text(
-                "iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe",
-            )
-            .unwrap(),
-        ),
-        None,
-    );
+        .initial_values
+        .insert(
+            AccountIdentifier::new(
+                PrincipalId(
+                    candid::Principal::from_text(
+                        "iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe",
+                    )
+                    .unwrap(),
+                ),
+                None,
+            ),
+            icp_ledger::Tokens::from_tokens(u64::MAX/2).expect("Couldn't create icpts"),
+        );
+
     eprintln!(
-    "Initializing with test ledger minter: iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe"
+    "Minting to iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe"
 );
 
     if args.initialize_with_gtc_neurons {
