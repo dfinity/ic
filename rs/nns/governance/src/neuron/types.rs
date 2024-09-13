@@ -590,6 +590,27 @@ impl Neuron {
                     ))
                 }
             }
+            Operation::RemoveHotKey(remove_hot_key) => {
+                let caller_asking_to_remove_self = remove_hot_key
+                    .hot_key_to_remove
+                    .as_ref()
+                    .map(|hk| hk == caller)
+                    .unwrap_or_default();
+
+                if self.is_controlled_by(caller)
+                    || (self.is_hotkey_or_controller(caller) && caller_asking_to_remove_self)
+                {
+                    Ok(())
+                } else {
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::NotAuthorized,
+                        format!(
+                            "Caller '{:?}' must be the controller or the hot key that is being removed from the neuron.",
+                            caller,
+                        ),
+                    ))
+                }
+            }
 
             // Only the controller is allowed to perform other configure operations.
             _ => {

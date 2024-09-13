@@ -4,6 +4,7 @@ use crate::{
     pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
 };
 
+use crate::pb::v1::manage_neuron::RemoveHotKey;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_stable_structures::Storable;
 use icp_ledger::Subaccount;
@@ -449,4 +450,68 @@ fn test_neuron_configure_dissolve_delay() {
     // Step 8: advance the time by 1 second and see that the neuron is now dissolved.
     let now = now + 1;
     assert_eq!(neuron.state(now), NeuronState::Dissolved);
+}
+
+#[test]
+fn test_hotkey_caller_can_remove_itself_from_neuron() {
+    let now = 123_456_789;
+    let mut neuron =
+        create_neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 100,
+            aging_since_timestamp_seconds: now - 100,
+        });
+    let hotkey = PrincipalId::new_user_test_id(2);
+    neuron.hot_keys.push(hotkey);
+
+    let controller = neuron.controller();
+
+    let other_caller = PrincipalId::new_user_test_id(3);
+
+    // Step 1: try to remove the hotkey from the neuron, expecting to fail.
+    assert!(neuron
+        .configure(
+            &other_caller,
+            now,
+            &Configure {
+                operation: Some(Operation::RemoveHotKey(RemoveHotKey {
+                    hot_key_to_remove: Some(hotkey)
+                })),
+            },
+        )
+        .is_err());
+
+    assert_eq!(neuron.hot_keys.len(), 1);
+
+    // Step 2: remove the hotkey from the neuron with controller.
+    neuron
+        .configure(
+            &controller,
+            now,
+            &Configure {
+                operation: Some(Operation::RemoveHotKey(RemoveHotKey {
+                    hot_key_to_remove: Some(hotkey),
+                })),
+            },
+        )
+        .unwrap();
+    assert_eq!(neuron.hot_keys.len(), 0);
+
+    // Re-add the hotkey
+    neuron.hot_keys.push(hotkey);
+
+    assert_eq!(neuron.hot_keys.len(), 1);
+    // Step 3: remove the hotkey from the neuron with the hotkey.
+    neuron
+        .configure(
+            &hotkey,
+            now,
+            &Configure {
+                operation: Some(Operation::RemoveHotKey(RemoveHotKey {
+                    hot_key_to_remove: Some(hotkey),
+                })),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(neuron.hot_keys.len(), 0);
 }
