@@ -350,6 +350,7 @@ members = [
     "rs/tests",
     "rs/tests/consensus",
     "rs/tests/consensus/orchestrator",
+    "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/utils",
     "rs/tests/driver",

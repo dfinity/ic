@@ -2407,6 +2407,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-subnet-recovery-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "canister_http",
+ "ic-agent",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-management-canister-types",
+ "ic-nns-constants",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "prost",
+ "serde",
+ "serde_json",
+ "slog",
+ "url",
+]
+
+[[package]]
 name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
@@ -13320,9 +13348,12 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
+ "hex",
  "ic-agent",
+ "ic-backup",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-management-canister-types",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-recovery",
@@ -13335,6 +13366,7 @@ dependencies = [
  "ic_consensus_system_test_catch_up_test_common",
  "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
  "k256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -13343,6 +13375,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
+ "tempfile",
  "tokio",
  "url",
 ]
@@ -19715,9 +19748,7 @@ dependencies = [
  "http 0.2.12",
  "humantime",
  "ic-agent",
- "ic-artifact-pool",
  "ic-async-utils",
- "ic-backup",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-client",
@@ -19762,7 +19793,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",
- "ic-recovery",
  "ic-regedit",
  "ic-registry-canister-api",
  "ic-registry-client",

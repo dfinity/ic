@@ -17,10 +17,7 @@ Success::
 
 end::catalog[] */
 
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
-use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-
+use anyhow::Result;
 use ic_consensus_system_test_utils::{
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
@@ -31,7 +28,12 @@ use ic_consensus_system_test_utils::{
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::constants::SSH_USERNAME;
+use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
@@ -240,4 +242,12 @@ pub fn test(env: TestEnv) {
         new_app_can_id,
         new_msg
     ));
+}
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test))
+        .execute_from_args()?;
+    Ok(())
 }
