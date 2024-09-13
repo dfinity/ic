@@ -1,100 +1,34 @@
 """
-This module defines shared dependency lists for the pocket-ic library and tests and a function to declare pocket-ic tests based on a given pocket-ic server.
+This module defines the macro rust_test_suite_pocket_ic which declares two rust_test_suites, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_test_suite")
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:hex",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:reqwest",
-    "@crate_index//:schemars",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-appender",
-    "@crate_index//:tracing-subscriber",
-]
-
-MACRO_DEPENDENCIES = []
-
-TEST_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/test_utilities/load_wasm",
-    "//rs/types/base_types",
-    "//rs/universal_canister/lib",
-    "@crate_index//:candid_parser",
-    "@crate_index//:ed25519-dalek",
-    "@crate_index//:flate2",
-    "@crate_index//:k256",
-    "@crate_index//:lazy_static",
-    "@crate_index//:wat",
-]
-
-def pocket_ic_tests(name_suffix, pocket_ic_server):
+def rust_test_suite_using_pocket_ic_server(name, **kwargs):
     """
-    Declares a number of rust_test_suites that test the pocket-ic library against the given pocket_ic_server.
+    Declares two rust_test_suites, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 
     Args:
-      name_suffix: to differentiate the declared rust_test_suites from other invocations
-        of this macro the names of the tests are suffixed with this string.
-      pocket_ic_server: which pocket-ic server to use.
-        For example "//rs/pocket_ic_server:pocket-ic-server" or "//:mainnet_pocket_ic".
+      name: the base name of the rust_test_suites.
+        The name will be suffixed with "-pocket-ic-server-mainnet" and "-pocket-ic-server-HEAD"
+        for the mainnet and HEAD versions of the pocket-ic server respectively,
+      **kwargs: the arguments of the rust_test_suite.
     """
-
-    suffix = "-pocket-ic-server-" + name_suffix
-
-    data = [pocket_ic_server]
-    env = {
-        "POCKET_IC_BIN": "$(rootpath " + pocket_ic_server + ")",
-    }
-
+    data = kwargs.pop("data", [])
+    env = kwargs.pop("env", {})
     rust_test_suite(
-        name = "test" + suffix,
-        size = "small",
-        srcs = ["tests/tests.rs"],
-        data = data + [
-            "tests/counter.wasm",
-            "tests/icp_ledger.wasm",
-            ":test_canister.wasm",
-        ],
+        name = name + "-pocket-ic-server-mainnet",
+        data = data + ["//:mainnet-pocket-ic"],
         env = env | {
-            "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
-            "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
-            "TEST_WASM": "$(rootpath :test_canister.wasm)",
+            "POCKET_IC_BIN": "$(rootpath //:mainnet-pocket-ic)",
         },
-        flaky = False,
-        proc_macro_deps = MACRO_DEPENDENCIES,
-        deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+        **kwargs
     )
-
     rust_test_suite(
-        name = "restart" + suffix,
-        size = "medium",
-        srcs = ["tests/restart.rs"],
-        data = data,
-        env = env,
-        flaky = False,
-        proc_macro_deps = MACRO_DEPENDENCIES,
-        deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
-    )
-
-    rust_test_suite(
-        name = "slow" + suffix,
-        size = "medium",
-        srcs = ["tests/slow.rs"],
-        data = data,
-        env = env,
-        flaky = False,
-        proc_macro_deps = MACRO_DEPENDENCIES,
-        tags = ["cpu:8"],
-        deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+        name = name + "-pocket-ic-server-HEAD",
+        data = data + ["//rs/pocket_ic_server:pocket-ic-server"],
+        env = env | {
+            "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        },
+        **kwargs
     )
