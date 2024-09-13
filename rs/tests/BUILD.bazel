@@ -133,10 +133,6 @@ symlink_dir_test(
     },
 )
 
-exports_files([
-    "src/orchestrator/orchestrator_universal_vm_activation.sh",
-])
-
 copy_file(
     name = "static-file-server_image",
     src = "@static-file-server//image",

@@ -9,7 +9,7 @@ SUBNET_RECOVERY_RUNTIME_DEPS = [
     "//rs/tests:recovery/binaries",
 ]
 
-ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
+ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = [":orchestrator_universal_vm_activation.sh"]
 
 STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
     # Keep sorted.
@@ -306,3 +306,8 @@ system_test_nns(
         "@crate_index//:url",
     ],
 )
+
+exports_files([
+    "orchestrator_universal_vm_activation.sh",
+])
+
