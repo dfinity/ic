@@ -107,6 +107,8 @@ test_using_pocket_ic_server(
     srcs = ["tests/slow.rs"],
     # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
     extra_HEAD_tags = [],
+    # Override the default [] extra_mainnet_tags to skip this test on CI.
+    extra_mainnet_tags = ["manual"]
     flaky = False,
     macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
