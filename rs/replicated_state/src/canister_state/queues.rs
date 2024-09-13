@@ -24,6 +24,7 @@ use ic_types::messages::{
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
@@ -441,16 +442,6 @@ impl CanisterQueues {
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        fn non_matching_response(message: &str, response: &Response) -> StateError {
-            StateError::NonMatchingResponse {
-                err_str: message.to_string(),
-                originator: response.originator,
-                callback_id: response.originator_reply_callback,
-                respondent: response.respondent,
-                deadline: response.deadline,
-            }
-        }
-
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -478,7 +469,10 @@ impl CanisterQueues {
                             // This is a critical error for guaranteed responses.
                             if response.deadline == NO_DEADLINE {
                                 return Err((
-                                    non_matching_response("Duplicate response", response),
+                                    StateError::non_matching_response(
+                                        "Duplicate response",
+                                        response,
+                                    ),
                                     msg,
                                 ));
                             } else {
@@ -493,7 +487,10 @@ impl CanisterQueues {
                     // Queue does not exist or has no reserved slot for this response.
                     _ => {
                         return Err((
-                            non_matching_response("No reserved response slot", response),
+                            StateError::non_matching_response(
+                                "No reserved response slot",
+                                response,
+                            ),
                             msg,
                         ));
                     }
@@ -744,7 +741,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(
+    //
+    // NOTE: DO NOT CHANGE THE VISIBILITY OF THIS METHOD. IT IS ONLY SUPPOSED TO BE
+    // CALLED FOR CANISTERS (I.E. NOT FOR THE SUBNET QUEUES).
+    pub(super) fn push_output_request(
         &mut self,
         request: Arc<Request>,
         time: Time,
@@ -1008,8 +1008,11 @@ impl CanisterQueues {
             self.pool = MessagePool::default();
             self.input_schedule = InputSchedule::default();
 
-            // Trust but verify. Ensure that everything is actually set to default.
-            debug_assert_eq!(CanisterQueues::default(), *self);
+            // Trust but verify. Ensure that the `CanisterQueues` now encodes to zero bytes.
+            debug_assert_eq!(
+                0,
+                pb_queues::CanisterQueues::from(self as &Self).encoded_len()
+            );
         }
     }
 

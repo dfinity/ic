@@ -37,7 +37,7 @@ use tokio::{
 };
 use turmoil::Sim;
 
-struct CustomUdp {
+pub struct CustomUdp {
     ip: IpAddr,
     inner: turmoil::net::UdpSocket,
 }
