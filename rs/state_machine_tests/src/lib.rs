@@ -780,7 +780,6 @@ impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinC
 
 struct PocketBitcoinClient {
     adapter_state: AdapterState,
-    //blockchain_state: Arc<TokioMutex<BlockchainState>>,
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
     rt_handle: Arc<Runtime>,
@@ -821,7 +820,6 @@ impl PocketBitcoinClient {
 
         Self {
             adapter_state,
-            //blockchain_state,
             get_successors_handler,
             transaction_manager_tx,
             rt_handle,
