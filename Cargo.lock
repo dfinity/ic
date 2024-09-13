@@ -2444,6 +2444,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-subnet-recovery-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "canister_http",
+ "ic-agent",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-management-canister-types",
+ "ic-nns-constants",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "prost",
+ "serde",
+ "serde_json",
+ "slog",
+ "url",
+]
+
+[[package]]
 name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
