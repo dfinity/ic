@@ -100,4 +100,4 @@ test_suite(
     tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
 )
 
-mainnet_binaries()
+mainnet_binaries(name = "mainnet")

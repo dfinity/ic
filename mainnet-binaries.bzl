@@ -36,15 +36,20 @@ def mainnet_binary_gzs():
             ),
         )
 
-def mainnet_binaries():
+def mainnet_binaries(name):
     """
     Declares Bazel targets for the mainnet versions of published binaries (/publish/binaries)
+
+    Args:
+      name: the name of the targets of the mainnet binaries will be prefixed with this name.
+        This argument is really unncessary since I would rather hard-code it to "mainnet". However
+        `bazel test //bazel:buildifier_test` requires this function to have a "name" argument.
     """
     for binary_name in MAINNET_BINARY_SHA256S.keys():
-        name = "mainnet_" + binary_name.replace("-", "_")
-        gz = name + ".gz"
+        target_name = name + "_" + binary_name.replace("-", "_")
+        gz = target_name + ".gz"
         native.genrule(
-            name = name,
+            name = target_name,
             srcs = ["@" + gz + "//file"],
             outs = [binary_name],
             cmd = "gunzip -c $< > $@",
