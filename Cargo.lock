@@ -9541,6 +9541,7 @@ dependencies = [
  "ic-sns-wasm",
  "serde",
  "tempfile",
+ "thiserror",
  "tokio",
 ]
 
