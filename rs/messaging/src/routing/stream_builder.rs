@@ -1,4 +1,6 @@
-use crate::message_routing::LatencyMetrics;
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -222,7 +224,7 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
-            .unwrap_or(|err| {
+            .unwrap_or_else(|(err, response)| {
                 // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
                 // `NonMatchingResponse` error.
                 error!(

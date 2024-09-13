@@ -867,7 +867,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
         &metrics_registry,
-        MessageRoutingMetrics::new(&metrics_registry),
+        &MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
@@ -1077,7 +1077,7 @@ fn assert_eq_critical_errors(
     metrics_registry: &MetricsRegistry,
 ) {
     assert_eq!(
-        metric_vec(&[
+        nonzero_values(metric_vec(&[
             (&[("error", &CRITICAL_ERROR_INFINITE_LOOP)], 0),
             (
                 &[("error", &CRITICAL_ERROR_PAYLOAD_TOO_LARGE)],
@@ -1087,7 +1087,7 @@ fn assert_eq_critical_errors(
                 &[("error", &CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND)],
                 response_destination_not_found
             )
-        ]),
-        fetch_int_counter_vec(metrics_registry, "critical_errors")
+        ])),
+        nonzero_values(fetch_int_counter_vec(metrics_registry, "critical_errors"))
     );
 }

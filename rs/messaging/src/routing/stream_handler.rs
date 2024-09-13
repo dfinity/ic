@@ -1,4 +1,6 @@
-use crate::message_routing::{LatencyMetrics, MessageRoutingMetrics};
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;

@@ -102,7 +102,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
-const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -1388,7 +1388,7 @@ impl MessageRoutingImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
-            MessageRoutingMetrics::new(metrics_registry),
+            &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
