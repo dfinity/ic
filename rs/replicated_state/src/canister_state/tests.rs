@@ -167,13 +167,7 @@ fn canister_state_push_input_response_no_reserved_slot() {
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
         Err((
-            StateError::NonMatchingResponse {
-                err_str: "No reserved response slot".to_string(),
-                originator: response.originator,
-                callback_id: response.originator_reply_callback,
-                respondent: response.respondent,
-                deadline: response.deadline,
-            },
+            StateError::non_matching_response("No reserved response slot", &response),
             response.clone().into(),
         )),
         fixture.push_input(
