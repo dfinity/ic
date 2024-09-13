@@ -24,14 +24,12 @@ def mainnet_binary_gzs():
     """
     Declares Bazel targets for the gz-compressed mainnet versions of published binaries (/publish/binaries)
     """
-    for binary_name in MAINNET_BINARY_SHA256S.keys():
-        name = "mainnet-" + binary_name
-        gz = name + ".gz"
+    for binary_name, sha256 in MAINNET_BINARY_SHA256S.items():
         http_file(
-            name = gz,
-            sha256 = MAINNET_BINARY_SHA256S[binary_name],
-            url = "https://download.dfinity.systems/ic/{git_commit_id}/binaries/x86_64-linux/{binary_name}.gz".format(
-                git_commit_id = MAINNET_REVISION,
+            name = "mainnet-" + binary_name + ".gz",
+            sha256 = sha256,
+            url = "https://download.dfinity.systems/ic/{rev}/binaries/x86_64-linux/{binary_name}.gz".format(
+                rev = MAINNET_REVISION,
                 binary_name = binary_name,
             ),
         )
@@ -47,10 +45,9 @@ def mainnet_binaries(name):
     """
     for binary_name in MAINNET_BINARY_SHA256S.keys():
         target_name = name + "-" + binary_name
-        gz = target_name + ".gz"
         native.genrule(
             name = target_name,
-            srcs = ["@" + gz + "//file"],
+            srcs = ["@" + target_name + ".gz//file"],
             outs = [binary_name],
             cmd = "gunzip -c $< > $@",
         )
