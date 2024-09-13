@@ -283,7 +283,6 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
                 account,
                 icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
             );
-
         eprintln!(
             "{}Initializing with test ledger account: {}",
             LOG_PREFIX,
