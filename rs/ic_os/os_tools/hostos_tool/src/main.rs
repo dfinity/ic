@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 use config::config_ini::get_config_ini_settings;
 use config::deployment_json::read_deployment_file;
+use config::types::NetworkSettings;
 use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
@@ -56,44 +57,60 @@ pub fn main() -> Result<()> {
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
-            let mut network_settings = config_ini_settings.network_settings;
 
-            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
-            eprintln!("Deployment config: {:?}", deployment_json);
+            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read mgmt_mac from deployment.json directly.
-            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
-
+            // and we won't need to read config.ini and deploymen.json directly.
+            let network_settings = NetworkSettings {
+                ipv6_prefix: config_ini_settings.ipv6_prefix,
+                ipv6_address: config_ini_settings.ipv6_address,
+                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
+                ipv6_gateway: config_ini_settings.ipv6_gateway,
+                ipv4_address: config_ini_settings.ipv4_address,
+                ipv4_gateway: config_ini_settings.ipv4_gateway,
+                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
+                domain: config_ini_settings.domain,
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            };
             eprintln!("Network settings config: {:?}", &network_settings);
 
             generate_network_config(
                 &network_settings,
-                deployment_json.deployment.name.as_str(),
+                deployment_json_settings.deployment.name.as_str(),
                 NodeType::HostOS,
                 Path::new(&output_directory),
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
-            let mut network_settings = config_ini_settings.network_settings;
 
-            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
-            eprintln!("Deployment config: {:?}", deployment_json);
+            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read mgmt_mac from deployment.json directly.
-            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac.clone();
-
+            // and we won't need to read config.ini and deploymen.json directly.
+            let network_settings = NetworkSettings {
+                ipv6_prefix: config_ini_settings.ipv6_prefix,
+                ipv6_address: config_ini_settings.ipv6_address,
+                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
+                ipv6_gateway: config_ini_settings.ipv6_gateway,
+                ipv4_address: config_ini_settings.ipv4_address,
+                ipv4_gateway: config_ini_settings.ipv4_gateway,
+                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
+                domain: config_ini_settings.domain,
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            };
             eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(
-                &deployment_json.deployment.name,
+                &deployment_json_settings.deployment.name,
                 &node_type,
-                deployment_json.deployment.mgmt_mac.as_deref(),
+                network_settings.mgmt_mac.as_deref(),
             )?;
             let ipv6_prefix = network_settings
                 .ipv6_prefix
@@ -107,23 +124,31 @@ pub fn main() -> Result<()> {
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
-            let mut network_settings = config_ini_settings.network_settings;
 
-            let deployment_json = read_deployment_file(Path::new(&opts.deployment_file))?;
-            eprintln!("Deployment config: {:?}", deployment_json);
+            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read mgmt_mac from deployment.json directly.
-            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac.clone();
-
+            // and we won't need to read config.ini and deploymen.json directly.
+            let network_settings = NetworkSettings {
+                ipv6_prefix: config_ini_settings.ipv6_prefix,
+                ipv6_address: config_ini_settings.ipv6_address,
+                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
+                ipv6_gateway: config_ini_settings.ipv6_gateway,
+                ipv4_address: config_ini_settings.ipv4_address,
+                ipv4_gateway: config_ini_settings.ipv4_gateway,
+                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
+                domain: config_ini_settings.domain,
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            };
             eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
             let mac = generate_mac_address(
-                &deployment_json.deployment.name,
+                &deployment_json_settings.deployment.name,
                 &node_type,
-                deployment_json.deployment.mgmt_mac.as_deref(),
+                network_settings.mgmt_mac.as_deref(),
             )?;
             let mac = FormattedMacAddress::from(&mac);
             println!("{}", mac.get());

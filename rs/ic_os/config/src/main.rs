@@ -7,8 +7,8 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use config::types::{
-    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, SetupOSConfig,
-    SetupOSSettings,
+    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, NetworkSettings,
+    SetupOSConfig, SetupOSSettings,
 };
 
 #[derive(Subcommand)]
@@ -59,24 +59,34 @@ pub fn main() -> Result<()> {
             node_operator_private_key_path,
             setupos_config_json_path,
         }) => {
-            // get config.ini variables
+            // get config.ini settings
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
-            let mut network_settings = config_ini_settings.network_settings;
 
             // get deployment.json variables
-            let deployment_json = read_deployment_file(&deployment_json_path)?;
-            network_settings.mgmt_mac = deployment_json.deployment.mgmt_mac;
+            let deployment_json_settings = read_deployment_file(&deployment_json_path)?;
+
+            let network_settings = NetworkSettings {
+                ipv6_prefix: config_ini_settings.ipv6_prefix,
+                ipv6_address: config_ini_settings.ipv6_address,
+                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
+                ipv6_gateway: config_ini_settings.ipv6_gateway,
+                ipv4_address: config_ini_settings.ipv4_address,
+                ipv4_gateway: config_ini_settings.ipv4_gateway,
+                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
+                domain: config_ini_settings.domain,
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            };
 
             let logging = Logging {
-                elasticsearch_hosts: deployment_json.logging.hosts.to_string(),
+                elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
                 elasticsearch_tags: None,
             };
 
             let icos_settings = ICOSSettings {
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
-                nns_urls: deployment_json.nns.url.clone(),
-                hostname: deployment_json.deployment.name.to_string(),
+                nns_urls: deployment_json_settings.nns.url.clone(),
+                hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
                     .then_some(node_operator_private_key_path),
@@ -88,8 +98,8 @@ pub fn main() -> Result<()> {
             let setupos_settings = SetupOSSettings;
 
             let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json.resources.memory,
-                vm_cpu: deployment_json
+                vm_memory: deployment_json_settings.resources.memory,
+                vm_cpu: deployment_json_settings
                     .resources
                     .cpu
                     .clone()

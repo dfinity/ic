@@ -7,10 +7,16 @@ use std::path::Path;
 use anyhow::bail;
 use anyhow::{Context, Result};
 
-use crate::types::NetworkSettings;
 pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {
-    pub network_settings: NetworkSettings,
+    pub ipv6_prefix: Option<String>,
+    pub ipv6_address: Option<Ipv6Addr>,
+    pub ipv6_prefix_length: u8,
+    pub ipv6_gateway: Ipv6Addr,
+    pub ipv4_address: Option<Ipv4Addr>,
+    pub ipv4_gateway: Option<Ipv4Addr>,
+    pub ipv4_prefix_length: Option<u8>,
+    pub domain: Option<String>,
     pub verbose: bool,
 }
 
@@ -95,7 +101,12 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 
     let domain = config_map.get("domain").cloned();
 
-    let network_settings = NetworkSettings {
+    let verbose = config_map
+        .get("verbose")
+        .map(|s| s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    Ok(ConfigIniSettings {
         ipv6_prefix,
         ipv6_address,
         ipv6_prefix_length,
@@ -104,16 +115,6 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         ipv4_gateway,
         ipv4_prefix_length,
         domain,
-        mgmt_mac: None,
-    };
-
-    let verbose = config_map
-        .get("verbose")
-        .map(|s| s.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-
-    Ok(ConfigIniSettings {
-        network_settings,
         verbose,
     })
 }
@@ -267,37 +268,28 @@ mod tests {
         let config_ini_settings = get_config_ini_settings(temp_file_path)?;
 
         assert_eq!(
-            config_ini_settings.network_settings.ipv6_prefix.unwrap(),
+            config_ini_settings.ipv6_prefix.unwrap(),
             "2a00:fb01:400:200".to_string()
         );
         assert_eq!(
-            config_ini_settings.network_settings.ipv6_address.unwrap(),
+            config_ini_settings.ipv6_address.unwrap(),
             "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
         );
         assert_eq!(
-            config_ini_settings.network_settings.ipv6_gateway,
+            config_ini_settings.ipv6_gateway,
             "2a00:fb01:400:200::1".parse::<Ipv6Addr>()?
         );
-        assert_eq!(config_ini_settings.network_settings.ipv6_prefix_length, 64);
+        assert_eq!(config_ini_settings.ipv6_prefix_length, 64);
         assert_eq!(
-            config_ini_settings.network_settings.ipv4_address.unwrap(),
+            config_ini_settings.ipv4_address.unwrap(),
             "212.71.124.178".parse::<Ipv4Addr>()?
         );
         assert_eq!(
-            config_ini_settings.network_settings.ipv4_gateway.unwrap(),
+            config_ini_settings.ipv4_gateway.unwrap(),
             "212.71.124.177".parse::<Ipv4Addr>()?
         );
-        assert_eq!(
-            config_ini_settings
-                .network_settings
-                .ipv4_prefix_length
-                .unwrap(),
-            28
-        );
-        assert_eq!(
-            config_ini_settings.network_settings.domain,
-            Some("example.com".to_string())
-        );
+        assert_eq!(config_ini_settings.ipv4_prefix_length.unwrap(), 28);
+        assert_eq!(config_ini_settings.domain, Some("example.com".to_string()));
         assert!(!config_ini_settings.verbose);
 
         // Test ipv6_address without ipv6_prefix_length length
@@ -305,10 +297,10 @@ mod tests {
         writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::")?;
         let config_ini_settings = get_config_ini_settings(temp_file_path)?;
         assert_eq!(
-            config_ini_settings.network_settings.ipv6_address.unwrap(),
+            config_ini_settings.ipv6_address.unwrap(),
             "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
         );
-        assert_eq!(config_ini_settings.network_settings.ipv6_prefix_length, 64);
+        assert_eq!(config_ini_settings.ipv6_prefix_length, 64);
 
         // Test missing ipv6
         let mut temp_file = NamedTempFile::new()?;
