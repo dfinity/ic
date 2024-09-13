@@ -8,7 +8,7 @@ tools="${@:4}"
 
 key_component=()
 if [ "${ssh_key}" != "None" ]; then
-    key_component=("-i", "${ssh_key}")
+    key_component=("-i" "${ssh_key}")
 fi
 
 TMPDIR=$(mktemp -d)
