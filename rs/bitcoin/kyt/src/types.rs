@@ -40,7 +40,7 @@ pub enum CheckTransactionError {
     },
     /// Canister call is rejected with rejection code and message.
     Rejected { code: u32, message: String },
-    /// Response size is too large (> `RETRY_BUFFER_SIZE`) when fetching the transaction data of a txid.
+    /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },
     /// Error decoding transaction data of a txid.
     Tx { txid: Vec<u8>, message: String },

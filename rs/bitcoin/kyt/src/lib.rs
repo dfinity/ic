@@ -13,7 +13,7 @@ mod types;
 
 pub use fetch::{
     get_tx_cycle_cost, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
-    INITIAL_BUFFER_SIZE,
+    INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, FetchState, TryFetchResult};
 use state::{FetchGuardError, FetchTxStatus};
@@ -62,7 +62,7 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
         && (message.contains("size limit") || message.contains("length limit"))
 }
 
-async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
+async fn get_tx(tx_id: Txid, max_response_bytes: u32) -> Result<Transaction, GetTxError> {
     // TODO(XC-159): Support multiple providers
     let host = "btcscan.org";
     let url = format!("https://{}/api/tx/{}/raw", host, tx_id);
@@ -80,7 +80,7 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
         url: url.to_string(),
         method: HttpMethod::GET,
         body: None,
-        max_response_bytes: Some(buffer_size as u64),
+        max_response_bytes: Some(max_response_bytes as u64),
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: ic_cdk::api::id(),
@@ -90,7 +90,7 @@ async fn get_tx(tx_id: Txid, buffer_size: u32) -> Result<Transaction, GetTxError
         }),
         headers: request_headers,
     };
-    let cycles = get_tx_cycle_cost(buffer_size);
+    let cycles = get_tx_cycle_cost(max_response_bytes);
     match http_request(request, cycles).await {
         Ok((response,)) => {
             // TODO(XC-158): ensure response is 200 before decoding
@@ -143,8 +143,8 @@ impl FetchState for KytCanisterState {
 struct KytCanisterEnv;
 
 impl FetchEnv for KytCanisterEnv {
-    async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
-        get_tx(txid, buffer_size).await
+    async fn get_tx(&self, txid: Txid, max_response_bytes: u32) -> Result<Transaction, GetTxError> {
+        get_tx(txid, max_response_bytes).await
     }
     fn cycles_accept(&self, cycles: u128) -> u128 {
         ic_cdk::api::call::msg_cycles_accept128(cycles)

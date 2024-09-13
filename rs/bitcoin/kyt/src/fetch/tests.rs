@@ -57,8 +57,10 @@ struct MockEnv {
 }
 
 impl FetchEnv for MockEnv {
-    async fn get_tx(&self, txid: Txid, buffer_size: u32) -> Result<Transaction, GetTxError> {
-        self.calls.borrow_mut().push_back((txid, buffer_size));
+    async fn get_tx(&self, txid: Txid, max_response_bytes: u32) -> Result<Transaction, GetTxError> {
+        self.calls
+            .borrow_mut()
+            .push_back((txid, max_response_bytes));
         self.replies
             .borrow_mut()
             .pop_front()
@@ -89,10 +91,10 @@ impl MockEnv {
             accepted_cycles: RefCell::new(0),
         }
     }
-    fn assert_get_tx_call(&self, txid: Txid, buffer_size: u32) {
+    fn assert_get_tx_call(&self, txid: Txid, max_response_bytes: u32) {
         assert_eq!(
             self.calls.borrow_mut().pop_front(),
-            Some((txid, buffer_size))
+            Some((txid, max_response_bytes))
         )
     }
     fn assert_no_more_get_tx_call(&self) {
@@ -175,9 +177,9 @@ async fn test_mock_env() {
     let env = MockEnv::new(0);
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
-    let result = env.get_tx(txid, INITIAL_BUFFER_SIZE).await;
+    let result = env.get_tx(txid, INITIAL_MAX_RESPONSE_BYTES).await;
     assert!(result.is_ok());
-    env.assert_get_tx_call(txid, INITIAL_BUFFER_SIZE);
+    env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
     env.assert_no_more_get_tx_call();
 }
 
@@ -228,7 +230,7 @@ fn test_try_fetch_tx() {
     ));
     assert_eq!(
         env.cycles_available(),
-        available - get_tx_cycle_cost(INITIAL_BUFFER_SIZE)
+        available - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES)
     );
 }
 
@@ -244,7 +246,9 @@ async fn test_fetch_tx() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
-    let result = env.fetch_tx(&state, (), txid_0, INITIAL_BUFFER_SIZE).await;
+    let result = env
+        .fetch_tx(&state, (), txid_0, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
         state.get_fetch_status(txid_0),
@@ -259,17 +263,21 @@ async fn test_fetch_tx() {
 
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
-    let result = env.fetch_tx(&state, (), txid_1, INITIAL_BUFFER_SIZE).await;
+    let result = env
+        .fetch_tx(&state, (), txid_1, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
                 state.get_fetch_status(txid_1),
-                Some(FetchTxStatus::PendingRetry { buffer_size }) if buffer_size == RETRY_BUFFER_SIZE));
+                Some(FetchTxStatus::PendingRetry { max_response_bytes }) if max_response_bytes == RETRY_MAX_RESPONSE_BYTES));
 
     // case Err
     env.expect_get_tx_with_reply(Err(GetTxError::TxEncoding(
         "failed to decode tx".to_string(),
     )));
-    let result = env.fetch_tx(&state, (), txid_2, INITIAL_BUFFER_SIZE).await;
+    let result = env
+        .fetch_tx(&state, (), txid_2, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(
         result,
         Ok(FetchResult::Error(GetTxError::TxEncoding(_)))
@@ -341,7 +349,7 @@ async fn test_check_fetched() {
 
     // case NotEnoughCycles
     let state = MockState::new();
-    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_BUFFER_SIZE) / 2);
+    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) / 2);
     assert!(matches!(
         env.check_fetched(&state, txid_0, &fetched).await,
         Ok(CheckTransactionResponse::NotEnoughCycles)
@@ -351,7 +359,7 @@ async fn test_check_fetched() {
 
     // case Pending: need 2 inputs, but only able to get 1 for now
     let state = MockState::new();
-    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_BUFFER_SIZE) * 3 / 2);
+    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 3 / 2);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
@@ -365,7 +373,7 @@ async fn test_check_fetched() {
     // Check remaining cycle: we deduct all remaining cycles when they are not enough
     assert_eq!(env.cycles_available(), 0);
     // Continue to get another one, should pass
-    env.refill_cycles(get_tx_cycle_cost(INITIAL_BUFFER_SIZE));
+    env.refill_cycles(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES));
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
         env.check_fetched(&state, txid_0, &fetched).await,
@@ -391,7 +399,7 @@ async fn test_check_fetched() {
     // Check remaining cycle
     assert_eq!(
         env.cycles_available(),
-        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_BUFFER_SIZE) * 2
+        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
     );
 
     // case Passed: need 2 inputs, and 1 already exists in cache.
@@ -417,7 +425,7 @@ async fn test_check_fetched() {
     // Check remaining cycle
     assert_eq!(
         env.cycles_available(),
-        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_BUFFER_SIZE)
+        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES)
     );
 
     // case Pending: need 2 input, but 1 of them gives RetryWithBiggerBuffer error.
@@ -444,8 +452,8 @@ async fn test_check_fetched() {
     assert_eq!(
         env.cycles_available(),
         CHECK_TRANSACTION_CYCLES_REQUIRED
-            - get_tx_cycle_cost(INITIAL_BUFFER_SIZE) * 2
-            - get_tx_cycle_cost(RETRY_BUFFER_SIZE)
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
+            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
 
     // case Error: need 2 input, but 1 of them keeps giving RetryWithBiggerBuffer error.
@@ -471,7 +479,7 @@ async fn test_check_fetched() {
     assert_eq!(
         env.cycles_available(),
         CHECK_TRANSACTION_CYCLES_REQUIRED
-            - get_tx_cycle_cost(INITIAL_BUFFER_SIZE) * 2
-            - get_tx_cycle_cost(RETRY_BUFFER_SIZE)
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
+            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
 }

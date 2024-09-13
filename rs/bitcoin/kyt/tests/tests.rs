@@ -4,7 +4,7 @@ use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
     CheckTransactionError, CheckTransactionResponse, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_BUFFER_SIZE,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
@@ -255,7 +255,7 @@ fn test_check_transaction_passed() {
 
     let cycles_after = env.cycle_balance(setup.universal_canister);
     let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_BUFFER_SIZE);
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);

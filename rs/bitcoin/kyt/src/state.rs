@@ -10,7 +10,7 @@ mod tests;
 #[derive(Debug, Clone)]
 pub enum FetchTxStatus {
     PendingOutcall,
-    PendingRetry { buffer_size: u32 },
+    PendingRetry { max_response_bytes: u32 },
     Error(GetTxError),
     Fetched(FetchedTx),
 }
