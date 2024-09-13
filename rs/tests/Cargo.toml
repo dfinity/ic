@@ -36,9 +36,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 http = "0.2.12"
 humantime = "2.0"
-ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
-ic-backup = { path = "../backup" }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
@@ -83,7 +81,6 @@ ic-nns-init = { path = "../nns/init" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
-ic-recovery = { path = "../recovery" }
 ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-regedit = { path = "../registry/regedit" }
 ic-registry-client = { path = "../registry/client" }
@@ -314,10 +311,6 @@ path = "boundary_nodes/custom_domains_integration_test.rs"
 [[bin]]
 name = "ic-systest-general-execution"
 path = "execution/general_execution_test.rs"
-
-[[bin]]
-name = "ic-systest-backup-manager"
-path = "consensus/backup_manager_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"

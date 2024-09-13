@@ -7,7 +7,6 @@ load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SN
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/artifact_pool",
     "//rs/async_utils",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
@@ -50,7 +49,6 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/prep",
     "//rs/protobuf",
-    "//rs/recovery",
     "//rs/registry/canister",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -348,7 +346,6 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        MAINNET_REVISION_RUNTIME_DEPS + \
                                        GRAFANA_RUNTIME_DEPS + [
     "//rs/sns/cli:sns",
-    "//rs/tests:recovery/binaries",
     "//rs/tests/nns:secret_key.pem",
     "@dfx",
     "@idl2json",
