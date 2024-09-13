@@ -139,6 +139,8 @@ test_using_pocket_ic_server(
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
+    # Run the tests using the mainnet pocket-ic server on PRs but run against the HEAD version every night:
+    extra_HEAD_tags = ["nns_tests_nightly"],
     flaky = False,
     macro = rust_test,
     proc_macro_deps = MACRO_DEPENDENCIES,
