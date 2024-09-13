@@ -548,15 +548,7 @@ impl CanisterState {
         } = self;
 
         // Remove aborted install code task.
-        system_state.task_queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
+        system_state.task_queue.remove_aborted_install_code_task();
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
         // contexts (the calls corresponding to the dropped stop contexts will be

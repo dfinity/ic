@@ -1052,6 +1052,7 @@ fn serialize_canister_to_tip(
             task_queue: canister_state
                 .system_state
                 .task_queue
+                .get_queue()
                 .clone()
                 .into_iter()
                 .collect(),

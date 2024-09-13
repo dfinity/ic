@@ -12,6 +12,8 @@ use crate::{
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
+use ic_config::flag_status::FlagStatus;
+use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
@@ -265,6 +267,140 @@ impl CanisterHistory {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct TaskQueue {
+    /// Tasks to execute before processing input messages.
+    /// Currently the task queue is empty outside of execution rounds.
+    pub queue: VecDeque<ExecutionTask>,
+}
+
+impl TaskQueue {
+    pub fn from_checkpoint(queue: VecDeque<ExecutionTask>) -> Self {
+        TaskQueue { queue }
+    }
+
+    pub fn front(&self) -> Option<&ExecutionTask> {
+        self.queue.front()
+    }
+
+    pub fn pop_front(&mut self) -> Option<ExecutionTask> {
+        self.queue.pop_front()
+    }
+
+    pub fn pop_back(&mut self) -> Option<ExecutionTask> {
+        self.queue.pop_back()
+    }
+
+    pub fn push_front(&mut self, task: ExecutionTask) {
+        self.queue.push_front(task);
+    }
+
+    pub fn push_back(&mut self, task: ExecutionTask) {
+        self.queue.push_back(task);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
+        &self.queue
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    // 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
+    // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
+    // 3. If deterministic time slicing is disabled, then there are no paused tasks.
+    //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
+    pub fn check_dts_invariants(
+        &self,
+        deterministic_time_slicing: FlagStatus,
+        current_round_type: ExecutionRoundType,
+        id: &CanisterId,
+    ) {
+        for task in self.queue.iter() {
+            match task {
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. } => {}
+                ExecutionTask::Heartbeat => {
+                    panic!(
+                        "Unexpected heartbeat task after a round in canister {:?}",
+                        id
+                    );
+                }
+                ExecutionTask::GlobalTimer => {
+                    panic!(
+                        "Unexpected global timer task after a round in canister {:?}",
+                        id
+                    );
+                }
+                // TODO [EXC-1666]
+                // For now, since OnLowWasmMemory is not used we will copy behaviour similar
+                // to Heartbeat and GlobalTimer, but when the feature is implemented we will
+                // come back to it, to revisit if we should keep it after the round ends.
+                ExecutionTask::OnLowWasmMemory => {
+                    panic!(
+                        "Unexpected on low wasm memory task after a round in canister {:?}",
+                        id
+                    );
+                }
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                    assert_eq!(
+                        deterministic_time_slicing,
+                        FlagStatus::Enabled,
+                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
+                        task,
+                        id
+                    );
+                    assert_eq!(
+                        current_round_type,
+                        ExecutionRoundType::OrdinaryRound,
+                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                        task,
+                        id
+                    );
+                }
+            }
+        }
+
+        // There should be at most one paused or aborted task left in the task queue.
+        assert!(
+            self.queue.len() <= 1,
+            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+            id,
+            self.queue
+        );
+    }
+
+    /// Removes aborted install code task.
+    pub fn remove_aborted_install_code_task(&mut self) {
+        self.queue.retain(|task| match task {
+            ExecutionTask::AbortedInstallCode { .. } => false,
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => true,
+        });
+    }
+
+    /// Removes aborted `Heartbeat` and `GlobalTimer` tasks.
+    pub fn remove_heartbeat_and_global_timer(&mut self) {
+        self.queue.retain(|task| match task {
+            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+            ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(..)
+            | ExecutionTask::AbortedExecution { .. }
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::OnLowWasmMemory => true,
+        });
+    }
+}
+
 /// State that is controlled and owned by the system (IC).
 ///
 /// Contains structs needed for running and maintaining the canister on the IC.
@@ -334,7 +470,7 @@ pub struct SystemState {
 
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
-    pub task_queue: VecDeque<ExecutionTask>,
+    pub task_queue: TaskQueue,
 
     /// Canister global timer.
     pub global_timer: CanisterTimer,
@@ -884,7 +1020,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue,
+            task_queue: TaskQueue::from_checkpoint(task_queue),
             global_timer,
             canister_version,
             canister_history,

@@ -818,19 +818,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
-                canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer
-                    | ExecutionTask::OnLowWasmMemory => false,
-                    ExecutionTask::PausedExecution { .. }
-                    | ExecutionTask::PausedInstallCode(..)
-                    | ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => true,
-                });
+                canister
+                    .system_state
+                    .task_queue
+                    .remove_heartbeat_and_global_timer();
             }
             // Apply priority credit for all the finished executions.
             for canister_id in &non_zero_priority_credit_canister_ids {
@@ -1386,62 +1381,11 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
-        //    and must not exist after the round.
-        // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
-        // 3. If deterministic time slicing is disabled, then there are no paused tasks.
-        //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
         for (id, canister) in canisters_with_tasks {
-            for task in canister.system_state.task_queue.iter() {
-                match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => {}
-                    ExecutionTask::Heartbeat => {
-                        panic!(
-                            "Unexpected heartbeat task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    ExecutionTask::GlobalTimer => {
-                        panic!(
-                            "Unexpected global timer task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    // TODO [EXC-1666]
-                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
-                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
-                    // come back to it, to revisit if we should keep it after the round ends.
-                    ExecutionTask::OnLowWasmMemory => {
-                        panic!(
-                            "Unexpected on low wasm memory task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                        assert_eq!(
-                            self.deterministic_time_slicing,
-                            FlagStatus::Enabled,
-                            "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                            task,
-                            id
-                        );
-                        assert_eq!(
-                            current_round_type,
-                            ExecutionRoundType::OrdinaryRound,
-                            "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                            task,
-                            id
-                        );
-                    }
-                }
-            }
-
-            // There should be at most one paused or aborted task left in the task queue.
-            assert!(
-                canister.system_state.task_queue.len() <= 1,
-                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
-                id, canister.system_state.task_queue
+            canister.system_state.task_queue.check_dts_invariants(
+                self.deterministic_time_slicing,
+                current_round_type,
+                id,
             );
         }
     }
