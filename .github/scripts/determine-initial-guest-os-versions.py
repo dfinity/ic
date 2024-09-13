@@ -185,7 +185,7 @@ def main():
         raise RuntimeError(f"Didn't find any versions from:\n\t1. {ROLLOUT_DASHBOARD_ENDPOINT}\n\t2. {PUBLIC_DASHBOARD_ENDPOINT}")
     eprint(f"Will qualify, starting from versions: {json.dumps(unique_versions)}")
     matrix = {
-        "versions": unique_versions
+        "version": unique_versions
     }
     print(json.dumps(matrix))
 
