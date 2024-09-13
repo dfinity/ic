@@ -647,13 +647,7 @@ impl<T: QueueItem<T> + std::clone::Clone + ValidateEq> QueueWithReservation<T> {
             Ok(())
         } else {
             Err((
-                StateError::NonMatchingResponse {
-                    err_str: "No reserved response slot".to_string(),
-                    originator: response.originator,
-                    callback_id: response.originator_reply_callback,
-                    respondent: response.respondent,
-                    deadline: response.deadline,
-                },
+                StateError::non_matching_response("No reserved response slot", &response),
                 response,
             ))
         }
