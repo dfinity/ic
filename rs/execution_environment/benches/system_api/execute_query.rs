@@ -12,8 +12,6 @@ use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
-use crate::common::Wasm64;
-
 pub fn execute_query_bench(c: &mut Criterion) {
     let wasm64_disabled = Wasm64::Disabled;
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
@@ -96,7 +94,6 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        wasm64_disabled,
     );
 }
 

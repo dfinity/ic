@@ -14,8 +14,6 @@ use ic_types::{
     messages::CanisterMessageOrTask,
 };
 
-use crate::common::Wasm64;
-
 pub fn execute_update_bench(c: &mut Criterion) {
     let wasm64_disabled = Wasm64::Disabled;
 
@@ -574,7 +572,10 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
+<<<<<<< HEAD
         wasm64_disabled,
+=======
+>>>>>>> alexuta/wasm64_instruction_benches
     );
 }
 

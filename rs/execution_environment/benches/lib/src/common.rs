@@ -220,7 +220,7 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        //println!("    WAT: {}", wat.as_ref());
+                        println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
@@ -249,13 +249,8 @@ fn check_sandbox_defined() -> bool {
 
 /// Run all benchmark in the list.
 /// List of benchmarks: benchmark id (name), WAT, expected number of instructions.
-pub fn run_benchmarks<G, R>(
-    c: &mut Criterion,
-    group: G,
-    benchmarks: &[Benchmark],
-    routine: R,
-    wasm64_enabled: Wasm64,
-) where
+pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
+where
     G: AsRef<str>,
     R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
@@ -275,15 +270,15 @@ pub fn run_benchmarks<G, R>(
     let mut embedders_config = EmbeddersConfig {
         feature_flags: FeatureFlags {
             best_effort_responses: FlagStatus::Enabled,
+            wasm64: FlagStatus::Enabled,
             ..FeatureFlags::default()
         },
         ..EmbeddersConfig::default()
     };
-    if wasm64_enabled == Wasm64::Enabled {
-        embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
-        // Set up larger heap, of 8GB.
-        embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
-    }
+
+    // Set up larger heap, of 8GB for the Wasm64 feature.
+    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+
     let config = Config {
         embedders_config,
         ..Default::default()

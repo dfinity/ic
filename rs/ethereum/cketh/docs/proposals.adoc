@@ -30,3 +30,4 @@
 . https://dashboard.internetcomputer.org/proposal/132132[132132]: upgrade the ckETH minter canister
 . https://dashboard.internetcomputer.org/proposal/132371[132371], https://dashboard.internetcomputer.org/proposal/132370[132370] and https://dashboard.internetcomputer.org/proposal/132372[132372]: add the ledger suite orchestrator as a controller to the ckETH ledger suite (index, ledger and archive, respectively).
 . https://dashboard.internetcomputer.org/proposal/132415[132415]: upgrade the ckETH minter canister to replace Ankr
+. https://dashboard.internetcomputer.org/proposal/132474[132474]: upgrade the ckETH minter canister to replace POKT

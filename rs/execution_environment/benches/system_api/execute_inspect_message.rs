@@ -93,7 +93,6 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 "Error comparing number of actual and expected instructions"
             );
         },
-        wasm64_disabled,
     );
 }
 
