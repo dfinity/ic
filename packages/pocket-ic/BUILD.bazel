@@ -81,6 +81,8 @@ test_using_pocket_ic_server(
         "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
         "TEST_WASM": "$(rootpath :test_canister.wasm)",
     },
+    # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
+    extra_HEAD_tags = [],
     flaky = False,
     macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -91,6 +93,8 @@ test_using_pocket_ic_server(
     name = "restart",
     size = "medium",
     srcs = ["tests/restart.rs"],
+    # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
+    extra_HEAD_tags = [],
     flaky = False,
     macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -101,6 +105,8 @@ test_using_pocket_ic_server(
     name = "slow",
     size = "medium",
     srcs = ["tests/slow.rs"],
+    # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
+    extra_HEAD_tags = [],
     flaky = False,
     macro = rust_test_suite,
     proc_macro_deps = MACRO_DEPENDENCIES,

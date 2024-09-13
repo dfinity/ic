@@ -5,6 +5,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -149,7 +150,7 @@ rust_test_suite_with_extra_srcs(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+test_using_pocket_ic_server(
     name = "icp_rosetta_system_tests",
     size = "large",
     srcs = [
@@ -158,7 +159,6 @@ rust_test_suite_with_extra_srcs(
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
-        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/replica",
         "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
@@ -167,16 +167,19 @@ rust_test_suite_with_extra_srcs(
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
+    # Run this test using the mainnet version of the pocket-ic-server
+    # but only run this test using the HEAD version of the pocket-ic server nightly.
+    extra_HEAD_tags = ["fi_tests_nightly"],
     extra_srcs = glob([
         "tests/system_tests/common/*.rs",
         "tests/system_tests/test_cases/*.rs",
     ]),
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )

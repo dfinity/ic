@@ -2,7 +2,7 @@
 This module defines macros for running tests using the pocket-ic server from both mainnet and HEAD.
 """
 
-def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = [], **kwargs):
+def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = ["manual"], **kwargs):
     """
     Declares two targets as defined by the given test macro, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 
@@ -13,6 +13,7 @@ def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD
         for the mainnet and HEAD variants of the pocket-ic server respectively,
       extra_mainnet_tags: extra tags assigned to the mainnet pocket-ic server variant.
       extra_HEAD_tags: extra tags assigned to the HEAD pocket-ic server variant.
+        Defaults to "manual" to not automatically run this variant.
       **kwargs: the arguments of the bazel macro.
     """
     data = kwargs.pop("data", [])

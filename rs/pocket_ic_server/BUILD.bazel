@@ -1,6 +1,7 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 BUILD_DEPENDENCIES = []
 
@@ -151,7 +152,7 @@ rust_ic_test(
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
-rust_test(
+test_using_pocket_ic_server(
     name = "test",
     size = "medium",
     srcs = [
@@ -159,37 +160,41 @@ rust_test(
         "tests/test.rs",
     ],
     aliases = {},
+    crate_root = "tests/test.rs",
     data = [
-        ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
+    # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
+    extra_HEAD_tags = [],
+    macro = rust_test,
     tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
 )
 
-rust_test(
+test_using_pocket_ic_server(
     name = "spec_test",
     size = "medium",
     srcs = [
         "tests/common.rs",
         "tests/spec_test.rs",
     ],
+    crate_root = "tests/spec_test.rs",
     data = [
-        ":pocket-ic-server",
         "//rs/tests:ic-hs",
         "//rs/tests/httpbin-rs:httpbin",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },
+    # Override the default ["manual"] extra_HEAD_tags to ensure this test runs on CI.
+    extra_HEAD_tags = [],
+    macro = rust_test,
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
 )

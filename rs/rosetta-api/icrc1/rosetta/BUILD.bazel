@@ -5,6 +5,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -123,21 +124,19 @@ LOCAL_REPLICA_DATA = [
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin",
-    "//rs/pocket_ic_server:pocket-ic-server",
 ]
 
 LOCAL_REPLICA_ENV = {
     "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "REPLICA_BIN": "$(rootpath //rs/replica)",
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
     "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin)",
     "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
 }
 
-rust_test_suite_with_extra_srcs(
+test_using_pocket_ic_server(
     name = "icrc_rosetta_integration",
     size = "large",
     srcs = [
@@ -145,6 +144,9 @@ rust_test_suite_with_extra_srcs(
     ],
     data = LOCAL_REPLICA_DATA,
     env = LOCAL_REPLICA_ENV,
+    # Run this test using the mainnet version of the pocket-ic-server
+    # but only run this test using the HEAD version of the pocket-ic server nightly.
+    extra_HEAD_tags = ["fi_tests_nightly"],
     extra_srcs = glob([
         "tests/common/*.rs",
         "tests/integration_test_components/*.rs",
@@ -152,11 +154,12 @@ rust_test_suite_with_extra_srcs(
         "tests/integration_test_components/storage/*.rs",
     ]),
     flaky = True,
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+test_using_pocket_ic_server(
     name = "icrc_rosetta_system",
     srcs = [
         "tests/system_tests.rs",
@@ -171,10 +174,14 @@ rust_test_suite_with_extra_srcs(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/rosetta/",
         "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
     },
+    # Run this test using the mainnet version of the pocket-ic-server
+    # but only run this test using the HEAD version of the pocket-ic server nightly.
+    extra_HEAD_tags = ["fi_tests_nightly"],
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
     flaky = True,
+    macro = rust_test_suite_with_extra_srcs,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )

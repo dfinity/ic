@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -90,7 +91,7 @@ rust_canister(
     ],
 )
 
-rust_ic_test_suite(
+test_using_pocket_ic_server(
     name = "ledger_canister_integration_test",
     timeout = "long",
     srcs = [
@@ -102,7 +103,6 @@ rust_ic_test_suite(
         "ledger_archive.did",
         ":ledger_proxy.wasm",
         ":test_notified_canister",
-        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
@@ -121,9 +121,12 @@ rust_ic_test_suite(
         "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
+    # Run this test using the mainnet version of the pocket-ic-server
+    # but only run this test using the HEAD version of the pocket-ic server nightly.
+    extra_HEAD_tags = ["fi_tests_nightly"],
+    macro = rust_ic_test_suite,
     deps = [
         # Keep sorted.
         ":icp_ledger",

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,23 +39,25 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_test(
+test_using_pocket_ic_server(
     name = "ic-icrc-rosetta-client-tests",
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
-        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/replica",
         "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     },
+    # Run this test using the mainnet version of the pocket-ic-server
+    # but only run this test using the HEAD version of the pocket-ic server nightly.
+    extra_HEAD_tags = ["fi_tests_nightly"],
+    macro = rust_test,
     deps = DEV_DEPENDENCIES,
 )
 
