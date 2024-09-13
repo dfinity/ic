@@ -281,7 +281,6 @@ members = [
     "rs/rosetta-api/icrc1/test_utils",
     "rs/rosetta-api/icrc1/tokens_u64",
     "rs/rosetta-api/icrc1/tokens_u256",
-    "rs/rosetta-api/hardware_wallet_tests",
     "rs/rosetta-api/test_utils",
     "rs/rosetta-api/test_utils/sender_canister",
     "rs/rosetta-api/tvl",

@@ -4577,31 +4577,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
-name = "hardware_wallet_tests"
-version = "0.1.0"
-dependencies = [
- "hex",
- "ic-canister-client-sender",
- "ic-crypto-ed25519",
- "ic-ledger-core",
- "ic-nns-constants",
- "ic-rosetta-api",
- "ic-rosetta-test-utils",
- "ic-types",
- "icp-ledger",
- "nix 0.24.3",
- "rand 0.8.5",
- "rand_distr",
- "reqwest 0.12.7",
- "serde",
- "serde_cbor",
- "serde_json",
- "tempfile",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
