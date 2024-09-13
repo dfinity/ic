@@ -4,6 +4,7 @@ package(default_visibility = [
     "//rs/bitcoin:__subpackages__",
     "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
+    "//rs/state_machine_tests:__subpackages__",
 ])
 
 rust_library(
@@ -11,7 +12,6 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_btc_adapter_client",
     version = "0.1.0",
-    visibility = ["//rs/state_machine_tests:__subpackages__"],
     deps = [
         # Keep sorted.
         "//rs/async_utils",
