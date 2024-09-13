@@ -800,8 +800,6 @@ impl PocketBitcoinClient {
         )));
         let get_successors_handler = GetSuccessorsHandler::new(
             config,
-            // The get successor handler should be low latency, and instead of not sharing state and
-            // offloading the computation to an event loop here we directly access the shared state.
             blockchain_state.clone(),
             blockchain_manager_tx,
             metrics_registry,
