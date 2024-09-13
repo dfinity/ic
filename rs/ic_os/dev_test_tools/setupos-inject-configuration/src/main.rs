@@ -12,7 +12,7 @@ use clap::{Args, Parser};
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::deployment_json::DeploymentJson;
+use config::deployment_json::DeploymentSettings;
 use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
 
 const SERVICE_NAME: &str = "setupos-inject-configuration";
@@ -227,7 +227,7 @@ async fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
 async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     let mut deployment_json = {
         let f = File::open(path).context("failed to open deployment config file")?;
-        let deployment_json: DeploymentJson = serde_json::from_reader(f)?;
+        let deployment_json: DeploymentSettings = serde_json::from_reader(f)?;
 
         deployment_json
     };

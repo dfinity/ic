@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::config_ini::get_config_ini_settings;
-use config::deployment_json::read_deployment_file;
+use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -63,7 +63,7 @@ pub fn main() -> Result<()> {
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
-            let deployment_json_settings = read_deployment_file(&deployment_json_path)?;
+            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,

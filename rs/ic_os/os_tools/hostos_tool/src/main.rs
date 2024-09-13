@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 use config::config_ini::get_config_ini_settings;
-use config::deployment_json::read_deployment_file;
+use config::deployment_json::get_deployment_settings;
 use config::types::NetworkSettings;
 use config::{DEFAULT_HOSTOS_CONFIG_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
@@ -58,7 +58,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
@@ -87,7 +87,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
@@ -125,7 +125,7 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateMacAddress { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = read_deployment_file(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
