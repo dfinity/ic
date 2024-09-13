@@ -157,7 +157,7 @@ mod holder {
     }
 
     pub async fn upgrade(rt: &Runtime, nns_canister_id: &CanisterId) {
-        ic_nns_test_utils::itest_helpers::upgrade_nns_canister_by_proposal(
+        ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal(
             &Canister::new(rt, *nns_canister_id),
             &Canister::new(rt, ic_nns_constants::GOVERNANCE_CANISTER_ID),
             &Canister::new(rt, ic_nns_constants::ROOT_CANISTER_ID),

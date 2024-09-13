@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
     governance::{
         bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
-        upgrade_nns_canister_with_arg_by_proposal, upgrade_root_canister_by_proposal,
+        upgrade_nns_canister_with_arg_by_proposal,
     },
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
@@ -49,54 +49,45 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
 
         for CanisterInstallInfo {
             wasm,
-            use_root,
+            use_root: _,
             canister,
             init_payload,
             mode,
         } in get_nns_canister_wasm(&nns_canisters, init_state).into_iter()
         {
-            if use_root {
-                if mode == CanisterInstallMode::Upgrade {
-                    println!("[Update] Canister: {:?}", canister.canister_id());
-                    if canister.canister_id() == LIFELINE_CANISTER_ID {
-                        let arg: Vec<String> = vec![];
-                        upgrade_nns_canister_with_arg_by_proposal(
-                            canister,
-                            &nns_canisters.governance,
-                            &nns_canisters.root,
-                            bump_gzip_timestamp(&wasm),
-                            Encode!(&arg).unwrap(),
-                        )
-                        .await;
-                    } else {
-                        upgrade_nns_canister_by_proposal(
-                            canister,
-                            &nns_canisters.governance,
-                            &nns_canisters.root,
-                            true,
-                            // Method fails if wasm stays the same
-                            bump_gzip_timestamp(&wasm),
-                            None,
-                        )
-                        .await;
-                    }
-                } else if mode == CanisterInstallMode::Reinstall {
-                    println!("[Reinstall] Canister: {:?}", canister.canister_id());
-                    reinstall_nns_canister_by_proposal(
+            println!("Upgrading canister: {:?}", canister.canister_id());
+            if mode == CanisterInstallMode::Upgrade {
+                println!("[Update] Canister: {:?}", canister.canister_id());
+                if canister.canister_id() == LIFELINE_CANISTER_ID {
+                    let arg: Vec<String> = vec![];
+                    upgrade_nns_canister_with_arg_by_proposal(
                         canister,
                         &nns_canisters.governance,
                         &nns_canisters.root,
-                        wasm,
-                        init_payload,
+                        bump_gzip_timestamp(&wasm),
+                        Encode!(&arg).unwrap(),
+                    )
+                    .await;
+                } else {
+                    upgrade_nns_canister_by_proposal(
+                        canister,
+                        &nns_canisters.governance,
+                        &nns_canisters.root,
+                        true,
+                        // Method fails if wasm stays the same
+                        bump_gzip_timestamp(&wasm),
+                        Some(Encode!(&()).unwrap()),
                     )
                     .await;
                 }
-            } else {
-                // Root Upgrade via Lifeline
-                upgrade_root_canister_by_proposal(
+            } else if mode == CanisterInstallMode::Reinstall {
+                println!("[Reinstall] Canister: {:?}", canister.canister_id());
+                reinstall_nns_canister_by_proposal(
+                    canister,
                     &nns_canisters.governance,
                     &nns_canisters.root,
                     wasm,
+                    init_payload,
                 )
                 .await;
             }
@@ -196,32 +187,22 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
         // Upgrade
         for CanisterInstallInfo {
             wasm,
-            use_root,
+            use_root: _,
             canister,
             init_payload,
             mode,
         } in canister_install_info
         {
             if mode == CanisterInstallMode::Upgrade {
-                if use_root {
-                    upgrade_nns_canister_by_proposal(
-                        canister,
-                        &nns_canisters.governance,
-                        &nns_canisters.root,
-                        false,
-                        wasm,
-                        Some(init_payload),
-                    )
-                    .await;
-                } else {
-                    // Root Upgrade via Lifeline
-                    upgrade_root_canister_by_proposal(
-                        &nns_canisters.governance,
-                        &nns_canisters.root,
-                        wasm,
-                    )
-                    .await;
-                }
+                upgrade_nns_canister_by_proposal(
+                    canister,
+                    &nns_canisters.governance,
+                    &nns_canisters.root,
+                    false,
+                    wasm,
+                    Some(init_payload),
+                )
+                .await;
             }
         }
 
@@ -354,13 +335,6 @@ fn get_nns_canister_wasm<'a>(
             canister: &nns_canisters.governance,
             init_payload: encoded_init_state[4].clone(),
             mode: CanisterInstallMode::Upgrade,
-        },
-        CanisterInstallInfo {
-            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("root-canister", &[])),
-            use_root: false,
-            canister: &nns_canisters.root,
-            init_payload: encoded_init_state[5].clone(),
-            mode: CanisterInstallMode::Reinstall,
         },
         CanisterInstallInfo {
             wasm: Project::cargo_bin_maybe_from_env("root-canister", &[]),

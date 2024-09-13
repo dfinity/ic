@@ -1,5 +1,5 @@
 use candid::{Decode, Encode, Nat, Principal};
-use canister_test::{CanisterInstallMode, Wasm};
+use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -11,10 +11,11 @@ use ic_nns_constants::{
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
+    install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
     ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
-    NnsFunction, Proposal, ProposalInfo, Topic,
+    InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, Topic,
 };
 use ic_nns_test_utils::{
     common::{
@@ -167,14 +168,16 @@ pub fn add_wasm_via_nns_proposal(
         hash: hash.to_vec(),
         wasm: Some(wasm),
     };
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(format!("Add WASM for SNS canister type {}", canister_type)),
         summary: "summary".to_string(),
         url: "".to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::AddSnsWasm as i32,
-            payload: Encode!(&payload).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddSnsWasm as i32,
+                payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
     };
     nns::governance::propose_and_wait(pocket_ic, proposal)
 }
@@ -183,11 +186,13 @@ pub fn propose_to_set_network_economics_and_wait(
     pocket_ic: &PocketIc,
     network_economics: NetworkEconomics,
 ) -> Result<ProposalInfo, String> {
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("Set NetworkEconomics.neurons_fund_economics {}".to_string()),
         summary: "summary".to_string(),
         url: "".to_string(),
-        action: Some(proposal::Action::ManageNetworkEconomics(network_economics)),
+        action: Some(ProposalActionRequest::ManageNetworkEconomics(
+            network_economics,
+        )),
     };
     nns::governance::propose_and_wait(pocket_ic, proposal)
 }
@@ -602,36 +607,19 @@ pub fn upgrade_nns_canister_to_tip_of_master_or_panic(
         return;
     }
 
-    let (payload, nns_function) = if canister_id == ROOT_CANISTER_ID {
-        let payload = UpgradeRootProposal {
-            wasm_module: wasm.bytes(),
-            module_arg: vec![],
-            stop_upgrade_start: true,
-        };
-        (
-            Encode!(&payload).unwrap(),
-            NnsFunction::NnsRootUpgrade as i32,
-        )
-    } else {
-        let payload = ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
-            .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
-            .with_wasm(wasm.bytes());
-        (
-            Encode!(&payload).unwrap(),
-            NnsFunction::NnsCanisterUpgrade as i32,
-        )
-    };
-
     println!("Upgrading {} to the latest version.", label);
     let proposal_info = nns::governance::propose_and_wait(
         pocket_ic,
-        Proposal {
+        MakeProposalRequest {
             title: Some(format!("Upgrade {} to the latest version.", label)),
             summary: "".to_string(),
             url: "".to_string(),
-            action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                nns_function,
-                payload,
+            action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
+                canister_id: Some(canister_id.get()),
+                install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                wasm_module: Some(wasm.bytes()),
+                arg: Some(vec![]),
+                skip_stopping_before_installing: None,
             })),
         },
     )
@@ -702,14 +690,14 @@ pub mod nns {
             pocket_ic: &PocketIc,
             sender: PrincipalId,
             neuron_id: NeuronId,
-            command: manage_neuron::Command,
+            command: ManageNeuronCommandRequest,
         ) -> ManageNeuronResponse {
             let result = pocket_ic
                 .update_call(
                     GOVERNANCE_CANISTER_ID.into(),
                     Principal::from(sender),
                     "manage_neuron",
-                    Encode!(&ManageNeuron {
+                    Encode!(&ManageNeuronRequest {
                         id: Some(neuron_id),
                         command: Some(command),
                         neuron_id_or_subaccount: None
@@ -726,13 +714,12 @@ pub mod nns {
 
         pub fn propose_and_wait(
             pocket_ic: &PocketIc,
-            proposal: Proposal,
+            proposal: MakeProposalRequest,
         ) -> Result<ProposalInfo, String> {
             let neuron_id = NeuronId {
                 id: TEST_NEURON_1_ID,
             };
-            let command: manage_neuron::Command =
-                manage_neuron::Command::MakeProposal(Box::new(proposal));
+            let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal));
             let response = manage_neuron(
                 pocket_ic,
                 *TEST_NEURON_1_OWNER_PRINCIPAL,
@@ -863,11 +850,11 @@ pub mod nns {
         ) -> (DeployedSns, ProposalId) {
             let proposal_info = propose_and_wait(
                 pocket_ic,
-                Proposal {
+                MakeProposalRequest {
                     title: Some(format!("Create SNS #{}", sns_instance_label)),
                     summary: "".to_string(),
                     url: "".to_string(),
-                    action: Some(proposal::Action::CreateServiceNervousSystem(
+                    action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                         create_service_nervous_system,
                     )),
                 },
@@ -1167,24 +1154,18 @@ pub mod sns {
                 post_upgrade_running_version.swap_wasm_hash.clone(),
             )
             .wasm;
-            let upgrade_canister = ChangeCanisterRequest {
-                stop_before_installing: true,
-                mode: CanisterInstallMode::Upgrade,
-                canister_id: CanisterId::unchecked_from_principal(swap_canister_id),
-                wasm_module: wasm,
-                arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
-            };
             nns::governance::propose_and_wait(
                 pocket_ic,
-                Proposal {
+                MakeProposalRequest {
                     title: Some("Enable auto-finalization for the Swap canister".to_string()),
                     summary: "".to_string(),
                     url: "".to_string(),
-                    action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                        nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                        payload: Encode!(&upgrade_canister).unwrap(),
+                    action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
+                        canister_id: Some(swap_canister_id),
+                        install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                        wasm_module: Some(wasm),
+                        arg: Some(vec![]),
+                        skip_stopping_before_installing: None,
                     })),
                 },
             )
