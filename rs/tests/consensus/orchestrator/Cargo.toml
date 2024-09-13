@@ -38,10 +38,6 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [[bin]]
-name = "ic-systest-sr-nns-failover-nodes-test"
-path = "sr_nns_failover_nodes_test.rs"
-
-[[bin]]
 name = "ic-systest-cup-compatibility"
 path = "cup_compatibility_test.rs"
 
@@ -92,7 +88,3 @@ path = "upgrade_downgrade_app_subnet_test.rs"
 [[bin]]
 name = "ic-systest-upgrade-downgrade-nns-subnet"
 path = "upgrade_downgrade_nns_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-nns-same-nodes"
-path = "sr_nns_same_nodes_test.rs"
