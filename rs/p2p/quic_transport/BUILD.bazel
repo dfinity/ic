@@ -65,7 +65,7 @@ rust_library(
 )
 
 rust_test(
-    name = "quic_transport_unit",
+    name = "quic_transport_test",
     aliases = ALIASES,
     crate = ":quic_transport",
     proc_macro_deps = MACRO_DEPENDENCIES,
