@@ -9,11 +9,10 @@
 
 BENCHMARKS_FILE="WASM_BENCHMARKS.md"
 # The file has the results of the last benchmark, which look like these:
-# wasm32/memop/i32.load                    |    2993245 |    1 | 
-# wasm64/memop/i32.load                    |    5098896 |    2 | 
-# wasm32/memop/i64.load                    |    3111268 |    1 | 
-# wasm64/memop/i64.load                    |    4794852 |    2 | 
-
+# wasm32/memop/i32.load                    |    2993245 |    1 |
+# wasm64/memop/i32.load                    |    5098896 |    2 |
+# wasm32/memop/i64.load                    |    3111268 |    1 |
+# wasm64/memop/i64.load                    |    4794852 |    2 |
 
 # The opcodes that are of most interest for computing the overhead.
 # One can add other operations, like `memop`, `ibinop`, `fbinop`, etc.
@@ -32,7 +31,7 @@ for op in $OP_TYPES; do
     cat "${BENCHMARKS_FILE}" | grep $op | grep "wasm64" | while read -r line; do
         # Extract the opcode and remove the "wasm64/" prefix.
         opcode=$(echo $line | awk '{print $1}' | sed 's/wasm64\///')
-    
+
         # Extract the Wasm64 time
         wasm64_time=$(echo $line | awk '{print $3}')
         # Extract the Wasm32 time
