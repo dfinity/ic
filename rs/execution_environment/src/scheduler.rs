@@ -662,6 +662,7 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
+        let mut canisters_executed_this_round = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -761,6 +762,8 @@ impl SchedulerImpl {
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
+            canisters_executed_this_round
+                .extend(executed_canisters.iter().map(|c| c.canister_id()));
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
@@ -875,6 +878,9 @@ impl SchedulerImpl {
         self.metrics
             .executable_canisters_per_round
             .observe(round_filtered_canisters.active_canister_ids.len() as f64);
+        self.metrics
+            .executed_canisters_per_round
+            .set(canisters_executed_this_round.len() as i64);
 
         self.metrics
             .heap_delta_rate_limited_canisters_per_round
