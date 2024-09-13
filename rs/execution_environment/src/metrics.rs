@@ -1,3 +1,5 @@
+use ic_error_types::UserError;
+use ic_management_canister_types::QueryMethod;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
@@ -7,7 +9,7 @@ use ic_types::{
     NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
@@ -15,6 +17,8 @@ pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
+
+pub const SUCCESS_STATUS_LABEL: &str = "success";
 
 #[derive(Clone)]
 pub struct IngressFilterMetrics {
@@ -147,6 +151,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub evaluated_canisters: Histogram,
     /// The number of transient errors.
     pub transient_errors: IntCounter,
+    /// Duration of a subnet query message execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
+    pub subnet_query_messages: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -268,7 +274,30 @@ impl QueryHandlerMetrics {
                 "The total number of transient errors accumulated \
                         during the query execution",
             ),
+            subnet_query_messages: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_duration_seconds",
+                "Duration of a subnet query message execution, in seconds.",
+                decimal_buckets(-3, 2),
+                &["method_name", "status"],
+            ),
         }
+    }
+
+    pub fn observe_subnet_query_message<T>(
+        &self,
+        query_method: QueryMethod,
+        duration: f64,
+        result: &Result<T, UserError>,
+    ) {
+        let method_name_label = &format!("query_ic00_{}", query_method);
+        let status_label = match result {
+            Ok(_) => SUCCESS_STATUS_LABEL,
+            Err(user_error) => &format!("{:?}", user_error.code()),
+        };
+
+        self.subnet_query_messages
+            .with_label_values(&[method_name_label, status_label])
+            .observe(duration);
     }
 }
 

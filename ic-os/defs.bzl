@@ -186,10 +186,12 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # Inherit tags for this test, to avoid triggering builds for local base images
     component_file_references_test(
         name = name + "_component_file_references_test",
         image = ":partition-root-unsigned.tzst",
         component_files = image_deps["component_files"].keys(),
+        tags = tags,
     )
 
     if upgrades:
@@ -221,9 +223,9 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
             tags = ["manual"],
         )
 
@@ -244,8 +246,8 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
-                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
                 tags = ["manual"],
             )
 
@@ -507,7 +509,7 @@ EOF
     native.genrule(
         name = "launch-remote-vm",
         srcs = [
-            "//rs/ic_os/launch-single-vm",
+            "//rs/ic_os/dev_test_tools/launch-single-vm",
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
@@ -515,7 +517,7 @@ EOF
         ],
         outs = ["launch_remote_vm_script"],
         cmd = """
-        BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
+        BIN="$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)"
         VERSION="$$(cat $(location :version.txt))"
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
@@ -754,9 +756,9 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
         tags = ["manual"],
     )
 
