@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -61,7 +61,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -82,7 +82,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -103,7 +103,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -122,7 +122,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -144,7 +144,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -166,7 +166,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -185,7 +185,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -207,7 +207,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -229,7 +229,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -251,7 +251,7 @@ system_test_nns(
         ":common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ]
+    ],
 )
 
 system_test_nns(
@@ -310,4 +310,3 @@ system_test_nns(
 exports_files([
     "orchestrator_universal_vm_activation.sh",
 ])
-
