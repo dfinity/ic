@@ -352,6 +352,7 @@ members = [
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
