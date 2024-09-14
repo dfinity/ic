@@ -77,8 +77,12 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
+bitcoincore-rpc = "0.15.0"
+ic-btc-interface = { workspace = true }
+ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-nns-constants = { path = "../nns/constants" }
 rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }

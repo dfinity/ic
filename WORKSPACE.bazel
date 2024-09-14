@@ -949,3 +949,26 @@ http_file(
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")
 
 kubeconfig()
+
+http_archive(
+    name = "bitcoin_core",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "contents",
+    srcs = glob(["**/*"]),
+)
+""",
+    sha256 = "2a6974c5486f528793c79d42694b5987401e4a43c97f62b1383abf35bcee44a8",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+    ],
+)
+
+http_file(
+    name = "bitcoin_example_canister",
+    downloaded_file_path = "basic_bitcoin.wasm.gz",
+    sha256 = "d74b049f397af82c55cdf0a02f8b56636e45c83e181998faf8854d66b1b6fc5b",
+    url = "https://github.com/mraszyk/examples/releases/download/rust-basic-bitcoin-24-09-14/basic_bitcoin.wasm.gz",
+)

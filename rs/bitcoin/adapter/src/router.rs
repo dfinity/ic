@@ -8,7 +8,7 @@ use crate::{
     TransactionManagerRequest,
 };
 use bitcoin::network::message::NetworkMessage;
-use ic_logger::ReplicaLogger;
+use ic_logger::{error, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -45,7 +45,7 @@ pub fn start_main_event_loop(
     let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
-        logger,
+        logger.clone(),
         network_message_sender,
         router_metrics.clone(),
     );
@@ -91,19 +91,23 @@ pub fn start_main_event_loop(
                     }
                 },
                 result = blockchain_manager_rx.recv() => {
-                    let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
-                    match command {
-                        BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
-                            blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
-                        }
-                        BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
-                            blockchain_manager.prune_blocks(anchor, processed_block_hashes).await;
-                        }
-                    };
+                    if let Some(command) = result {
+                        match command {
+                            BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
+                                blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
+                            }
+                            BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
+                                blockchain_manager.prune_blocks(anchor, processed_block_hashes).await;
+                            }
+                        };
+                    } else {
+                        error!(logger, "Receiving should not fail because the sender part of the channel is never closed.");
+                    }
                 }
                 transaction_manager_request = transaction_manager_rx.recv() => {
-                    match transaction_manager_request.unwrap() {
-                        TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.enqueue_transaction(&transaction),
+                    match transaction_manager_request {
+                        Some(TransactionManagerRequest::SendTransaction(transaction)) => transaction_manager.enqueue_transaction(&transaction),
+                        None => error!(logger, "Receiving should not fail because the sender part of the channel is never closed."),
                     }
                 },
                 _ = tick_interval.tick() => {

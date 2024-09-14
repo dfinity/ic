@@ -81,19 +81,24 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/config",
     "//rs/interfaces/registry",
+    "//rs/nns/constants",
     "//rs/registry/canister",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-utils",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -192,4 +197,26 @@ rust_test(
     },
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "bitcoin_integration_tests",
+    size = "small",
+    srcs = [
+        "tests/bitcoin_integration_tests.rs",
+    ],
+    aliases = {},
+    data = [
+        ":pocket-ic-server",
+        "@bitcoin_core//:bin/bitcoind",
+        "@bitcoin_example_canister//file",
+        "@btc_canister//file",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bin/bitcoind)",
+        "BTC_WASM": "$(rootpath @btc_canister//file)",
+    },
+    deps = TEST_DEPENDENCIES,
 )
