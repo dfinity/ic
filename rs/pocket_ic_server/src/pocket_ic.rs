@@ -1120,15 +1120,15 @@ fn process_mock_canister_https_response(
         }
     };
     let content = response_to_content(&mock_canister_http_response.response);
-    let mut contents: Vec<_> =
-        if let Some(ref additional_responses) = &mock_canister_http_response.additional_responses {
-            additional_responses
-                .iter()
-                .map(response_to_content)
-                .collect()
-        } else {
-            vec![content.clone(); subnet.nodes.len() - 1]
-        };
+    let mut contents: Vec<_> = if !mock_canister_http_response.additional_responses.is_empty() {
+        mock_canister_http_response
+            .additional_responses
+            .iter()
+            .map(response_to_content)
+            .collect()
+    } else {
+        vec![content.clone(); subnet.nodes.len() - 1]
+    };
     contents.push(content);
     if contents.len() != subnet.nodes.len() {
         return OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((

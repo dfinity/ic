@@ -1,14 +1,11 @@
+use anyhow::Result;
 use std::time::Duration;
 
-#[rustfmt::skip]
-
-use anyhow::Result;
-
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
-use ic_tests::orchestrator::subnet_recovery_app_subnet::{
+use ic_consensus_system_test_subnet_recovery_common::{
     setup_large_tecdsa as setup, test_large_with_tecdsa as test,
 };
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

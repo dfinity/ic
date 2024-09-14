@@ -1107,7 +1107,8 @@ impl SystemState {
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///  * `NonMatchingResponse` if no response is expected, the callback is not
-    ///    found or the respondent does not match.
+    ///    found, the respondent does not match or this is a duplicate guaranteed
+    ///    response.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,

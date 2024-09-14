@@ -43,7 +43,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -60,7 +60,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         #TODO: enable k8s when there's enough capacity
@@ -78,7 +78,7 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    flaky = False,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

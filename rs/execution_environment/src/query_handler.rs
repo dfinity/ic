@@ -44,6 +44,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
@@ -198,11 +199,18 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return fetch_canister_logs(
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
