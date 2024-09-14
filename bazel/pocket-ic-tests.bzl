@@ -6,6 +6,20 @@ def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD
     """
     Declares two targets as defined by the given test macro, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 
+    The idea behind this macro is that NNS and other canisters need to be tested
+    against the mainnet version of the replica since that version would be active
+    when the canisters would be released at that point in time. Therefor tests that
+    check these canisters need to run with the mainnet version of the pocket-ic server
+    to replicate production as much as possible.
+
+    However it's still useful to also test the canisters against the HEAD version of the IC.
+    Therefor an additional target is declared that runs the test using the HEAD version of the
+    pocket-ic server but this target is tagged as "manual" by default to not run it automatically on CI.
+    Most test override this "manual" tag with some tag to run it on a schedule like
+    "nns_tests_nightly" or "fi_tests_nightly".
+
+    In a way this macro is the mirror image of the rs/tests/system_tests.bzl:system_test_nns() macro.
+
     Args:
       macro: the bazel macro to run. For example: rust_test_suite or rust_test_suite_with_extra_srcs.
       name: the base name of the target.
