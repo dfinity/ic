@@ -99,6 +99,37 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
+  update-mainnet-artifacts:
+    name: Update Mainnet Artifacts
+    timeout-minutes: 30
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
+      options: >-
+        -e NODE_NAME
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            update-mainnet-artifacts:
+              - 'testnet/mainnet_revisions.json'
+      - name: Run Lock Generate
+        id: lock-generate
+        if: steps.filter.outputs.update-mainnet-artifacts == 'true'
+        run: ./ci/scripts/update-mainnet-artifacts.sh
   pre-commit:
     name: Pre Commit Test
     timeout-minutes: 30
