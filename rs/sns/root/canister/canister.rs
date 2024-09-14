@@ -382,8 +382,7 @@ fn init_timers() {
 
 async fn poll_for_new_archive_canisters() {
     let ledger_client = create_ledger_client();
-    let now = CanisterEnvironment {}.now();
-    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client, now).await
+    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client).await
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
