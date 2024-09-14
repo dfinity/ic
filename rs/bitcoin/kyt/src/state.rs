@@ -1,11 +1,26 @@
-use crate::GetTxError;
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
+use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 #[cfg(test)]
 mod tests;
+
+/// Error returned by calling `http_get_tx`.
+#[derive(Debug, Clone)]
+pub enum HttpGetTxError {
+    TxEncoding(String),
+    TxidMismatch {
+        expected: Txid,
+        decoded: Txid,
+    },
+    ResponseTooLarge,
+    Rejected {
+        code: RejectionCode,
+        message: String,
+    },
+}
 
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
 /// It transitions from `PendingOutcall` to any one of the three
@@ -14,7 +29,7 @@ mod tests;
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error(GetTxError),
+    Error(HttpGetTxError),
     Fetched(FetchedTx),
 }
 

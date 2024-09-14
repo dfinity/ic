@@ -1,6 +1,6 @@
-use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx};
+use crate::blocklist_contains;
+use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError};
 use crate::types::{CheckTransactionError, CheckTransactionResponse};
-use crate::{blocklist_contains, GetTxError};
 use bitcoin::{address::FromScriptError, Address, Network, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -37,14 +37,14 @@ pub const RETRY_MAX_RESPONSE_BYTES: u32 = 400 * 1024;
 
 pub enum FetchResult {
     RetryWithBiggerBuffer,
-    Error(GetTxError),
+    Error(HttpGetTxError),
     Fetched(FetchedTx),
 }
 
 pub enum TryFetchResult<F> {
     Pending,
     HighLoad,
-    Error(GetTxError),
+    Error(HttpGetTxError),
     NotEnoughCycles,
     Fetched(FetchedTx),
     ToFetch(F),
@@ -65,7 +65,7 @@ pub trait FetchEnv {
         &self,
         txid: Txid,
         max_response_bytes: u32,
-    ) -> Result<Transaction, GetTxError>;
+    ) -> Result<Transaction, HttpGetTxError>;
     fn cycles_accept(&self, cycles: u128) -> u128;
     fn cycles_available(&self) -> u128;
 
@@ -126,7 +126,9 @@ pub trait FetchEnv {
                 state.set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
                 Ok(FetchResult::Fetched(fetched))
             }
-            Err(GetTxError::ResponseTooLarge) if max_response_bytes < RETRY_MAX_RESPONSE_BYTES => {
+            Err(HttpGetTxError::ResponseTooLarge)
+                if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
+            {
                 state.set_fetch_status(
                     txid,
                     FetchTxStatus::PendingRetry {

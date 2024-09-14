@@ -51,7 +51,7 @@ impl MockState {
 // mock states and transactions used for testing purpose.
 struct MockEnv {
     calls: RefCell<VecDeque<(Txid, u32)>>,
-    replies: RefCell<VecDeque<Result<Transaction, GetTxError>>>,
+    replies: RefCell<VecDeque<Result<Transaction, HttpGetTxError>>>,
     available_cycles: RefCell<u128>,
     accepted_cycles: RefCell<u128>,
 }
@@ -61,14 +61,14 @@ impl FetchEnv for MockEnv {
         &self,
         txid: Txid,
         max_response_bytes: u32,
-    ) -> Result<Transaction, GetTxError> {
+    ) -> Result<Transaction, HttpGetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
         self.replies
             .borrow_mut()
             .pop_front()
-            .unwrap_or(Err(GetTxError::Rejected {
+            .unwrap_or(Err(HttpGetTxError::Rejected {
                 code: RejectionCode::from(0),
                 message: "no more reply".to_string(),
             }))
@@ -104,7 +104,7 @@ impl MockEnv {
     fn assert_no_more_get_tx_call(&self) {
         assert_eq!(self.calls.borrow_mut().pop_front(), None)
     }
-    fn expect_get_tx_with_reply(&self, reply: Result<Transaction, GetTxError>) {
+    fn expect_get_tx_with_reply(&self, reply: Result<Transaction, HttpGetTxError>) {
         self.replies.borrow_mut().push_back(reply)
     }
     fn refill_cycles(&self, cycles: u128) {
@@ -266,7 +266,7 @@ async fn test_fetch_tx() {
     }
 
     // case RetryWithBiggerBuffer
-    env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
+    env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     let result = env
         .fetch_tx(&state, (), txid_1, INITIAL_MAX_RESPONSE_BYTES)
         .await;
@@ -276,7 +276,7 @@ async fn test_fetch_tx() {
                 Some(FetchTxStatus::PendingRetry { max_response_bytes }) if max_response_bytes == RETRY_MAX_RESPONSE_BYTES));
 
     // case Err
-    env.expect_get_tx_with_reply(Err(GetTxError::TxEncoding(
+    env.expect_get_tx_with_reply(Err(HttpGetTxError::TxEncoding(
         "failed to decode tx".to_string(),
     )));
     let result = env
@@ -284,11 +284,11 @@ async fn test_fetch_tx() {
         .await;
     assert!(matches!(
         result,
-        Ok(FetchResult::Error(GetTxError::TxEncoding(_)))
+        Ok(FetchResult::Error(HttpGetTxError::TxEncoding(_)))
     ));
     assert!(matches!(
         state.get_fetch_status(txid_2),
-        Some(FetchTxStatus::Error(GetTxError::TxEncoding(_)))
+        Some(FetchTxStatus::Error(HttpGetTxError::TxEncoding(_)))
     ));
 }
 
@@ -441,7 +441,7 @@ async fn test_check_fetched() {
     };
     state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
-    env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
+    env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(&state, txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Pending)
@@ -469,13 +469,13 @@ async fn test_check_fetched() {
     };
     state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
-    env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
+    env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(&state, txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Pending)
     ));
     // Try again with bigger buffer, still fails
-    env.expect_get_tx_with_reply(Err(GetTxError::ResponseTooLarge));
+    env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
             env.check_fetched(&state, txid_0, &fetched).await,
             Err(CheckTransactionError::ResponseTooLarge { txid }) if txid_2.as_ref() == txid));

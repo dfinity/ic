@@ -16,37 +16,25 @@ pub use fetch::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, FetchState, TryFetchResult};
-use state::{FetchGuardError, FetchTxStatus};
+use state::{FetchGuardError, FetchTxStatus, HttpGetTxError};
 pub use types::*;
 
-#[derive(Debug, Clone)]
-pub enum GetTxError {
-    TxEncoding(String),
-    TxidMismatch {
-        expected: Txid,
-        decoded: Txid,
-    },
-    ResponseTooLarge,
-    Rejected {
-        code: RejectionCode,
-        message: String,
-    },
-}
-
-impl From<(Txid, GetTxError)> for CheckTransactionError {
-    fn from((txid, err): (Txid, GetTxError)) -> CheckTransactionError {
+impl From<(Txid, HttpGetTxError)> for CheckTransactionError {
+    fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionError {
         let txid = txid.as_ref().to_vec();
         match err {
-            GetTxError::TxEncoding(message) => CheckTransactionError::Tx { txid, message },
-            GetTxError::TxidMismatch { expected, decoded } => CheckTransactionError::TxidMismatch {
-                expected: expected.as_ref().to_vec(),
-                decoded: decoded.as_ref().to_vec(),
-            },
-            GetTxError::Rejected { code, message } => CheckTransactionError::Rejected {
+            HttpGetTxError::TxEncoding(message) => CheckTransactionError::Tx { txid, message },
+            HttpGetTxError::TxidMismatch { expected, decoded } => {
+                CheckTransactionError::TxidMismatch {
+                    expected: expected.as_ref().to_vec(),
+                    decoded: decoded.as_ref().to_vec(),
+                }
+            }
+            HttpGetTxError::Rejected { code, message } => CheckTransactionError::Rejected {
                 code: code as u32,
                 message,
             },
-            GetTxError::ResponseTooLarge => CheckTransactionError::ResponseTooLarge { txid },
+            HttpGetTxError::ResponseTooLarge => CheckTransactionError::ResponseTooLarge { txid },
         }
     }
 }
@@ -91,7 +79,7 @@ impl FetchEnv for KytCanisterEnv {
         &self,
         txid: Txid,
         max_response_bytes: u32,
-    ) -> Result<Transaction, GetTxError> {
+    ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
         let host = "btcscan.org";
         let url = format!("https://{}/api/tx/{}/raw", host, txid);
@@ -129,28 +117,28 @@ impl FetchEnv for KytCanisterEnv {
                     } else {
                         RejectionCode::SysFatal
                     };
-                    return Err(GetTxError::Rejected {
+                    return Err(HttpGetTxError::Rejected {
                         code,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
                 }
                 let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                    .map_err(|err| GetTxError::TxEncoding(err.to_string()))?;
+                    .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?;
                 // Verify the correctness of the transaction by recomputing the transaction ID.
                 let decoded_txid = tx.compute_txid();
                 if decoded_txid.as_ref() as &[u8; 32] != txid.as_ref() {
-                    return Err(GetTxError::TxidMismatch {
+                    return Err(HttpGetTxError::TxidMismatch {
                         expected: txid,
                         decoded: Txid::from(*(decoded_txid.as_ref() as &[u8; 32])),
                     });
                 }
                 Ok(tx)
             }
-            Err((r, m)) if is_response_too_large(&r, &m) => Err(GetTxError::ResponseTooLarge),
+            Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
             Err((r, m)) => {
                 // TODO(XC-158): maybe try other providers and also log the error.
                 println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
-                Err(GetTxError::Rejected {
+                Err(HttpGetTxError::Rejected {
                     code: r,
                     message: m,
                 })
