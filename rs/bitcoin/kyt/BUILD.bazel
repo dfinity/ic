@@ -87,5 +87,6 @@ rust_ic_test(
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-cdk",
     ],
 )
