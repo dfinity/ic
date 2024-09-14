@@ -5,7 +5,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
-load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
+load("//bazel:pocket-ic-tests.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 

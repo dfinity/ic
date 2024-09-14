@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
-load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
+load("//bazel:pocket-ic-tests.bzl", "test_using_pocket_ic_server")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])

@@ -1,5 +1,5 @@
 """
-This module defines macros for running tests using the pocket-ic server from both mainnet and HEAD.
+This module defines a macro for running tests using the pocket-ic server from both mainnet and HEAD.
 """
 
 def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = ["manual"], **kwargs):

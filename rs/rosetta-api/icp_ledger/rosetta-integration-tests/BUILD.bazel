@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
-load("//bazel:pocket-ic-server-macros.bzl", "test_using_pocket_ic_server")
+load("//bazel:pocket-ic-tests.bzl", "test_using_pocket_ic_server")
 
 package(default_visibility = ["//visibility:public"])
 
