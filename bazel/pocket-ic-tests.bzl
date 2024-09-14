@@ -12,6 +12,9 @@ def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD
     check these canisters need to run with the mainnet version of the pocket-ic server
     to replicate production as much as possible.
 
+    Additionally not letting canister tests depend on the HEAD version of the pocket-ic server means
+    less time spend on CI whenever IC components (which the pocket-ic server depends on) are modified.
+
     However it's still useful to also test the canisters against the HEAD version of the IC.
     Therefor an additional target is declared that runs the test using the HEAD version of the
     pocket-ic server but this target is tagged as "manual" by default to not run it automatically on CI.
