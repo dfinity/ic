@@ -6,6 +6,7 @@ use ic_btc_kyt::{
     CheckTransactionError, CheckTransactionResponse, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
 };
+use ic_cdk::api::call::RejectionCode;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -282,6 +283,43 @@ fn test_check_transaction_error() {
 
     let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for 500 error
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 500,
+                headers: vec![],
+                body: vec![],
+            }),
+            additional_responses: None,
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        dbg!(decode::<CheckTransactionResult>(&result)),
+        Err(CheckTransactionError::Rejected { code, .. }) if code == RejectionCode::SysFatal as u32
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost =
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);

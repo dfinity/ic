@@ -122,7 +122,18 @@ impl FetchEnv for KytCanisterEnv {
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
             Ok((response,)) => {
-                // TODO(XC-158): ensure response is 200 before decoding
+                // Ensure response is 200 before decoding
+                if response.status != candid::Nat::from(200u8) {
+                    let code = if response.status == candid::Nat::from(429u32) {
+                        RejectionCode::SysTransient
+                    } else {
+                        RejectionCode::SysFatal
+                    };
+                    return Err(GetTxError::Rejected {
+                        code,
+                        message: format!("HTTP GET {} received code {}", url, response.status),
+                    });
+                }
                 let tx = Transaction::consensus_decode(&mut response.body.as_slice())
                     .map_err(|err| GetTxError::TxEncoding(err.to_string()))?;
                 // Verify the correctness of the transaction by recomputing the transaction ID.
