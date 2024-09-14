@@ -1,6 +1,6 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("mainnet-binaries.bzl", "mainnet_binaries")
+load("mainnet-artifacts.bzl", "mainnet_binaries")
 
 package(default_visibility = ["//visibility:public"])
 

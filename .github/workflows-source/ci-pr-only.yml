@@ -112,6 +112,28 @@ jobs:
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
 
+  update-mainnet-artifacts:
+    name: Update Mainnet Artifacts
+    <<: *dind-small-setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
+      - <<: *before-script
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            update-mainnet-artifacts:
+              - 'testnet/mainnet_revisions.json'
+      - name: Run Lock Generate
+        id: lock-generate
+        if: steps.filter.outputs.update-mainnet-artifacts == 'true'
+        run: ./ci/scripts/update-mainnet-artifacts.sh
+
   pre-commit:
     name: Pre Commit Test
     <<: *dind-small-setup
