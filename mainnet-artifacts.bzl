@@ -17,13 +17,13 @@ MAINNET_NNS_SUBNET_IC_VERSION = "99ab7f03700ba6cf832eb18ffd55228f56ae927a"
 #     If <rev> equals MAINNET_NNS_SUBNET_IC_VERSION this hash is automatically updated
 #     by ci/scripts/update-mainnet-artifacts.sh.
 PUBLISHED_BINARIES = {
+    "ic-recovery": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "8411814fd0a66fa52d1a4b096c2b1a3d7482faf6d31f3e4b6520021c2275c49b"},
+    "ic-replay": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "a6234ea2ad32cf8a5de7d45626988237f2e9ddc30cdc25d51166feb8735c5092"},
     # TODO: when the mainnet pocket-ic server is compatible with the HEAD version of the pocket-ic library
     # we should use the mainnet version again using:
     # "pocket-ic": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "057b323263dbffefc3004ae7485b85c580c294c80eeb49dc14f66590ca14f9cd"},
     # until that's the case we use a slightly newer version of the pocket-ic server (rc--2024-09-13_01-31):
     "pocket-ic": {"rev": "52ebccfba8855e23dcad9657a8d6e6be01df71f9", "sha256": "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1"},
-    "ic-admin": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "c1eb4bcf5aeede0e46340c4743fe45aa76562b422c0344c8d12603c1d1f05a6f"},
-    "ic-replay": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "a6234ea2ad32cf8a5de7d45626988237f2e9ddc30cdc25d51166feb8735c5092"},
 }
 
 def mainnet_binary_gzs():
