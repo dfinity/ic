@@ -126,7 +126,7 @@ jobs:
           filters: |
             update-mainnet-artifacts:
               - 'testnet/mainnet_revisions.json'
-      - name: Run Lock Generate
+      - name: Run ./ci/scripts/update-mainnet-artifacts.sh
         id: lock-generate
         if: steps.filter.outputs.update-mainnet-artifacts == 'true'
         run: ./ci/scripts/update-mainnet-artifacts.sh
