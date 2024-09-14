@@ -144,7 +144,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         }
     }
 
-    let send_amount = 100000000; // 1 BTC
+    let send_amount = 100_000_000; // 1 BTC
     let send_request = SendRequest {
         destination_address: another_bitcoin_address.clone(),
         amount_in_satoshi: send_amount,

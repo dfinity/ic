@@ -169,7 +169,6 @@ use ic_xnet_payload_builder::{
 };
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 pub use ic_error_types::RejectCode;
 use maplit::btreemap;
@@ -181,7 +180,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    net::Ipv6Addr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
