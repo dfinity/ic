@@ -1,5 +1,5 @@
 {
-  "checksum": "8e441a3523116ab27406b654014d3ee22cd7aad1f6c7c4cf24db310ef399a7da",
+  "checksum": "616d4654fff2f99602ef1fb387f534493423f451c3fff61ce44fd05e5d06a3db",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12445,9 +12445,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/cloudflare/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "f14720e42184ee176a97676e85ef2d2d85bc3aae"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -52823,7 +52823,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "rustls",
@@ -52831,6 +52835,7 @@
             "rustls-tls-webpki-roots",
             "serde_json",
             "tokio-rustls",
+            "tokio-util",
             "webpki-roots"
           ],
           "selects": {}
@@ -52884,6 +52889,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.3",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.32",
                 "target": "encoding_rs"
@@ -52943,6 +52952,10 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-util 0.7.12",
+                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
