@@ -163,6 +163,7 @@ mod holder {
             &Canister::new(rt, ic_nns_constants::ROOT_CANISTER_ID),
             true,
             Wasm::from_bytes(HOLDER_CANISTER_WASM.to_vec()),
+            None,
         )
         .await;
     }

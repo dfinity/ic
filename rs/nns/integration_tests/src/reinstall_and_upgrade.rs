@@ -55,7 +55,6 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
             mode,
         } in get_nns_canister_wasm(&nns_canisters, init_state).into_iter()
         {
-            println!("Upgrading canister: {:?}", canister.canister_id());
             if mode == CanisterInstallMode::Upgrade {
                 println!("[Update] Canister: {:?}", canister.canister_id());
                 if canister.canister_id() == LIFELINE_CANISTER_ID {
@@ -337,7 +336,7 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: Project::cargo_bin_maybe_from_env("root-canister", &[]),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("root-canister", &[])),
             use_root: false,
             canister: &nns_canisters.root,
             init_payload: encoded_init_state[5].clone(),

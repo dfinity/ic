@@ -12,7 +12,6 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
@@ -359,7 +358,7 @@ async fn change_nns_canister_by_proposal(
         )
         .await
         .expect("Error calling the manage_neuron api.");
-    match response
+    let proposal_id = match response
         .panic_if_error("Error making proposal")
         .command
         .unwrap()
@@ -368,16 +367,30 @@ async fn change_nns_canister_by_proposal(
         other => panic!("Unexpected response: {:?}", other),
     };
 
+    // If the canister is the root canister, we need to wait for the proposal to be executed before
+    // starting to poll the status, otherwise the open call context will prevent the root canister
+    // from being stopped.
+    if canister.canister_id() == root.canister_id() {
+        assert_eq!(
+            wait_for_final_state(governance, ProposalId::from(proposal_id))
+                .await
+                .status(),
+            ProposalStatus::Executed
+        );
+    }
+
     // Wait 'till the hash matches and the canister is running again.
     loop {
-        let status: CanisterStatusResult = root
+        let Ok(status): Result<CanisterStatusResult, _> = root
             .update_(
                 "canister_status",
                 candid_one,
                 CanisterIdRecord::from(canister.canister_id()),
             )
             .await
-            .unwrap();
+        else {
+            continue;
+        };
         if status.module_hash.unwrap().as_slice() == new_module_hash
             && status.status == CanisterStatusType::Running
         {
