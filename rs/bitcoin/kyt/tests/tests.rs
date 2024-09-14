@@ -307,7 +307,7 @@ fn test_check_transaction_error() {
                 headers: vec![],
                 body: vec![],
             }),
-            additional_responses: None,
+            additional_responses: vec![],
         });
     let result = setup
         .env
