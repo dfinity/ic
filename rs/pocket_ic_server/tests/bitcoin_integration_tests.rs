@@ -4,7 +4,7 @@ use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
-use std::fs::{copy, create_dir, File};
+use std::fs::{create_dir, File};
 use std::io::Write;
 use std::process::Command;
 use std::str::FromStr;
@@ -69,10 +69,8 @@ fn deploy_basic_bitcoin_canister(pic: &PocketIc) -> Principal {
 fn bitcoin_integration_test() {
     let tmp_dir = tempdir().unwrap();
 
-    let bitcoind_path = tmp_dir.path().join("bitcoind");
-    let bitcoind_env = std::env::var_os("BITCOIND_BIN")
+    let bitcoind_path = std::env::var_os("BITCOIND_BIN")
         .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
-    copy(bitcoind_env, bitcoind_path.clone()).unwrap();
 
     let conf_path = tmp_dir.path().join("bitcoin.conf");
     let mut conf = File::create(conf_path.clone()).unwrap();
