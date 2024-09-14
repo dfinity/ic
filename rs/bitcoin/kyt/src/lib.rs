@@ -111,8 +111,8 @@ impl FetchEnv for KytCanisterEnv {
         match http_request(request, cycles).await {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
-                if response.status != candid::Nat::from(200u8) {
-                    let code = if response.status == candid::Nat::from(429u32) {
+                if response.status != 200u32 {
+                    let code = if response.status == 429u32 {
                         RejectionCode::SysTransient
                     } else {
                         RejectionCode::SysFatal
