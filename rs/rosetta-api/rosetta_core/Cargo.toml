@@ -25,6 +25,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
+icp-ledger = { path = "../icp_ledger" }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -1,5 +1,5 @@
 {
-  "checksum": "bc9e2abe946f0f6f70975491852cbe6c488de104b6dd91f18588ff2d2baef360",
+  "checksum": "339b81ae381c208e11c61ce38eeb4b3f305e2cbf83acd1e738d42318b671348b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18165,6 +18165,10 @@
               "target": "ic_cdk_timers"
             },
             {
+              "id": "ic-certificate-verification 2.6.0",
+              "target": "ic_certificate_verification"
+            },
+            {
               "id": "ic-certification 2.6.0",
               "target": "ic_certification"
             },
@@ -18205,7 +18209,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "ic-wasm 0.8.1",
+              "id": "ic-wasm 0.8.4",
               "target": "ic_wasm"
             },
             {
@@ -30904,14 +30908,14 @@
       ],
       "license_file": null
     },
-    "ic-wasm 0.8.1": {
+    "ic-wasm 0.8.4": {
       "name": "ic-wasm",
-      "version": "0.8.1",
+      "version": "0.8.4",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.8.1/download",
-          "sha256": "941376953c00628d8edae0adcad4b6e882c01cbfd5416d2ac2bc5fb709927737"
+          "url": "https://static.crates.io/crates/ic-wasm/0.8.4/download",
+          "sha256": "45bc33855672981ae4a2f4e77c1a77d1bdc0756fb1b36ad0dbe47df77a955e2d"
         }
       },
       "targets": [
@@ -30996,7 +31000,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.1"
+        "version": "0.8.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -77750,7 +77754,7 @@
   },
   "binary_crates": [
     "canbench 0.1.4",
-    "ic-wasm 0.8.1",
+    "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -78963,6 +78967,7 @@
     "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
+    "ic-certificate-verification 2.6.0",
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
     "ic-http-certification 2.6.0",
@@ -78973,7 +78978,7 @@
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.37.0",
     "ic-verify-bls-signature 0.6.0",
-    "ic-wasm 0.8.1",
+    "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
     "ic_bls12_381 0.10.0",

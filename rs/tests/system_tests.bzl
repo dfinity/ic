@@ -206,8 +206,8 @@ def system_test(
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
