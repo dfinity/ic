@@ -12,7 +12,8 @@ set -eufo pipefail
 EXIT_STATUS=0
 
 # Retrieve the IC version (git revision) of the mainnet NNS subnet:
-MAINNET_NNS_SUBNET_IC_VERSION="$(jq '.subnets."tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"' -r testnet/mainnet_revisions.json)"
+MAINNET_NNS_SUBNET_ID="tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+MAINNET_NNS_SUBNET_IC_VERSION="$(jq ".subnets.\"$MAINNET_NNS_SUBNET_ID\"" -r testnet/mainnet_revisions.json)"
 
 # Write this IC version to mainnet-artifacts.bzl to give bazel access to it:
 sed -i "s/MAINNET_NNS_SUBNET_IC_VERSION = \".*\"/MAINNET_NNS_SUBNET_IC_VERSION = \"$MAINNET_NNS_SUBNET_IC_VERSION\"/" mainnet-artifacts.bzl
