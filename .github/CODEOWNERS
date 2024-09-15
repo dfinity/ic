@@ -201,6 +201,8 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
+/rs/rust_canisters/downstream_calls_test/		@dfinity/ic-message-routing-owners
+/rs/rust_canisters/random_traffic_test/			@dfinity/ic-message-routing-owners
 /rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking

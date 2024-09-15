@@ -83,7 +83,7 @@ fn seed_rng() {
 /// Returns the canister records.
 #[export_name = "canister_query records"]
 fn records() {
-    let records = RECORDS.with_borrow(|records| records.iter().cloned().collect::<Vec<_>>());
+    let records = RECORDS.with_borrow(|records| records.to_vec());
     let msg = candid::Encode!(&records).unwrap();
     api::reply(&msg[..]);
 }
