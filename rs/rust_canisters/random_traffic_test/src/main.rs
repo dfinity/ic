@@ -9,7 +9,6 @@ use rand::{
 };
 use random_traffic_test::*;
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 thread_local! {
@@ -22,13 +21,11 @@ thread_local! {
     /// A configuration holding parameters for how to the canister should behave, such as the range
     /// of payload bytes it should send.
     static CONFIG: RefCell<Config> = RefCell::default();
-    /// The maximum number of calls each heartbeat can make.
+    /// The maximum number of calls each heartbeat will attempt to make.
     static MAX_CALLS_PER_HEARTBEAT: Cell<u32> = Cell::default();
-    /// An ID used as an entry in `RECORDS` unique for each call.
-    static CALL_ID: Cell<u32> = Cell::default();
     /// A collection of records; one record for each call. Keeps track of how each call went,
     /// whether it was rejected or not and how many bytes we received as a reply.
-    static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
+    static RECORDS: RefCell<Vec<Record>> = RefCell::default();
 }
 
 /// Replaces the canister state according to `f` by parsing `arg_data` of type `T`; replies the old
@@ -86,7 +83,7 @@ fn seed_rng() {
 /// Returns the canister records.
 #[export_name = "canister_query records"]
 fn records() {
-    let records = RECORDS.with_borrow(|records| records.values().cloned().collect::<Vec<_>>());
+    let records = RECORDS.with_borrow(|records| records.iter().cloned().collect::<Vec<_>>());
     let msg = candid::Encode!(&records).unwrap();
     api::reply(&msg[..]);
 }
@@ -106,13 +103,6 @@ where
     CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(config))))
 }
 
-/// Returns the next call id for use in keeping records.
-fn next_call_id() -> u32 {
-    let id = CALL_ID.take();
-    CALL_ID.set(id + 1);
-    id
-}
-
 /// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
 /// attempted in `RECORDS` in the order they were made. Once a reply is received, this record is
 /// updated in place.
@@ -123,22 +113,22 @@ fn next_call_id() -> u32 {
 fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
     let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
-    let call_id = next_call_id();
-    let insert_new_call_record = |reply: Option<Reply>| {
-        RECORDS.with_borrow_mut(|records| {
-            records.insert(
-                call_id,
-                Record {
-                    receiver,
-                    sent_bytes: payload_bytes,
-                    reply,
-                },
-            );
+
+    // Insert a new call record at the back of `RECORDS`; returns the `index` of the new element at
+    // the back.
+    let index = RECORDS.with_borrow_mut(|records| {
+        records.push(Record {
+            receiver,
+            sent_bytes: payload_bytes,
+            reply: None,
         });
-    };
+        records.len() - 1
+    });
+
+    // Updates the `Reply` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |reply: Reply| {
         RECORDS.with_borrow_mut(|records| {
-            records.get_mut(&call_id).unwrap().reply = Some(reply);
+            records[index].reply = Some(reply);
         });
     };
 
@@ -159,17 +149,16 @@ fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
         },
     );
     if error_code == 0 {
-        insert_new_call_record(None);
         Ok(())
     } else {
-        insert_new_call_record(Some(Reply::SynchronousRejection(error_code)));
+        set_reply_in_call_record(Reply::SynchronousRejection(error_code));
         Err(())
     }
 }
 
 /// Samples a weighted binomial distribution to decide whether to make a reply (true) or a
 /// downstream call (false). Defaults to `true` for bad weights (e.g. both 0).
-fn should_reply() -> bool {
+fn should_reply_now() -> bool {
     RNG.with_borrow_mut(|rng| {
         WeightedIndex::new([REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
             .map(|dist| dist.sample(rng) == 0)
@@ -195,7 +184,7 @@ fn handle_call() {
     // Note: Awaiting each call before possibly making another one also ensures there is only ever
     // one response despite potentially multiple downstream calls, something that doesn't matter for
     // the heartbeat where calls are not awaited because the heartbeat can't give a response anyway.
-    if should_reply() || try_call(handle_call).is_err() {
+    if should_reply_now() || try_call(handle_call).is_err() {
         let payload_bytes = gen_range(|config| config.reply_bytes_min..=config.reply_bytes_max);
         let instructions_count =
             gen_range(|config| config.instructions_count_min..=config.instructions_count_max);

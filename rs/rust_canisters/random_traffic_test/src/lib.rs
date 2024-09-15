@@ -87,7 +87,7 @@ pub enum Reply {
     AsynchronousRejection(i32, String),
 }
 
-/// Record for one message cycle. Records many bytes were sent out; and what kind of reply was
+/// Record for one outgoing call. Records many bytes were sent out; and what kind of reply was
 /// received (either data or a synchronous or asynchronous rejection).
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub struct Record {
@@ -168,3 +168,6 @@ pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
     }
     metrics
 }
+
+// Enable Candid export
+ic_cdk::export_candid!();

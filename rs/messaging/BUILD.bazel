@@ -97,7 +97,7 @@ rust_ic_test_suite(
         # Keep sorted.
         ":messaging",
         "//rs/config",
-	"//rs/interfaces/certified_stream_store",
+        "//rs/interfaces/certified_stream_store",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
