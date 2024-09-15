@@ -263,7 +263,7 @@ impl PocketIc {
         time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        mut bitcoind_addr: Option<SocketAddr>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -301,6 +301,9 @@ impl PocketIc {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
+        if !matches!(subnet_kind, SubnetKind::Bitcoin) {
+            bitcoind_addr = None;
+        }
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))

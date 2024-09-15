@@ -191,6 +191,7 @@ use tokio::sync::mpsc::{channel, Sender};
 use tokio::{
     runtime::Runtime,
     sync::{mpsc, watch, Mutex as TokioMutex},
+    task::JoinHandle,
 };
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
@@ -781,6 +782,7 @@ struct PocketBitcoinClient {
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
     rt_handle: Arc<Runtime>,
+    join_handle: JoinHandle<()>,
 }
 
 impl PocketBitcoinClient {
@@ -806,24 +808,29 @@ impl PocketBitcoinClient {
 
         let adapter_state_clone = adapter_state.clone();
         let metrics_registry = metrics_registry.clone();
-        rt_handle.spawn(async move {
-            start_main_event_loop(
-                &config,
-                logger,
-                blockchain_state.clone(),
-                transaction_manager_rx,
-                adapter_state_clone,
-                blockchain_manager_rx,
-                &metrics_registry,
-            )
-        });
+        let join_handle = start_main_event_loop(
+            &config,
+            logger,
+            blockchain_state.clone(),
+            transaction_manager_rx,
+            adapter_state_clone,
+            blockchain_manager_rx,
+            &metrics_registry,
+        );
 
         Self {
             adapter_state,
             get_successors_handler,
             transaction_manager_tx,
             rt_handle,
+            join_handle,
         }
+    }
+}
+
+impl Drop for PocketBitcoinClient {
+    fn drop(self: &mut PocketBitcoinClient) {
+        self.join_handle.abort()
     }
 }
 
@@ -1251,6 +1258,7 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
+    /// Only use from tokio contexts.
     pub fn with_bitcoind_addr(self, bitcoind_addr: Option<SocketAddr>) -> Self {
         Self {
             bitcoind_addr,

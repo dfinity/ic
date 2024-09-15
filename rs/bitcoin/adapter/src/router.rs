@@ -18,6 +18,7 @@ use tokio::{
         mpsc::{channel, Receiver},
         Mutex,
     },
+    task::JoinHandle,
     time::{interval, sleep},
 };
 
@@ -34,7 +35,7 @@ pub fn start_main_event_loop(
     adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) {
+) -> JoinHandle<()> {
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
@@ -116,5 +117,5 @@ pub fn start_main_event_loop(
                 }
             };
         }
-    });
+    })
 }
