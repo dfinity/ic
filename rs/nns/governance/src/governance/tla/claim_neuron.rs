@@ -13,8 +13,8 @@ pub fn claim_neuron_desc() -> Update {
     Update {
         default_start_locals: default_locals.clone(),
         default_end_locals: default_locals,
-        start_label: Label::new("ClaimNeuron1"),  // TODO: sync this label
-        end_label: Label::new("Done"), // TODO: sync this label
+        start_label: Label::new("ClaimNeuron1"),
+        end_label: Label::new("Done"),
         process_id: PID.to_string(),
         canister_name: "governance".to_string(),
         post_process: |trace| {
@@ -26,7 +26,34 @@ pub fn claim_neuron_desc() -> Update {
 }
 
 fn extract_claim_neuron_constants(pid: &str, trace: &[ResolvedStatePair]) -> TlaConstantAssignment {
-    //TODO
+    let constants = BTreeMap::from([
+        (
+            "Neuron_Ids".to_string(),
+            function_domain_union(trace, "neuron").to_tla_value(),
+        ),
+        (
+            "MIN_STAKE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("min_stake")
+                        .expect("min_stake not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        (
+            "Claim_Neuron_Process_Ids".to_string(),
+            BTreeSet::from([pid]).to_tla_value(),
+        ),
+        ("Governance_Account_Ids".to_string(), {
+            let mut ids = function_domain_union(trace, "neuron_id_by_account");
+            ids.insert(governance_account_id());
+            ids.to_tla_value()
+        }),
+    ]);
+    TlaConstantAssignment { constants }
 }
 
 fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
