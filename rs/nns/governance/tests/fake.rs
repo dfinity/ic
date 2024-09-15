@@ -315,7 +315,24 @@ impl IcpLedger for FakeDriver {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.state.try_lock().unwrap().accounts;
+
+        tla_log_request!(
+            "WaitForBalanceQuery",
+            Destination::new("ledger"),
+            "BalanceQuery",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("account".to_string(), account_to_tla(account))
+            ]))
+        );
+
         let account_e8s = accounts.get(&account).unwrap_or(&0);
+        tla_log_response!(
+            Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "TransferOk".to_string(),
+                    value: Box::new(account_38s.to_tla_value()),
+                }
+        );
         Ok(Tokens::from_e8s(*account_e8s))
     }
 
