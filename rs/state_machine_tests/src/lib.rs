@@ -3,8 +3,7 @@ use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter::{
-    config::Config as BitcoinClientConfig,
-    config::{address_limits, IncomingSource},
+    config::{address_limits, Config as BitcoinAdapterConfig},
     start_main_event_loop, AdapterState, BlockchainState, GetSuccessorsHandler,
     TransactionManagerRequest,
 };
@@ -786,7 +785,7 @@ struct PocketBitcoinClient {
 
 impl PocketBitcoinClient {
     fn new(
-        config: BitcoinClientConfig,
+        config: BitcoinAdapterConfig,
         metrics_registry: &MetricsRegistry,
         logger: ReplicaLogger,
         rt_handle: Arc<Runtime>,
@@ -1352,19 +1351,29 @@ impl StateMachineBuilder {
         ));
 
         let bitcoin_network = Network::Regtest;
-        let bitcoin_client_config = BitcoinClientConfig {
+        let level = match sm.replica_logger.inner_logger.level {
+            Level::Critical => ic_config::logger::Level::Critical,
+            Level::Error => ic_config::logger::Level::Error,
+            Level::Warning => ic_config::logger::Level::Warning,
+            Level::Info => ic_config::logger::Level::Info,
+            Level::Debug => ic_config::logger::Level::Debug,
+            Level::Trace => ic_config::logger::Level::Trace,
+        };
+        let logger_config = LoggerConfig {
+            level,
+            ..Default::default()
+        };
+        let bitcoin_client_config = BitcoinAdapterConfig {
             network: bitcoin_network,
-            dns_seeds: vec![],
             nodes: vec![SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 18444,
             )],
             socks_proxy: None,
-            idle_seconds: 42,
             ipv6_only: false,
-            logger: LoggerConfig::default(),
-            incoming_source: IncomingSource::Systemd,
+            logger: logger_config,
             address_limits: address_limits(bitcoin_network),
+            ..Default::default()
         };
         let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
             sm.state_manager.clone(),

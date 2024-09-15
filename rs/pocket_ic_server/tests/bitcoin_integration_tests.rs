@@ -1,6 +1,6 @@
 use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
 use candid::{CandidType, Encode, Principal};
-use ic_btc_interface::{Config, Fees, Flag, Network};
+use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
@@ -8,6 +8,7 @@ use std::fs::{create_dir, File};
 use std::io::Write;
 use std::process::Command;
 use std::str::FromStr;
+use std::time::SystemTime;
 use tempfile::tempdir;
 
 #[derive(CandidType, serde::Deserialize)]
@@ -27,18 +28,9 @@ fn deploy_btc_canister(pic: &PocketIc) {
     let btc_path =
         std::env::var_os("BTC_WASM").expect("Missing BTC_WASM (path to BTC canister wasm) in env.");
     let btc_wasm = std::fs::read(btc_path).expect("Could not read BTC canister wasm file.");
-    // default values: https://github.com/dfinity/bitcoin-canister/blob/52c160168c478d5bce34b7dc5bacb78243c9d8aa/interface/src/lib.rs#L651
     let args = Config {
-        stability_threshold: 0,
         network: Network::Regtest,
-        blocks_source: Principal::management_canister(),
-        syncing: Flag::Enabled,
-        fees: Fees::default(),
-        api_access: Flag::Enabled,
-        disable_api_if_not_fully_synced: Flag::Enabled,
-        watchdog_canister: None,
-        burn_cycles: Flag::Disabled,
-        lazily_evaluate_fee_percentiles: Flag::Disabled,
+        ..Default::default()
     };
     pic.install_canister(
         btc_canister_id,
@@ -63,6 +55,23 @@ fn deploy_basic_bitcoin_canister(pic: &PocketIc) -> Principal {
         None,
     );
     canister_id
+}
+
+fn get_balance(
+    pic: &PocketIc,
+    basic_bitcoin_canister_id: Principal,
+    bitcoin_address: String,
+) -> u64 {
+    loop {
+        if let Ok((balance,)) = update_candid::<_, (u64,)>(
+            pic,
+            basic_bitcoin_canister_id,
+            "get_balance",
+            (bitcoin_address.clone(),),
+        ) {
+            break balance;
+        }
+    }
 }
 
 #[test]
@@ -96,7 +105,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .with_ii_subnet()
         .with_application_subnet()
         .build();
-    pic.auto_progress(); // bitcoind uses real time
+    pic.set_time(SystemTime::now());
+
     deploy_btc_canister(&pic);
 
     let basic_bitcoin_canister_id = deploy_basic_bitcoin_canister(&pic);
@@ -132,15 +142,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     let reward = 50 * 100_000_000; // 50 BTC
 
     loop {
-        if let Ok((balance,)) = update_candid::<_, (u64,)>(
-            &pic,
-            basic_bitcoin_canister_id,
-            "get_balance",
-            (bitcoin_address.clone(),),
-        ) {
-            if balance == n * reward {
-                break;
-            }
+        if get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address.clone()) == n * reward {
+            break;
         }
     }
 
@@ -158,33 +161,23 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     .unwrap();
 
     loop {
-        if let Ok((balance,)) = update_candid::<_, (u64,)>(
+        if get_balance(
             &pic,
             basic_bitcoin_canister_id,
-            "get_balance",
-            (another_bitcoin_address.clone(),),
-        ) {
-            if balance == send_amount {
-                break;
-            } else {
-                btc_rpc
-                    .generate_to_address(1, &Address::from_str(&bitcoin_address).unwrap())
-                    .unwrap();
-                n += 1;
-            }
+            another_bitcoin_address.clone(),
+        ) == send_amount
+        {
+            break;
+        } else {
+            btc_rpc
+                .generate_to_address(1, &Address::from_str(&bitcoin_address).unwrap())
+                .unwrap();
+            n += 1;
         }
     }
 
-    loop {
-        if let Ok((balance,)) = update_candid::<_, (u64,)>(
-            &pic,
-            basic_bitcoin_canister_id,
-            "get_balance",
-            (bitcoin_address.clone(),),
-        ) {
-            if balance == n * reward - send_amount {
-                break;
-            }
-        }
-    }
+    assert_eq!(
+        get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address),
+        n * reward - send_amount
+    );
 }
