@@ -86,11 +86,11 @@ For detailed information on building IC-OS images, please refer to the link:ic-o
 
 Alternatively, to build all IC-OS images using a simple, containerized environment, run:
 
-  $ ./ci/container/build-ic.sh -i
+  $ ./gitlab-ci/container/build-ic.sh -i
 
 To build only the binaries and canisters, use the `-b` and/or `-c` flags:
 
-  $ ./ci/container/build-ic.sh -b -c
+  $ ./gitlab-ci/container/build-ic.sh -b -c
 
 All built artifacts will be located in the top-level artifacts/ directory.
 
@@ -100,11 +100,11 @@ Each https://dashboard.internetcomputer.org/releases[release proposal] includes 
 
 To verify the build reproducibility of a specific `Elect Replica` proposal, you can just copy the one liner below to a fresh Ubuntu VM 22.04 or higher:
 
-    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
+    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSLO https://raw.githubusercontent.com/dfinity/ic/master/gitlab-ci/tools/repro-check.sh && chmod +x repro-check.sh && ./repro-check.sh -p <proposal>
 
 If you have the repository already cloned, you can just run:
 
-    $ ./ci/tools/repro-check.sh -c <git revision>
+    $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
 
 == Contributing
 
