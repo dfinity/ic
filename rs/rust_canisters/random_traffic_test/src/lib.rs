@@ -76,6 +76,7 @@ impl Config {
     }
 }
 
+/// Records the outcome of an outgoing call.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub enum Reply {
     /// A response including a data payload of a distinct size was received.
