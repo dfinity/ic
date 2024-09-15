@@ -88,8 +88,8 @@ pub enum Reply {
     AsynchronousRejection(i32, String),
 }
 
-/// Record for one outgoing call. Records many bytes were sent out; and what kind of reply was
-/// received (either data or a synchronous or asynchronous rejection).
+/// Record for one outgoing call. Records how many bytes were sent out; and what kind of
+/// reply was received (either data or a synchronous or asynchronous rejection).
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub struct Record {
     pub receiver: CanisterId,
