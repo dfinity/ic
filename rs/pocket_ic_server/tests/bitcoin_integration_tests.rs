@@ -6,6 +6,7 @@ use ic_nns_constants::ROOT_CANISTER_ID;
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
 use std::fs::{create_dir, File};
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
 use std::str::FromStr;
 use std::time::SystemTime;
@@ -104,6 +105,10 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .with_bitcoin_subnet()
         .with_ii_subnet()
         .with_application_subnet()
+        .with_bitcoind_addr(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            18444,
+        ))
         .build();
     pic.set_time(SystemTime::now());
 

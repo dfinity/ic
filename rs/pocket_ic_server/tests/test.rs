@@ -103,6 +103,7 @@ fn test_creation_of_instance_extended() {
         state_dir: None,
         nonmainnet_features: false,
         log_level: None,
+        bitcoind_addr: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

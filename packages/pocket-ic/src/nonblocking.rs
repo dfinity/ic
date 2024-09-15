@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 use slog::Level;
 use std::fs::File;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
@@ -88,6 +89,7 @@ impl PocketIc {
             None,
             false,
             None,
+            None,
         )
         .await
     }
@@ -100,7 +102,16 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None).await
+        Self::from_components(
+            config,
+            server_url,
+            max_request_time_ms,
+            None,
+            false,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -116,6 +127,7 @@ impl PocketIc {
             None,
             false,
             None,
+            None,
         )
         .await
     }
@@ -127,6 +139,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -139,6 +152,7 @@ impl PocketIc {
             state_dir,
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
+            bitcoind_addr,
         };
 
         let parent_pid = std::os::unix::process::parent_id();

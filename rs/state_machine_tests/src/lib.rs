@@ -179,7 +179,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
@@ -1031,7 +1031,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
     log_level: Option<Level>,
-    is_bitcoin_subnet: bool,
+    bitcoind_addr: Option<SocketAddr>,
 }
 
 impl StateMachineBuilder {
@@ -1065,7 +1065,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             dts: true,
             log_level: None,
-            is_bitcoin_subnet: false,
+            bitcoind_addr: None,
         }
     }
 
@@ -1251,9 +1251,9 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
-    pub fn is_bitcoin_subnet(self, is_bitcoin_subnet: bool) -> Self {
+    pub fn with_bitcoind_addr(self, bitcoind_addr: Option<SocketAddr>) -> Self {
         Self {
-            is_bitcoin_subnet,
+            bitcoind_addr,
             ..self
         }
     }
@@ -1329,7 +1329,7 @@ impl StateMachineBuilder {
         self,
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
-        let is_bitcoin_subnet = self.is_bitcoin_subnet;
+        let bitcoind_addr = self.bitcoind_addr;
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
@@ -1366,7 +1366,7 @@ impl StateMachineBuilder {
                 BitcoinAdapterRequestWrapper,
                 Response = BitcoinAdapterResponseWrapper,
             >,
-        > = if is_bitcoin_subnet {
+        > = if let Some(bitcoind_addr) = bitcoind_addr {
             let bitcoin_network = Network::Regtest;
             let level = match sm.replica_logger.inner_logger.level {
                 Level::Critical => ic_config::logger::Level::Critical,
@@ -1382,10 +1382,7 @@ impl StateMachineBuilder {
             };
             let bitcoin_adapter_config = BitcoinAdapterConfig {
                 network: bitcoin_network,
-                nodes: vec![SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    18444,
-                )],
+                nodes: vec![bitcoind_addr],
                 socks_proxy: None,
                 ipv6_only: false,
                 logger: logger_config,

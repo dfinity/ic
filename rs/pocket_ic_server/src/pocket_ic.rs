@@ -79,6 +79,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufReader, Write},
+    net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
@@ -171,6 +172,7 @@ pub struct PocketIc {
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
+    bitcoind_addr: Option<SocketAddr>,
 }
 
 impl Drop for PocketIc {
@@ -261,6 +263,7 @@ impl PocketIc {
         time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -298,7 +301,6 @@ impl PocketIc {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
-        let is_bitcoin_subnet = matches!(subnet_kind, SubnetKind::Bitcoin);
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
@@ -309,7 +311,7 @@ impl PocketIc {
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
-            .is_bitcoin_subnet(is_bitcoin_subnet)
+            .with_bitcoind_addr(bitcoind_addr)
     }
 
     pub(crate) fn new(
@@ -318,6 +320,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -453,6 +456,7 @@ impl PocketIc {
                 time,
                 nonmainnet_features,
                 log_level,
+                bitcoind_addr,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -588,6 +592,7 @@ impl PocketIc {
             runtime,
             nonmainnet_features,
             log_level,
+            bitcoind_addr,
         }
     }
 
@@ -688,6 +693,7 @@ impl Default for PocketIc {
             },
             None,
             false,
+            None,
             None,
         )
     }
@@ -2310,6 +2316,7 @@ fn route(
                         time,
                         pic.nonmainnet_features,
                         pic.log_level,
+                        pic.bitcoind_addr,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -2626,6 +2633,7 @@ mod tests {
             },
             None,
             false,
+            None,
             None,
         );
         let canister_id = pic.any_subnet().create_canister(None);
