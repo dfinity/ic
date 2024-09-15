@@ -744,7 +744,7 @@ impl XNetPayloadBuilderImpl {
             SignalsValidationResult::Valid => {
                 self.metrics
                     .slice_messages
-                    .observe(slice.messages().map(|m| m.len()).unwrap_or(0) as f64);
+                    .observe(slice.messages().map_or(0, |m| m.len()) as f64);
                 self.metrics
                     .slice_payload_size
                     .observe(certified_slice.payload.len() as f64);
@@ -752,8 +752,7 @@ impl XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end: slice
                         .messages()
-                        .map(|messages| messages.end())
-                        .unwrap_or(expected.message_index),
+                        .map_or(expected.message_index, |messages| messages.end()),
                     signals_end: slice.header().signals_end(),
                     byte_size,
                 }
@@ -893,8 +892,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .network_topology
                     .subnets
                     .get(&subnet_id)
-                    .map(|subnet| subnet.subnet_type)
-                    .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
+                    .map_or(Application, |subnet| subnet.subnet_type); // Technically unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
                     return None;
                 }

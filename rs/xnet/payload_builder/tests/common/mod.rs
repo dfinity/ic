@@ -218,11 +218,12 @@ pub fn assert_opt_slice_pairs_eq(
 }
 
 fn opt_slice_to_string(slice: Option<CertifiedStreamSlice>) -> String {
-    slice.map(slice_to_string).unwrap_or_else(|| "None".into())
+    slice.map_or_else(|| "None".into(), slice_to_string)
 }
 
 fn slice_to_string(slice: CertifiedStreamSlice) -> String {
-    UnpackedStreamSlice::try_from(slice.clone())
-        .map(|unpacked| format!("{:?}", unpacked))
-        .unwrap_or(format!("{:?}", slice))
+    UnpackedStreamSlice::try_from(slice.clone()).map_or_else(
+        || format!("{:?}", slice),
+        |unpacked| format!("{:?}", unpacked),
+    )
 }
