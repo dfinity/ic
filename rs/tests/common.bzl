@@ -347,12 +347,20 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
                                        MAINNET_REVISION_RUNTIME_DEPS + \
                                        GRAFANA_RUNTIME_DEPS + [
+    # Keep sorted.
+    "//:mainnet-ic-recovery",
+    "//:mainnet-ic-replay",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/cli:sns",
     "//rs/tests:recovery/binaries",
     "//rs/tests/nns:secret_key.pem",
+    "@candid//:didc",
     "@dfx",
     "@idl2json",
     "@sns_quill//:sns-quill",
-    "@candid//:didc",
-    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
+
+IC_MAINNET_NNS_RECOVERY_ENV = NNS_CANISTER_ENV | {
+    "IC_REPLAY_PATH": "$(rootpath //:mainnet-ic-replay)",
+    "IC_RECOVERY_PATH": "$(rootpath //:mainnet-ic-recovery)",
+}

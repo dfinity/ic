@@ -12,7 +12,6 @@ use candid::CandidType;
 use canister_test::Canister;
 use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use dfn_candid::candid_one;
-use flate2::read::GzDecoder;
 use ic_canister_client::Sender;
 use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
 use ic_consensus_system_test_utils::{
@@ -53,9 +52,8 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use std::{
     fs,
-    fs::{File, OpenOptions},
-    io::{Cursor, Read, Write},
-    os::unix::fs::OpenOptionsExt,
+    fs::File,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Output},
     str::FromStr,
@@ -76,8 +74,6 @@ const RECOVERY_WORKING_DIR: &str = "recovery/working_dir";
 const IC_CONFIG_DESTINATION: &str = "recovery/working_dir/ic.json5";
 const NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
 const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
-const IC_REPLAY: &str = "ic-replay";
-const IC_RECOVERY: &str = "ic-recovery";
 
 /// Path to temporarily store a tarball of the IC registry local store.
 /// This tarball will be created on the recovered NNS node and scp-ed from it.
@@ -201,14 +197,6 @@ fn setup_recovered_nns(
 ) {
     let logger = env.logger();
 
-    let env_clone = env.clone();
-    let fetch_mainnet_ic_replay_thread = std::thread::spawn(move || {
-        fetch_mainnet_ic_replay(env_clone);
-    });
-    let env_clone = env.clone();
-    let fetch_mainnet_ic_recovery_thread = std::thread::spawn(move || {
-        fetch_mainnet_ic_recovery(env_clone);
-    });
     fetch_nns_state_from_backup_pod(env.clone());
 
     let topology = rx_topology.recv().unwrap();
@@ -227,17 +215,9 @@ fn setup_recovered_nns(
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    fetch_mainnet_ic_replay_thread
-        .join()
-        .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
-
     let neuron_id: NeuronId = prepare_nns_state(env.clone(), account_id);
 
     let aux_node = rx_aux_node.recv().unwrap();
-
-    fetch_mainnet_ic_recovery_thread
-        .join()
-        .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(env.clone(), nns_node, recovered_nns_node.clone(), aux_node);
     test_recovered_nns(env.clone(), neuron_id, recovered_nns_node.clone());
@@ -608,7 +588,8 @@ fn fetch_ic_config(env: TestEnv, nns_node: IcNodeSnapshot) {
 
 fn ic_replay(env: TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output {
     let logger: slog::Logger = env.logger();
-    let ic_replay_path = env.get_path(IC_REPLAY);
+    let ic_replay_path =
+        get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set"));
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
     let nns_state_dir = env.get_path(NNS_STATE_DIR_PATH);
     let ic_config_file = env.get_path(IC_CONFIG_DESTINATION);
@@ -681,100 +662,11 @@ fn with_ledger_account_for_tests(env: TestEnv, account_id: AccountIdentifier) {
     info!(logger, "Our principal now has 1 million ICP");
 }
 
-fn fetch_mainnet_ic_replay(env: TestEnv) {
-    let logger = env.logger();
-    let version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
-    let mainnet_ic_replica_url =
-        format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
-    let ic_replay_path = env.get_path(IC_REPLAY);
-    let ic_replay_gz_path = env.get_path("ic-replay.gz");
-    // let mut tmp_file = tempfile::tempfile().unwrap();
-    info!(
-        logger,
-        "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
-    );
-    let response = reqwest::blocking::get(mainnet_ic_replica_url.clone())
-        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}"));
-    if !response.status().is_success() {
-        panic!("Failed to download {mainnet_ic_replica_url}");
-    }
-    let bytes = response.bytes().unwrap();
-    let mut content = Cursor::new(bytes);
-    let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
-    std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
-        panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
-    );
-    let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
-    let mut gz = GzDecoder::new(&ic_replay_gz_file);
-    let mut ic_replay_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .mode(0o755)
-        .open(ic_replay_path.clone())
-        .unwrap();
-    std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
-        panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
-    );
-}
-
 fn prepare_nns_state(env: TestEnv, account_id: AccountIdentifier) -> NeuronId {
     let neuron_id = with_neuron_for_tests(env.clone());
     with_trusted_neurons_following_neuron_for_tests(env.clone(), neuron_id);
     with_ledger_account_for_tests(env.clone(), account_id);
     neuron_id
-}
-
-fn fetch_mainnet_ic_recovery(env: TestEnv) {
-    let logger = env.logger();
-    let version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
-    let mainnet_ic_recovery_url =
-        format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
-    let ic_recovery_path = env.get_path(IC_RECOVERY);
-    let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
-    info!(
-        logger,
-        "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
-    );
-    let response = reqwest::blocking::get(mainnet_ic_recovery_url.clone())
-        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}"));
-    if !response.status().is_success() {
-        panic!("Failed to download {mainnet_ic_recovery_url}");
-    }
-    let bytes = response.bytes().unwrap();
-    let mut content = Cursor::new(bytes);
-    let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
-    std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
-        panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
-    );
-    let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
-    let mut gz = GzDecoder::new(&ic_recovery_gz_file);
-    let mut ic_recovery_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .mode(0o755)
-        .open(ic_recovery_path.clone())
-        .unwrap();
-    std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
-        panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
-    );
 }
 
 fn recover_nns_subnet(
@@ -808,7 +700,8 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let ic_recovery_path = env.get_path(IC_RECOVERY);
+    let ic_recovery_path =
+        get_dependency_path(std::env::var("IC_RECOVERY_PATH").expect("IC_RECOVERY_PATH not set"));
     let mut cmd = Command::new(ic_recovery_path);
     cmd.arg("--skip-prompts")
         .arg("--dir")
