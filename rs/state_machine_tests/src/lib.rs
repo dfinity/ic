@@ -1031,6 +1031,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
     log_level: Option<Level>,
+    is_bitcoin_subnet: bool,
 }
 
 impl StateMachineBuilder {
@@ -1064,6 +1065,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             dts: true,
             log_level: None,
+            is_bitcoin_subnet: false,
         }
     }
 
@@ -1249,6 +1251,13 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
+    pub fn is_bitcoin_subnet(self, is_bitcoin_subnet: bool) -> Self {
+        Self {
+            is_bitcoin_subnet,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1320,6 +1329,8 @@ impl StateMachineBuilder {
         self,
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
+        let is_bitcoin_subnet = self.is_bitcoin_subnet;
+
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
         let subnet_id = sm.get_subnet_id();
@@ -1350,41 +1361,51 @@ impl StateMachineBuilder {
             sm.replica_logger.clone(),
         ));
 
-        let bitcoin_network = Network::Regtest;
-        let level = match sm.replica_logger.inner_logger.level {
-            Level::Critical => ic_config::logger::Level::Critical,
-            Level::Error => ic_config::logger::Level::Error,
-            Level::Warning => ic_config::logger::Level::Warning,
-            Level::Info => ic_config::logger::Level::Info,
-            Level::Debug => ic_config::logger::Level::Debug,
-            Level::Trace => ic_config::logger::Level::Trace,
-        };
-        let logger_config = LoggerConfig {
-            level,
-            ..Default::default()
-        };
-        let bitcoin_client_config = BitcoinAdapterConfig {
-            network: bitcoin_network,
-            nodes: vec![SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                18444,
-            )],
-            socks_proxy: None,
-            ipv6_only: false,
-            logger: logger_config,
-            address_limits: address_limits(bitcoin_network),
-            ..Default::default()
+        let bitcoin_client: Box<
+            dyn RpcAdapterClient<
+                BitcoinAdapterRequestWrapper,
+                Response = BitcoinAdapterResponseWrapper,
+            >,
+        > = if is_bitcoin_subnet {
+            let bitcoin_network = Network::Regtest;
+            let level = match sm.replica_logger.inner_logger.level {
+                Level::Critical => ic_config::logger::Level::Critical,
+                Level::Error => ic_config::logger::Level::Error,
+                Level::Warning => ic_config::logger::Level::Warning,
+                Level::Info => ic_config::logger::Level::Info,
+                Level::Debug => ic_config::logger::Level::Debug,
+                Level::Trace => ic_config::logger::Level::Trace,
+            };
+            let logger_config = LoggerConfig {
+                level,
+                ..Default::default()
+            };
+            let bitcoin_adapter_config = BitcoinAdapterConfig {
+                network: bitcoin_network,
+                nodes: vec![SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    18444,
+                )],
+                socks_proxy: None,
+                ipv6_only: false,
+                logger: logger_config,
+                address_limits: address_limits(bitcoin_network),
+                ..Default::default()
+            };
+            Box::new(PocketBitcoinClient::new(
+                bitcoin_adapter_config,
+                &sm.metrics_registry,
+                sm.replica_logger.clone(),
+                sm.runtime.clone(),
+            ))
+        } else {
+            Box::new(BrokenConnectionBitcoinClient)
         };
         let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
             sm.state_manager.clone(),
             &sm.metrics_registry,
             Box::new(BrokenConnectionBitcoinClient),
-            Box::new(PocketBitcoinClient::new(
-                bitcoin_client_config,
-                &sm.metrics_registry,
-                sm.replica_logger.clone(),
-                sm.runtime.clone(),
-            )),
+            bitcoin_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),

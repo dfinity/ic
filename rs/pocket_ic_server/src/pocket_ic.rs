@@ -298,6 +298,7 @@ impl PocketIc {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
+        let is_bitcoin_subnet = matches!(subnet_kind, SubnetKind::Bitcoin);
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
@@ -308,6 +309,7 @@ impl PocketIc {
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
+            .is_bitcoin_subnet(is_bitcoin_subnet)
     }
 
     pub(crate) fn new(
