@@ -41,8 +41,7 @@ use ic_replicated_state::{
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
-    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
-    SystemState,
+    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
@@ -1067,34 +1066,13 @@ impl CanisterManager {
                 error: err,
                 cycles_to_return: stop_context.take_cycles(),
             },
-            Ok(()) => {
-                match &mut canister.system_state.status {
-                    CanisterStatus::Stopped => StopCanisterResult::AlreadyStopped {
-                        cycles_to_return: stop_context.take_cycles(),
-                    },
 
-                    CanisterStatus::Stopping { stop_contexts, .. } => {
-                        // Canister is already stopping. Add the message to it
-                        // so that we can respond to the message once the
-                        // canister has fully stopped.
-                        stop_contexts.push(stop_context);
-                        StopCanisterResult::RequestAccepted
-                    }
-
-                    CanisterStatus::Running {
-                        call_context_manager,
-                    } => {
-                        // Transition the canister into the stopping state.
-                        canister.system_state.status = CanisterStatus::Stopping {
-                            call_context_manager: call_context_manager.clone(),
-                            // Track the stop message to later respond to it once the
-                            // canister is fully stopped.
-                            stop_contexts: vec![stop_context],
-                        };
-                        StopCanisterResult::RequestAccepted
-                    }
-                }
-            }
+            Ok(()) => match canister.system_state.begin_stopping(stop_context) {
+                Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
+                    cycles_to_return: stop_context.take_cycles(),
+                },
+                None => StopCanisterResult::RequestAccepted,
+            },
         };
         canister.system_state.canister_version += 1;
         state.put_canister_state(canister);
@@ -1119,27 +1097,7 @@ impl CanisterManager {
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
         validate_controller(canister, &sender)?;
 
-        let stop_contexts = match &mut canister.system_state.status {
-            CanisterStatus::Stopping { stop_contexts, .. } => std::mem::take(stop_contexts),
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
-                Vec::new() // No stop contexts to return.
-            }
-        };
-
-        // Transition the canister into "running".
-        let status = match &canister.system_state.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            }
-            | CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => CanisterStatus::Running {
-                call_context_manager: call_context_manager.clone(),
-            },
-            CanisterStatus::Stopped => CanisterStatus::new_running(),
-        };
-        canister.system_state.status = status;
+        let stop_contexts = canister.system_state.start_canister();
         canister.system_state.canister_version += 1;
 
         Ok(stop_contexts)
@@ -2990,25 +2948,14 @@ pub fn uninstall_canister(
         AddCanisterChangeToHistory::No => {}
     };
 
-    let mut rejects = Vec::new();
     let canister_id = canister.canister_id();
-    if let Some(call_context_manager) = canister.system_state.call_context_manager_mut() {
-        // Mark all call contexts as deleted and prepare reject responses.
-        // Note that callbacks will be unregistered at a later point once they are
-        // received.
-        for call_context in call_context_manager.call_contexts_mut() {
-            // Mark the call context as deleted.
-            call_context.mark_deleted();
-
-            if call_context.has_responded() {
-                // Call context has already been responded to. Nothing to do.
-                continue;
-            }
-
-            // Generate a reject response.
+    let reject_responses = canister
+        .system_state
+        .delete_all_call_contexts(|call_context| {
+            // Generate reject responses for ingress and canister messages.
             match call_context.call_origin() {
                 CallOrigin::Ingress(user_id, message_id) => {
-                    rejects.push(Response::Ingress(IngressResponse {
+                    Some(Response::Ingress(IngressResponse {
                         message_id: message_id.clone(),
                         status: IngressStatus::Known {
                             receiver: canister_id.get(),
@@ -3019,10 +2966,10 @@ pub fn uninstall_canister(
                                 "Canister has been uninstalled.",
                             )),
                         },
-                    }));
+                    }))
                 }
                 CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
-                    rejects.push(Response::Canister(CanisterResponse {
+                    Some(Response::Canister(CanisterResponse {
                         originator: *caller_canister_id,
                         respondent: canister_id,
                         originator_reply_callback: *callback_id,
@@ -3032,7 +2979,7 @@ pub fn uninstall_canister(
                             "Canister has been uninstalled.",
                         )),
                         deadline: *deadline,
-                    }));
+                    }))
                 }
                 CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
                     log,
@@ -3040,24 +2987,12 @@ pub fn uninstall_canister(
                 ),
                 CallOrigin::SystemTask => {
                     // Cannot respond to system tasks. Nothing to do.
+                    None
                 }
             }
-        }
+        });
 
-        // Mark all call contexts as responded to.
-        let call_context_ids = call_context_manager
-            .call_contexts()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        for call_context_id in call_context_ids {
-            call_context_manager
-                .mark_responded(call_context_id)
-                .unwrap(); // Safe to do, we only just collected the IDs above.
-        }
-    }
-
-    rejects
+    reject_responses
 }
 
 /// Holds necessary information for the deterministic time slicing execution of

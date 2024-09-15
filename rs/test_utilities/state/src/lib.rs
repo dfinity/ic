@@ -21,9 +21,8 @@ use ic_replicated_state::{
     metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
-    SystemState,
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -345,29 +344,9 @@ impl CanisterStateBuilder {
             system_state.queues_mut().push_ingress(ingress)
         }
 
-        // Set call contexts. Because there is no way pass in a `CallContext`
-        // object to `CallContextManager`, we have to construct them in this
-        // bizarre way.
+        // Set call contexts.
         for call_context in self.call_contexts.into_iter() {
-            let call_context_manager = system_state.call_context_manager_mut().unwrap();
-            let call_context_id = call_context_manager.new_call_context(
-                call_context.call_origin().clone(),
-                call_context.available_cycles(),
-                call_context.time(),
-                call_context.metadata().clone(),
-            );
-
-            if call_context.has_responded() {
-                call_context_manager
-                    .mark_responded(call_context_id)
-                    .unwrap();
-            }
-            let call_context_in_call_context_manager = call_context_manager
-                .call_context_mut(call_context_id)
-                .unwrap();
-            if call_context.is_deleted() {
-                call_context_in_call_context_manager.mark_deleted();
-            }
+            system_state.with_call_context(call_context);
         }
 
         // Add inputs to the input queue.
@@ -688,13 +667,6 @@ pub fn get_stopped_canister_with_controller(
     }
 }
 
-/// Convert a running canister into a stopped canister. This functionality
-/// is added here since it is only allowed in tests.
-pub fn running_canister_into_stopped(mut canister: CanisterState) -> CanisterState {
-    canister.system_state.status = CanisterStatus::Stopped;
-    canister
-}
-
 /// Returns a `ReplicatedState` with SubnetType::Application, variable amount of canisters, input
 /// messages per canister and methods that are to be called.
 pub fn get_initial_state(canister_num: u64, message_num_per_canister: u64) -> ReplicatedState {
@@ -814,29 +786,31 @@ pub fn register_callback(
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
-    let call_context_manager = canister_state
+    let call_context_id = canister_state
         .system_state
-        .call_context_manager_mut()
+        .new_call_context(
+            CallOrigin::SystemTask,
+            Cycles::zero(),
+            Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, UNIX_EPOCH),
+        )
         .unwrap();
-    let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::SystemTask,
-        Cycles::zero(),
-        Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
-    );
 
-    call_context_manager.register_callback(Callback::new(
-        call_context_id,
-        originator,
-        respondent,
-        Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
-        WasmClosure::new(0, 2),
-        WasmClosure::new(0, 2),
-        None,
-        deadline,
-    ))
+    canister_state
+        .system_state
+        .register_callback(Callback::new(
+            call_context_id,
+            originator,
+            respondent,
+            Cycles::zero(),
+            Cycles::new(42),
+            Cycles::new(84),
+            WasmClosure::new(0, 2),
+            WasmClosure::new(0, 2),
+            None,
+            deadline,
+        ))
+        .unwrap()
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.

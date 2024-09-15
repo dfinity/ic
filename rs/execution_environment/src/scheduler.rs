@@ -35,7 +35,7 @@ use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
+    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
     MAX_WASM_MEMORY_IN_BYTES,
@@ -592,9 +592,9 @@ impl SchedulerImpl {
             }
 
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
-            match canister.system_state.status {
-                CanisterStatus::Running { .. } => {}
-                CanisterStatus::Stopping { .. } | CanisterStatus::Stopped => {
+            match canister.system_state.status() {
+                CanisterStatusType::Running => {}
+                CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
                     continue;
                 }
             }
@@ -2158,16 +2158,15 @@ fn observe_replicated_state_metrics(
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
-        match &canister.system_state.status {
+        match canister.system_state.get_status() {
             CanisterStatus::Running { .. } => num_running_canisters += 1,
             CanisterStatus::Stopping { stop_contexts, .. } => {
                 num_stopping_canisters += 1;
                 // TODO(EXC-1466): Remove once all calls have `call_id` present.
-                let stop_contexts_with_missing_call_id: Vec<&StopCanisterContext> = stop_contexts
+                num_stop_canister_calls_without_call_id += stop_contexts
                     .iter()
                     .take_while(|stop_context| stop_context.call_id().is_none())
-                    .collect();
-                num_stop_canister_calls_without_call_id += stop_contexts_with_missing_call_id.len();
+                    .count();
             }
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }

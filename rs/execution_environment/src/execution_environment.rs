@@ -54,7 +54,7 @@ use ic_replicated_state::{
         ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -82,7 +82,7 @@ use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::{Into, TryFrom},
-    fmt, mem,
+    fmt,
     str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -3417,88 +3417,45 @@ impl ExecutionEnvironment {
         let time = state.time();
 
         for canister in canister_states.values_mut() {
-            let canister_id = canister.canister_id();
-            match canister.system_state.status {
-                // Canister is not stopping so we can skip it.
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
-
-                // Canister is ready to stop.
-                CanisterStatus::Stopping { .. } if canister.system_state.ready_to_stop() => {
-                    // Transition the canister to "stopped".
-                    let stopping_status =
-                        mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-                    canister.system_state.canister_version += 1;
-
-                    // Reply to all pending stop_canister requests.
-                    if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                        for stop_context in stop_contexts {
-                            self.reply_to_stop_context(
-                                &stop_context,
-                                &mut state,
-                                canister_id,
-                                time,
-                                StopCanisterReply::Completed,
-                            );
+            let (stopped, stop_contexts) =
+                canister.system_state.try_stop_canister(|stop_context| {
+                    match stop_context.call_id() {
+                        Some(call_id) => {
+                            let sc_time = state
+                                .metadata
+                                .subnet_call_context_manager
+                                .get_time_for_stop_canister_call(call_id);
+                            match sc_time {
+                                Some(t) => time >= t + self.config.stop_canister_timeout_duration,
+                                // Should never hit this case unless there's a
+                                // bug but handle it for robustness.
+                                None => false,
+                            }
                         }
+                        // Should only happen for old stop requests that existed
+                        // before call ids were added.
+                        None => false,
                     }
-                }
-
-                // Canister is stopping, but not yet ready to stop.
-                CanisterStatus::Stopping {
-                    ref mut stop_contexts,
-                    ..
-                } => {
-                    // Respond to any stop contexts that have timed out.
-                    self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
-                }
+                });
+            if stopped {
+                canister.system_state.canister_version += 1;
+            }
+            for stop_context in stop_contexts.iter() {
+                self.reply_to_stop_context(
+                    stop_context,
+                    &mut state,
+                    canister.canister_id(),
+                    time,
+                    if stopped {
+                        StopCanisterReply::Completed
+                    } else {
+                        StopCanisterReply::Timeout
+                    },
+                );
             }
         }
         state.put_canister_states(canister_states);
         state
-    }
-
-    fn timeout_expired_requests(
-        &self,
-        time: Time,
-        canister_id: CanisterId,
-        stop_contexts: &mut Vec<StopCanisterContext>,
-        state: &mut ReplicatedState,
-    ) {
-        // Identify if any of the stop contexts have expired.
-        let (expired_stop_contexts, remaining_stop_contexts) = std::mem::take(stop_contexts)
-            .into_iter()
-            .partition(|stop_context| {
-                match stop_context.call_id() {
-                    Some(call_id) => {
-                        let sc_time = state
-                            .metadata
-                            .subnet_call_context_manager
-                            .get_time_for_stop_canister_call(call_id);
-                        match sc_time {
-                            Some(t) => time >= t + self.config.stop_canister_timeout_duration,
-                            // Should never hit this case unless there's a
-                            // bug but handle it for robustness.
-                            None => false,
-                        }
-                    }
-                    // Should only happen for old stop requests that existed
-                    // before call ids were added.
-                    None => false,
-                }
-            });
-
-        for stop_context in expired_stop_contexts {
-            // Respond to expired requests that they timed out.
-            self.reply_to_stop_context(
-                &stop_context,
-                state,
-                canister_id,
-                time,
-                StopCanisterReply::Timeout,
-            );
-        }
-
-        *stop_contexts = remaining_stop_contexts;
     }
 
     fn reject_unexpected_ingress(&self, method: Ic00Method) -> ExecuteSubnetMessageResult {

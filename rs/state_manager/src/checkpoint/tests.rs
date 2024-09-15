@@ -9,7 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{NextScheduledMethod, WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
-    testing::ReplicatedStateTesting,
+    testing::{ReplicatedStateTesting, SystemStateTesting},
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
 use ic_state_layout::{
@@ -455,8 +455,8 @@ fn can_recover_a_stopping_canister() {
 
         let canister = recovered_state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister.system_state.status,
-            CanisterStatus::Stopping {
+            canister.system_state.get_status(),
+            &CanisterStatus::Stopping {
                 stop_contexts: vec![stop_context],
                 call_context_manager: CallContextManager::default(),
             }

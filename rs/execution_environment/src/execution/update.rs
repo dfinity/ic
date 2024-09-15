@@ -327,14 +327,13 @@ impl UpdateHelper {
 
         let call_context_id = canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .new_call_context(
                 original.call_origin.clone(),
                 original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
-            );
+            )
+            .unwrap();
 
         let initial_cycles_balance = canister.system_state.balance();
 
@@ -475,14 +474,8 @@ impl UpdateHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(
-                self.call_context_id,
-                None,
-                output.wasm_result,
-                instructions_used,
-            );
+            .on_canister_result(self.call_context_id, output.wasm_result, instructions_used)
+            .unwrap();
 
         let response = action_to_response(
             &self.canister,

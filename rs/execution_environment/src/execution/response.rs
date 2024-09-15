@@ -524,17 +524,15 @@ impl ResponseHelper {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
+        self.canister
+            .system_state
+            .unregister_callback(original.callback_id)
+            .unwrap();
         let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(
-                original.call_context_id,
-                Some(original.callback_id),
-                result,
-                instructions_used,
-            );
+            .on_canister_result(original.call_context_id, result, instructions_used)
+            .unwrap();
         let response = action_to_response(
             &self.canister,
             action,

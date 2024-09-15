@@ -17,6 +17,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
@@ -33,7 +34,7 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
+use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -3066,9 +3067,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
-                CanisterStatusView::Running => Ok(1),
-                CanisterStatusView::Stopping => Ok(2),
-                CanisterStatusView::Stopped => Ok(3),
+                CanisterStatusType::Running => Ok(1),
+                CanisterStatusType::Stopping => Ok(2),
+                CanisterStatusType::Stopped => Ok(3),
             },
         };
         trace_syscall!(self, CanisterStatus, result);

@@ -1,4 +1,3 @@
-use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
@@ -523,12 +522,9 @@ fn stopping_canister_rejects_requests() {
     test.execute_message(a_id);
     test.induct_messages();
     test.stop_canister(b_id);
-    assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+    assert_eq!(
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -570,8 +566,8 @@ fn stopped_canister_rejects_requests() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -1448,7 +1444,7 @@ fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls
             if let CanisterStatus::Stopping {
                 call_context_manager: _,
                 stop_contexts,
-            } = &canister.system_state.status
+            } = canister.system_state.get_status()
             {
                 Some(stop_contexts.iter().cloned())
             } else {

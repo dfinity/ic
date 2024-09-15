@@ -216,14 +216,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     system_state
 }
 

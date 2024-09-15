@@ -1022,7 +1022,7 @@ fn serialize_canister_to_tip(
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
-            status: canister_state.system_state.status.clone(),
+            status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics

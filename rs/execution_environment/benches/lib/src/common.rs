@@ -112,14 +112,13 @@ where
     );
     let call_context_id = canister_state
         .system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     let callback = Callback::new(
         call_context_id,
         canister_test_id(LOCAL_CANISTER_ID),

@@ -1728,8 +1728,8 @@ fn stop_a_running_canister() {
                 .canister_state(&canister_id)
                 .unwrap()
                 .system_state
-                .status,
-            CanisterStatus::Stopping {
+                .get_status(),
+            &CanisterStatus::Stopping {
                 stop_contexts: vec![stop_context],
                 call_context_manager: CallContextManager::default(),
             }
