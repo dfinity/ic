@@ -946,7 +946,9 @@ impl CallContextManager {
 
             if !call_context.has_responded() {
                 // Generate a reject response.
-                reject(call_context).map(|response| reject_responses.push(response));
+                if let Some(response) = reject(call_context) {
+                    reject_responses.push(response)
+                }
 
                 call_context.mark_responded();
                 self.stats

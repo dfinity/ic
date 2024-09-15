@@ -291,7 +291,7 @@ impl SystemStateChanges {
 
                 let call_context = system_state
                     .withdraw_cycles(context_id, call_context_balance_taken)
-                    .map_err(|message| Self::error(message))?;
+                    .map_err(Self::error)?;
                 if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
                         CallOrigin::CanisterUpdate(origin_canister_id, _, _)

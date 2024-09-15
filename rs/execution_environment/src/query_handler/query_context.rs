@@ -515,7 +515,10 @@ impl<'a> QueryContext<'a> {
         instructions_used: NumInstructions,
     ) -> CallContextAction {
         if let Some(callback_id) = callback_id {
-            canister.system_state.unregister_callback(callback_id);
+            canister
+                .system_state
+                .unregister_callback(callback_id)
+                .unwrap();
         }
         canister
             .system_state
