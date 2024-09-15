@@ -11,20 +11,33 @@ set -eufo pipefail
 
 EXIT_STATUS=0
 
-MAINNET_NNS_SUBNET_IC_VERSION="$( \
-  cat testnet/mainnet_revisions.json | \
-  jq '.subnets."tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"' -r)"
+# Retrieve the IC version (git revision) of the mainnet NNS subnet:
+MAINNET_NNS_SUBNET_IC_VERSION="$(
+    cat testnet/mainnet_revisions.json \
+        | jq '.subnets."tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"' -r
+)"
 
+# Write this IC version to mainnet-artifacts.bzl to give bazel access to it:
 sed -i "s/MAINNET_NNS_SUBNET_IC_VERSION = \".*\"/MAINNET_NNS_SUBNET_IC_VERSION = \"$MAINNET_NNS_SUBNET_IC_VERSION\"/" mainnet-artifacts.bzl
 
+# Download the SHA256SUMS file for the binaries of the IC version:
+binaries_SHA256SUMS="$(mktemp -t binaries_SHA256SUMS.XXXX)"
+trap "rm -f $binaries_SHA256SUMS" EXIT
+curl "https://download.dfinity.systems/ic/$MAINNET_NNS_SUBNET_IC_VERSION/binaries/x86_64-linux/SHA256SUMS" \
+    --silent --fail -o "$binaries_SHA256SUMS"
+
+# Construct a sed script that subsitutes the old SHA256 hashes with the new SHA256 hashes
+# found in the previously downloaded SHA256SUMS file:
 sed_script=""
 while IFS= read -r line; do
     binary_name="$(echo "$line" | cut -d: -f1 | tr -d '"' | xargs)"
     existing_sha256="$(echo "$line" | cut -d: -f4 | tr -d '"},' | xargs)"
-    sha256="$(curl "https://download.dfinity.systems/ic/$MAINNET_NNS_SUBNET_IC_VERSION/binaries/x86_64-linux/${binary_name}.gz" --silent --fail | sha256sum | cut -d' ' -f1)"
+    sha256="$(grep "$binary_name" "$binaries_SHA256SUMS" | cut -d' ' -f1)"
     sed_script+="s/$existing_sha256/$sha256/;"
-done <<< $(grep '"rev": MAINNET_NNS_SUBNET_IC_VERSION' mainnet-artifacts.bzl | grep -v '#')
+done <<<$(grep '"rev": MAINNET_NNS_SUBNET_IC_VERSION' mainnet-artifacts.bzl | grep -v '#')
 
+# Apply this sed script to the PUBLISHED_BINARIES dictionary in mainnet-artifacts.bzl
+# such that bazel will use the new binaries of IC version:
 sed -i "$sed_script" mainnet-artifacts.bzl
 
 # Stage files and check if anything changed
