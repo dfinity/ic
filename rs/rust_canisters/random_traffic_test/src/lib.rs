@@ -19,12 +19,12 @@ pub struct Config {
 }
 
 impl Default for Config {
-    /// Default using the full range of payloads, no delayed responses and no downstream calls.
+    /// Default using the full range of payloads and no delayed responses.
     fn default() -> Self {
         Self {
+            receivers: vec![],
             call_bytes_min: 0,
             call_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
-            receivers: vec![],
             reply_bytes_min: 0,
             reply_bytes_max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32,
             instructions_count_min: 0,
@@ -169,6 +169,3 @@ pub fn extract_metrics(records: &Vec<Record>) -> Metrics {
     }
     metrics
 }
-
-// Enable Candid export
-ic_cdk::export_candid!();

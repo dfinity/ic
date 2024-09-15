@@ -161,8 +161,7 @@ fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
 fn should_reply_now() -> bool {
     RNG.with_borrow_mut(|rng| {
         WeightedIndex::new([REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
-            .map(|dist| dist.sample(rng) == 0)
-            .unwrap_or(true)
+            .map_or(true, |dist| dist.sample(rng) == 0)
     })
 }
 
