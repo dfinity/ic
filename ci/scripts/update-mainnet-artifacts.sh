@@ -25,7 +25,11 @@ curl "https://download.dfinity.systems/ic/$MAINNET_NNS_SUBNET_IC_VERSION/binarie
     --silent --fail -o "$binaries_SHA256SUMS"
 
 # Construct a sed script that subsitutes the old SHA256 hashes with the new SHA256 hashes
-# found in the previously downloaded SHA256SUMS file:
+# found in the previously downloaded SHA256SUMS file.
+# Note that we only update the sha256s of binaries of revision MAINNET_NNS_SUBNET_IC_VERSION.
+# Binaries that track a different revision are left alone. This allows us to temporarily
+# track a different revision for a binary (in case the mainnet binary is incompatible with HEAD in some way)
+# without this script overwriting our override.
 sed_script=""
 while IFS= read -r line; do
     binary_name="$(echo "$line" | cut -d: -f1 | tr -d '"' | xargs)"
