@@ -405,14 +405,13 @@ fn canister_post_upgrade() {
 }
 
 #[cfg(feature = "test")]
-#[candid_method(update)]
-#[update]
-fn set_time_warp_(new_time_warp: TimeWarp) {
+#[update(hidden = true)]
+fn set_time_warp(new_time_warp: TimeWarp) {
     governance_mut().set_time_warp(GovTimeWarp::from(new_time_warp));
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
-#[update]
+#[update(hidden = true)]
 async fn forward_vote(
     (neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote),
 ) -> ManageNeuronResponse {
@@ -428,14 +427,14 @@ async fn forward_vote(
     .await
 }
 
-#[update]
+#[update(hidden = true)]
 fn transfer_notification() {
     debug_log("neuron_stake_transfer_notification");
     check_caller_is_ledger();
     panic!("Method removed. Please use ManageNeuron::ClaimOrRefresh.",)
 }
 
-#[update]
+#[update(hidden = true)]
 fn transfer_notification_pb() {
     debug_log("neuron_stake_transfer_notification_pb");
     check_caller_is_ledger();
@@ -445,7 +444,6 @@ fn transfer_notification_pb() {
 // DEPRECATED: Please use ManageNeuron::ClaimOrRefresh.
 //
 // Just redirects to ManageNeuron.
-#[candid_method(update)]
 #[update]
 async fn claim_or_refresh_neuron_from_account(
     claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
@@ -480,7 +478,6 @@ async fn claim_or_refresh_neuron_from_account(
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
-#[candid_method(update)]
 #[update]
 fn claim_gtc_neurons(
     new_controller: PrincipalId,
@@ -491,7 +488,6 @@ fn claim_gtc_neurons(
     Ok(governance_mut().claim_gtc_neurons(&caller(), new_controller, neuron_ids)?)
 }
 
-#[candid_method(update)]
 #[update]
 async fn transfer_gtc_neuron(
     donor_neuron_id: NeuronIdProto,
@@ -504,18 +500,17 @@ async fn transfer_gtc_neuron(
         .await?)
 }
 
-#[candid_method(update)]
 #[update]
-async fn manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
+async fn manage_neuron(_manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("manage_neuron");
-    let response = governance_mut()
-        .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(manage_neuron)))
-        .await;
-    ManageNeuronResponse::from(response)
+    ManageNeuronResponse::from(
+        governance_mut()
+            .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(_manage_neuron)))
+            .await,
+    )
 }
 
 #[cfg(feature = "test")]
-#[candid_method(update, rename = "update_neuron")]
 #[update]
 /// Internal method for calling update_neuron.
 fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
@@ -526,7 +521,6 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
         .map(GovernanceError::from)
 }
 
-#[candid_method(update)]
 #[update]
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
@@ -535,7 +529,6 @@ fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronRes
     ManageNeuronResponse::from(response)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_full_neuron_by_id_or_subaccount(
     by: NeuronIdOrSubaccount,
@@ -550,7 +543,6 @@ fn get_full_neuron_by_id_or_subaccount(
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
     debug_log("get_full_neuron");
@@ -560,7 +552,6 @@ fn get_full_neuron(neuron_id: NeuronId) -> Result<Neuron, GovernanceError> {
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_neuron_info(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     debug_log("get_neuron_info");
@@ -570,7 +561,6 @@ fn get_neuron_info(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_neuron_info_by_id_or_subaccount(
     by: NeuronIdOrSubaccount,
@@ -585,7 +575,6 @@ fn get_neuron_info_by_id_or_subaccount(
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_proposal_info(id: ProposalId) -> Option<ProposalInfo> {
     debug_log("get_proposal_info");
@@ -594,7 +583,6 @@ fn get_proposal_info(id: ProposalId) -> Option<ProposalInfo> {
         .map(ProposalInfo::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_neurons_fund_audit_info(
     request: GetNeuronsFundAuditInfoRequest,
@@ -605,7 +593,6 @@ fn get_neurons_fund_audit_info(
     GetNeuronsFundAuditInfoResponse::from(intermediate)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_pending_proposals() -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
@@ -616,21 +603,18 @@ fn get_pending_proposals() -> Vec<ProposalInfo> {
         .collect()
 }
 
-#[candid_method(query)]
 #[query]
 fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     debug_log("list_proposals");
     governance().list_proposals(&caller(), &(req.into())).into()
 }
 
-#[candid_method(query)]
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
     governance().list_neurons(&(req.into()), caller()).into()
 }
 
-#[candid_method(query)]
 #[query]
 fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
     debug_log("get_metrics");
@@ -640,7 +624,6 @@ fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(update)]
 #[update]
 async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError>
 {
@@ -649,7 +632,6 @@ async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderReward
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 
-#[candid_method(query)]
 #[query]
 fn list_node_provider_rewards(
     req: ListNodeProviderRewardsRequest,
@@ -664,9 +646,8 @@ fn list_node_provider_rewards(
     ListNodeProviderRewardsResponse { rewards }
 }
 
-#[candid_method(query)]
 #[query]
-fn list_known_neurons_() -> ListKnownNeuronsResponse {
+fn list_known_neurons() -> ListKnownNeuronsResponse {
     debug_log("list_known_neurons");
     let response = governance().list_known_neurons();
     ListKnownNeuronsResponse::from(response)
@@ -674,7 +655,7 @@ fn list_known_neurons_() -> ListKnownNeuronsResponse {
 
 /// DEPRECATED: Always panics. Use manage_neuron instead.
 /// TODO(NNS1-413): Remove this once we are sure that there are no callers.
-#[update]
+#[update(hidden = true)]
 fn submit_proposal(
     (_proposer, _proposal, _caller): (NeuronId, Proposal, PrincipalId),
 ) -> ProposalId {
@@ -686,7 +667,7 @@ fn submit_proposal(
 }
 
 /// DEPRECATED: Proposals are now executed on every vote.
-#[update]
+#[update(hidden = true)]
 fn execute_eligible_proposals() {
     println!(
         "{}execute_eligible_proposals -- This method does nothing!",
@@ -694,7 +675,6 @@ fn execute_eligible_proposals() {
     )
 }
 
-#[candid_method(query)]
 #[query]
 fn get_latest_reward_event() -> RewardEvent {
     debug_log("get_latest_reward_event");
@@ -707,7 +687,6 @@ fn get_latest_reward_event() -> RewardEvent {
 /// Neurons that directly follow the former in the topic `NeuronManagement`
 /// are included. Summarily, the Neuron IDs in the set returned can be queried
 /// by `get_full_neuron` without getting an authorization error.
-#[candid_method(query)]
 #[query]
 fn get_neuron_ids() -> Vec<NeuronId> {
     debug_log("get_neuron_ids");
@@ -720,7 +699,6 @@ fn get_neuron_ids() -> Vec<NeuronId> {
         .collect()
 }
 
-#[candid_method(query)]
 #[query]
 fn get_network_economics_parameters() -> NetworkEconomics {
     debug_log("get_network_economics_parameters");
@@ -772,7 +750,6 @@ fn list_neurons_pb() {
     over(protobuf, list_neurons)
 }
 
-#[candid_method(update)]
 #[update]
 fn update_node_provider(req: UpdateNodeProvider) -> Result<(), GovernanceError> {
     debug_log("update_node_provider");
@@ -781,7 +758,6 @@ fn update_node_provider(req: UpdateNodeProvider) -> Result<(), GovernanceError> 
 
 /// Obsolete, so always returns an error. Please use `settle_neurons_fund_participation`
 /// instead.
-#[candid_method(update)]
 #[update]
 async fn settle_community_fund_participation(
     _request: SettleCommunityFundParticipation,
@@ -795,7 +771,6 @@ async fn settle_community_fund_participation(
     ))
 }
 
-#[candid_method(update)]
 #[update]
 async fn settle_neurons_fund_participation(
     request: SettleNeuronsFundParticipationRequest,
@@ -810,7 +785,6 @@ async fn settle_neurons_fund_participation(
 
 /// Return the NodeProvider record where NodeProvider.id == caller(), if such a
 /// NodeProvider record exists.
-#[candid_method(query)]
 #[query]
 fn get_node_provider_by_caller(_: ()) -> Result<NodeProvider, GovernanceError> {
     debug_log("get_node_provider_by_caller");
@@ -820,7 +794,6 @@ fn get_node_provider_by_caller(_: ()) -> Result<NodeProvider, GovernanceError> {
         .map_err(GovernanceError::from)
 }
 
-#[candid_method(query)]
 #[query]
 fn list_node_providers() -> ListNodeProvidersResponse {
     debug_log("list_node_providers");
@@ -832,7 +805,6 @@ fn list_node_providers() -> ListNodeProvidersResponse {
     ListNodeProvidersResponse { node_providers }
 }
 
-#[candid_method(query)]
 #[query]
 fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProviderRewards> {
     governance()
@@ -840,12 +812,12 @@ fn get_most_recent_monthly_node_provider_rewards() -> Option<MonthlyNodeProvider
         .map(MonthlyNodeProviderRewards::from)
 }
 
-#[query]
+#[query(hidden = true)]
 fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
     governance().neuron_data_validation_summary()
 }
 
-#[query]
+#[query(hidden = true)]
 fn get_migrations() -> Migrations {
     let response = governance()
         .heap_data
@@ -855,7 +827,6 @@ fn get_migrations() -> Migrations {
     Migrations::from(response)
 }
 
-#[candid_method(query)]
 #[query]
 fn get_restore_aging_summary() -> RestoreAgingSummary {
     let response = governance().get_restore_aging_summary().unwrap_or_default();
@@ -1032,7 +1003,7 @@ fn add_proposal_id_to_add_wasm_request(
 
 /// Deprecated: The blessed alternative is to do (the equivalent of)
 /// `dfx canister metadata $CANISTER 'candid:service'`.
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> String {
     #[cfg(not(feature = "test"))]
     let declared_interface = include_str!("governance.did");
