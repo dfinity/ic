@@ -59,7 +59,7 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
-
+    /// Time spent in queue for ingress message before executing it.
     pub(crate) canister_ingress_queue_latency: Histogram,
 }
 
