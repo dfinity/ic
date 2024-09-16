@@ -969,6 +969,6 @@ filegroup(
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
-    sha256 = "d74b049f397af82c55cdf0a02f8b56636e45c83e181998faf8854d66b1b6fc5b",
-    url = "https://github.com/mraszyk/examples/releases/download/rust-basic-bitcoin-24-09-14/basic_bitcoin.wasm.gz",
+    sha256 = "2a428e8d35518ce22002e498f7d618a9eeeddf57371f965e92cf480dd3cbd046",
+    url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-24-09-16/basic_bitcoin.wasm.gz",
 )
