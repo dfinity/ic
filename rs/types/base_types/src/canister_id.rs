@@ -2,7 +2,7 @@ use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].
@@ -167,9 +167,9 @@ impl TryFrom<PrincipalId> for CanisterId {
 impl TryFrom<&[u8]> for CanisterId {
     type Error = CanisterIdError;
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self::unchecked_from_principal(
+        Self::try_from(
             PrincipalId::try_from(bytes).map_err(CanisterIdError::PrincipalIdParseError)?,
-        ))
+        )
     }
 }
 
@@ -233,12 +233,14 @@ impl<'de> Deserialize<'de> for CanisterId {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let result = PrincipalId::deserialize(deserializer)?;
-        // TODO: Ideally, instead of unchecked_from_principal, we'd use
-        // try_from_principal_id, but that would break people who are relying on
-        // the original behavior of CanisterId::try_from(principal_id), which
-        // would ALWAYS return Ok.
-        Ok(CanisterId::unchecked_from_principal(result))
+        // Not all principals are valid inside a CanisterId.
+        // Therefore, deserialization must explicitly
+        // transform the PrincipalId into a CanisterId.
+        // A derived implementation of Deserialize would open
+        // the door to invariant violation.
+        let res = CanisterId::try_from(PrincipalId::deserialize(deserializer)?);
+        let id = res.map_err(D::Error::custom)?;
+        Ok(id)
     }
 }
 
