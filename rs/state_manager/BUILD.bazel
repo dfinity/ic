@@ -80,6 +80,7 @@ rust_test(
         "//rs/types/wasm_types",
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
+        "@crate_index//:pretty_assertions",
         "@crate_index//:proptest",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
