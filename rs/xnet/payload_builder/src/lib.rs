@@ -892,7 +892,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .network_topology
                     .subnets
                     .get(&subnet_id)
-                    .map_or(Application, |subnet| subnet.subnet_type); // Technically unwrap() would work here, but this is safer.
+                    .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
                     return None;
                 }
