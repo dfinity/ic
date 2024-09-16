@@ -45,7 +45,7 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
-use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
+use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
@@ -1545,16 +1545,9 @@ impl XNetClientImpl {
         #[cfg(test)]
         let https = TlsConnector::new_for_tests(tls);
 
-        let crt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .thread_name("XNet_Payload_Thread".to_string())
-            .enable_all()
-            .build()
-            .unwrap();
-
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
-            Client::builder(ExecuteOnRuntime(crt.handle().clone()))
+            Client::builder(hyper_util::rt::TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);
