@@ -1,6 +1,6 @@
 = GuestOS Config Store
 
-This document describes the contents of the GuestOS *config* partition (*/dev/vda3* in the GuestOS disk image). The config partition stores information that must be preserved across system upgrades and needs to be available during early boot time. Consequently, this information cannot reside within the encrypted payload data partition.
+This document calls out some of the contents of the GuestOS *config* partition (*/dev/vda3* in the GuestOS disk image). The config partition stores information that must be preserved across system upgrades and needs to be available during early boot time. Consequently, this information cannot reside within the encrypted payload data partition.
 
 Currently, all contents in the config partition are stored as plain-text without integrity protection.
 
