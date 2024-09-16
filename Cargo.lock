@@ -1849,7 +1849,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.212.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -5391,6 +5391,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "slog",
+ "thiserror",
  "tokio",
  "tower 0.4.13",
  "tracing",
@@ -8002,7 +8003,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "tower 0.4.13",
- "wasmparser 0.212.0",
+ "wasmparser 0.215.0",
 ]
 
 [[package]]
@@ -8056,9 +8057,9 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
- "wasm-encoder 0.212.0",
- "wasmparser 0.212.0",
- "wasmprinter 0.212.0",
+ "wasm-encoder 0.215.0",
+ "wasmparser 0.215.0",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
  "wast",
@@ -8167,7 +8168,7 @@ dependencies = [
  "tokio",
  "tower 0.4.13",
  "tracing",
- "wasmparser 0.212.0",
+ "wasmparser 0.215.0",
  "wat",
 ]
 
@@ -9507,8 +9508,9 @@ name = "ic-nervous-system-canisters"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "candid",
+ "dfn_candid",
  "dfn_core",
- "dfn_protobuf",
  "ic-base-types",
  "ic-ledger-core",
  "ic-nervous-system-common",
@@ -9562,7 +9564,6 @@ dependencies = [
  "by_address",
  "bytes",
  "dfn_core",
- "dfn_protobuf",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
@@ -9668,7 +9669,6 @@ dependencies = [
  "candid",
  "canister-test",
  "cycles-minting-canister",
- "dfn_protobuf",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types",
@@ -12489,7 +12489,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower 0.4.13",
- "wasmprinter 0.212.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -13052,9 +13052,9 @@ dependencies = [
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
- "wasm-encoder 0.212.0",
- "wasmparser 0.212.0",
- "wasmprinter 0.212.0",
+ "wasm-encoder 0.215.0",
+ "wasmparser 0.215.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -14671,7 +14671,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.212.0",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -21156,7 +21156,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501940df4418b8929eb6d52f1aade1fdd15a5b86c92453cb696e3c906bd3fc33"
 dependencies = [
  "leb128",
- "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21166,6 +21165,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb56df3e06b8e6b77e37d2969a50ba51281029a9aeb3855e76b7f49b6418847"
 dependencies = [
  "leb128",
+ "wasmparser 0.215.0",
 ]
 
 [[package]]
@@ -21207,17 +21207,6 @@ dependencies = [
  "indexmap 2.5.0",
  "semver",
  "serde",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.212.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21345,7 +21334,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.215.0",
  "wasmparser 0.215.0",
- "wasmprinter 0.215.0",
+ "wasmprinter",
  "wasmtime-types",
 ]
 

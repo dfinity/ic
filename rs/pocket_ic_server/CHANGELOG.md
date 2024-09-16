@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a `bitcoind` process is listening at an address and port specified in an additional argument
   of the endpoint `/instances/` to create a new PocketIC instance.
 
+### Fixed
+- Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
+
 
 
 ## 6.0.0 - 2024-09-12

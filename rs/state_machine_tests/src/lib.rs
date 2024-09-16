@@ -1539,10 +1539,7 @@ impl StateMachine {
                 }
             })
             .collect();
-        self.canister_http_pool
-            .write()
-            .unwrap()
-            .apply_changes(changeset);
+        self.canister_http_pool.write().unwrap().apply(changeset);
         let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
         if let Some(ref query_stats) = query_stats {
             self.query_stats_payload_builder.purge(query_stats);
@@ -2260,7 +2257,7 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
-            self.canister_http_pool.write().unwrap().apply_changes(vec![
+            self.canister_http_pool.write().unwrap().apply(vec![
                 CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
             ]);
         }
