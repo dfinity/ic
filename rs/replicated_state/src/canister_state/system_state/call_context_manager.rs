@@ -415,8 +415,12 @@ impl CallContextManagerStats {
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
-    /// Maps call context to its responded status.
+
+    /// Call contexts (including deleted ones) that still have open callbacks.
     call_contexts: BTreeMap<CallContextId, CallContext>,
+
+    /// Callbacks still awaiting response, plus the callback of the currently
+    /// paused or aborted DTS response execution, if any.
     callbacks: BTreeMap<CallbackId, Arc<Callback>>,
 
     /// Guaranteed response and overall callback and call context stats.
@@ -601,27 +605,15 @@ impl CallContextManager {
             Some(callback) if response.respondent != callback.respondent
                     || response.originator != callback.originator
                     || response.deadline != callback.deadline => {
-                Err(StateError::NonMatchingResponse {
-                    err_str: format!(
+                Err(StateError::non_matching_response(format!(
                         "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
                         callback.originator, callback.respondent, Time::from(callback.deadline)
-                    ),
-                    originator: response.originator,
-                    callback_id: response.originator_reply_callback,
-                    respondent: response.respondent,
-                    deadline: response.deadline,
-                })
+                    ), response))
             }
             Some(_) => Ok(()),
             None => {
                 // Received an unknown callback ID.
-                Err(StateError::NonMatchingResponse {
-                    err_str: "unknown callback ID".to_string(),
-                    originator: response.originator,
-                    callback_id: response.originator_reply_callback,
-                    respondent: response.respondent,
-                    deadline: response.deadline,
-                })
+                Err(StateError::non_matching_response("unknown callback ID", response))
             }
         }
     }

@@ -18,12 +18,13 @@ use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
-    CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse,
+    Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
@@ -101,6 +102,9 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///    queue is at capacity. See https://github.com/dfinity/ic/pull/1293 for an
 ///    attempted implementation.
 ///
+///  * `callbacks_with_enqueued_response` contains the precise set of
+///    `CallbackIds` of all inbound responses.
+///
 /// # Soft invariants
 ///
 ///  * `QueueStats`' input / output queue slot reservation stats are consistent
@@ -144,6 +148,12 @@ pub struct CanisterQueues {
     /// and remote subnet senders; as well as within the local subnet senders and
     /// remote subnet senders groups.
     input_schedule: InputSchedule,
+
+    /// The callback IDs of all responses enqueued in the input queues.
+    ///
+    /// Used for response deduplication (whether due to a locally generated reject
+    /// response to a best-effort call; or due to a malicious / buggy subnet).
+    callbacks_with_enqueued_response: BTreeSet<CallbackId>,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -370,7 +380,8 @@ impl CanisterQueues {
     ///    output queues are full.
     ///
     ///  * `NonMatchingResponse` if pushing a `Response` and the corresponding input
-    ///    queue does not have a reserved slot.
+    ///    queue does not have a reserved slot; or this is a duplicate guaranteed
+    ///    response.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -393,18 +404,38 @@ impl CanisterQueues {
             }
             RequestOrResponse::Response(ref response) => {
                 match self.canister_queues.get_mut(&sender) {
-                    Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => queue,
+                    Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => {
+                        // Check against duplicate responses.
+                        if !self
+                            .callbacks_with_enqueued_response
+                            .insert(response.originator_reply_callback)
+                        {
+                            debug_assert_eq!(Ok(()), self.test_invariants());
+                            // This is a critical error for guaranteed responses.
+                            if response.deadline == NO_DEADLINE {
+                                return Err((
+                                    StateError::non_matching_response(
+                                        "Duplicate response",
+                                        response,
+                                    ),
+                                    msg,
+                                ));
+                            } else {
+                                // But is OK for best-effort responses (if we already generated a timeout response).
+                                // Silently ignore the response.
+                                return Ok(());
+                            }
+                        }
+                        queue
+                    }
 
                     // Queue does not exist or has no reserved slot for this response.
                     _ => {
                         return Err((
-                            StateError::NonMatchingResponse {
-                                err_str: "No reserved response slot".to_string(),
-                                originator: response.originator,
-                                callback_id: response.originator_reply_callback,
-                                respondent: response.respondent,
-                                deadline: response.deadline,
-                            },
+                            StateError::non_matching_response(
+                                "No reserved response slot",
+                                response,
+                            ),
                             msg,
                         ));
                     }
@@ -462,6 +493,11 @@ impl CanisterQueues {
             }
 
             if let Some(msg) = msg {
+                if let RequestOrResponse::Response(response) = &msg {
+                    assert!(self
+                        .callbacks_with_enqueued_response
+                        .remove(&response.originator_reply_callback));
+                }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
                 return Some(msg.into());
@@ -516,8 +552,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map(|(input_queue, _)| input_queue.len() != 0)
-                .unwrap_or(false)
+                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
@@ -617,7 +652,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(
+    //
+    // NOTE: DO NOT CHANGE THE VISIBILITY OF THIS METHOD. IT IS ONLY SUPPOSED TO BE
+    // CALLED FOR CANISTERS (I.E. NOT FOR THE SUBNET QUEUES).
+    pub(super) fn push_output_request(
         &mut self,
         request: Arc<Request>,
         time: Time,
@@ -879,8 +917,11 @@ impl CanisterQueues {
             self.pool = MessagePool::default();
             self.input_schedule = InputSchedule::default();
 
-            // Trust but verify. Ensure that everything is actually set to default.
-            debug_assert_eq!(CanisterQueues::default(), *self);
+            // Trust but verify. Ensure that the `CanisterQueues` now encodes to zero bytes.
+            debug_assert_eq!(
+                0,
+                pb_queues::CanisterQueues::from(self as &Self).encoded_len()
+            );
         }
     }
 
@@ -986,7 +1027,7 @@ impl CanisterQueues {
             Outbound => (output_queue, input_queue),
         };
 
-        // Ensure that the first reference in a queue is never stale: if we dropped the
+        // Ensure that the first reference in a queue is never stale: if we drop the
         // message at the front of a queue, advance to the first non-stale reference.
         //
         // Defensive check, reference may have already been popped by an earlier
@@ -1007,13 +1048,16 @@ impl CanisterQueues {
                 self.queue_stats.on_drop_input_request(request);
             }
 
-            // Outbound request: produce a `SYS_TRANSIENT` timeout reject response.
+            // Outbound request: enqueue a `SYS_TRANSIENT` timeout reject response.
             (Outbound, RequestOrResponse::Request(request)) => {
                 let response = generate_timeout_response(request);
 
                 // Update stats for the generated response.
                 self.queue_stats.on_push_response(&response, Inbound);
 
+                assert!(self
+                    .callbacks_with_enqueued_response
+                    .insert(response.originator_reply_callback));
                 let reference = self.pool.insert_inbound(response.into());
                 reverse_queue.push_response(reference);
 
@@ -1024,11 +1068,16 @@ impl CanisterQueues {
                 }
             }
 
-            // Inbound or outbound response, nothing left to do.
-            //
-            // TODO(MR-603): Recall the `Id` -> `CallbackId` of shed inbound responses and
-            // generate a reject response on the fly when the respective `Id` is popped.
-            (_, RequestOrResponse::Response(_)) => {}
+            (Inbound, RequestOrResponse::Response(response)) => {
+                // TODO(MR-603): Recall the `Id` -> `CallbackId` of shed inbound responses and
+                // generate a reject response on the fly when the respective `Id` is popped.
+                assert!(self
+                    .callbacks_with_enqueued_response
+                    .remove(&response.originator_reply_callback));
+            }
+
+            // Outbound (best-effort) responses can be dropped with impunity.
+            (Outbound, RequestOrResponse::Response(_)) => {}
         }
     }
 
@@ -1075,8 +1124,9 @@ impl CanisterQueues {
     }
 
     /// Helper function for concisely validating invariants other than those of
-    /// input queue schedules (no stale references at queue front, valid stats)
-    /// during deserialization; or in debug builds, by writing
+    /// input queue schedules (no stale references at queue front, valid stats,
+    /// accurate tracking of callbacks with enqueued responses) during
+    /// deserialization; or in debug builds, by writing
     /// `debug_assert_eq!(Ok(()), self.test_invariants())`.
     ///
     /// Time complexity: `O(n * log(n))`.
@@ -1099,6 +1149,17 @@ impl CanisterQueues {
             return Err(format!(
                 "Inconsistent stats:\n  expected: {:?}\n  actual: {:?}",
                 calculated_stats, self.queue_stats
+            ));
+        }
+
+        // `callbacks_with_enqueued_response` contains the precise set of `CallbackIds`
+        // of all inbound responses.
+        let enqueued_response_callbacks =
+            callbacks_with_enqueued_response(&self.canister_queues, &self.pool)?;
+        if self.callbacks_with_enqueued_response != enqueued_response_callbacks {
+            return Err(format!(
+                "Inconsistent `callbacks_with_enqueued_response`:\n  expected: {:?}\n  actual: {:?}",
+                enqueued_response_callbacks, self.callbacks_with_enqueued_response
             ));
         }
 
@@ -1182,8 +1243,31 @@ fn queue_front_not_stale(
     Ok(())
 }
 
+/// Collects the `CallbackIds` of all the responses enqueued in input queues.
+/// Returns an error if there are duplicate `CallbackIds` among the responses.
+///
+/// Time complexity: `O(n * log(n))`.
+fn callbacks_with_enqueued_response(
+    _canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    pool: &MessagePool,
+) -> Result<BTreeSet<CallbackId>, String> {
+    let mut callbacks = BTreeSet::new();
+    let duplicates: Vec<_> = pool
+        .inbound_response_callbacks()
+        .filter(|callback_id| !callbacks.insert(*callback_id))
+        .collect();
+    if !duplicates.is_empty() {
+        return Err(format!(
+            "CanisterQueues: Duplicate callback(s) in inbound responses: {:?}",
+            duplicates
+        ));
+    }
+
+    Ok(callbacks)
+}
+
 /// Generates a timeout reject response from a request, refunding its payment.
-fn generate_timeout_response(request: &Arc<Request>) -> Response {
+fn generate_timeout_response(request: &Request) -> Response {
     Response {
         originator: request.sender,
         respondent: request.receiver,
@@ -1325,7 +1409,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                             && !enqueued_pool_messages.insert(reference)
                         {
                             metrics.observe_broken_soft_invariant(format!(
-                                "CanisterQueues: Message {:?} enqueued more than once",
+                                "CanisterQueues: {:?} enqueued more than once",
                                 reference
                             ));
                         }
@@ -1356,12 +1440,17 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             item.remote_sender_schedule,
         ))?;
 
+        let callbacks_with_enqueued_response =
+            callbacks_with_enqueued_response(&canister_queues, &pool)
+                .map_err(ProxyDecodeError::Other)?;
+
         let queues = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
             queue_stats,
             input_schedule,
+            callbacks_with_enqueued_response,
         };
 
         // Safe to pretend that all senders are remote, as the validation logic allows

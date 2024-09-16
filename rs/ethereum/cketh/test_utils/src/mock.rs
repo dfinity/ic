@@ -49,7 +49,7 @@ pub enum JsonRpcMethod {
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
 pub enum JsonRpcProvider {
     //order is top-to-bottom and must match order used in production
-    Ankr,
+    BlockPi,
     PublicNode,
     LlamaNodes,
 }
@@ -57,7 +57,7 @@ pub enum JsonRpcProvider {
 impl JsonRpcProvider {
     fn url(&self) -> &str {
         match self {
-            JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
+            JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
