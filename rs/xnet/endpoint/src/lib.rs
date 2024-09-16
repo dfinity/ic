@@ -200,7 +200,8 @@ fn start_server(
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
-    let http = hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new());
+    // let http = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+    let http = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
 
     let graceful_shutdown = GracefulShutdown::new();
 
@@ -220,8 +221,8 @@ fn start_server(
                         let _ = registry_client;
 
                         let io = TokioIo::new(stream);
-                        let conn = http.serve_connection(io, hyper_service);
-                        let wrapped = graceful_shutdown.watch(conn);
+                        let conn = http.serve_connection_with_upgrades(io, hyper_service);
+                        let wrapped = graceful_shutdown.watch(conn.into_owned());
                         tokio::spawn(async move {
                             if let Err(err) = wrapped.await {
                                 warn!(logger, "failed to serve connection: {err}");
@@ -233,7 +234,7 @@ fn start_server(
                     {
                         // Creates a new TLS server config and uses it to accept the request.
                         let registry_version = registry_client.get_latest_version();
-                        let server_config = match tls.server_config(
+                        let mut server_config = match tls.server_config(
                             ic_crypto_tls_interfaces::SomeOrAllNodes::All,
                             registry_version,
                         ) {
@@ -244,13 +245,17 @@ fn start_server(
                             }
                         };
 
+                        const ALPN_HTTP2: &[u8; 2] = b"h2";
+                        const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+                        server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+
                         let tls_acceptor =
                             tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
                         match tls_acceptor.accept(stream).await {
                             Ok(tls_stream) => {
                                 let io = TokioIo::new(tls_stream);
-                                let conn = http.serve_connection(io, hyper_service);
-                                let wrapped = graceful_shutdown.watch(conn);
+                                let conn = http.serve_connection_with_upgrades(io, hyper_service);
+                                let wrapped = graceful_shutdown.watch(conn.into_owned());
                                 tokio::spawn(async move {
                                     if let Err(err) = wrapped.await {
                                         warn!(logger, "failed to serve connection: {err}");
