@@ -1,0 +1,85 @@
+[package]
+name = "consensus-subnet-recovery-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+canister_http = { path = "../../networking/canister_http" }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canister-client = { path = "../../../canister_client" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-recovery = { path = "../../../recovery" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+url = { workspace = true }
+
+[lib]
+name = "ic_consensus_system_test_subnet_recovery_common"
+path = "common.rs"
+
+[[bin]]
+name = "ic-systest-sr-nns-failover-nodes-test"
+path = "sr_nns_failover_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-nns-same-nodes"
+path = "sr_nns_same_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-same-nodes"
+path = "sr_app_same_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-failover-nodes"
+path = "sr_app_failover_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-no-upgrade"
+path = "sr_app_no_upgrade_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
+path = "sr_app_same_nodes_enable_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
+path = "sr_app_failover_nodes_enable_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
+path = "sr_app_no_upgrade_enable_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
+path = "sr_app_same_nodes_with_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
+path = "sr_app_failover_nodes_with_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
+path = "sr_app_no_upgrade_with_tecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
+path = "sr_app_large_with_tecdsa_test.rs"
+
+

@@ -138,8 +138,8 @@ use std::convert::TryFrom;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum WasmMemoryType {
+#[derive(Clone, Copy, Debug)]
+pub enum WasmMemoryType {
     Wasm32,
     Wasm64,
 }
@@ -174,11 +174,12 @@ impl InjectedImports {
 }
 
 // Gets the cost of an instruction.
-pub fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
-    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // The exceptions are: atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
     // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    // Cost for certain instructions differ based on the memory type (Wasm32 vs. Wasm64).
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -358,9 +359,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 2.
+        // All load/store instructions are of cost 1 in Wasm32 mode.
         // Validated in benchmarks.
-        // The cost is adjusted to 1 after benchmarking with real canisters.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
         | Operator::F32Load { .. }
@@ -383,7 +383,10 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I32Store16 { .. }
         | Operator::I64Store8 { .. }
         | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 1,
+        | Operator::I64Store32 { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
 
         // Global get/set operations are similarly expensive to loads/stores.
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
@@ -455,28 +458,34 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         ////////////////////////////////////////////////////////////////
         // Wasm SIMD Operators
-        Operator::V128Load { .. } => 1,
-        Operator::V128Load8x8S { .. } => 1,
-        Operator::V128Load8x8U { .. } => 1,
-        Operator::V128Load16x4S { .. } => 1,
-        Operator::V128Load16x4U { .. } => 1,
-        Operator::V128Load32x2S { .. } => 1,
-        Operator::V128Load32x2U { .. } => 1,
-        Operator::V128Load8Splat { .. } => 1,
-        Operator::V128Load16Splat { .. } => 1,
-        Operator::V128Load32Splat { .. } => 1,
-        Operator::V128Load64Splat { .. } => 1,
-        Operator::V128Load32Zero { .. } => 1,
-        Operator::V128Load64Zero { .. } => 1,
-        Operator::V128Store { .. } => 1,
-        Operator::V128Load8Lane { .. } => 2,
-        Operator::V128Load16Lane { .. } => 2,
-        Operator::V128Load32Lane { .. } => 1,
-        Operator::V128Load64Lane { .. } => 1,
-        Operator::V128Store8Lane { .. } => 1,
-        Operator::V128Store16Lane { .. } => 1,
-        Operator::V128Store32Lane { .. } => 1,
-        Operator::V128Store64Lane { .. } => 1,
+
+        // Load/store for SIMD cost 1 in Wasm32 mode and 2 in Wasm64 mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
+
         Operator::V128Const { .. } => 1,
         Operator::I8x16Shuffle { .. } => 3,
         Operator::I8x16ExtractLaneS { .. } => 1,
@@ -1820,7 +1829,8 @@ fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail
+            .increment_cost(instruction_to_cost(i, mem_type));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
