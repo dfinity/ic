@@ -29,7 +29,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::{
+    LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE,
+};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -1625,6 +1627,9 @@ impl ExecutionEnvironment {
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
+                let start = ingress.expiry_time.saturating_sub(MAX_INGRESS_TTL);
+                let latency = time.saturating_duration_since(start).as_secs_f64();
+                self.metrics.canister_ingress_queue_latency.observe(latency);
                 CanisterCall::Ingress(ingress)
             }
         };
