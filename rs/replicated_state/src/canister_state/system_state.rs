@@ -1150,9 +1150,13 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    call_context_manager
-                        .validate_response(response)
-                        .map_err(|err| (err, msg.clone()))?;
+                    if !call_context_manager
+                        .should_enqueue(response)
+                        .map_err(|err| (err, msg.clone()))?
+                    {
+                        // Best effort response whose callback is gone. Silently drop it.
+                        return Ok(());
+                    }
                 }
                 push_input(
                     &mut self.queues,
