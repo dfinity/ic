@@ -25,6 +25,7 @@ use ic_test_utilities_types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
+use ic_types::time::CoarseTime;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
@@ -42,9 +43,11 @@ const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 
-fn default_input_request() -> RequestOrResponse {
+fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
     RequestBuilder::default()
+        .sender(OTHER_CANISTER_ID)
         .receiver(CANISTER_ID)
+        .deadline(deadline)
         .build()
         .into()
 }
@@ -151,7 +154,7 @@ fn canister_state_push_input_request_success() {
     let mut fixture = CanisterStateFixture::new();
     fixture
         .push_input(
-            default_input_request(),
+            default_input_request(NO_DEADLINE),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
@@ -164,13 +167,7 @@ fn canister_state_push_input_response_no_reserved_slot() {
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
         Err((
-            StateError::NonMatchingResponse {
-                err_str: "No reserved response slot".to_string(),
-                originator: response.originator,
-                callback_id: response.originator_reply_callback,
-                respondent: response.respondent,
-                deadline: response.deadline,
-            },
+            StateError::non_matching_response("No reserved response slot", &response),
             response.clone().into(),
         )),
         fixture.push_input(
@@ -204,6 +201,7 @@ fn canister_state_push_input_request_mismatched_receiver() {
     fixture
         .push_input(
             RequestBuilder::default()
+                .sender(OTHER_CANISTER_ID)
                 .receiver(OTHER_CANISTER_ID)
                 .build()
                 .into(),
@@ -221,6 +219,7 @@ fn canister_state_push_input_response_mismatched_originator() {
         .push_input(
             ResponseBuilder::default()
                 .originator(OTHER_CANISTER_ID)
+                .respondent(OTHER_CANISTER_ID)
                 .build()
                 .into(),
             SubnetType::Application,
@@ -232,6 +231,7 @@ fn canister_state_push_input_response_mismatched_originator() {
 #[test]
 fn application_subnet_remote_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
+        NO_DEADLINE,
         13,
         SubnetType::Application,
         InputQueueType::RemoteSubnet,
@@ -242,6 +242,7 @@ fn application_subnet_remote_push_input_request_not_enough_subnet_memory() {
 #[test]
 fn application_subnet_local_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
+        NO_DEADLINE,
         13,
         SubnetType::Application,
         InputQueueType::LocalSubnet,
@@ -252,6 +253,7 @@ fn application_subnet_local_push_input_request_not_enough_subnet_memory() {
 #[test]
 fn system_subnet_remote_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
+        NO_DEADLINE,
         13,
         SubnetType::System,
         InputQueueType::RemoteSubnet,
@@ -262,9 +264,32 @@ fn system_subnet_remote_push_input_request_not_enough_subnet_memory() {
 #[test]
 fn system_subnet_local_push_input_request_ignores_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
+        NO_DEADLINE,
         13,
         SubnetType::System,
         InputQueueType::LocalSubnet,
+        false,
+    );
+}
+
+#[test]
+fn application_subnet_push_input_best_effort_request_ignores_subnet_memory() {
+    canister_state_push_input_request_memory_limit_test_impl(
+        CoarseTime::from_secs_since_unix_epoch(1),
+        -13,
+        SubnetType::Application,
+        InputQueueType::RemoteSubnet,
+        false,
+    );
+}
+
+#[test]
+fn system_subnet_push_input_best_effort_request_ignores_subnet_memory() {
+    canister_state_push_input_request_memory_limit_test_impl(
+        CoarseTime::from_secs_since_unix_epoch(1),
+        -13,
+        SubnetType::System,
+        InputQueueType::RemoteSubnet,
         false,
     );
 }
@@ -277,6 +302,7 @@ fn system_subnet_local_push_input_request_ignores_subnet_memory() {
 /// queue type; and ensures that the limits are / are not enforced, depending on
 /// the value of the `should_enforce_limit` parameter.
 fn canister_state_push_input_request_memory_limit_test_impl(
+    deadline: CoarseTime,
     initial_subnet_available_memory: i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
@@ -284,7 +310,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
 ) {
     let mut canister_state = CanisterStateFixture::new().canister_state;
 
-    let request = default_input_request();
+    let request = default_input_request(deadline);
     let mut subnet_available_memory = initial_subnet_available_memory;
 
     let result = canister_state.push_input(
@@ -308,8 +334,13 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     } else {
         result.unwrap();
 
-        let expected_subnet_available_memory =
-            initial_subnet_available_memory - MAX_RESPONSE_COUNT_BYTES as i64;
+        // Guaranteed response requests consume `MAX_RESPONSE_COUNT_BYTES` guaranteed
+        // response memory. Best-effort requests consume no guaranteed response memory.
+        let expected_subnet_available_memory = if deadline == NO_DEADLINE {
+            initial_subnet_available_memory - MAX_RESPONSE_COUNT_BYTES as i64
+        } else {
+            initial_subnet_available_memory
+        };
         assert_eq!(expected_subnet_available_memory, subnet_available_memory);
     }
 }
@@ -342,7 +373,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
             .guaranteed_response_message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
-    let request = default_input_request();
+    let request = default_input_request(NO_DEADLINE);
 
     canister_state
         .push_input(

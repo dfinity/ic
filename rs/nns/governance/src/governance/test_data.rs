@@ -219,6 +219,7 @@ lazy_static! {
                         one_third_participation_milestone_icp: dec!(100_000.0),
                         full_participation_milestone_icp: dec!(167_000.0),
                     },
+                    false
                 ).unwrap().serialize(),
             ),
         }),

@@ -17,21 +17,17 @@ concurrency:
 permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
-  CI_COMMIT_BRANCH: ${{ github.head_ref || github.ref_name }}
-  CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
-  CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   CI_JOB_NAME: ${{ github.job }}
   CI_JOB_ID: ${{ github.job }} # github does not expose this variable https://github.com/orgs/community/discussions/8945
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_SHA: ${{ github.event.pull_request.base.sha }}
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_PULL_REQUEST_TARGET_BRANCH_SHA: ${{ github.event.pull_request.base.sha }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
@@ -295,6 +291,9 @@ jobs:
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
+        env:
+          CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
+          CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   build-ic:
     name: Build IC
     runs-on:

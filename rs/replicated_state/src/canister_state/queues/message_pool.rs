@@ -1,10 +1,7 @@
-// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
-#![allow(dead_code)]
-
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
@@ -483,6 +480,19 @@ impl MessagePool {
             stats += MessageStats::stats_delta(msg, id.context());
         }
         stats
+    }
+
+    /// Returns an iterator over the callbacks of all inbound responses in the pool.
+    ///
+    /// Time complexity: `O(n)`.
+    pub(super) fn inbound_response_callbacks(&self) -> impl Iterator<Item = CallbackId> + '_ {
+        self.messages.iter().filter_map(|(id, msg)| match msg {
+            RequestOrResponse::Response(response) if id.context() == Context::Inbound => {
+                assert_eq!(Kind::Response, id.kind());
+                Some(response.originator_reply_callback)
+            }
+            _ => None,
+        })
     }
 
     /// Invariant check for use at loading time and in `debug_asserts`.

@@ -203,7 +203,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
     jira_finding = Finding(
         repository=repository.name,
         scanner=scanner,
