@@ -519,6 +519,22 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .unwrap();
 ```
 
+If needed (e.g., for running tests in parallel), you can specify ports to which the `bitcoind` process binds:
+
+```rust
+    let port = [...];       // to be used with `PocketIcBuilder::with_bitcoind_addr` (see below for more details)
+    let onion_port = [...]; // not needed, but a unique port must be provided
+    let rpc_port = [...];   // to be used with `bitcoincore_rpc::Client` (see below for more details)
+    Command::new(bitcoind_path)
+        .arg(format!("-conf={}", conf_path.display()))
+        .arg(format!("-datadir={}", data_dir_path.display()))
+        .arg(format!("-bind=0.0.0.0:{}", port))
+        .arg(format!("-bind=0.0.0.0:{}=onion", onion_port))
+        .arg(format!("-rpcport={}", rpc_port))
+        .spawn()
+        .unwrap();
+```
+
 Now we create a PocketIC instance configured with the Bitcoin subnet and the `bitcoind` process' address and port
 (by default, the `bitcoind` process configured with `regtest=1` listens at port 18444):
 
