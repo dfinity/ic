@@ -1,13 +1,8 @@
 //! Consensus utility functions
 use crate::{crypto::Aggregate, membership::Membership};
-use ic_interfaces::{
-    consensus::{PayloadValidationError, PayloadValidationFailure},
-    consensus_pool::ConsensusPoolCache,
-    validation::ValidationError,
-};
+use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -324,30 +319,6 @@ fn get_transcript_data_at_given_summary<T>(
         Some(getter(transcript))
     } else {
         None
-    }
-}
-
-/// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
-pub fn get_subnet_record(
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    logger: &ReplicaLogger,
-) -> Result<SubnetRecord, PayloadValidationError> {
-    match registry_client.get_subnet_record(subnet_id, registry_version) {
-        Ok(Some(record)) => Ok(record),
-        Ok(None) => {
-            warn!(logger, "Subnet id {:?} not found in registry", subnet_id);
-            Err(ValidationError::ValidationFailed(
-                PayloadValidationFailure::SubnetNotFound(subnet_id),
-            ))
-        }
-        Err(err) => {
-            warn!(logger, "Failed to get subnet record in block_maker");
-            Err(ValidationError::ValidationFailed(
-                PayloadValidationFailure::RegistryUnavailable(err),
-            ))
-        }
     }
 }
 

@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 use super::utils::{
     find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, is_time_to_make_block,
+    get_notarization_delay_settings, get_subnet_record, is_time_to_make_block,
 };
 use crate::{
     consensus::{
@@ -12,7 +12,7 @@ use crate::{
     dkg::payload_builder::create_payload as create_dkg_payload,
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
-use ic_consensus_utils::{get_subnet_record, membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };

@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
-    "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",

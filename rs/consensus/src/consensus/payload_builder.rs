@@ -6,7 +6,6 @@ use crate::consensus::{
     },
     payload::BatchPayloadSectionBuilder,
 };
-use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, ProposalContext},
     consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
@@ -26,6 +25,8 @@ use ic_types::{
     Height, NodeId, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
+
+use super::utils::get_subnet_record;
 
 /// Implementation of PayloadBuilder.
 pub struct PayloadBuilderImpl {
