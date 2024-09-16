@@ -9,7 +9,6 @@ source /opt/ic/bin/functions.sh
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-
 check_config_file() {
     echo "* Checking Config..."
     local CONFIG_FILE="/var/ic/config/config.json"
