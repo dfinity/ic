@@ -1164,7 +1164,7 @@ impl Player {
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
         use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
-        pool.apply_changes(ChangeAction::PurgeValidatedBelow(purge_height).into());
+        pool.apply(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }
 

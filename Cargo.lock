@@ -9508,8 +9508,9 @@ name = "ic-nervous-system-canisters"
 version = "0.9.0"
 dependencies = [
  "async-trait",
+ "candid",
+ "dfn_candid",
  "dfn_core",
- "dfn_protobuf",
  "ic-base-types",
  "ic-ledger-core",
  "ic-nervous-system-common",
@@ -9563,7 +9564,6 @@ dependencies = [
  "by_address",
  "bytes",
  "dfn_core",
- "dfn_protobuf",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
@@ -9669,7 +9669,6 @@ dependencies = [
  "candid",
  "canister-test",
  "cycles-minting-canister",
- "dfn_protobuf",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types",
