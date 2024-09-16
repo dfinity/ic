@@ -179,12 +179,4 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             n += 1;
         }
     }
-
-    loop {
-        if get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address.clone())
-            == n * reward - send_amount
-        {
-            break;
-        }
-    }
 }
