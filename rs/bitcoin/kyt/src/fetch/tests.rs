@@ -165,6 +165,7 @@ fn test_try_fetch_tx() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
+    let txid_2 = mock_txid(2);
 
     // case Fetched
     let fetched_0 = FetchTxStatus::Fetched(FetchedTx {
@@ -183,20 +184,18 @@ fn test_try_fetch_tx() {
 
     // case HighLoad
     env.high_load = true;
-    assert!(matches!(
-        env.try_fetch_tx(mock_txid(2)),
-        TryFetchResult::HighLoad
-    ));
+    assert!(matches!(env.try_fetch_tx(txid_2), TryFetchResult::HighLoad));
     env.high_load = false;
 
     // case NotEnoughCycles
     assert!(matches!(
-        MockEnv::new(0).try_fetch_tx(mock_txid(2)),
+        MockEnv::new(0).try_fetch_tx(txid_2),
         TryFetchResult::NotEnoughCycles
     ));
 
     // case ToFetch
     let available = env.cycles_available();
+    assert!(state::get_fetch_status(txid_2).is_none());
     assert!(matches!(
         env.try_fetch_tx(mock_txid(2)),
         TryFetchResult::ToFetch(_)
