@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::config_ini::get_config_ini_settings;
+use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use std::fs::File;
@@ -62,18 +62,30 @@ pub fn main() -> Result<()> {
             // get config.ini settings
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
 
+            let ConfigIniSettings {
+                ipv6_prefix,
+                ipv6_address,
+                ipv6_prefix_length,
+                ipv6_gateway,
+                ipv4_address,
+                ipv4_gateway,
+                ipv4_prefix_length,
+                domain,
+                verbose,
+            } = config_ini_settings;
+
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
             let network_settings = NetworkSettings {
-                ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_address: config_ini_settings.ipv6_address,
-                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
-                ipv6_gateway: config_ini_settings.ipv6_gateway,
-                ipv4_address: config_ini_settings.ipv4_address,
-                ipv4_gateway: config_ini_settings.ipv4_gateway,
-                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
-                domain: config_ini_settings.domain,
+                ipv6_prefix,
+                ipv6_address,
+                ipv6_prefix_length,
+                ipv6_gateway,
+                ipv4_address,
+                ipv4_gateway,
+                ipv4_prefix_length,
+                domain,
                 mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
             };
 
@@ -104,7 +116,7 @@ pub fn main() -> Result<()> {
                     .cpu
                     .clone()
                     .unwrap_or("kvm".to_string()),
-                verbose: config_ini_settings.verbose,
+                verbose,
             };
 
             let guestos_settings = GuestOSSettings::default();
