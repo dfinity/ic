@@ -2,7 +2,7 @@ use bitcoin::{Address, Network};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist_contains, check_transaction_inputs, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionError, CheckTransactionResponse,
+    CheckTransactionArgs, CheckTransactionError, CheckTransactionResponse, CheckTransactionStatus,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
@@ -43,9 +43,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// If a permanent error occurred in the process, e.g, when a transaction data
 /// fails to decode or its transaction id does not match, then `Error` is returned
 /// together with a text description.
-async fn check_transaction(
-    args: CheckTransactionArgs,
-) -> Result<CheckTransactionResponse, CheckTransactionError> {
+async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
     ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
     match Txid::try_from(args.txid.as_ref()) {
         Ok(txid) => {
@@ -54,15 +52,12 @@ async fn check_transaction(
                 .unwrap()
                 < CHECK_TRANSACTION_CYCLES_REQUIRED
             {
-                Ok(CheckTransactionResponse::NotEnoughCycles)
+                CheckTransactionStatus::NotEnoughCycles.into()
             } else {
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => Err(CheckTransactionError::Txid {
-            txid: args.txid,
-            message: format!("{}", err),
-        }),
+        Err(err) => CheckTransactionError::InvalidTransaction(err.to_string()).into(),
     }
 }
 

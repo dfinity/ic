@@ -3,10 +3,10 @@ use ic_base_types::PrincipalId;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
-    CheckTransactionError, CheckTransactionResponse, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CheckTransactionError, CheckTransactionPending, CheckTransactionResponse,
+    CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
 };
-use ic_cdk::api::call::RejectionCode;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -18,8 +18,6 @@ use pocket_ic::{
     query_candid, PocketIc, UserError, WasmResult,
 };
 use std::str::FromStr;
-
-type CheckTransactionResult = Result<CheckTransactionResponse, CheckTransactionError>;
 
 const MAX_TICKS: usize = 10;
 
@@ -257,8 +255,8 @@ fn test_check_transaction_passed() {
         .expect("the fetch request didn't finish");
 
     assert!(matches!(
-        decode::<CheckTransactionResult>(&result),
-        Ok(CheckTransactionResponse::Passed)
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Passed
     ));
 
     let cycles_after = env.cycle_balance(setup.caller);
@@ -292,8 +290,8 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResult>(&result),
-        Ok(CheckTransactionResponse::NotEnoughCycles { .. })
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Other(CheckTransactionStatus::NotEnoughCycles),
     ));
 
     let cycles_after = setup.env.cycle_balance(setup.caller);
@@ -329,8 +327,10 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        dbg!(decode::<CheckTransactionResult>(&result)),
-        Err(CheckTransactionError::Rejected { code, .. }) if code == RejectionCode::SysFatal as u32
+        dbg!(decode::<CheckTransactionResponse>(&result)),
+        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+            CheckTransactionPending::TransientInternalError(_)
+        ))
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost =
@@ -354,8 +354,10 @@ fn test_check_transaction_error() {
         .await_call(call_id)
         .expect("the fetch request didn't finish");
     assert!(matches!(
-        decode::<CheckTransactionResult>(&result),
-        Err(CheckTransactionError::Txid { .. })
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Other(CheckTransactionStatus::Error(
+            CheckTransactionError::InvalidTransaction(_)
+        ))
     ));
 
     let cycles_after = setup.env.cycle_balance(setup.caller);

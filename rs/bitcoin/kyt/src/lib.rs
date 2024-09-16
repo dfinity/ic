@@ -19,22 +19,17 @@ use fetch::{FetchEnv, FetchResult, TryFetchResult};
 use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
-impl From<(Txid, HttpGetTxError)> for CheckTransactionError {
-    fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionError {
+impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
+    fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
-            HttpGetTxError::TxEncoding(message) => CheckTransactionError::Tx { txid, message },
-            HttpGetTxError::TxidMismatch { expected, decoded } => {
-                CheckTransactionError::TxidMismatch {
-                    expected: expected.as_ref().to_vec(),
-                    decoded: decoded.as_ref().to_vec(),
-                }
+            HttpGetTxError::Rejected { message, .. } => {
+                CheckTransactionPending::TransientInternalError(message).into()
             }
-            HttpGetTxError::Rejected { code, message } => CheckTransactionError::Rejected {
-                code: code as u32,
-                message,
-            },
-            HttpGetTxError::ResponseTooLarge => CheckTransactionError::ResponseTooLarge { txid },
+            HttpGetTxError::ResponseTooLarge => {
+                (CheckTransactionError::ResponseTooLarge { txid }).into()
+            }
+            _ => CheckTransactionError::InvalidTransaction(format!("{:?}", err)).into(),
         }
     }
 }
@@ -153,21 +148,19 @@ impl FetchEnv for KytCanisterEnv {
 ///    checks if the input addresses of this transaction are available.
 ///    If not, we need to additionally fetch those input transactions
 ///    in order to compute their corresponding addresses.
-pub async fn check_transaction_inputs(
-    txid: Txid,
-) -> Result<CheckTransactionResponse, CheckTransactionError> {
+pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
     match env.try_fetch_tx(txid) {
-        TryFetchResult::Pending => Ok(CheckTransactionResponse::Pending),
-        TryFetchResult::HighLoad => Ok(CheckTransactionResponse::HighLoad),
-        TryFetchResult::Error(err) => Err((txid, err).into()),
-        TryFetchResult::NotEnoughCycles => Ok(CheckTransactionResponse::NotEnoughCycles),
+        TryFetchResult::Pending => CheckTransactionPending::Pending.into(),
+        TryFetchResult::HighLoad => CheckTransactionPending::HighLoad.into(),
+        TryFetchResult::Error(err) => (txid, err).into(),
+        TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
         TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {
             match do_fetch.await {
                 Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
-                Ok(FetchResult::Error(err)) => Err((txid, err).into()),
-                Ok(FetchResult::RetryWithBiggerBuffer) => Ok(CheckTransactionResponse::Pending),
+                Ok(FetchResult::Error(err)) => (txid, err).into(),
+                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionPending::Pending.into(),
                 Err(_) => unreachable!(), // should never happen
             }
         }
