@@ -32,6 +32,6 @@ rust_canister(
     name = "random-traffic-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":random_traffic_test.did",
+    service_file = ":random-traffic-test.did",
     deps = DEPENDENCIES + [":random_traffic_test"],
 )
