@@ -1623,6 +1623,16 @@ impl ExecutionEnvironment {
                 )
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+                if let Some(metadata) = &request.metadata {
+                    let latency = current_time()
+                        .saturating_duration_since(*metadata.call_tree_start_time())
+                        .as_secs_f64();
+                    let call_tree_depth_label = metadata.call_tree_depth().to_string();
+                    self.metrics
+                        .canister_message_queue_latency
+                        .with_label_values(&["request", &call_tree_depth_label])
+                        .observe(latency);
+                }
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
@@ -1632,7 +1642,7 @@ impl ExecutionEnvironment {
                 let latency = now.saturating_duration_since(start).as_secs_f64();
                 self.metrics
                     .canister_message_queue_latency
-                    .with_label_values(&["ingress"])
+                    .with_label_values(&["ingress", "0"])
                     .observe(latency);
                 CanisterCall::Ingress(ingress)
             }

@@ -126,7 +126,7 @@ impl ExecutionEnvironmentMetrics {
                 "Time spent in queue for canister message before executing it in seconds.",
                 // Buckets: 0s, 0.1s, 0.2s, 0.5s, ..., 500 seconds
                 decimal_buckets_with_zero(-1, 2),
-                &["message_type"],
+                &["message_type", "call_tree_depth"],
             ),
         }
     }

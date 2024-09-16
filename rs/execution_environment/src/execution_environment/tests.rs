@@ -3714,13 +3714,16 @@ fn test_sign_with_schnorr_api_is_enabled() {
 }
 
 #[test]
-fn test_execution_canister_ingress_queue_latency_seconds() {
+fn test_execution_canister_message_queue_latency_seconds_ingress() {
     fn get_metric_stats(test: &ExecutionTest) -> HistogramStats {
         fetch_histogram_vec_stats(
             test.metrics_registry(),
             "execution_canister_message_queue_latency_seconds",
         )
-        .get(&labels(&[("message_type", "ingress")]))
+        .get(&labels(&[
+            ("message_type", "ingress"),
+            ("call_tree_depth", "0"),
+        ]))
         .cloned()
         .unwrap_or_default()
     }
@@ -3729,6 +3732,36 @@ fn test_execution_canister_ingress_queue_latency_seconds() {
     test.ingress_raw(canister_id, "test", vec![]);
 
     assert_eq!(get_metric_stats(&test).count, 0);
-    test.execute_message(canister_id);
+    test.execute_all();
+    assert_eq!(get_metric_stats(&test).count, 1);
+}
+
+#[test]
+fn test_execution_canister_message_queue_latency_seconds_request() {
+    fn get_metric_stats(test: &ExecutionTest) -> HistogramStats {
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "execution_canister_message_queue_latency_seconds",
+        )
+        .get(&labels(&[
+            ("message_type", "request"),
+            ("call_tree_depth", "0"),
+        ]))
+        .cloned()
+        .unwrap_or_default()
+    }
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let canister_a = test
+        .canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    let canister_b = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+
+    test.ingress_raw(
+        canister_a,
+        "update",
+        wasm().call_simple(canister_b, "test", call_args()).build(),
+    );
+    assert_eq!(get_metric_stats(&test).count, 0);
+    test.execute_all();
     assert_eq!(get_metric_stats(&test).count, 1);
 }
