@@ -1520,6 +1520,12 @@ impl Drop for LedgerUpdateLock {
         if self.retain {
             return;
         }
+        // To retain behavior from dfn_core implementation of 'call', we do not
+        // unlock the neuron if we are recovering from a trap. ic_cdk::api::call
+        // always cleans up, so we have to check this.
+        if ic_cdk::api::call::is_recovering_from_trap() {
+            return;
+        }
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
