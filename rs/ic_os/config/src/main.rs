@@ -37,6 +37,8 @@ pub enum Commands {
     GenerateHostosConfig {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
+        hostos_config_json_path: PathBuf,
     },
 }
 
@@ -141,6 +143,7 @@ pub fn main() -> Result<()> {
         }
         Some(Commands::GenerateHostosConfig {
             setupos_config_json_path,
+            hostos_config_json_path,
         }) => {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
@@ -154,12 +157,12 @@ pub fn main() -> Result<()> {
                 guestos_settings: setupos_config.guestos_settings,
             };
 
-            let hostos_config_output_path = Path::new("/var/ic/config/config-hostos.json");
-            serialize_and_write_config(hostos_config_output_path, &hostos_config)?;
+            let hostos_config_json_path = Path::new(&hostos_config_json_path);
+            serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
 
             println!(
                 "HostOSConfig has been written to {}",
-                hostos_config_output_path.display()
+                hostos_config_json_path.display()
             );
 
             Ok(())
