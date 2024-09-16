@@ -791,7 +791,7 @@ impl SystemMetadata {
             // we used CURRENT_CERTIFICATION_VERSION here, the state hash would
             // NOT be guaranteed to be constant, potentially leading to
             // hard-to-track bugs in state manager.
-            certification_version: CertificationVersion::V0,
+            certification_version: CURRENT_CERTIFICATION_VERSION,
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
