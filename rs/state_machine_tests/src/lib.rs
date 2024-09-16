@@ -105,7 +105,6 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_test_utilities_types::ids::NODE_1;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
@@ -576,11 +575,11 @@ impl PocketIngressPool {
     }
 
     /// Pushes a received ingress message into the pool.
-    fn push(&mut self, m: SignedIngress, timestamp: Time) {
+    fn push(&mut self, m: SignedIngress, timestamp: Time, peer_id: NodeId) {
         self.validated.insert(
             IngressMessageId::new(m.expiry_time(), m.id()),
             ValidatedIngressArtifact {
-                msg: IngressPoolObject::new(NODE_1, m),
+                msg: IngressPoolObject::new(peer_id, m),
                 timestamp,
             },
         );
@@ -2026,7 +2025,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
         Ok(message_id)
     }
 
@@ -2037,7 +2036,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
     pub fn mock_canister_http_response(
