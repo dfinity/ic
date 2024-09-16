@@ -186,10 +186,12 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # Inherit tags for this test, to avoid triggering builds for local base images
     component_file_references_test(
         name = name + "_component_file_references_test",
         image = ":partition-root-unsigned.tzst",
         component_files = image_deps["component_files"].keys(),
+        tags = tags,
     )
 
     if upgrades:

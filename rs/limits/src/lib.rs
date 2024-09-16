@@ -53,7 +53,7 @@ pub const MEGABYTE: u64 = KILOBYTE * KILOBYTE;
 
 pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);
 pub const UNIT_DELAY_NNS_SUBNET: Duration = Duration::from_millis(3000);
-pub const INITIAL_NOTARY_DELAY_APP_SUBNET: Duration = Duration::from_millis(600);
+pub const INITIAL_NOTARY_DELAY_APP_SUBNET: Duration = Duration::from_millis(300);
 pub const INITIAL_NOTARY_DELAY_NNS_SUBNET: Duration = Duration::from_millis(1000);
 pub const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
 pub const MAX_BLOCK_PAYLOAD_SIZE: u64 = 4 * MEGABYTE;

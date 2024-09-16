@@ -1,8 +1,9 @@
+use crate::wasm_utils::instrumentation::WasmMemoryType;
 use crate::wasmtime_embedder::{
     system_api_complexity::{overhead, overhead_native},
     StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
-
+use crate::InternalErrorCode;
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -14,16 +15,12 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
-use ic_wasm_types::WasmEngineError;
-
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
-
-use crate::InternalErrorCode;
-use std::convert::TryFrom;
-
-use crate::wasm_utils::instrumentation::WasmMemoryType;
 use ic_system_api::SystemApiImpl;
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_wasm_types::WasmEngineError;
+use num_traits::ops::saturating::SaturatingAdd;
+use std::convert::TryFrom;
+use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -84,7 +81,7 @@ fn store_value(
 /// Updates heap bytemap marking which pages have been written to dst and size
 /// need to have valid values (need to pass checks performed by the function
 /// that actually writes to the heap)
-#[inline(never)]
+#[inline(always)]
 fn mark_writes_on_bytemap(
     caller: &mut Caller<'_, StoreData>,
     dst: usize,
@@ -116,6 +113,7 @@ fn mark_writes_on_bytemap(
 }
 
 /// Charge for system api call that doesn't involve touching memory
+#[inline(always)]
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -124,6 +122,7 @@ fn charge_for_cpu(
 }
 
 /// Charge for system api call that involves writing/reading heap
+#[inline(always)]
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -134,7 +133,7 @@ fn charge_for_cpu_and_mem(
 
 /// Charge for system api call that involves writing/reading stable memory
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_stable_write(
     caller: &mut Caller<'_, StoreData>,
     mut overhead: NumInstructions,
@@ -148,32 +147,17 @@ fn charge_for_stable_write(
 
     let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
 
-    overhead = overhead
-        .get()
-        .checked_add(dirty_page_cost.get())
-        .ok_or(unexpected_err(format!(
-            "Overflow while calculating charge for stable write:\
-             overhead: {}, dirty page cost: {}",
-            overhead, dirty_page_cost
-        )))?
-        .into();
-
-    #[allow(non_upper_case_globals)]
-    const KiB: u64 = 1024;
+    overhead = overhead.saturating_add(&dirty_page_cost);
 
     let stable_dirty_pages = &mut caller
         .data_mut()
         .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = NumOsPages::from(
-        stable_dirty_pages
-            .get()
-            .saturating_add(new_stable_dirty_pages.get()),
-    );
+    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
 
     if total_pages > dirty_page_limit {
         let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
                             ),
                         );
         return Err(error);
@@ -199,39 +183,24 @@ fn charge_for_stable_write(
 //
 // Note: marked not for inlining as we don't want to spill this code into every system API call.
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
+    overhead: NumInstructions,
     num_bytes: usize,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
-    if num_bytes > 0 {
-        let bytes_charge =
-            system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
-        overhead = overhead
-            .get()
-            .checked_add(bytes_charge.get())
-            .ok_or(unexpected_err(format!(
-                "Overflow while calculating charge for System API call:\
-             overhead: {}, bytes charge: {}",
-                overhead, bytes_charge
-            )))?
-            .into();
-    }
-
+    let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
+    let overhead = overhead.saturating_add(&bytes_charge);
     charge_direct_fee(caller, overhead)
 }
 
 // TODO: RUN-841: Cover with tests
+#[inline(always)]
 fn charge_direct_fee(
     caller: &mut Caller<'_, StoreData>,
     fee: NumInstructions,
 ) -> HypervisorResult<()> {
-    if fee == NumInstructions::from(0) {
-        return Ok(());
-    }
-
     let num_instructions_global = get_num_instructions_global(caller)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller)?;
     // Assert the current instruction counter is sane

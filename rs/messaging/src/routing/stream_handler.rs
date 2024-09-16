@@ -1,4 +1,6 @@
-use crate::message_routing::LatencyMetrics;
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -92,13 +94,15 @@ const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_REMOTE: &str = "remote";
 
 const CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE: &str = "mr_bad_reject_signal_for_response";
-const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "mr_sender_subnet_mismatch";
 const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "mr_receiver_subnet_mismatch";
 const CRITICAL_ERROR_REQUEST_MISROUTED: &str = "mr_request_misrouted";
 
 impl StreamHandlerMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
+    ) -> Self {
         let inducted_xnet_messages = metrics_registry.int_counter_vec(
             METRIC_INDUCTED_XNET_MESSAGES,
             "Counts of XNet message induction attempts, by message type and status.",
@@ -132,8 +136,9 @@ impl StreamHandlerMetrics {
         );
         let critical_error_bad_reject_signal_for_response =
             metrics_registry.error_counter(CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE);
-        let critical_error_induct_response_failed =
-            metrics_registry.error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED);
+        let critical_error_induct_response_failed = message_routing_metrics
+            .critical_error_induct_response_failed
+            .clone();
         let critical_error_sender_subnet_mismatch =
             metrics_registry.error_counter(CRITICAL_ERROR_SENDER_SUBNET_MISMATCH);
         let critical_error_receiver_subnet_mismatch =
@@ -212,6 +217,7 @@ impl StreamHandlerImpl {
         subnet_id: SubnetId,
         hypervisor_config: HypervisorConfig,
         metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
         log: ReplicaLogger,
     ) -> Self {
@@ -219,7 +225,7 @@ impl StreamHandlerImpl {
             subnet_id,
             guaranteed_response_message_memory_capacity: hypervisor_config
                 .subnet_message_memory_capacity,
-            metrics: StreamHandlerMetrics::new(metrics_registry),
+            metrics: StreamHandlerMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
                 metrics_registry,
@@ -510,8 +516,7 @@ impl StreamHandlerImpl {
             stream_slice.header().begin(),
             stream_slice
                 .messages()
-                .map(|q| q.end())
-                .unwrap_or_else(|| stream_slice.header().end()),
+                .map_or_else(|| stream_slice.header().end(), |q| q.end()),
             StreamComponent::MessagesFrom(remote_subnet),
         );
         assert_valid_slice_messages_for_stream(
@@ -830,7 +835,7 @@ impl StreamHandlerImpl {
                                 // Critical error, responses should always be inducted successfully.
                                 error!(
                                     self.log,
-                                    "{}: Inducting response failed: {} {:?}",
+                                    "{}: Inducting response failed: {}\n{:?}",
                                     CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
                                     err,
                                     response

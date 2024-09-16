@@ -19,6 +19,8 @@ pub const CONFIRMATION_LOOP_ITERATIONS: usize = 1_000_000;
 /// Note, the maximum compilation complexity is 15K.
 pub const CONFIRMATION_REPEAT_TIMES: usize = 14_000;
 
+use crate::common::Wasm64;
+
 ////////////////////////////////////////////////////////////////////////
 /// WAT Block Builder
 
@@ -71,11 +73,11 @@ impl Block {
     }
 
     /// Define variables and functions used in the `code` snippet.
-    pub fn define_variables_and_functions(mut self, code: &str) -> Self {
+    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: Wasm64) -> Self {
         for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
-                    self.declare_variable(name, ty);
+                    self.declare_variable(name, ty, wasm64_enabled);
                 }
             }
         }
@@ -85,23 +87,32 @@ impl Block {
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
         }
-        if code.contains("$result_i32") {
+        if code.contains("$result_i32") || code.contains("table.get") || code.contains("table.size")
+        {
             self.import("(type $result_i32 (func (result i32)))")
                 .import("(func $empty_indirect (type $result_i32) (i32.const 0))")
-                .import("(table 10 funcref)")
-                .import("(elem (i32.const 7) $empty_indirect)");
+                .import("(table $table 10 funcref)")
+                .import("(elem (i32.const 7) $empty_indirect)")
+                .import("(elem func 0)");
         }
         self
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
-    pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: Wasm64) -> &mut Self {
+        let memory_var_address = if wasm64_enabled == Wasm64::Enabled {
+            // The address should be somewhere beyond 4 GiB.
+            // This is 5 GB.
+            "5368709120"
+        } else {
+            "16"
+        };
         let init_val = match name {
             "x" => "1000000007",
             "y" => "1337",
             "z" => "2147483647",
             "zero" => "0",
-            "address" => "16",
+            "address" => memory_var_address,
             "one" => "1",
             _ => panic!("Error getting initial value for variable {name}"),
         };
@@ -146,19 +157,15 @@ pub struct Func {
 
 impl Func {
     /// Transform the function into a test module WAT representation.
-    pub fn into_test_module_wat(self) -> String {
+    pub fn into_test_module_wat(self, wasm64_enabled: Wasm64) -> String {
+        let memory = if wasm64_enabled == Wasm64::Enabled {
+            "(memory $mem i64 131072)"
+        } else {
+            "(memory $mem 1)"
+        };
         wrap_lines(
             "(module",
-            [
-                self.imports,
-                vec![
-                    "(table $table 10 funcref)".into(),
-                    "(elem func 0)".into(),
-                    "(memory $mem 1)".into(),
-                ],
-                self.lines,
-            ]
-            .concat(),
+            [self.imports, vec![memory.into()], self.lines].concat(),
             ")",
         )
         .join("\n")
