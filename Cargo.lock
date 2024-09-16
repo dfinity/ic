@@ -17321,8 +17321,6 @@ dependencies = [
  "candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.13.5",
- "ic-cdk-macros 0.9.0",
  "ic-error-types",
  "ic-types",
  "rand 0.8.5",

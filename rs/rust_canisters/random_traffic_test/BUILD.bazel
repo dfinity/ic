@@ -4,20 +4,16 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    # Keep sorted.
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
 ]
 
 rust_library(
@@ -32,6 +28,6 @@ rust_canister(
     name = "random-traffic-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":random-traffic-test.did",
+    service_file = ":random-traffic-canister.did",
     deps = DEPENDENCIES + [":random_traffic_test"],
 )
