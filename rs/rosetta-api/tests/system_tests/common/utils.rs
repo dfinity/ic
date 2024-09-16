@@ -5,7 +5,9 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
+use ic_ledger_core::block::BlockType;
 use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -57,10 +59,32 @@ pub async fn wait_for_rosetta_to_sync_up_to_block(
             if last_block >= block_index {
                 return Some(last_block);
             }
+        } else {
+            eprintln!("Failed to get network status: {:?}", response);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     panic!("Failed to sync with the ledger");
+}
+
+pub async fn assert_rosetta_blockchain_is_valid(
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+    agent: &Agent,
+) {
+    // Let's check the network status
+    let network_status = rosetta_client
+        .network_status(network_identifier.clone())
+        .await
+        .unwrap();
+    let ledger_tip = query_encoded_blocks(agent, None, 1).await.blocks[0].clone();
+    assert_eq!(
+        to_hash(&network_status.current_block_identifier.hash).unwrap(),
+        icp_ledger::Block::block_hash(&ledger_tip),
+        "Block hashes do not match: Expected Block {:?} but got Block {:?}",
+        network_status.current_block_identifier,
+        ledger_tip
+    );
 }
 
 pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {

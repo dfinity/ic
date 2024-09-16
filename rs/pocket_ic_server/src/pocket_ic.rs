@@ -467,7 +467,7 @@ impl PocketIc {
 
             if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
                 for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
-                    for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                    for name in ["key_1", "test_key_1", "dfx_test_key"] {
                         let key_id = SchnorrKeyId {
                             algorithm,
                             name: name.to_string(),
@@ -476,7 +476,7 @@ impl PocketIc {
                     }
                 }
 
-                for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+                for name in ["key_1", "test_key_1", "dfx_test_key"] {
                     let key_id = EcdsaKeyId {
                         curve: EcdsaCurve::Secp256k1,
                         name: name.to_string(),
@@ -1120,15 +1120,15 @@ fn process_mock_canister_https_response(
         }
     };
     let content = response_to_content(&mock_canister_http_response.response);
-    let mut contents: Vec<_> =
-        if let Some(ref additional_responses) = &mock_canister_http_response.additional_responses {
-            additional_responses
-                .iter()
-                .map(response_to_content)
-                .collect()
-        } else {
-            vec![content.clone(); subnet.nodes.len() - 1]
-        };
+    let mut contents: Vec<_> = if !mock_canister_http_response.additional_responses.is_empty() {
+        mock_canister_http_response
+            .additional_responses
+            .iter()
+            .map(response_to_content)
+            .collect()
+    } else {
+        vec![content.clone(); subnet.nodes.len() - 1]
+    };
     contents.push(content);
     if contents.len() != subnet.nodes.len() {
         return OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((

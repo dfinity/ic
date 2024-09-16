@@ -1,3 +1,5 @@
+use crate::message_routing::MessageRoutingMetrics;
+
 use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
@@ -151,68 +153,6 @@ fn reject_local_request() {
             expected_state.canister_state(&canister_id).unwrap(),
             state.canister_state(&canister_id).unwrap()
         );
-    });
-}
-
-#[test]
-fn reject_local_request_for_subnet() {
-    with_test_replica_logger(|log| {
-        let (stream_builder, mut state, _) = new_fixture(&log);
-
-        // With a reservation on the subnet input queue.
-        let payment = Cycles::new(100);
-        let subnet_id = state.metadata.own_subnet_id;
-        let subnet_id_as_canister_id = CanisterId::from(subnet_id);
-        let msg = generate_message_for_test(
-            subnet_id_as_canister_id,
-            canister_test_id(0),
-            CallbackId::from(1),
-            "method".to_string(),
-            payment,
-            NO_DEADLINE,
-        );
-
-        state
-            .subnet_queues_mut()
-            .push_output_request(msg.clone().into(), UNIX_EPOCH)
-            .unwrap();
-        state
-            .subnet_queues_mut()
-            .pop_canister_output(&msg.receiver)
-            .unwrap();
-
-        let mut expected_state = state.clone();
-
-        // Reject the message.
-        let reject_message = "Reject response";
-        stream_builder.reject_local_request(
-            &mut state,
-            &msg,
-            RejectCode::SysFatal,
-            reject_message.to_string(),
-        );
-
-        // Which should result in a reject Response being enqueued onto the subnet
-        // queue.
-        expected_state
-            .push_input(
-                Response {
-                    originator: msg.sender,
-                    respondent: msg.receiver,
-                    originator_reply_callback: msg.sender_reply_callback,
-                    refund: msg.payment,
-                    response_payload: Payload::Reject(RejectContext::new(
-                        RejectCode::SysFatal,
-                        reject_message,
-                    )),
-                    deadline: msg.deadline,
-                }
-                .into(),
-                &mut (i64::MAX / 2),
-            )
-            .unwrap();
-
-        assert_eq!(expected_state.subnet_queues(), state.subnet_queues());
     });
 }
 
@@ -927,6 +867,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
         &metrics_registry,
+        &MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             &metrics_registry,
         ))),
@@ -1136,7 +1077,7 @@ fn assert_eq_critical_errors(
     metrics_registry: &MetricsRegistry,
 ) {
     assert_eq!(
-        metric_vec(&[
+        nonzero_values(metric_vec(&[
             (&[("error", &CRITICAL_ERROR_INFINITE_LOOP)], 0),
             (
                 &[("error", &CRITICAL_ERROR_PAYLOAD_TOO_LARGE)],
@@ -1146,7 +1087,7 @@ fn assert_eq_critical_errors(
                 &[("error", &CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND)],
                 response_destination_not_found
             )
-        ]),
-        fetch_int_counter_vec(metrics_registry, "critical_errors")
+        ])),
+        nonzero_values(fetch_int_counter_vec(metrics_registry, "critical_errors"))
     );
 }

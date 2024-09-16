@@ -2,7 +2,7 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
@@ -46,6 +46,13 @@ pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
+
+/// Enables Wasm64 benchmarks.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Wasm64 {
+    Enabled,
+    Disabled,
+}
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
@@ -260,11 +267,20 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let config = Config {
-        embedders_config: EmbeddersConfig {
-            metering_type: MeteringType::New,
-            ..EmbeddersConfig::default()
+    let mut embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            best_effort_responses: FlagStatus::Enabled,
+            wasm64: FlagStatus::Enabled,
+            ..FeatureFlags::default()
         },
+        ..EmbeddersConfig::default()
+    };
+
+    // Set up larger heap, of 8GB for the Wasm64 feature.
+    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+
+    let config = Config {
+        embedders_config,
         ..Default::default()
     };
 

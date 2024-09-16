@@ -19,8 +19,8 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryDelta,
-        RegistryError, RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
+        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
@@ -185,60 +185,63 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
-    // Only self-authenticating and anonymous principals are allowed to call us.
-    const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
-        Ok(PrincipalIdClass::SelfAuthenticating),
-        Ok(PrincipalIdClass::Anonymous),
-    ];
-    let class = caller().class();
-    if !ALLOWED_CALLER_CLASSES.contains(&class) {
-        let response = RegistryGetChangesSinceResponse {
-            error: Some(RegistryError {
-                code: Code::Authorization as i32,
-                reason: format!(
+    fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
+        // Authorize: Only self-authenticating and anonymous principals are allowed to call us.
+        const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
+            Ok(PrincipalIdClass::SelfAuthenticating),
+            Ok(PrincipalIdClass::Anonymous),
+        ];
+        let class = caller().class();
+        if !ALLOWED_CALLER_CLASSES.contains(&class) {
+            return Err((
+                Code::Authorization,
+                format!(
                     "Caller must be self-authenticating, or anonymous (but was {:?}).",
                     class,
                 ),
-                key: vec![],
-            }),
-            ..Default::default()
-        };
+            ));
+        }
 
-        let response: Vec<u8> =
-            serialize_get_changes_since_response(response).expect("Error serializing response");
+        // Parse request.
+        let request = deserialize_get_changes_since_request(arg_data())
+            .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
+        let version = request;
 
-        reply(&response);
-        return;
+        // All requirements met. Proceed with "real work".
+
+        let registry = registry();
+
+        let max_versions = registry
+            .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
+            .min(MAX_VERSIONS_PER_QUERY);
+
+        Ok(RegistryGetChangesSinceResponse {
+            error: None,
+            version: registry.latest_version(),
+            deltas: registry.get_changes_since(version, Some(max_versions)),
+        })
     }
 
-    let response_pb = match deserialize_get_changes_since_request(arg_data()) {
-        Ok(version) => {
-            let registry = registry();
-
-            let max_versions = registry
-                .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
-                .min(MAX_VERSIONS_PER_QUERY);
+    let response = main().unwrap_or_else(
+        // Convert Err to RegistryGetChangesSinceResponse
+        |(code, reason)| {
+            let code = code as i32;
 
             RegistryGetChangesSinceResponse {
-                error: None,
-                version: registry.latest_version(),
-                deltas: registry.get_changes_since(version, Some(max_versions)),
+                error: Some(RegistryError {
+                    code,
+                    reason,
+                    key: vec![],
+                }),
+                ..Default::default()
             }
-        }
-        Err(error) => RegistryGetChangesSinceResponse {
-            error: Some(RegistryError {
-                code: Code::MalformedMessage as i32,
-                reason: error.to_string(),
-                key: Vec::<u8>::default(),
-            }),
-            version: 0,
-            deltas: Vec::<RegistryDelta>::default(),
         },
-    };
-    let bytes =
-        serialize_get_changes_since_response(response_pb).expect("Error serializing response");
+    );
 
-    reply(&bytes);
+    let response =
+        serialize_get_changes_since_response(response).expect("Error serializing response");
+
+    reply(&response);
 }
 
 #[export_name = "canister_query get_certified_changes_since"]

@@ -38,10 +38,6 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [[bin]]
-name = "ic-systest-sr-nns-failover-nodes-test"
-path = "sr_nns_failover_nodes_test.rs"
-
-[[bin]]
 name = "ic-systest-cup-compatibility"
 path = "cup_compatibility_test.rs"
 
