@@ -1,5 +1,5 @@
 use crate::{
-    are_set_visibility_proposals_enabled, decoder_config, enable_new_canister_management_topics,
+    are_set_visibility_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -404,19 +404,14 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsRootUpgrade
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::ReviseElectedGuestosVersions
-                | NnsFunction::DeployGuestosToAllSubnetNodes
+            NnsFunction::ReviseElectedGuestosVersions | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsCanisterInstall
-                | NnsFunction::NnsRootUpgrade
+            NnsFunction::NnsCanisterInstall
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
@@ -432,6 +427,8 @@ impl NnsFunction {
                 | NnsFunction::UpdateNodesHostosVersion
                 | NnsFunction::BlessReplicaVersion
                 | NnsFunction::RetireReplicaVersion
+                | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsRootUpgrade
         )
     }
 }
@@ -822,20 +819,10 @@ impl Proposal {
                             NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::HardResetNnsRootToVersion
-                            | NnsFunction::BitcoinSetConfig => {
-                                if enable_new_canister_management_topics() {
-                                    Topic::ProtocolCanisterManagement
-                                } else {
-                                    Topic::NetworkCanisterManagement
-                                }
-                            }
+                            | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
                             NnsFunction::AddSnsWasm
                             | NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                                if enable_new_canister_management_topics() {
-                                    Topic::ServiceNervousSystemManagement
-                                } else {
-                                    Topic::NetworkCanisterManagement
-                                }
+                                Topic::ServiceNervousSystemManagement
                             }
                         }
                     } else {
@@ -961,6 +948,10 @@ impl Action {
                     Some(f) => f.allowed_when_resources_are_low(),
                     None => false,
                 }
+            }
+            Action::InstallCode(install_code) => install_code.allowed_when_resources_are_low(),
+            Action::UpdateCanisterSettings(update_canister_settings) => {
+                update_canister_settings.allowed_when_resources_are_low()
             }
             _ => false,
         }

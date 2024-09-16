@@ -62,6 +62,7 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
+        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -79,12 +80,12 @@ use ic_nns_governance::{
         settle_neurons_fund_participation_request, swap_background_information,
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, KnownNeuron,
-        KnownNeuronData, ListNeurons, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron,
-        NeuronChange, NeuronState, NeuronType, NeuronsFundData, NeuronsFundParticipation,
-        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalChange, ProposalData,
-        ProposalDataChange,
+        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
+        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
+        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
+        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
+        ProposalChange, ProposalData, ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -2018,6 +2019,116 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
         .with_neuron_management_voting_period(1)
         .with_wait_for_quiet_threshold(10)
         .build()
+}
+
+/// Legacy behavior.
+#[test]
+fn test_get_neuron_when_private_neuron_enforcement_disabled() {
+    // Step 1: Prepare the world.
+
+    // This is the only difference (in step 1) compared to the previous test.
+    let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
+
+    let driver = fake::FakeDriver::default();
+    let governance = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call code under test.
+    let neuron_id = NeuronId { id: 1 };
+    let key = NeuronIdOrSubaccount::NeuronId(neuron_id);
+    let controller = principal(1);
+
+    let neuron_info = governance
+        .get_neuron_info_by_id_or_subaccount(&key, *RANDOM_PRINCIPAL_ID)
+        .unwrap();
+
+    let full_neuron = governance
+        .get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(neuron_id),
+            &controller,
+        )
+        .unwrap();
+
+    let list_neurons_response = governance.list_neurons(
+        &ListNeurons {
+            neuron_ids: vec![1],
+            ..Default::default()
+        },
+        controller,
+    );
+
+    // Step 3: Inspect results.
+    assert_eq!(neuron_info.visibility, None);
+    assert_eq!(full_neuron.visibility, None);
+
+    assert_eq!(
+        list_neurons_response,
+        ListNeuronsResponse {
+            neuron_infos: hashmap! {
+                1 => neuron_info,
+            },
+            full_neurons: vec![full_neuron],
+        },
+    );
+}
+
+/// Behavior of glorious future.
+#[test]
+fn test_get_neuron_when_private_neuron_enforcement_enabled() {
+    // Step 1: Prepare the world.
+
+    // This is the only difference (in step 1) compared to the previous test.
+    let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
+
+    let driver = fake::FakeDriver::default();
+    let governance = Governance::new(
+        fixture_for_manage_neuron(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call code under test. (Same as previous test.)
+    let neuron_id = NeuronId { id: 1 };
+    let key = NeuronIdOrSubaccount::NeuronId(neuron_id);
+    let controller = principal(1);
+
+    let neuron_info = governance
+        .get_neuron_info_by_id_or_subaccount(&key, *RANDOM_PRINCIPAL_ID)
+        .unwrap();
+
+    let full_neuron = governance
+        .get_full_neuron_by_id_or_subaccount(
+            &NeuronIdOrSubaccount::NeuronId(neuron_id),
+            &controller,
+        )
+        .unwrap();
+
+    let list_neurons_response = governance.list_neurons(
+        &ListNeurons {
+            neuron_ids: vec![1],
+            ..Default::default()
+        },
+        controller,
+    );
+
+    // Step 3: Inspect results.
+    assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32));
+    assert_eq!(full_neuron.visibility, Some(Visibility::Private as i32));
+
+    assert_eq!(
+        list_neurons_response,
+        ListNeuronsResponse {
+            neuron_infos: hashmap! {
+                1 => neuron_info,
+            },
+            full_neurons: vec![full_neuron],
+        },
+    );
 }
 
 /// Test authorization for calls to `get_neuron_info` and
@@ -4203,6 +4314,11 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     );
 
     // Make sure the neuron was created with the right details.
+    let visibility = if is_private_neuron_enforcement_enabled() {
+        Some(Visibility::Private as i32)
+    } else {
+        None
+    };
     assert_eq!(
         gov.get_full_neuron(&id, &from).unwrap(),
         Neuron {
@@ -4214,6 +4330,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             aging_since_timestamp_seconds: driver.now(),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
+            visibility,
             ..Default::default()
         }
     );
@@ -8040,7 +8157,7 @@ fn test_filter_proposals_excluding_topics() {
                 proposer: Some(NeuronId { id: 1 }),
                 proposal: Some(Proposal {
                     action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                        nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                        nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
                         payload: Vec::new(),
                     })),
                     ..new_motion_proposal()
@@ -8074,7 +8191,7 @@ fn test_filter_proposals_excluding_topics() {
             &ListProposalInfo {
                 exclude_topic: vec![
                     Topic::NetworkEconomics as i32,
-                    Topic::NetworkCanisterManagement as i32
+                    Topic::ProtocolCanisterManagement as i32
                 ],
                 ..Default::default()
             },
@@ -8444,7 +8561,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
-    // Let's try a NnsCanisterUpgrade. This proposal type is whitelisted, so it can
+    // Let's try an Installcode for Governance itself. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
         gov.make_proposal(
@@ -8453,10 +8570,14 @@ async fn test_max_number_of_proposals_with_ballots() {
             &principal(1),
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
-                summary: "NnsCanisterUpgrade should go through despite the limit".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Vec::new(),
+                summary: "InstallCode for Governance should go through despite the limit"
+                    .to_string(),
+                action: Some(proposal::Action::InstallCode(InstallCode {
+                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                    wasm_module: Some(vec![1, 2, 3]),
+                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                    arg: Some(vec![4, 5, 6]),
+                    skip_stopping_before_installing: None,
                 })),
                 ..Default::default()
             },
@@ -9828,17 +9949,25 @@ fn test_include_public_neurons_in_full_neurons() {
 
     // Step 3: Inspect results.
 
-    assert_eq!(
-        list_neurons_response.full_neurons,
-        vec![
-            known_neuron,
-            explicitly_public_neuron,
-            // In particular, legacy and explicitly_private are NOT in the result.
+    let mut expected_full_neurons = vec![
+        known_neuron,
+        explicitly_public_neuron,
+        // In particular, legacy and explicitly_private are NOT in the result.
 
-            // This behavior already existed. This just makes sure that we did not break it.
-            caller_controlled_neuron,
-        ],
-    );
+        // This behavior already existed. This just makes sure that we did not break it.
+        caller_controlled_neuron,
+    ];
+
+    if is_private_neuron_enforcement_enabled() {
+        for neuron in &mut expected_full_neurons {
+            let visibility = &mut neuron.visibility;
+            if visibility.is_none() {
+                *visibility = Some(Visibility::Private as i32);
+            }
+        }
+    }
+
+    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons,);
 }
 
 /// Struct to help with the wait for quiet tests.
