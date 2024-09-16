@@ -72,7 +72,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    time::expiry_time_from_now,
+    time::{current_time, expiry_time_from_now},
     CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
@@ -1626,7 +1626,7 @@ impl ExecutionEnvironment {
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
-                let now = time;
+                let now = current_time();
                 let expiry_duration = expiry_time_from_now().saturating_duration_since(now);
                 let start = ingress.expiry_time.saturating_sub(expiry_duration);
                 let latency = now.saturating_duration_since(start).as_secs_f64();
