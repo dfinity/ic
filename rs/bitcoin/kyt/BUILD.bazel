@@ -71,6 +71,7 @@ test_using_pocket_ic_server(
         "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
         "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
     },
+    extra_HEAD_tags = ["manual"],
     macro = rust_ic_test,
     deps = [
         # Keep sorted.

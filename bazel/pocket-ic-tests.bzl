@@ -2,7 +2,7 @@
 This module defines a macro for running tests using the pocket-ic server from both mainnet and HEAD.
 """
 
-def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = ["manual"], **kwargs):
+def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD_tags = [], **kwargs):
     """
     Declares two targets as defined by the given test macro, one which uses the mainnet pocket-ic server and one that uses the pocket-ic server from HEAD.
 
@@ -17,9 +17,8 @@ def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD
 
     However it's still useful to also test the canisters against the HEAD version of the IC.
     Therefore an additional target is declared that runs the test using the HEAD version of the
-    pocket-ic server but this target is tagged as "manual" by default to not run it automatically on CI.
-    Most test override this "manual" tag with some tag to run it on a schedule like
-    "nns_tests_nightly" or "fi_tests_nightly".
+    pocket-ic server. Most tests set the extra_HEAD_tags to some tag like "nns_tests_nightly" or
+    "fi_tests_nightly" to run it on a schedule.
 
     In a way this macro is the mirror image of the rs/tests/system_tests.bzl:system_test_nns() macro.
 
