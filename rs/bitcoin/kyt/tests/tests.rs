@@ -12,8 +12,8 @@ use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
     common::rest::{
-        CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawMessageId,
+        CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
+        MockCanisterHttpResponse, RawMessageId,
     },
     query_candid, PocketIc, UserError, WasmResult,
 };
@@ -192,13 +192,7 @@ fn test_check_transaction_passed() {
     // given txid, and then fetch the vout[0] from the returned transaction body.
 
     let canister_http_requests = tick_until_next_request(env);
-    env.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: canister_http_requests[0].subnet_id,
-        request_id: canister_http_requests[0].request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: b"\
+    let body = b"\
 \x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
 \x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
 \x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
@@ -209,19 +203,20 @@ fn test_check_transaction_passed() {
 \xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
-                .to_vec(),
-        }),
-        additional_responses: vec![],
-    });
-
-    let canister_http_requests = tick_until_next_request(env);
+        .to_vec();
     env.mock_canister_http_response(MockCanisterHttpResponse {
         subnet_id: canister_http_requests[0].subnet_id,
         request_id: canister_http_requests[0].request_id,
         response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
             status: 200,
             headers: vec![],
-            body: b"\
+            body,
+        }),
+        additional_responses: vec![],
+    });
+
+    let canister_http_requests = tick_until_next_request(env);
+    let body = b"\
 \x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
 \xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
 \xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
@@ -232,9 +227,29 @@ fn test_check_transaction_passed() {
 \xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
-                .to_vec(),
+        .to_vec();
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: canister_http_requests[0].subnet_id,
+        request_id: canister_http_requests[0].request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
         }),
-        additional_responses: vec![],
+        // Fill additional responses with different headers to test if the transform
+        // function does its job by clearing the headers.
+        additional_responses: (1..13)
+            .map(|i| {
+                CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                    status: 200,
+                    headers: vec![CanisterHttpHeader {
+                        name: format!("name-{}", i),
+                        value: format!("{}", i),
+                    }],
+                    body: body.clone(),
+                })
+            })
+            .collect(),
     });
 
     let result = env
