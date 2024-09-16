@@ -1,12 +1,15 @@
 use async_trait::async_trait;
+use candid::Nat;
+use dfn_candid::candid_one;
 use dfn_core::{call, CanisterId};
-use dfn_protobuf::protobuf;
 use ic_ledger_core::block::BlockIndex;
-use ic_nervous_system_common::ledger::{ICRC1Ledger, IcpLedger};
-use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_common::{
+    ledger::{ICRC1Ledger, IcpLedger},
+    NervousSystemError,
+};
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
-    Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
+    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
+    TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
@@ -75,39 +78,48 @@ impl IcpLedger for IcpLedgerCanister {
         // this method, make sure that the staked amount
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
-        let result: Result<u64, (Option<i32>, String)> = call(
+        let result: Result<Result<u64, TransferError>, (Option<i32>, String)> = call(
             self.id,
-            "send_pb",
-            protobuf,
-            SendArgs {
+            "transfer",
+            candid_one,
+            TransferArgs {
                 memo: Memo(memo),
                 amount: Tokens::from_e8s(amount_e8s),
                 fee: Tokens::from_e8s(fee_e8s),
                 from_subaccount,
-                to,
+                to: to.to_address(),
                 created_at_time: None,
             },
         )
         .await;
 
-        result.map_err(|(code, msg)| {
-            NervousSystemError::new_with_message(format!(
-                "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
-                code, msg
-            ))
-        })
+        result
+            .map_err(|(code, msg)| {
+                NervousSystemError::new_with_message(format!(
+                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
+                    code, msg
+                ))
+            })
+            .and_then(|inner_result| {
+                inner_result.map_err(|e: TransferError| {
+                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+                })
+            })
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (Option<i32>, String)> =
-            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {})
+            call(self.id, "icrc1_total_supply", candid_one, ())
                 .await
-                .map(tokens_from_proto);
+                .map(|e8s: Nat| {
+                    Tokens::try_from(e8s)
+                        .expect("Should always succeed, as ICP ledger internally stores u64")
+                });
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'total_supply' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )
@@ -120,17 +132,18 @@ impl IcpLedger for IcpLedgerCanister {
     ) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (Option<i32>, String)> = call(
             self.id,
-            "account_balance_pb",
-            protobuf,
-            AccountBalanceArgs { account },
+            "account_balance",
+            candid_one,
+            BinaryAccountBalanceArgs {
+                account: account.to_address(),
+            },
         )
-        .await
-        .map(tokens_from_proto);
+        .await;
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance_pb' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )

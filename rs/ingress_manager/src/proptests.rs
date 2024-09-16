@@ -77,7 +77,7 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(
                             message_id.clone(),
                         )]);
                         // check that message is indeed in the pool
