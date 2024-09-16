@@ -39,7 +39,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dyn-clone = "1.0.14"
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-cdk = { workspace = true, optional = true }
+ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
@@ -119,4 +119,4 @@ tokio-test = "0.4.2"
 
 [features]
 test = ["ic-sns-swap/test"]
-canbench-rs = ["dep:canbench-rs", "dep:ic-cdk"]
+canbench-rs = ["dep:canbench-rs"]
