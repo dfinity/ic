@@ -63,7 +63,6 @@ pub fn main() -> Result<()> {
         }) => {
             // get config.ini settings
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
-
             let ConfigIniSettings {
                 ipv6_prefix,
                 ipv6_address,
