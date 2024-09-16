@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tokio-rustls",
     "@crate_index//:tower",
-    "@crate_index//:tracing",
     "@crate_index//:url",
 ]
 

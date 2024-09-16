@@ -14,8 +14,9 @@ use crate::certified_slice_pool::{
     certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
 };
 use async_trait::async_trait;
-use hyper::{client::Client, Body, Request, StatusCode, Uri};
-use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
+use http_body_util::BodyExt;
+use hyper::{Request, StatusCode, Uri};
+use hyper_util::client::legacy::Client;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -55,8 +56,8 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use thiserror::Error;
 use tokio::{runtime, sync::mpsc};
-use tracing::instrument;
 
 /// Message and signal indices into a XNet stream or stream slice.
 ///
@@ -325,7 +326,6 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            runtime_handle.clone(),
             tls_handshake,
             proximity_map.clone(),
         ));
@@ -414,7 +414,6 @@ impl XNetPayloadBuilderImpl {
     ///
     /// Returns the default value `(0, 0)` when no stream or slices from the
     /// given subnet exist.
-    #[instrument(skip_all)]
     fn expected_indices_for_stream(
         &self,
         subnet_id: SubnetId,
@@ -456,7 +455,6 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Computes the expected message and signal indices for every known subnet.
-    #[instrument(skip_all)]
     fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
@@ -497,7 +495,6 @@ impl XNetPayloadBuilderImpl {
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
     ///     and
-    #[instrument(skip_all)]
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -591,7 +588,6 @@ impl XNetPayloadBuilderImpl {
     ///
     /// Returns the validation result, including the `CountBytes`-like estimate
     /// (deterministic, but not exact) of the slice size in bytes if valid.
-    #[instrument(skip_all)]
     fn validate_slice(
         &self,
         subnet_id: SubnetId,
@@ -781,7 +777,6 @@ impl XNetPayloadBuilderImpl {
 
     /// Implementation of `get_xnet_payload()` that returns a `Result`, so it
     /// can use the `?` operator internally for clean and simple error handling.
-    #[instrument(skip_all)]
     fn get_xnet_payload_impl(
         &self,
         validation_context: &ValidationContext,
@@ -1231,7 +1226,6 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    #[instrument(skip_all)]
     async fn refill_pool(
         &self,
         pool_byte_size_soft_cap: usize,
@@ -1317,6 +1311,7 @@ impl PoolRefillTask {
 
                 match query_result {
                     Ok(slice) => {
+                        let logger = log.clone();
                         let res = tokio::task::spawn_blocking(move || {
                             if witness_begin != msg_begin {
                                 // Pulled a stream suffix, append to pooled slice.
@@ -1330,15 +1325,22 @@ impl PoolRefillTask {
                                     .put(subnet_id, slice, registry_version, log)
                             }
                         })
-                        .await
-                        .unwrap();
-                        let status = match res {
-                            Ok(()) => STATUS_SUCCESS,
-                            Err(e) => e.to_label_value(),
-                        };
+                        .await;
+                        match res {
+                            Ok(res) => {
+                                let status = match res {
+                                    Ok(()) => STATUS_SUCCESS,
+                                    Err(e) => e.to_label_value(),
+                                };
 
-                        metrics.observe_query_slice_duration(status, proximity, since);
-                        metrics.observe_pull_attempt(status);
+                                metrics.observe_query_slice_duration(status, proximity, since);
+                                metrics.observe_pull_attempt(status);
+                            }
+                            Err(err) => warn!(
+                                logger,
+                                "Failed to join pool refill blocking thread: {}", err
+                            ),
+                        };
                     }
 
                     Err(e) => {
@@ -1458,57 +1460,22 @@ impl SliceValidationResult {
 }
 
 /// Internal error type, to simplify error handling.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),
+    #[error("Failed to retrieve list of subnets: {0}")]
     RegistryGetSubnetsFailed(RegistryClientError),
+    #[error("Failed to retrieve registry info for subnet {0}: {1}")]
     RegistryGetSubnetInfoFailed(SubnetId, RegistryClientError),
+    #[error("No nodes in subnet {0}")]
     MissingSubnet(SubnetId),
+    #[error("Failed to retrieve registry info for node {0}: {1}")]
     RegistryGetNodeInfoFailed(NodeId, RegistryClientError),
+    #[error("No XNet endpoint info found for node {0}")]
     MissingXNetEndpoint(NodeId),
+    #[error("Invalid XNet endpoint info for node {0}: {1}")]
     InvalidXNetEndpoint(NodeId, String),
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::GetStateFailed(_height, e) => Some(e),
-            Error::RegistryGetSubnetsFailed(e) => Some(e),
-            Error::RegistryGetSubnetInfoFailed(_subnet_id, e) => Some(e),
-            Error::RegistryGetNodeInfoFailed(_node_id, e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::GetStateFailed(height, e) => {
-                write!(f, "Error retrieving state at height {}: {}", height, e)
-            }
-            Error::RegistryGetSubnetsFailed(e) => {
-                write!(f, "Failed to retrieve list of subnets: {}", e)
-            }
-            Error::RegistryGetSubnetInfoFailed(subnet_id, e) => write!(
-                f,
-                "Failed to retrieve registry info for subnet {}: {}",
-                subnet_id, e
-            ),
-            Error::MissingSubnet(subnet_id) => write!(f, "No nodes in subnet {}", subnet_id),
-            Error::RegistryGetNodeInfoFailed(node_id, e) => write!(
-                f,
-                "Failed to retrieve registry info for node {}: {}",
-                node_id, e
-            ),
-            Error::MissingXNetEndpoint(node_id) => {
-                write!(f, "No XNet endpoint info found for node {}", node_id)
-            }
-            Error::InvalidXNetEndpoint(node_id, e) => {
-                write!(f, "Invalid XNet endpoint info for node {}: {}", node_id, e)
-            }
-        }
-    }
 }
 
 impl Error {
@@ -1550,11 +1517,13 @@ pub trait XNetClient: Sync + Send {
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
 }
 
+type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
+
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
     /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<Body>>,
+    http_client: Client<TlsConnector, Request<XNetRequestBody>>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
@@ -1568,21 +1537,27 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
+        #[cfg(not(test))]
+        let https = TlsConnector::new(tls);
+        #[cfg(test)]
+        let https = TlsConnector::new_for_tests(tls);
+
+        let crt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("XNet_Payload_Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         // TODO(MR-28) Make timeout configurable.
-        let http_client: Client<TlsConnector, _> = Client::builder()
-            .pool_idle_timeout(Some(Duration::from_secs(600)))
-            .pool_max_idle_per_host(1)
-            .executor(ExecuteOnRuntime(runtime_handle))
-            .build(
-                #[cfg(not(test))]
-                TlsConnector::new(tls),
-                #[cfg(test)]
-                TlsConnector::new_for_tests(tls),
-            );
+        let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
+            Client::builder(ExecuteOnRuntime(crt.handle().clone()))
+                .pool_idle_timeout(Some(Duration::from_secs(600)))
+                .pool_max_idle_per_host(1)
+                .build(https);
 
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
@@ -1611,7 +1586,13 @@ impl XNetClient for XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             let request_start = Instant::now();
-            let result = self.http_client.get(endpoint.url.clone()).await;
+
+            let response = self
+                .http_client
+                .get(endpoint.url.clone())
+                .await
+                .map_err(XNetClientError::RequestFailed)?;
+
             // While this is not exactly roundtrip time (it may include multiple roundtrips
             // e.g. if a TLS connection needs to be established first), it is a good enough
             // approximation. Else, we would have to use explicit pings to measure actual
@@ -1621,21 +1602,15 @@ impl XNetClient for XNetClientImpl {
                 Instant::now().saturating_duration_since(request_start),
             );
 
-            let response = result.map_err(|e| {
-                if e.is_timeout() {
-                    XNetClientError::Timeout
-                } else {
-                    XNetClientError::RequestFailed(e)
-                }
-            })?;
-
             let status = response.status();
-            let content = receive_body_without_timeout(
-                response.into_body(),
-                (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
-            )
-            .await
-            .map_err(XNetClientError::BodyReadError)?;
+
+            let content =
+                http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
+                    .collect()
+                    .await
+                    .map(|collected| collected.to_bytes())
+                    .map_err(XNetClientError::BodyReadError)?;
+
             Ok((status, content))
         })
         .await;
@@ -1668,40 +1643,20 @@ impl XNetClient for XNetClientImpl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum XNetClientError {
+    #[error("XNet request timed out")]
     Timeout,
-    RequestFailed(hyper::Error),
+    #[error("XNet request failed: {0}")]
+    RequestFailed(hyper_util::client::legacy::Error),
+    #[error("No stream")]
     NoContent,
+    #[error("HTTP {0}: {1}")]
     ErrorResponse(hyper::StatusCode, String),
-    BodyReadError(BodyReceiveError),
+    #[error("Error reading response body: {0}")]
+    BodyReadError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("Error decoding XNet proto into Rust struct: {0}")]
     ProxyDecodeError(ProxyDecodeError),
-}
-
-impl std::error::Error for XNetClientError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            XNetClientError::RequestFailed(e) => Some(e),
-            XNetClientError::BodyReadError(e) => Some(e),
-            XNetClientError::ProxyDecodeError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for XNetClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            XNetClientError::Timeout => write!(f, "XNet request timed out"),
-            XNetClientError::RequestFailed(e) => write!(f, "XNet request failed: {}", e),
-            XNetClientError::NoContent => write!(f, "No stream"),
-            XNetClientError::ErrorResponse(status, msg) => write!(f, "HTTP {}: {}", status, msg),
-            XNetClientError::BodyReadError(e) => write!(f, "Error reading response body: {}", e),
-            XNetClientError::ProxyDecodeError(e) => {
-                write!(f, "Error decoding XNet proto into Rust struct: {}", e)
-            }
-        }
-    }
 }
 
 impl XNetClientError {

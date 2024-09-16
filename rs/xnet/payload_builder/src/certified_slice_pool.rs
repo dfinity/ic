@@ -26,7 +26,6 @@ use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
-use tracing::instrument;
 
 const LABEL_STREAMS: &[u8] = b"streams";
 const LABEL_HEADER: &[u8] = b"header";
@@ -1105,7 +1104,6 @@ impl CertifiedSlicePool {
     /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
     /// drops the pooled slice if `begin`'s `message_index` is before the
     /// first pooled message.
-    #[instrument(skip_all)]
     pub fn take_slice(
         &mut self,
         subnet_id: SubnetId,
@@ -1146,7 +1144,6 @@ impl CertifiedSlicePool {
     /// `self.payload` is malformed. Returns `Err(TakeBeforeSliceBegin)` if
     /// `begin`'s `message_index` is before the pooled slice's messages begin
     /// index.
-    #[instrument(skip_all)]
     fn take_slice_impl(
         &mut self,
         subnet_id: SubnetId,
@@ -1307,7 +1304,6 @@ impl CertifiedSlicePool {
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
     /// not be decoded or its certification was invalid.
-    #[instrument(skip_all)]
     pub fn put(
         &mut self,
         subnet_id: SubnetId,
@@ -1341,7 +1337,6 @@ impl CertifiedSlicePool {
     /// Returns `Err(InvalidAppend)` if the two slices do not match.
     /// Returns `Err(DecodeStreamError)` if the partial slice could not be decoded
     /// or the certification was invalid for the merged slice.
-    #[instrument(skip_all)]
     pub fn append(
         &mut self,
         subnet_id: SubnetId,
@@ -1387,7 +1382,6 @@ impl CertifiedSlicePool {
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
     /// `unpacked` is malformed.
-    #[instrument(skip_all)]
     fn put_impl(
         &mut self,
         subnet_id: SubnetId,
@@ -1525,7 +1519,6 @@ fn witness_count_bytes(
 ///
 /// Returns `Err(DecodeStreamError)` if the slice could not be decoded or its
 /// certification was invalid.
-#[instrument(skip_all)]
 fn validate_slice(
     slice: &CertifiedStreamSlice,
     subnet_id: SubnetId,

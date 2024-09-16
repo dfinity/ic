@@ -8,8 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-hyper = { version = "0.14.18", features = ["full", "tcp"] }
-ic-async-utils = { path = "../../async_utils" }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-limits = { path = "../../limits" }
@@ -32,8 +33,8 @@ ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

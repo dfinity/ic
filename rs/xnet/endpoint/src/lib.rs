@@ -28,7 +28,6 @@ use tokio::{
     sync::{Notify, Semaphore},
 };
 use tower::Service;
-use tracing::instrument;
 use url::Url;
 
 pub struct XNetEndpointMetrics {
@@ -127,7 +126,6 @@ fn ok<T>(t: T) -> Result<T, Infallible> {
 
 /// Handles an incoming HTTP request by taking a permit from the semaphore, parsing the URL,
 /// handing over to `route_request()` and replying with the produced response.
-#[instrument(skip_all)]
 async fn handle_xnet_request(
     State(ctx): State<Context>,
     request: Request<Body>,
@@ -324,7 +322,6 @@ impl XNetEndpoint {
 
 /// Routes an `XNetEndpoint` request to the appropriate handler; or produces an
 /// HTTP 404 Not Found response if the URL doesn't match any handler.
-#[instrument(skip_all)]
 fn route_request(
     url: Url,
     certified_stream_store: &dyn CertifiedStreamStore,
@@ -396,7 +393,6 @@ fn route_request(
 }
 
 /// Returns a list of all subnets with available streams.
-#[instrument(skip_all)]
 fn handle_streams(
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
@@ -411,7 +407,6 @@ fn handle_streams(
 
 /// Returns a stream slice for the given subnet; or a 404 response if a stream
 /// for the respective subnet does not exist.
-#[instrument(skip_all)]
 fn handle_stream(
     subnet_id: SubnetId,
     witness_begin: Option<StreamIndex>,
@@ -462,7 +457,6 @@ where
 }
 
 /// Serializes the response as JSON.
-#[instrument(skip_all)]
 pub(crate) fn json_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
     let buf = serde_json::to_vec(r).expect("Could not serialize response");
     let size_bytes = buf.len();
@@ -476,7 +470,6 @@ pub(crate) fn json_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
 }
 
 /// Serializes the response as Protobuf.
-#[instrument(skip_all)]
 pub(crate) fn proto_response<R, M>(r: R) -> (Response<Body>, usize)
 where
     M: ProtoProxy<R>,
