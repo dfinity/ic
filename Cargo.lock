@@ -8043,16 +8043,8 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
-<<<<<<< HEAD
  "tower",
  "wasmparser 0.215.0",
-||||||| 97867a1211
- "tower",
- "wasmparser 0.212.0",
-=======
- "tower 0.4.13",
- "wasmparser 0.212.0",
->>>>>>> origin/master
 ]
 
 [[package]]
