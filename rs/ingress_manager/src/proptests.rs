@@ -14,13 +14,13 @@
 //! small number of values variable.
 
 use crate::tests::{access_ingress_pool, setup_with_params};
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
     p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
@@ -77,10 +77,9 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(
                             message_id.clone(),
-                            node_test_id(0),
-                        ))]);
+                        )]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
                     });

@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/types/base_types",
+    "//rs/protobuf",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:maplit",
+]
+
+rust_library(
+    name = "node_provider_rewards",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_node_provider_rewards",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "node_provider_rewards_test",
+    crate = ":node_provider_rewards",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

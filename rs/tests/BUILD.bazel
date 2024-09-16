@@ -13,6 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 exports_files([
     "src/memory_safety.wasm",
     "src/message.wasm",
+    "src/counter.wat",
 ])
 
 ALIASES = {
@@ -131,10 +132,6 @@ symlink_dir_test(
         "//rs/types/types:types_test": "types_test",
     },
 )
-
-exports_files([
-    "src/orchestrator/orchestrator_universal_vm_activation.sh",
-])
 
 copy_file(
     name = "static-file-server_image",

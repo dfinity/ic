@@ -575,16 +575,18 @@ fn configure_setupos_image(
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
     let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs =
-        get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
-    let setupos_disable_checks =
-        get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+    let setupos_inject_configs = get_dependency_path(
+        "rs/ic_os/dev_test_tools/setupos-inject-configuration/setupos-inject-configuration",
+    );
+    let setupos_disable_checks = get_dependency_path(
+        "rs/ic_os/dev_test_tools/setupos-disable-checks/setupos-disable-checks",
+    );
 
     let nested_vm = env.get_nested_vm(name)?;
 
     let mac = nested_vm.get_vm()?.mac6;
     let memory = "16";
-    let cpu_mode = "qemu";
+    let cpu = "qemu";
 
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     let admin_keys: Vec<_> = std::fs::read_to_string(ssh_authorized_pub_keys_dir.join("admin"))
@@ -644,8 +646,8 @@ fn configure_setupos_image(
         .arg(&gateway)
         .arg("--memory-gb")
         .arg(memory)
-        .arg("--cpu-mode")
-        .arg(cpu_mode)
+        .arg("--cpu")
+        .arg(cpu)
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--nns-public-key")

@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-either = "1.6.0"
 ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
 ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }

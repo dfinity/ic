@@ -5,8 +5,7 @@ mod test {
     use futures::TryFutureExt;
     use ic_https_outcalls_adapter::{AdapterServer, Config};
     use ic_https_outcalls_service::{
-        canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
-        HttpMethod,
+        https_outcalls_service_client::HttpsOutcallsServiceClient, HttpMethod, HttpsOutcallRequest,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -147,7 +146,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/get", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -155,7 +154,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
         });
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
@@ -171,7 +170,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("http://{}/get", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -179,7 +178,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
         });
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         assert_eq!(
             response.as_ref().unwrap_err().code(),
             tonic::Code::InvalidArgument
@@ -201,7 +200,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_http_server("127.0.0.1".parse().unwrap());
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("http://{}/get", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -209,7 +208,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
         });
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
@@ -223,7 +222,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/post", &url),
             headers: Vec::new(),
             method: HttpMethod::Post as i32,
@@ -232,7 +231,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
         assert_eq!(String::from_utf8_lossy(&http_response.content), "420");
@@ -247,7 +246,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/head", &url),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
@@ -256,7 +255,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
@@ -272,7 +271,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/size", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -281,7 +280,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         assert_eq!(
             response.as_ref().unwrap_err().code(),
             tonic::Code::OutOfRange
@@ -289,7 +288,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"header exceeds http body size".to_string()));
+            .contains(&"Http body exceeds size limit of".to_string()));
     }
 
     #[tokio::test]
@@ -302,7 +301,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/size", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -311,7 +310,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
@@ -327,7 +326,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/delay", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -336,7 +335,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         assert_eq!(
             response.as_ref().unwrap_err().code(),
             tonic::Code::Cancelled
@@ -361,7 +360,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         // Non routable address that causes a connect timeout.
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: "https://10.255.255.1".to_string(),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
@@ -369,7 +368,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 64,
             socks_proxy_allowed: false,
         });
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         assert_eq!(
             response.as_ref().unwrap_err().code(),
             tonic::Code::Unavailable
@@ -377,7 +376,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"deadline has elapsed".to_string()));
+            .contains(&"client error (Connect)".to_string()));
     }
 
     #[tokio::test]
@@ -390,7 +389,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: format!("https://{}/invalid", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -399,7 +398,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             socks_proxy_allowed: false,
         });
 
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let _ = response.unwrap_err();
     }
 
@@ -413,7 +412,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let _url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
-        let request = tonic::Request::new(CanisterHttpSendRequest {
+        let request = tonic::Request::new(HttpsOutcallRequest {
             url: "127.0.0.1".to_string(),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
@@ -421,12 +420,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
         });
-        let response = client.canister_http_send(request).await;
+        let response = client.https_outcall(request).await;
         let _ = response.unwrap_err();
     }
 
     // Spawn grpc server and return canister http client
-    fn spawn_grpc_server(config: Config) -> CanisterHttpServiceClient<Channel> {
+    fn spawn_grpc_server(config: Config) -> HttpsOutcallsServiceClient<Channel> {
         let uuid = Uuid::new_v4();
         let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
 
@@ -455,7 +454,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 UnixStream::connect(path.clone())
             }));
 
-        CanisterHttpServiceClient::new(channel)
+        HttpsOutcallsServiceClient::new(channel)
     }
 
     // implements unix listener that removes socket file when done

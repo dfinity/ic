@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/node_provider_rewards",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
@@ -97,6 +98,14 @@ BUILD_DEPENDENCIES = [
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    [
+        "gen/**",
+        "src/**",
+    ],
+    exclude = ["**/*tests*/**"],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -108,10 +117,7 @@ cargo_build_script(
 
 rust_library(
     name = "canister",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "registry_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -126,28 +132,30 @@ rust_canister(
     compile_data = ["canister/registry.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/registry.did",
-    deps = DEPENDENCIES + [":canister"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":canister",
+    ],
 )
 
 rust_ic_test(
     name = "registry_canister_canister_test",
     srcs = glob(["canister/*.rs"]),
+    compile_data = ["canister/registry.did"],
     crate_root = "canister/canister.rs",
-    data = [
-        "canister/registry.did",
-        ":registry-canister",
-        "//rs/nns/cmc:cycles-minting-canister",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/registry/canister",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":canister"] + [":build_script"],
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [
+        ":build_script",
+        ":canister",
+    ],
 )
 
 rust_test(
     name = "registry_canister_test",
-    crate = ":canister",
+    srcs = glob([
+        "gen/**",
+        "src/**",
+    ]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -157,15 +165,18 @@ rust_ic_test_suite_with_extra_srcs(
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
-            "tests/mod.rs",
+            # Keep sorted.
             "tests/check_generated_files.rs",
+            "tests/mod.rs",
         ],
     ),
     data = [
+        # Keep sorted.
         ":registry-canister",
         "//rs/nns/cmc:cycles-minting-canister",
     ],
     env = {
+        # Keep sorted.
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
@@ -179,6 +190,7 @@ generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
     data = [
+        # Keep sorted.
         ":protos",
         "//rs/nns/common:protos",
         "//rs/protobuf:protos",

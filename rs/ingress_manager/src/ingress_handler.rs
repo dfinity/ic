@@ -1,37 +1,40 @@
 use crate::IngressManager;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_pool::{
         ChangeAction::{
             MoveToValidated, PurgeBelowExpiry, RemoveFromUnvalidated, RemoveFromValidated,
         },
-        ChangeSet, IngressPool,
+        IngressPool, IngressPoolObject, Mutations,
     },
-    p2p::consensus::ChangeSetProducer,
+    p2p::consensus::PoolMutationsProducer,
 };
-use ic_logger::{debug, warn};
-use ic_types::{artifact::IngressMessageId, ingress::IngressStatus, CountBytes};
+use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::debug;
+use ic_registry_client_helpers::subnet::IngressMessageSettings;
+use ic_types::{
+    artifact::IngressMessageId, ingress::IngressStatus, messages::MessageId, CountBytes,
+    RegistryVersion, Time,
+};
+use ic_validator::RequestValidationError;
 
-impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
-    type ChangeSet = ChangeSet;
+impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
+    type Mutations = Mutations;
 
-    #[allow(clippy::cognitive_complexity)]
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> Mutations {
         // Skip on_state_change when ingress_message_setting is not available in
         // registry.
         let registry_version = self.registry_client.get_latest_version();
-        let ingress_message_settings = match self.get_ingress_message_settings(registry_version) {
-            Some(settings) => settings,
-            None => return ChangeSet::new(),
+        let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
+        else {
+            return Mutations::new();
         };
 
         let _timer = self.metrics.ingress_handler_time.start_timer();
         let get_status = self.ingress_hist_reader.get_latest_status();
 
         // Do not run on_state_change if consensus_time is not initialized yet.
-        let consensus_time = match self.consensus_time.consensus_time() {
-            Some(time) => time,
-            None => return ChangeSet::new(),
+        let Some(consensus_time) = self.consensus_time.consensus_time() else {
+            return Mutations::new();
         };
 
         let mut change_set = Vec::new();
@@ -49,67 +52,34 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         // looks at the unvalidated ingress messages and
         // 1. either discards them
         // 2. or moves them to validated.
-        let unvalidated_artifacts = pool
+        let unvalidated_artifacts_changeset = pool
             .unvalidated()
-            .get_all_by_expiry_range(expiry_range.clone());
-        change_set.extend(unvalidated_artifacts.map(|artifact| {
-            let ingress_object = &artifact.message;
-            let ingress_message = &ingress_object.signed_ingress;
-            let max_ingress_bytes_per_message =
-                ingress_message_settings.max_ingress_bytes_per_message;
-            // If the message is too large, consider the ingress message invalid
-            let size = ingress_object.count_bytes();
-            if size > max_ingress_bytes_per_message {
-                warn!(
-                    self.log,
-                    "ingress_message_remove_unvalidated";
-                    ingress_message.message_id => format!("{}", ingress_object.message_id),
-                    ingress_message.reason => "message_too_large",
-                    ingress_message.size => size as u64,
-                );
-                return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
-            }
+            .get_all_by_expiry_range(expiry_range.clone())
+            .map(|artifact| {
+                let ingress_object = &artifact.message;
 
-            // Check status of the ingress message against IngressHistoryReader,
-            // If Unknown, consider the ingress message valid
-            let status = get_status(&ingress_object.message_id);
-            if status != IngressStatus::Unknown {
-                debug!(
-                    self.log,
-                    "ingress_message_remove_unvalidated";
-                    ingress_message.message_id => format!("{}", ingress_object.message_id),
-                    ingress_message.reason => format!("unexpected_status_{}", status.as_str()),
-                );
-                return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
-            }
+                match self.validate_ingress_pool_object(
+                    ingress_object,
+                    &ingress_message_settings,
+                    get_status.as_ref(),
+                    consensus_time,
+                    registry_version,
+                ) {
+                    Ok(()) => MoveToValidated(IngressMessageId::from(ingress_object)),
+                    Err(err) => {
+                        debug!(
+                            self.log,
+                            "ingress_message_remove_unvalidated";
+                            ingress_message.message_id => ingress_object.message_id.to_string(),
+                            ingress_message.reason => err.to_string(),
+                        );
 
-            // Check signatures, remove from unvalidated if they can't be
-            // verified, add to validated otherwise.
-            //
-            // Note that consensus_time is used here instead of current_time,
-            // in order to be consistent with expiry_range, which imposes
-            // a precondition that all messages processed here are in range.
-            if let Err(err) = self.request_validator.validate_request(
-                ingress_message.as_ref(),
-                consensus_time,
-                &self.registry_root_of_trust_provider(registry_version),
-            ) {
-                debug!(
-                    self.log,
-                    "ingress_message_remove_unvalidated";
-                    ingress_message.message_id => format!("{}", ingress_object.message_id),
-                    ingress_message.reason => format!("auth_failure: {}", err),
-                );
-                return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
-            }
+                        RemoveFromUnvalidated(IngressMessageId::from(ingress_object))
+                    }
+                }
+            });
 
-            debug!(
-                self.log,
-                "ingress_message_insert_validated";
-                ingress_message.message_id => format!("{}", ingress_object.message_id),
-            );
-            MoveToValidated((IngressMessageId::from(ingress_object), artifact.peer_id))
-        }));
+        change_set.extend(unvalidated_artifacts_changeset);
 
         // Check validated messages and remove if they are not required anymore (i.e.
         // IngressHistoryReader returns status other than Unknown).
@@ -139,6 +109,71 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         }
 
         change_set
+    }
+}
+
+enum IngressMessageValidationError {
+    IngressMessageTooLarge { max: usize, actual: usize },
+    UnexpectedStatus(IngressStatus),
+    InvalidRequest(RequestValidationError),
+}
+
+impl std::fmt::Display for IngressMessageValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngressMessageValidationError::IngressMessageTooLarge { max, actual } => {
+                write!(f, "Ingress Message is too large {} > {}", actual, max)
+            }
+            IngressMessageValidationError::UnexpectedStatus(status) => write!(
+                f,
+                "Ingress Message is not `Unknown` to the IngressHistoryReader: {:?}",
+                status
+            ),
+            IngressMessageValidationError::InvalidRequest(error) => {
+                write!(f, "Ingress Message failed validation: {}", error)
+            }
+        }
+    }
+}
+
+impl IngressManager {
+    fn validate_ingress_pool_object(
+        &self,
+        ingress_object: &IngressPoolObject,
+        settings: &IngressMessageSettings,
+        ingress_message_status: impl Fn(&MessageId) -> IngressStatus,
+        consensus_time: Time,
+        registry_version: RegistryVersion,
+    ) -> Result<(), IngressMessageValidationError> {
+        // If the message is too large, consider the ingress message invalid
+        let size = ingress_object.count_bytes();
+        if size > settings.max_ingress_bytes_per_message {
+            return Err(IngressMessageValidationError::IngressMessageTooLarge {
+                max: settings.max_ingress_bytes_per_message,
+                actual: size,
+            });
+        }
+
+        let status = ingress_message_status(&ingress_object.message_id);
+        if status != IngressStatus::Unknown {
+            return Err(IngressMessageValidationError::UnexpectedStatus(status));
+        }
+
+        // Check signatures, remove from unvalidated if they can't be
+        // verified, add to validated otherwise.
+        //
+        // Note that consensus_time is used here instead of current_time,
+        // in order to be consistent with expiry_range, which imposes
+        // a precondition that all messages processed here are in range.
+        if let Err(err) = self.request_validator.validate_request(
+            ingress_object.signed_ingress.as_ref(),
+            consensus_time,
+            &self.registry_root_of_trust_provider(registry_version),
+        ) {
+            return Err(IngressMessageValidationError::InvalidRequest(err));
+        }
+
+        Ok(())
     }
 }
 
@@ -199,8 +234,7 @@ mod tests {
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
-                let expected_change_action =
-                    ChangeAction::MoveToValidated((message_id, node_test_id(0)));
+                let expected_change_action = ChangeAction::MoveToValidated(message_id);
                 assert!(change_set.contains(&expected_change_action));
             },
         )
@@ -348,7 +382,7 @@ mod tests {
                         timestamp: time,
                     });
                     let change_set = ingress_manager.on_state_change(ingress_pool);
-                    ingress_pool.apply_changes(change_set);
+                    ingress_pool.apply(change_set);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
@@ -410,8 +444,7 @@ mod tests {
                 let good_id = IngressMessageId::from(&good_msg);
                 let bad_id = IngressMessageId::from(&bad_msg);
                 let expected_change_action0 = PurgeBelowExpiry(batch_time);
-                let expected_change_action1 =
-                    ChangeAction::MoveToValidated((good_id, node_test_id(0)));
+                let expected_change_action1 = ChangeAction::MoveToValidated(good_id);
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);
                 assert_eq!(change_set.len(), 3);
                 assert!(change_set.contains(&expected_change_action0));

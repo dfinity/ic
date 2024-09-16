@@ -1,5 +1,5 @@
 use ic_crypto_internal_csp::api::{
-    CspSigVerifier, CspSigner, CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspSigner, CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
@@ -55,15 +55,6 @@ mock! {
             &self,
             signers: Vec<CspPublicKey>,
             signature: CspSignature,
-            msg: &[u8],
-            algorithm_id: AlgorithmId,
-        ) -> CryptoResult<()>;
-    }
-
-    impl CspSigVerifier for AllCryptoServiceProvider {
-        fn verify_batch(
-            &self,
-            key_signature_pairs: &[(CspPublicKey, CspSignature)],
             msg: &[u8],
             algorithm_id: AlgorithmId,
         ) -> CryptoResult<()>;

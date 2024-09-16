@@ -564,7 +564,6 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState {
                 canister_root: "NOT_USED".into(),
-                session_nonce: None,
                 wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
                 wasm_memory: Memory::new_for_testing(),
                 stable_memory: Memory::new_for_testing(),
@@ -931,9 +930,7 @@ prop_compose! {
             max_size,
             min_signal_count,
             max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream

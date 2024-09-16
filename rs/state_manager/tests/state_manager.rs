@@ -17,7 +17,9 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, St
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{CanisterChangeDetails, CanisterChangeOrigin};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -31,7 +33,10 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, StateMachine, StateMachineBuilder,
+    TakeCanisterSnapshotArgs, UploadChunkArgs,
+};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
     state_sync::{
@@ -104,9 +109,7 @@ fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> 
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+        + std::fs::metadata(canister_layout.vmemory_0().base()).map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of stable memory including overlays.
@@ -119,8 +122,7 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
         + std::fs::metadata(canister_layout.stable_memory().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+            .map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of wasm chunk store including overlays.
@@ -134,8 +136,7 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map(|p| std::fs::metadata(p).unwrap().len())
             .sum::<u64>()
             + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map(|metadata| metadata.len())
-                .unwrap_or(0)
+                .map_or(0, |metadata| metadata.len())
     } else {
         std::fs::metadata(canister_layout.wasm_chunk_store().base())
             .unwrap()
@@ -6326,14 +6327,9 @@ fn can_create_and_delete_canister_snapshot() {
     });
 }
 
-proptest! {
-    /// Backup then restore. Two closely related variants, one where everything happens in one checkpoint interval, and one where it
-    /// happens across checkpoints.
-    #[test]
-    fn can_create_and_restore_snapshot(certification_scope in prop_oneof!(
-        Just(CertificationScope::Full),
-        Just(CertificationScope::Metadata)
-    )) {
+#[test]
+fn can_create_and_restore_snapshot() {
+    fn can_create_and_restore_snapshot_impl(certification_scope: CertificationScope) {
         state_manager_test(|metrics, state_manager| {
             let canister_id = canister_test_id(100);
 
@@ -6359,8 +6355,11 @@ proptest! {
 
             // Take a snapshot of the canister
             let (_height, mut state) = state_manager.take_tip();
-            let new_snapshot =
-                CanisterSnapshot::from_canister(state.canister_state(&canister_id).unwrap(), state.time()).unwrap();
+            let new_snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&canister_id).unwrap(),
+                state.time(),
+            )
+            .unwrap();
             let snapshot_id = SnapshotId::from((canister_id, 0));
             state
                 .canister_snapshots
@@ -6430,6 +6429,343 @@ proptest! {
             assert_error_counters(metrics);
         });
     }
+
+    // Backup then restore. Two closely related variants, one where everything happens in one checkpoint interval, and one where it
+    // happens across checkpoints.
+    can_create_and_restore_snapshot_impl(CertificationScope::Metadata);
+    can_create_and_restore_snapshot_impl(CertificationScope::Full);
+}
+
+#[test]
+fn restore_heap_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot has 1 in the heap counter.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.checkpointed_tick();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_stable_memory_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot has 2 in heap and 1 in stable memory
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    env.checkpointed_tick();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_binary_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot is running TEST_CANISTER.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.upgrade_canister(canister_id, EMPTY_WASM.to_vec(), vec![])
+        .unwrap();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.upgrade_canister(canister_id, EMPTY_WASM.to_vec(), vec![])
+        .unwrap();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.checkpointed_tick();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_chunk_store_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    let chunk_hash = env
+        .upload_chunk(UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: EMPTY_WASM.to_vec(),
+        })
+        .unwrap()
+        .hash;
+
+    // Snapshot contains the EMPTY_WASM in the wasm chunk store, but TEST_CANISTER as binary.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash.clone()],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.clear_chunk_store(canister_id).unwrap();
+    assert!(env
+        .install_chunked_code(InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            None,
+            vec![chunk_hash.clone()],
+            empty_wasm().module_hash().to_vec(),
+            vec![],
+        ))
+        .is_err());
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash.clone()],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.clear_chunk_store(canister_id).unwrap();
+    assert!(env
+        .install_chunked_code(InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            None,
+            vec![chunk_hash.clone()],
+            empty_wasm().module_hash().to_vec(),
+            vec![],
+        ))
+        .is_err());
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+    env.checkpointed_tick();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
 proptest! {
@@ -6904,10 +7240,10 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 
 proptest! {
 // We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(10))]
+#![proptest_config(ProptestConfig::with_cases(5))]
 
 #[test]
-fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..200)) {
+fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {

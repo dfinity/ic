@@ -16,7 +16,7 @@ async-trait = { workspace = true }
 axum = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
-dashmap = "5.3.4"
+dashmap = "6.1.0"
 futures = { workspace = true }
 humantime = "2.1.0"
 hyper = { workspace = true }

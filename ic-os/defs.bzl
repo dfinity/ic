@@ -5,9 +5,10 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
+load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
@@ -185,6 +186,14 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # Inherit tags for this test, to avoid triggering builds for local base images
+    component_file_references_test(
+        name = name + "_component_file_references_test",
+        image = ":partition-root-unsigned.tzst",
+        component_files = image_deps["component_files"].keys(),
+        tags = tags,
+    )
+
     if upgrades:
         inject_files(
             name = "partition-root-test-unsigned.tzst",
@@ -214,9 +223,9 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+            tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
             tags = ["manual"],
         )
 
@@ -237,8 +246,8 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
-                tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+                tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
                 tags = ["manual"],
             )
 
@@ -370,20 +379,6 @@ def icos_build(
             tags = ["manual"],
         )
 
-        gzip_compress(
-            name = "update-img.tar.gz",
-            srcs = [":update-img.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img.tar.gz.sha256",
-            srcs = [":update-img.tar.gz"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -412,20 +407,6 @@ def icos_build(
         sha256sum2url(
             name = "update-img-test.tar.zst.cas-url",
             src = ":update-img-test.tar.zst.sha256",
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        gzip_compress(
-            name = "update-img-test.tar.gz",
-            srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img-test.tar.gz.sha256",
-            srcs = [":update-img-test.tar.gz"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -461,9 +442,7 @@ def icos_build(
                 name = "upload_update-img",
                 inputs = [
                     ":update-img.tar.zst",
-                    ":update-img.tar.gz",
                     ":update-img-test.tar.zst",
-                    ":update-img-test.tar.gz",
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
                 visibility = visibility,
@@ -530,7 +509,7 @@ EOF
     native.genrule(
         name = "launch-remote-vm",
         srcs = [
-            "//rs/ic_os/launch-single-vm",
+            "//rs/ic_os/dev_test_tools/launch-single-vm",
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
@@ -538,7 +517,7 @@ EOF
         ],
         outs = ["launch_remote_vm_script"],
         cmd = """
-        BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
+        BIN="$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)"
         VERSION="$$(cat $(location :version.txt))"
         URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
         SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
@@ -622,9 +601,7 @@ EOF
             ":disk-img.tar.zst",
         ] + ([
             ":update-img.tar.zst",
-            ":update-img.tar.gz",
             ":update-img-test.tar.zst",
-            ":update-img-test.tar.gz",
         ] if upgrades else []),
         visibility = visibility,
         tags = tags,
@@ -779,9 +756,9 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
+        tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
         tags = ["manual"],
     )
 

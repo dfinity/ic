@@ -14,8 +14,6 @@ const X_V128: &str = "(local.get $x_v128)";
 const Y_V128: &str = "(local.get $y_v128)";
 const Y_I32: &str = "(local.get $y_i32)";
 const Z_V128: &str = "(local.get $z_v128)";
-const ADDRESS_I32: &str = "(local.get $address_i32)";
-const UNALIGNED_ADDRESS_I32: &str = "(local.get $one_i32)";
 
 pub fn benchmarks() -> Vec<Benchmark> {
     // List of benchmarks to run.
@@ -662,13 +660,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} (local.get $address_memtype)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load"]) {
         let name = format!("vmem/{op}_unaligned");
-        let code = &format!("({SET_X_V128} ({op} {UNALIGNED_ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} (local.get $one_memtype)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -676,13 +674,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({op} {ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} (local.get $address_memtype) {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}_unaligned");
-        let code = &format!("({op} {UNALIGNED_ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} (local.get $one_memtype) {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -697,7 +695,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         "v128.load32x2_u",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} (local.get $address_memtype)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -705,7 +703,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load32_zero", "v128.load64_zero"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} (local.get $address_memtype)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -718,7 +716,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         "v128.load64_splat",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
+        let code = &format!("({SET_X_V128} ({op} (local.get $address_memtype)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -726,13 +724,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.5 Gops/s
     for op in first_or_all(&["v128.load8_lane", "v128.load16_lane"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
+        let code = &format!("({SET_X_V128} ({op} 1 (local.get $address_memtype) {X_V128}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
     // The throughput for the following benchmarks is ~1.9 Gops/s
     for op in first_or_all(&["v128.load32_lane", "v128.load64_lane"]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({SET_X_V128} ({op} 1 {ADDRESS_I32} {X_V128}))");
+        let code = &format!("({SET_X_V128} ({op} 1 (local.get $address_memtype) {X_V128}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -745,7 +743,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
         "v128.store64_lane",
     ]) {
         let name = format!("vmem/{op}");
-        let code = &format!("({op} 1 {ADDRESS_I32} {X_V128})");
+        let code = &format!("({op} 1 (local.get $address_memtype) {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 

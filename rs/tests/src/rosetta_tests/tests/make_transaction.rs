@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PORT: u32 = 8102;
-const VM_NAME: &str = "rosetta-make-transaction";
+const VM_NAME: &str = "make-transaction";
 
 lazy_static! {
     static ref FEE: Tokens = Tokens::from_e8s(10_000);

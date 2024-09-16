@@ -16,15 +16,13 @@ use crate::{
 };
 use axum::Router;
 use bytes::BytesMut;
-use either::Either;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    p2p::state_sync::StateSyncClient,
-    time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
+    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -39,7 +37,7 @@ use tokio::{
 };
 use turmoil::Sim;
 
-struct CustomUdp {
+pub struct CustomUdp {
     ip: IpAddr,
     inner: turmoil::net::UdpSocket,
 }
@@ -377,13 +375,13 @@ pub fn add_transport_to_sim<F>(
                         consensus.clone(),
                         consensus.clone().read().unwrap().clone(),
                     );
-                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
 
                 let downloader = FetchArtifact::new(
                     log.clone(),
                     tokio::runtime::Handle::current(),
                     consensus,
-                    pfn_producer,
+                    bouncer_factory,
                     MetricsRegistry::default(),
                 );
                 consensus_builder.add_client(
@@ -406,7 +404,7 @@ pub fn add_transport_to_sim<F>(
                 registry_client,
                 peer,
                 topology_watcher_clone.clone(),
-                Either::Right(custom_udp),
+                Arc::new(custom_udp),
                 router.unwrap_or_default(),
             ));
 
@@ -447,7 +445,7 @@ pub fn start_test_processor(
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
+    mpsc::Receiver<ArtifactTransmit<U64Artifact>>,
     mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);

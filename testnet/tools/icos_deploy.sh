@@ -38,10 +38,10 @@ function exit_usage() {
         err '    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys'
         err '    --allow-specified-ids                 Allow installing canisters at specified IDs'
         err ''
-        err 'To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh'
+        err 'To get the latest branch revision that has a disk image pre-built, you can use ci/src/artifacts/newest_sha_with_disk_image.sh'
         err 'Example (deploy latest master to small-a):'
         err ''
-        err '    testnet/tools/icos_deploy.sh small-a --git-revision $(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)'
+        err '    testnet/tools/icos_deploy.sh small-a --git-revision $(ci/src/artifacts/newest_sha_with_disk_image.sh master)'
         err ''
         exit 1
     fi

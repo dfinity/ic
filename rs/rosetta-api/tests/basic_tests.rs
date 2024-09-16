@@ -5,237 +5,24 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scribe};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
-use ic_rosetta_api::convert::{block_id, from_hash, to_hash, to_model_account_identifier};
+use ic_rosetta_api::convert::{from_hash, to_hash};
 use ic_rosetta_api::errors::ApiError;
-use ic_rosetta_api::ledger_client::LedgerAccess;
-use ic_rosetta_api::models::amount::tokens_to_amount;
-use ic_rosetta_api::models::Amount;
 use ic_rosetta_api::models::CallRequest;
+use ic_rosetta_api::models::PartialBlockIdentifier;
 use ic_rosetta_api::models::QueryBlockRangeRequest;
 use ic_rosetta_api::models::QueryBlockRangeResponse;
-use ic_rosetta_api::models::{AccountBalanceRequest, PartialBlockIdentifier};
 use ic_rosetta_api::models::{
-    AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
-    BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
-    ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
-    MempoolTransactionRequest, NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest,
-    SearchTransactionsResponse,
+    BlockIdentifier, BlockRequest, BlockTransaction, BlockTransactionRequest,
+    SearchTransactionsRequest, SearchTransactionsResponse,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
-use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
 use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
-use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::objects::ObjectMap;
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 mod test_utils;
-
-#[actix_rt::test]
-async fn smoke_test() {
-    let mut scribe = Scribe::new();
-    let num_transactions: usize = 1000;
-    let num_accounts = 100;
-    let transaction_fee = Tokens::from_e8s(2_000);
-
-    scribe.gen_accounts(num_accounts, 1_000_000);
-    for _i in 0..num_transactions {
-        scribe.gen_transaction();
-    }
-
-    let ledger = Arc::new(TestLedger {
-        transfer_fee: transaction_fee,
-        ..Default::default()
-    });
-    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
-    for b in &scribe.blockchain {
-        ledger.add_block(b.clone()).await.ok();
-    }
-
-    assert_eq!(
-        scribe.blockchain.len() as u64,
-        ledger
-            .read_blocks()
-            .await
-            .get_latest_verified_hashed_block()
-            .unwrap()
-            .index
-            + 1
-    );
-
-    for i in 0..num_accounts {
-        let acc = acc_id(i);
-        assert_eq!(
-            get_balance(&req_handler, None, acc).await.unwrap(),
-            *scribe.balance_book.get(&acc).unwrap()
-        );
-    }
-
-    let msg = NetworkRequest::new(req_handler.network_id());
-    let res = req_handler.network_status(msg).await;
-    assert_eq!(
-        res,
-        Ok(NetworkStatusResponse::new(
-            block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            models::timestamp::from_system_time(
-                Block::decode(scribe.blockchain.back().unwrap().block.clone())
-                    .unwrap()
-                    .timestamp()
-                    .into()
-            )
-            .unwrap()
-            .0
-            .try_into()
-            .unwrap(),
-            block_id(scribe.blockchain.front().unwrap()).unwrap(),
-            None,
-            None,
-            vec![]
-        ))
-    );
-
-    let chain_len = scribe.blockchain.len();
-    ledger.blockchain.write().await.try_prune(&Some(10), 0).ok();
-    let expected_first_block = chain_len - 11;
-    assert_eq!(
-        ledger
-            .read_blocks()
-            .await
-            .get_first_verified_hashed_block()
-            .unwrap()
-            .index as usize,
-        expected_first_block
-    );
-    let b = ledger
-        .read_blocks()
-        .await
-        .get_latest_verified_hashed_block()
-        .unwrap()
-        .index;
-    let a = ledger
-        .read_blocks()
-        .await
-        .get_first_verified_hashed_block()
-        .unwrap()
-        .index;
-    assert_eq!(b - a, 10);
-
-    let msg = NetworkRequest::new(req_handler.network_id());
-    let res = req_handler.network_status(msg).await;
-    assert_eq!(
-        res.unwrap().oldest_block_identifier,
-        Some(block_id(scribe.blockchain.get(expected_first_block).unwrap()).unwrap())
-    );
-
-    let msg = MetadataRequest::new();
-    let res = req_handler.network_list(msg).await;
-    assert_eq!(
-        res,
-        Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
-    );
-
-    let msg = NetworkRequest::new(req_handler.network_id());
-    let network_options = req_handler
-        .network_options(msg)
-        .await
-        .expect("failed to fetch network options");
-
-    assert_eq!(network_options.version.rosetta_version, API_VERSION);
-    assert_eq!(network_options.version.node_version, NODE_VERSION);
-    assert!(!network_options.allow.operation_statuses.is_empty());
-    assert!(network_options
-        .allow
-        .operation_types
-        .contains(&"TRANSACTION".to_string()));
-    assert!(network_options
-        .allow
-        .operation_types
-        .contains(&"FEE".to_string()));
-    assert!(!network_options.allow.errors.is_empty());
-    assert!(network_options.allow.historical_balance_lookup);
-
-    let msg = NetworkRequest::new(req_handler.network_id());
-    let res = req_handler.mempool(msg).await;
-    assert_eq!(res, Ok(MempoolResponse::new(vec![])));
-
-    let msg = MempoolTransactionRequest::new(
-        req_handler.network_id(),
-        TransactionIdentifier::from("hello there".to_string()).into(),
-    );
-    let res = req_handler.mempool_transaction(msg).await;
-    assert_eq!(
-        res,
-        Err(ApiError::MempoolTransactionMissing(
-            false,
-            Default::default()
-        ))
-    );
-
-    let msg = AccountBalanceRequest {
-        network_identifier: req_handler.network_id(),
-        account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc_id(0)),
-        block_identifier: None,
-        metadata: None,
-    };
-
-    let res = req_handler.account_balance(msg).await;
-    assert_eq!(
-        res,
-        Ok(AccountBalanceResponse {
-            block_identifier: block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            balances: vec![tokens_to_amount(
-                *scribe.balance_book.get(&acc_id(0)).unwrap(),
-                DEFAULT_TOKEN_SYMBOL
-            )
-            .unwrap()],
-            metadata: None
-        })
-    );
-
-    let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
-    let res = req_handler.construction_derive(msg);
-    assert_eq!(
-        res,
-        Ok(ConstructionDeriveResponse {
-            address: None,
-            account_identifier: Some(to_model_account_identifier(&acc_id)),
-            metadata: None
-        })
-    );
-
-    let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
-    pk.curve_type = CurveType::Secp256K1;
-    let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
-    let res = req_handler.construction_derive(msg);
-    assert!(res.is_err(), "This pk should not have been accepted");
-
-    let msg = ConstructionMetadataRequest {
-        network_identifier: req_handler.network_id(),
-        options: None,
-        public_keys: None,
-    };
-    let res = req_handler.construction_metadata(msg).await;
-    assert_eq!(
-        res,
-        Ok(ConstructionMetadataResponse {
-            metadata: Default::default(),
-            suggested_fee: Some(vec![Amount {
-                value: format!("{}", transaction_fee.get_e8s()),
-                currency: Currency {
-                    symbol: "ICP".to_string(),
-                    decimals: 8,
-                    metadata: None,
-                },
-                metadata: None,
-            }]),
-        })
-    );
-}
 
 #[actix_rt::test]
 async fn blocks_test() {
@@ -313,11 +100,11 @@ async fn blocks_test() {
     );
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            Some(trans.transaction_identifier.clone()),
-            None,
-        ))
+        .search_transactions(
+            SearchTransactionsRequest::builder(req_handler.network_id())
+                .with_transaction_identifier(trans.transaction_identifier.clone())
+                .build(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -330,11 +117,7 @@ async fn blocks_test() {
     assert_eq!(resp.total_count, 1);
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            None,
-            None,
-        ))
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
         .await
         .unwrap();
 
@@ -342,7 +125,7 @@ async fn blocks_test() {
     assert_eq!(resp.transactions.len(), scribe.blockchain.len());
     assert_eq!(resp.next_offset, None);
 
-    let mut req = SearchTransactionsRequest::new(req_handler.network_id(), None, None);
+    let mut req = SearchTransactionsRequest::builder(req_handler.network_id()).build();
     req.max_block = Some(100);
     req.limit = Some(10);
     req.offset = Some(30);
@@ -399,11 +182,11 @@ async fn blocks_test() {
         let resp = req_handler.block_transaction(msg).await.unwrap();
         assert_eq!(resp.transaction, transactions[0]);
         let resp = req_handler
-            .search_transactions(SearchTransactionsRequest::new(
-                req_handler.network_id(),
-                Some(transaction.transaction_identifier),
-                None,
-            ))
+            .search_transactions(
+                SearchTransactionsRequest::builder(req_handler.network_id())
+                    .with_transaction_identifier(transaction.transaction_identifier)
+                    .build(),
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -522,11 +305,9 @@ async fn query_search_transactions(
     offset: Option<i64>,
     limit: Option<i64>,
 ) -> Result<SearchTransactionsResponse, ApiError> {
-    let mut msg = SearchTransactionsRequest::new(
-        req_handler.network_id(),
-        None,
-        Some(ic_rosetta_api::convert::to_model_account_identifier(acc)),
-    );
+    let mut msg = SearchTransactionsRequest::builder(req_handler.network_id())
+        .with_account_identifier(ic_rosetta_api::convert::to_model_account_identifier(acc))
+        .build();
     msg.max_block = max_block;
     msg.offset = offset;
     msg.limit = limit;
@@ -737,11 +518,7 @@ async fn load_from_store_test() {
     verify_account_search(&scribe, &req_handler, 11, last_verified).await;
 
     let resp = req_handler
-        .search_transactions(SearchTransactionsRequest::new(
-            req_handler.network_id(),
-            None,
-            None,
-        ))
+        .search_transactions(SearchTransactionsRequest::builder(req_handler.network_id()).build())
         .await
         .unwrap();
 

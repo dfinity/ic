@@ -5,8 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",

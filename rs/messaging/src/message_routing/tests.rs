@@ -97,7 +97,7 @@ mod notification {
     }
 
     /// The result of the `wait_with_timeout` call.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
     pub enum WaitResult<T> {
         Notified(T),
         TimedOut,
@@ -261,7 +261,7 @@ fn message_routing_does_not_block() {
 
 /// Readable version of `SubnetRecordProto` holding only the relevant entries for
 /// `BatchProcessorImpl::try_to_read_registry()`.
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
@@ -289,7 +289,7 @@ impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
 /// Wrapper around data to be written to the registry. `Valid(_)` represents data that can be
 /// written to the registry as is. `Corrupted` represents a registry record with corrupted data in
 /// it and `Missing` represents data that is missing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum Integrity<T: Clone> {
     Valid(T),
     Corrupted,
