@@ -6,9 +6,9 @@ Before=setupos.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/config create-setupos-config
-StandardOutput=tty
-StandardError=tty
+ExecStart=/opt/ic/bin/config create-setupos-config
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target
