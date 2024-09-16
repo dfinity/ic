@@ -271,7 +271,7 @@ pub struct CanisterQueues {
     #[prost(message, optional, tag = "10")]
     pub pool: ::core::option::Option<MessagePool>,
     #[prost(message, repeated, tag = "12")]
-    pub shed_responses: ::prost::alloc::vec::Vec<canister_queues::ShedResponse>,
+    pub shed_responses: ::prost::alloc::vec::Vec<canister_queues::CallbackReference>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_source: i32,
     #[prost(message, repeated, tag = "7")]
@@ -295,10 +295,12 @@ pub mod canister_queues {
         #[prost(message, optional, tag = "3")]
         pub output_queue: ::core::option::Option<super::CanisterQueue>,
     }
-    /// The callback ID of a response that was shed while in an input queue.
+    /// A reference to a callback, used as a compact reject response (e.g. an
+    /// expired best-effort callback; or one whose response was shed while in an
+    /// input queue.
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct ShedResponse {
+    pub struct CallbackReference {
         #[prost(uint64, tag = "1")]
         pub id: u64,
         #[prost(uint64, tag = "2")]

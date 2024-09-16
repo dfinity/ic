@@ -1076,7 +1076,8 @@ impl ReplicatedState {
 /// `CanisterMessage`.
 ///
 /// As opposed to actual canister queues, subnet input queues should never hold
-/// responses.
+/// any kind of response (because the management canister does not make any
+/// outbound calls as itself).
 fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
     match input {
         CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),

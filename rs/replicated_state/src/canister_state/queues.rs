@@ -24,6 +24,7 @@ use ic_types::messages::{
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use message_pool::Class;
 use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
@@ -147,7 +148,7 @@ pub struct CanisterQueues {
 
     /// The `CallbackIds` of shed inbound best-effort responses, to be returned as
     /// `UnknownResponse` by `peek_input()` / `pop_input()` (and then be "inflated"
-    /// by `SystemState` into a reject response from the respective callback).
+    /// by `SystemState` into a reject response based on the actual callback).
     shed_responses: BTreeMap<message_pool::Id, CallbackId>,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -231,7 +232,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             .expect("Empty queue in output iterator.");
         debug_assert_eq!(
             Ok(()),
-            output_queue_front_not_stale(queue, self.pool, receiver)
+            queue_front_not_stale(queue, self.pool, &NO_SHED_RESPONSES, receiver)
         );
 
         if queue.len() > 0 {
@@ -535,26 +536,8 @@ impl CanisterQueues {
                 continue;
             };
 
-            let msg = if let Some(reference) = input_queue.pop() {
-                // Message must be either pooled; or a previously shed inbound response.
-                let msg = self
-                    .pool
-                    .take(reference)
-                    .map(|msg| msg.into())
-                    .unwrap_or_else(|| {
-                        CanisterInput::ResponseDropped(
-                            self.shed_responses
-                                .remove(&reference)
-                                .expect("stale reference at the front of input queue"),
-                        )
-                    });
-                // Advance to the next non-stale reference.
-                input_queue
-                    .pop_while(|reference| is_stale(reference, &self.pool, &self.shed_responses));
-                Some(msg)
-            } else {
-                None
-            };
+            let msg =
+                input_queue_pop_and_advance(input_queue, &mut self.pool, &mut self.shed_responses);
 
             // Update the input schedule.
             if input_queue.len() != 0 {
@@ -617,10 +600,12 @@ impl CanisterQueues {
     /// Returns the `CanisterInput` corresponding to the given reference, by looking
     /// it up in the message pool or in the shed inbound responses map.
     fn get_canister_input(&self, reference: message_pool::Id) -> Option<CanisterInput> {
+        assert_eq!(Context::Inbound, reference.context());
+
         if let Some(msg) = self.pool.get(reference) {
             debug_assert!(!self.shed_responses.contains_key(&reference));
             Some(msg.clone().into())
-        } else if reference.kind() == Kind::Response {
+        } else if reference.kind() == Kind::Response && reference.class() == Class::BestEffort {
             self.shed_responses
                 .get(&reference)
                 .map(|callback_id| CanisterInput::ResponseDropped(*callback_id))
@@ -910,10 +895,12 @@ impl CanisterQueues {
         self.queue_stats.input_queues_reserved_slots
     }
 
-    /// Returns the total byte size of canister input queues (queues +
-    /// messages).
+    /// Returns the total byte size of canister input queues (queues + messages).
+    ///
+    /// Does not account for callback references for expired callbacks or dropped
+    /// responses, as these are constant size per callback and thus can be included
+    /// in the cost of a callback.
     pub fn input_queues_size_bytes(&self) -> usize {
-        // FIXME: Consider accounting for dropped responses.
         self.pool.message_stats().inbound_size_bytes
             + self.canister_queues.len() * size_of::<CanisterQueue>()
     }
@@ -943,8 +930,11 @@ impl CanisterQueues {
     }
 
     /// Returns the memory usage of all best-effort messages.
+    ///
+    /// Does not account for callback references for expired callbacks or dropped
+    /// responses, as these are constant size per callback and thus can be included
+    /// in the cost of a callback.
     pub fn best_effort_memory_usage(&self) -> usize {
-        // FIXME: Consider accounting for dropped responses.
         self.pool.message_stats().best_effort_message_bytes
     }
 
@@ -1114,7 +1104,7 @@ impl CanisterQueues {
                     .insert(reference, response.originator_reply_callback)
             );
 
-            // Leave the input queue unchanged, as "dropped responses" are non-stale.
+            // Leave the input queue unchanged, as "shed responses" are non-stale.
             return;
         }
 
@@ -1234,8 +1224,8 @@ impl CanisterQueues {
         // Invariant: all canister queues (input or output) are either empty or start
         // with a non-stale reference.
         for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            self.input_queue_front_not_stale(input_queue, canister_id)?;
-            output_queue_front_not_stale(output_queue, &self.pool, canister_id)?;
+            queue_front_not_stale(input_queue, &self.pool, &self.shed_responses, canister_id)?;
+            queue_front_not_stale(output_queue, &self.pool, &NO_SHED_RESPONSES, canister_id)?;
         }
 
         // Reserved slot stats match the actual number of reserved slots.
@@ -1264,28 +1254,6 @@ impl CanisterQueues {
                 "Inconsistent `callbacks_with_enqueued_response`:\n  expected: {:?}\n  actual: {:?}",
                 enqueued_response_callbacks, self.callbacks_with_enqueued_response
             ));
-        }
-
-        Ok(())
-    }
-
-    /// Helper function for concisely validating the hard invariant that an input
-    /// queue is either empty or starts with a non-stale reference, by writing
-    /// `debug_assert_eq!(Ok(()), self.input_queue_front_not_stale(...)`.
-    ///
-    /// Time complexity: `O(log(n))`.
-    fn input_queue_front_not_stale(
-        &self,
-        queue: &CanisterQueue,
-        canister_id: &CanisterId,
-    ) -> Result<(), String> {
-        if let Some(reference) = queue.peek() {
-            if is_stale(reference, &self.pool, &self.shed_responses) {
-                return Err(format!(
-                    "Stale reference at the front of input queue from {}",
-                    canister_id
-                ));
-            }
         }
 
         Ok(())
@@ -1351,6 +1319,36 @@ fn is_stale(
 /// queues (that cannot contain any inbound shed responses).
 const NO_SHED_RESPONSES: BTreeMap<message_pool::Id, CallbackId> = BTreeMap::new();
 
+/// Pops and returns the reference at the front of the given input queue and
+/// advances the queue to the next non-stale reference.
+fn input_queue_pop_and_advance(
+    queue: &mut CanisterQueue,
+    pool: &mut MessagePool,
+    shed_responses: &mut BTreeMap<message_pool::Id, CallbackId>,
+) -> Option<CanisterInput> {
+    let reference = queue.pop()?;
+    assert_eq!(Context::Inbound, reference.context());
+
+    // Advance to the next non-stale reference.
+    queue.pop_while(|reference| is_stale(reference, pool, shed_responses));
+
+    // Message must be either pooled; or a previously shed inbound response.
+    let msg = pool
+        .take(reference)
+        .map(|msg| msg.into())
+        .unwrap_or_else(|| {
+            debug_assert_eq!(Kind::Response, reference.kind());
+            debug_assert_eq!(Class::BestEffort, reference.class());
+
+            CanisterInput::ResponseDropped(
+                shed_responses
+                    .remove(&reference)
+                    .expect("stale reference at the front of input queue"),
+            )
+        });
+    Some(msg)
+}
+
 /// Pops and returns the reference at the front of the given output queue and
 /// advances the queue to the next non-stale reference.
 fn output_queue_pop_and_advance(
@@ -1367,22 +1365,22 @@ fn output_queue_pop_and_advance(
     msg
 }
 
-/// Helper function for concisely validating the hard invariant that an outout
-/// queue is either empty or starts with a non-stale reference, by writing
-/// `debug_assert_eq!(Ok(()), output_queue_front_not_stale(...)`.
+/// Helper function for concisely validating the hard invariant that a canister
+/// queue is either empty of has a non-stale reference at the front, by writing
+/// `debug_assert_eq!(Ok(()), queue_front_not_stale(...)`.
 ///
 /// Time complexity: `O(log(n))`.
-fn output_queue_front_not_stale(
+fn queue_front_not_stale(
     queue: &CanisterQueue,
     pool: &MessagePool,
+    shed_responses: &BTreeMap<message_pool::Id, CallbackId>,
     canister_id: &CanisterId,
 ) -> Result<(), String> {
     if let Some(reference) = queue.peek() {
-        assert_eq!(Context::Outbound, reference.context());
-
-        if is_stale(reference, pool, &NO_SHED_RESPONSES) {
+        if is_stale(reference, pool, shed_responses) {
             return Err(format!(
-                "Stale reference at the front of output queue to {}",
+                "Stale reference at the front of {:?} queue to/from {}",
+                reference.context(),
                 canister_id
             ));
         }
@@ -1500,7 +1498,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             shed_responses: item
                 .shed_responses
                 .iter()
-                .map(|(&id, &callback_id)| message_pool::ShedResponse(id, callback_id).into())
+                .map(|(&id, &callback_id)| message_pool::CallbackReference(id, callback_id).into())
                 .collect(),
             next_input_source,
             local_sender_schedule,
@@ -1572,7 +1570,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 .shed_responses
                 .into_iter()
                 .map(|sr| {
-                    let sr = message_pool::ShedResponse::try_from(sr)?;
+                    let sr = message_pool::CallbackReference::try_from(sr)?;
                     Ok((sr.0, sr.1))
                 })
                 .collect::<Result<_, Self::Error>>()?;

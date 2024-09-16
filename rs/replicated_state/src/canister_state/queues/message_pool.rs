@@ -139,11 +139,11 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
     }
 }
 
-/// Helper for encoding / decoding `pb_queues::canister_queues::ShedResponse`.
-pub(super) struct ShedResponse(pub(super) Id, pub(super) CallbackId);
+/// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
+pub(super) struct CallbackReference(pub(super) Id, pub(super) CallbackId);
 
-impl From<ShedResponse> for pb_queues::canister_queues::ShedResponse {
-    fn from(item: ShedResponse) -> Self {
+impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
+    fn from(item: CallbackReference) -> Self {
         Self {
             id: item.0 .0,
             callback_id: item.1.get(),
@@ -151,15 +151,15 @@ impl From<ShedResponse> for pb_queues::canister_queues::ShedResponse {
     }
 }
 
-impl TryFrom<pb_queues::canister_queues::ShedResponse> for ShedResponse {
+impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReference {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queues::ShedResponse) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
         let id = Id(item.id);
         if id.context() == Context::Inbound
             && id.class() == Class::BestEffort
             && id.kind() == Kind::Response
         {
-            Ok(ShedResponse(id, CallbackId::from(item.callback_id)))
+            Ok(CallbackReference(id, CallbackId::from(item.callback_id)))
         } else {
             Err(ProxyDecodeError::Other(
                 "Not an inbound best-effort response".to_string(),

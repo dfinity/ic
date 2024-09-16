@@ -505,6 +505,73 @@ fn test_shed_largest_message() {
     assert!(!queues.shed_largest_message(&this, &local_canisters));
 }
 
+#[test]
+fn test_shed_inbound_response() {
+    let mut queues = CanisterQueues::default();
+
+    // Enqueue three output requests, reserving 3 input queue slots.
+    for callback in 1..=3 {
+        queues
+            .push_output_request(request(callback, SOME_DEADLINE).into(), UNIX_EPOCH)
+            .unwrap();
+    }
+    assert_eq!(3, queues.output_into_iter().count());
+    assert_eq!(3, queues.input_queues_reserved_slots());
+    assert_eq!(0, queues.input_queues_response_count());
+
+    // Enqueue three inbound responses with increasing payload sizes.
+    for callback in 1..=3 {
+        queues
+            .push_input(
+                response_with_payload(1000 * callback as usize, callback, SOME_DEADLINE).into(),
+                LocalSubnet,
+            )
+            .unwrap();
+    }
+    assert_eq!(0, queues.input_queues_reserved_slots());
+    assert_eq!(3, queues.input_queues_response_count());
+
+    let this = canister_test_id(13);
+    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, CanisterState> = BTreeMap::new();
+
+    // Shed the largest response (callback ID 3).
+    let memory_usage3 = queues.best_effort_memory_usage();
+    assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
+    let memory_usage2 = queues.best_effort_memory_usage();
+    assert!(memory_usage2 < memory_usage3);
+
+    // Shed the next largest response (callback ID 2).
+    assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
+    let memory_usage1 = queues.best_effort_memory_usage();
+    assert!(memory_usage1 < memory_usage2);
+
+    // Pop the response for callback ID 1.
+    assert_matches!(queues.pop_input(), Some(CanisterInput::Response(response)) if response.originator_reply_callback.get() == 1);
+    assert_eq!(2, queues.input_queues_response_count());
+    assert_eq!(0, queues.best_effort_memory_usage());
+
+    // There's nothing else to shed.
+    assert!(!queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
+
+    // Peek then pop the response for callback ID 2.
+    assert_matches!(
+        queues.peek_input(),
+        Some(CanisterInput::ResponseDropped(callback_id)) if callback_id.get() == 2
+    );
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterInput::ResponseDropped(callback_id)) if callback_id.get() == 2
+    );
+    assert_eq!(1, queues.input_queues_response_count());
+
+    // Pop the response for callback ID 3.
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterInput::ResponseDropped(callback_id)) if callback_id.get() == 3
+    );
+    assert_eq!(0, queues.input_queues_response_count());
+}
+
 /// Enqueues 3 requests for the same canister and consumes them.
 #[test]
 fn test_message_picking_round_robin_on_one_queue() {

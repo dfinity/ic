@@ -195,12 +195,14 @@ message CanisterQueues {
   repeated CanisterQueuePair canister_queues = 9;
   MessagePool pool = 10;
 
-  // The callback ID of a response that was shed while in an input queue.
-  message ShedResponse {
+  // A reference to a callback, used as a compact reject response (e.g. an
+  // expired best-effort callback; or one whose response was shed while in an
+  // input queue.
+  message CallbackReference {
     uint64 id = 1;
     uint64 callback_id = 2;
   }
-  repeated ShedResponse shed_responses = 12;
+  repeated CallbackReference shed_responses = 12;
 
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
