@@ -3724,6 +3724,7 @@ dependencies = [
  "criterion",
  "ic-test-utilities-execution-environment",
  "ic-types",
+ "ic-wasm-transform",
 ]
 
 [[package]]
