@@ -16,7 +16,7 @@ def test_using_pocket_ic_server(macro, name, extra_mainnet_tags = [], extra_HEAD
     less time spend on CI whenever IC components (which the pocket-ic server depends on) are modified.
 
     However it's still useful to also test the canisters against the HEAD version of the IC.
-    Therefor an additional target is declared that runs the test using the HEAD version of the
+    Therefore an additional target is declared that runs the test using the HEAD version of the
     pocket-ic server but this target is tagged as "manual" by default to not run it automatically on CI.
     Most test override this "manual" tag with some tag to run it on a schedule like
     "nns_tests_nightly" or "fi_tests_nightly".
