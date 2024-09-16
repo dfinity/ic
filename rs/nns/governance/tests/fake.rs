@@ -330,7 +330,7 @@ impl IcpLedger for FakeDriver {
             Destination::new("ledger"),
                 tla::TlaValue::Variant {
                     tag: "TransferOk".to_string(),
-                    value: Box::new(account_38s.to_tla_value()),
+                    value: Box::new(account_e8s.to_tla_value()),
                 }
         );
         Ok(Tokens::from_e8s(*account_e8s))
