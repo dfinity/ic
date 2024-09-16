@@ -204,8 +204,7 @@ impl SubnetPairProxy {
         do_until_or_panic(MAX_TICKS, |_| {
             let exit_condition = self
                 .local_output_queue_snapshot()
-                .map(|q| q.len() >= min_num_messages)
-                .unwrap_or(false);
+                .map_or(false, |q| q.len() >= min_num_messages);
             if !exit_condition {
                 self.local_env.tick();
             }
@@ -1027,9 +1026,7 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.local_env, &new_subnets_proxy.remote_env),
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
-        assert!(stream_snapshot(from_env, into_env)
-            .map(|(_, stream)| stream.is_empty())
-            .unwrap_or(true));
+        assert!(stream_snapshot(from_env, into_env).map_or(true, |(_, stream)| stream.is_empty()));
     }
 
     // No messages in the system must imply empty callback id trackers because of
