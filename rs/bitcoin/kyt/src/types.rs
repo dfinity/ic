@@ -25,9 +25,9 @@ pub enum CheckTransactionResponse {
     /// When check finishes and one or more input addresses failed KYT.
     /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed(Vec<String>),
-    /// The case where it is unable to give a final answer of Passed or Failed.
-    /// The caller should examine the error and decide how to handle it.
-    Other(CheckTransactionStatus),
+    /// Unknown case where it is unable to give a final answer of Passed or Failed.
+    /// The caller should examine the status and decide how to handle it.
+    Unknown(CheckTransactionStatus),
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
@@ -60,18 +60,18 @@ pub enum CheckTransactionError {
 
 impl From<CheckTransactionError> for CheckTransactionResponse {
     fn from(err: CheckTransactionError) -> CheckTransactionResponse {
-        CheckTransactionResponse::Other(CheckTransactionStatus::Error(err))
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(err))
     }
 }
 
 impl From<CheckTransactionPending> for CheckTransactionResponse {
     fn from(pending: CheckTransactionPending) -> CheckTransactionResponse {
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(pending))
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(pending))
     }
 }
 
 impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
-        CheckTransactionResponse::Other(status)
+        CheckTransactionResponse::Unknown(status)
     }
 }

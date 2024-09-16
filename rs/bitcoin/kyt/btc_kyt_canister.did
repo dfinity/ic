@@ -16,9 +16,9 @@ type CheckTransactionResponse = variant {
     // When check finishes and one or more input addresses failed KYT.
     // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed: vec BitcoinAddress;
-    // Error case where it is unable to give a final answer of Passed or Failed.
-    // The caller should examine the error and decide how to handle it.
-    Other: CheckTransactionStatus;
+    // Unknown case where it is unable to give a final answer of Passed or Failed.
+    // The caller should examine the status and decide how to handle it.
+    Unknown: CheckTransactionStatus;
 };
 
 type CheckTransactionStatus = variant {

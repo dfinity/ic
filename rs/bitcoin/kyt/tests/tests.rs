@@ -291,7 +291,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
-        CheckTransactionResponse::Other(CheckTransactionStatus::NotEnoughCycles),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
     ));
 
     let cycles_after = setup.env.cycle_balance(setup.caller);
@@ -328,7 +328,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     assert!(matches!(
         dbg!(decode::<CheckTransactionResponse>(&result)),
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
             CheckTransactionPending::TransientInternalError(_)
         ))
     ));
@@ -355,7 +355,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
-        CheckTransactionResponse::Other(CheckTransactionStatus::Error(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionError::InvalidTransaction(_)
         ))
     ));

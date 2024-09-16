@@ -305,7 +305,7 @@ async fn test_check_fetched() {
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
             CheckTransactionPending::HighLoad
         ))
     ));
@@ -317,7 +317,7 @@ async fn test_check_fetched() {
     let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) / 2);
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Other(CheckTransactionStatus::NotEnoughCycles)
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles)
     ));
     // Check available cycles: we deduct all remaining cycles even when they are not enough
     assert_eq!(env.cycles_available(), 0);
@@ -332,7 +332,7 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
             CheckTransactionPending::Pending
         ))
     ));
@@ -408,7 +408,7 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
             CheckTransactionPending::Pending
         ))
     ));
@@ -439,7 +439,7 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Other(CheckTransactionStatus::Pending(
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
             CheckTransactionPending::Pending
         ))
     ));
@@ -447,7 +447,7 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
             env.check_fetched(txid_0, &fetched).await,
-            CheckTransactionResponse::Other(CheckTransactionStatus::Error(
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
                 CheckTransactionError::ResponseTooLarge { txid }
             )) if txid_2.as_ref() == txid));
     // Check remaining cycle
