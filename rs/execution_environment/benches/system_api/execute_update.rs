@@ -80,7 +80,8 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 ),
                 Wasm64::Enabled,
             ),
-            16000006,
+            // Number of instructions is different in Wasm64 mode because charging is different, i.e., instructions have different weights.
+            17000006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_caller_size()".into(),
