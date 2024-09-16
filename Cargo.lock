@@ -11685,6 +11685,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
