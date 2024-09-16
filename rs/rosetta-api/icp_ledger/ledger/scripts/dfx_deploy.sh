@@ -14,6 +14,12 @@ if [[ -z "$DEFAULT_ACCOUNT_ID" ]]; then
     exit 1
 fi
 
+# Check if dfx is installed
+if ! command -v dfx &>/dev/null; then
+    echo "Error: dfx is not installed"
+    exit 1
+fi
+
 # Check if a local replica is running
 if ! dfx ping &>/dev/null; then
     echo "Error: Local replica is not running"
