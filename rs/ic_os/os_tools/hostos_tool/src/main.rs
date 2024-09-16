@@ -64,7 +64,7 @@ pub fn main() -> Result<()> {
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read config.ini and deploymen.json directly.
+            // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
                 ipv6_address: config_ini_settings.ipv6_address,
@@ -94,7 +94,7 @@ pub fn main() -> Result<()> {
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read config.ini and deploymen.json directly.
+            // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
                 ipv6_address: config_ini_settings.ipv6_address,
@@ -133,7 +133,7 @@ pub fn main() -> Result<()> {
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
             // Once HostOS is using the config struct, all config will be contained there
-            // and we won't need to read config.ini and deploymen.json directly.
+            // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
                 ipv6_address: config_ini_settings.ipv6_address,
