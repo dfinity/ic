@@ -1624,25 +1624,28 @@ impl ExecutionEnvironment {
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 if let Some(metadata) = &request.metadata {
+                    let message_type_label = "request";
+                    let call_tree_depth_label = &metadata.call_tree_depth().to_string();
                     let latency = current_time()
                         .saturating_duration_since(*metadata.call_tree_start_time())
                         .as_secs_f64();
-                    let call_tree_depth_label = metadata.call_tree_depth().to_string();
                     self.metrics
                         .canister_message_queue_latency
-                        .with_label_values(&["request", &call_tree_depth_label])
+                        .with_label_values(&[message_type_label, call_tree_depth_label])
                         .observe(latency);
                 }
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
+                let message_type_label = "ingress";
+                let call_tree_depth_label = "0"; // Ingress messages do not have a call tree.
                 let now = current_time();
                 let expiry_duration = expiry_time_from_now().saturating_duration_since(now);
                 let start = ingress.expiry_time.saturating_sub(expiry_duration);
                 let latency = now.saturating_duration_since(start).as_secs_f64();
                 self.metrics
                     .canister_message_queue_latency
-                    .with_label_values(&["ingress", "0"])
+                    .with_label_values(&[message_type_label, call_tree_depth_label])
                     .observe(latency);
                 CanisterCall::Ingress(ingress)
             }
