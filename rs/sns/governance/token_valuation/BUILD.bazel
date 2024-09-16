@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/initial_supply",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/string",
     "//rs/nns/cmc",
@@ -16,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:mockall",
+    "@crate_index//:num-traits",
     "@crate_index//:rust_decimal",
 ]
 

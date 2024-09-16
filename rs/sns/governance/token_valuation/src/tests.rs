@@ -84,6 +84,8 @@ async fn test_icps_per_sns_token_client() {
     lazy_static! {
         static ref SWAP_CANISTER_ID: CanisterId =
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap();
+        static ref SNS_TOKEN_LEDGER_CANISTER_ID: CanisterId =
+            CanisterId::try_from(PrincipalId::new_user_test_id(43)).unwrap();
     }
 
     thread_local! {
@@ -169,10 +171,13 @@ async fn test_icps_per_sns_token_client() {
         }
     }
 
-    let observed_icps_per_sns_token = IcpsPerSnsTokenClient::<MockRuntime>::new(*SWAP_CANISTER_ID)
-        .get()
-        .await
-        .unwrap();
+    let observed_icps_per_sns_token = IcpsPerSnsTokenClient::<MockRuntime>::new(
+        *SWAP_CANISTER_ID,
+        *SNS_TOKEN_LEDGER_CANISTER_ID,
+    )
+    .get()
+    .await
+    .unwrap();
 
     {
         let observed = f64::try_from(observed_icps_per_sns_token).unwrap();
