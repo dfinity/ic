@@ -1,5 +1,7 @@
 use candid::CandidType;
+use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::convert::TryInto;
 use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
@@ -65,4 +67,21 @@ impl Sub<Duration> for TimeStamp {
                 .saturating_sub(d.as_nanos().try_into().unwrap()),
         }
     }
+}
+
+impl Storable for TimeStamp {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(self.as_nanos_since_unix_epoch().to_le_bytes().to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self::from_nanos_since_unix_epoch(u64::from_le_bytes(
+            bytes.into_owned().as_slice().try_into().unwrap(),
+        ))
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8,
+        is_fixed_size: true,
+    };
 }

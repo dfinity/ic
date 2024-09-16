@@ -43,13 +43,28 @@ package(default_visibility = ["//visibility:public"])
         ] + extra_deps,
     )
     for (name_suffix, archive_name_suffix, features, extra_deps) in [
-        ("", "", [], []),
-        ("_u256", "_u256", [], []),
+        (
+            "",
+            "",
+            [],
+            [
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
         (
             "_canbench",
             "",
             ["canbench-rs"],
             [
+                "//rs/rosetta-api/icrc1/tokens_u64",
                 "@crate_index//:canbench-rs",
             ],
         ),
@@ -61,6 +76,7 @@ package(default_visibility = ["//visibility:public"])
                 "u256-tokens",
             ],
             [
+                "//rs/rosetta-api/icrc1/tokens_u256",
                 "@crate_index//:canbench-rs",
             ],
         ),

@@ -6,7 +6,10 @@ use std::{
 
 use base32::Alphabet;
 use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
+use ic_stable_structures::{storable::Bound, Storable};
 use serde::Serialize;
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
 
 pub type Subaccount = [u8; 32];
 
@@ -165,6 +168,53 @@ impl FromStr for Account {
                 .map(Account::from),
         }
     }
+}
+
+impl Storable for Account {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer: Vec<u8> = vec![];
+        let mut buffer0: Vec<u8> = vec![];
+
+        if let Some(subaccount) = self.subaccount {
+            buffer0.extend(subaccount.as_slice());
+        }
+        buffer0.extend(self.owner.as_slice());
+        buffer.extend((buffer0.len() as u8).to_le_bytes());
+        buffer.append(&mut buffer0);
+
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes);
+
+        let mut len_bytes = [0u8; 1];
+        cursor
+            .read_exact(&mut len_bytes)
+            .expect("Unable to read the len of the account");
+        let mut len = u8::from_le_bytes(len_bytes);
+        let subaccount = if len >= 32 {
+            let mut subaccount_bytes = [0u8; 32];
+            cursor
+                .read_exact(&mut subaccount_bytes)
+                .expect("Unable to read the bytes of the account's subaccount");
+            len -= 32;
+            Some(subaccount_bytes)
+        } else {
+            None
+        };
+        let mut owner_bytes = vec![0; len as usize];
+        cursor
+            .read_exact(&mut owner_bytes)
+            .expect("Unable to read the bytes of the account's owners");
+        let owner = Principal::from_slice(&owner_bytes);
+        Account { owner, subaccount }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 62,
+        is_fixed_size: false,
+    };
 }
 
 #[cfg(test)]

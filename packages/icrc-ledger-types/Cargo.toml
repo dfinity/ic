@@ -15,13 +15,14 @@ base32 = "0.4.0"
 candid = { workspace = true }
 crc32fast = "1.2.0"
 hex = { workspace = true }
+ic-stable-structures = { workspace = true }
 itertools = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 sha2 = { workspace = true }
-strum = { workspace = true}
+strum = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]

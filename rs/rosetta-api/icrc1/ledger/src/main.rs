@@ -71,7 +71,7 @@ pub type Tokens = ic_icrc1_tokens_u64::U64;
 pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
-    static LEDGER: RefCell<Option<Ledger<Tokens>>> = const { RefCell::new(None) };
+    static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
@@ -80,7 +80,7 @@ declare_log_buffer!(name = LOG, capacity = 1000);
 
 struct Access;
 impl LedgerAccess for Access {
-    type Ledger = Ledger<Tokens>;
+    type Ledger = Ledger;
 
     fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R {
         LEDGER.with(|cell| {
@@ -116,9 +116,7 @@ fn init(args: LedgerArgument) {
 
 fn init_state(init_args: InitArgs) {
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    LEDGER.with(|cell| {
-        *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(&LOG, init_args, now))
-    })
+    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(&LOG, init_args, now)))
 }
 
 // We use 8MiB buffer
@@ -181,7 +179,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                 }
             };
     } else {
-        let state: Ledger<Tokens> = UPGRADES_MEMORY.with_borrow(|bs| {
+        let state: Ledger = UPGRADES_MEMORY.with_borrow(|bs| {
             let reader = Reader::new(bs, 0);
             let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
             let state = ciborium::de::from_reader(&mut buffered_reader).expect(
