@@ -9503,7 +9503,6 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-ledger-core",
