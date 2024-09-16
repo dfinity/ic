@@ -291,7 +291,7 @@ mod tests {
                 ingress_pool
                     .write()
                     .unwrap()
-                    .apply_changes(vec![ChangeAction::MoveToValidated(message_id_1)]);
+                    .apply(vec![ChangeAction::MoveToValidated(message_id_1)]);
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
