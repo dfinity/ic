@@ -200,7 +200,7 @@ fn start_server(
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
-    let http = hyper::server::conn::http1::Builder::new();
+    let http = hyper::server::conn::http2::Builder::new(hyper_util::rt::TokioExecutor::new());
 
     let graceful_shutdown = GracefulShutdown::new();
 

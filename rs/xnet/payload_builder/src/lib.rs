@@ -1548,6 +1548,7 @@ impl XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(hyper_util::rt::TokioExecutor::new())
+                .http2_only(true)
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);
