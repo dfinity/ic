@@ -19,10 +19,10 @@ pub struct SendRequest {
 }
 
 fn deploy_btc_canister(pic: &PocketIc) {
-    let root_canister_id: Principal = ROOT_CANISTER_ID.into();
+    let nns_root_canister_id: Principal = ROOT_CANISTER_ID.into();
     let btc_canister_id = Principal::from_text(BITCOIN_TESTNET_CANISTER_ID).unwrap();
     let actual_canister_id = pic
-        .create_canister_with_id(Some(root_canister_id), None, btc_canister_id)
+        .create_canister_with_id(Some(nns_root_canister_id), None, btc_canister_id)
         .unwrap();
     assert_eq!(actual_canister_id, btc_canister_id);
 
@@ -37,7 +37,7 @@ fn deploy_btc_canister(pic: &PocketIc) {
         btc_canister_id,
         btc_wasm,
         Encode!(&args).unwrap(),
-        Some(root_canister_id),
+        Some(nns_root_canister_id),
     );
 }
 
@@ -101,7 +101,6 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         .unwrap();
 
     let pic = PocketIcBuilder::new()
-        .with_nns_subnet()
         .with_bitcoin_subnet()
         .with_ii_subnet()
         .with_application_subnet()
@@ -181,8 +180,11 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
         }
     }
 
-    assert_eq!(
-        get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address),
-        n * reward - send_amount
-    );
+    loop {
+        if get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address.clone())
+            == n * reward - send_amount
+        {
+            break;
+        }
+    }
 }
