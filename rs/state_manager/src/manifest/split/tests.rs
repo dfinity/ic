@@ -4,7 +4,6 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
-//use pretty_assertions::assert_eq;
 use super::*;
 
 /// Expected hash of a zero length file.
