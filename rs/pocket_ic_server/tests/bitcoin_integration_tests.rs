@@ -138,7 +138,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     )
     .unwrap();
 
-    let mut n = 101; // must be more than 100 (Coinbase maturity rule)
+    // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
+    let mut n = 101;
     btc_rpc
         .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap())
         .unwrap();
