@@ -9157,6 +9157,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
+ "ic-stable-structures",
  "num-traits",
  "serde",
  "serde_bytes",
@@ -13527,6 +13528,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-stable-structures",
  "itertools 0.12.1",
  "num-bigint 0.4.6",
  "num-traits",
