@@ -24,7 +24,8 @@ use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, metric_vec, HistogramStats,
+    fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter, labels, metric_vec,
+    HistogramStats,
 };
 use ic_types::{
     canister_http::{CanisterHttpMethod, Transform},
@@ -3715,10 +3716,12 @@ fn test_sign_with_schnorr_api_is_enabled() {
 #[test]
 fn test_execution_canister_ingress_queue_latency_seconds() {
     fn get_metric_stats(test: &ExecutionTest) -> HistogramStats {
-        fetch_histogram_stats(
+        fetch_histogram_vec_stats(
             test.metrics_registry(),
-            "execution_canister_ingress_queue_latency_seconds",
+            "execution_canister_message_queue_latency_seconds",
         )
+        .get(&labels(&[("message_type", "ingress")]))
+        .cloned()
         .unwrap_or_default()
     }
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();

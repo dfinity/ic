@@ -1630,7 +1630,10 @@ impl ExecutionEnvironment {
                 let expiry_duration = expiry_time_from_now().saturating_duration_since(now);
                 let start = ingress.expiry_time.saturating_sub(expiry_duration);
                 let latency = now.saturating_duration_since(start).as_secs_f64();
-                self.metrics.canister_ingress_queue_latency.observe(latency);
+                self.metrics
+                    .canister_message_queue_latency
+                    .with_label_values(&["ingress"])
+                    .observe(latency);
                 CanisterCall::Ingress(ingress)
             }
         };
