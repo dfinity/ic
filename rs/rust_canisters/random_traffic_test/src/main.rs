@@ -28,9 +28,8 @@ thread_local! {
     static RECORDS: RefCell<Vec<Record>> = RefCell::default();
 }
 
-/// Replaces the canister state according to `f` by parsing `arg_data` of type `T`; replies the old
-/// state.
-fn replace_state<T, F>(f: F)
+/// Replaces an element in the `treadlocal! {}` block above.
+fn with_candid_encoding<T, F>(f: F)
 where
     T: candid::CandidType + for<'a> serde::Deserialize<'a>,
     F: FnOnce(T) -> T,
@@ -47,13 +46,13 @@ where
 /// Replaces the test config.
 #[export_name = "canister_update replace_config"]
 fn replace_config() {
-    replace_state(|config: Config| CONFIG.replace(config));
+    with_candid_encoding(|config: Config| CONFIG.replace(config));
 }
 
 /// Replaces the requests per round to be sent each heart beat.
 #[export_name = "canister_update replace_max_calls_per_heartbeat"]
 fn replace_max_calls_per_heartbeat() {
-    replace_state(|max_calls_per_heartbeat: u32| {
+    with_candid_encoding(|max_calls_per_heartbeat: u32| {
         MAX_CALLS_PER_HEARTBEAT.replace(max_calls_per_heartbeat)
     });
 }
@@ -61,13 +60,13 @@ fn replace_max_calls_per_heartbeat() {
 /// Replaces the reply weight.
 #[export_name = "canister_update replace_reply_weight"]
 fn replace_reply_weight() {
-    replace_state(|reply_weight: u32| REPLY_WEIGHT.replace(reply_weight));
+    with_candid_encoding(|reply_weight: u32| REPLY_WEIGHT.replace(reply_weight));
 }
 
 /// Replaces the call weight.
 #[export_name = "canister_update replace_call_weight"]
 fn replace_call_weight() {
-    replace_state(|call_weight: u32| CALL_WEIGHT.replace(call_weight));
+    with_candid_encoding(|call_weight: u32| CALL_WEIGHT.replace(call_weight));
 }
 
 /// Seeds `RNG`.
