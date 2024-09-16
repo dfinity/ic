@@ -15,8 +15,8 @@ pub use fetch::{
     get_tx_cycle_cost, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
-use fetch::{FetchEnv, FetchResult, FetchState, TryFetchResult};
-use state::{FetchGuardError, FetchTxStatus, HttpGetTxError};
+use fetch::{FetchEnv, FetchResult, TryFetchResult};
+use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
 impl From<(Txid, HttpGetTxError)> for CheckTransactionError {
@@ -50,31 +50,15 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
         && (message.contains("size limit") || message.contains("length limit"))
 }
 
-struct KytCanisterState;
+struct KytCanisterEnv;
 
-impl FetchState for KytCanisterState {
+impl FetchEnv for KytCanisterEnv {
     type FetchGuard = state::FetchGuard;
 
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
         state::FetchGuard::new(txid)
     }
 
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus> {
-        state::get_fetch_status(txid)
-    }
-
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus) {
-        state::set_fetch_status(txid, status)
-    }
-
-    fn set_fetched_address(&self, txid: Txid, index: usize, address: Address) {
-        state::set_fetched_address(txid, index, address)
-    }
-}
-
-struct KytCanisterEnv;
-
-impl FetchEnv for KytCanisterEnv {
     async fn http_get_tx(
         &self,
         txid: Txid,
@@ -173,16 +157,15 @@ pub async fn check_transaction_inputs(
     txid: Txid,
 ) -> Result<CheckTransactionResponse, CheckTransactionError> {
     let env = &KytCanisterEnv;
-    let state = &KytCanisterState;
-    match env.try_fetch_tx(state, txid) {
+    match env.try_fetch_tx(txid) {
         TryFetchResult::Pending => Ok(CheckTransactionResponse::Pending),
         TryFetchResult::HighLoad => Ok(CheckTransactionResponse::HighLoad),
         TryFetchResult::Error(err) => Err((txid, err).into()),
         TryFetchResult::NotEnoughCycles => Ok(CheckTransactionResponse::NotEnoughCycles),
-        TryFetchResult::Fetched(fetched) => env.check_fetched(state, txid, &fetched).await,
+        TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {
             match do_fetch.await {
-                Ok(FetchResult::Fetched(fetched)) => env.check_fetched(state, txid, &fetched).await,
+                Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
                 Ok(FetchResult::Error(err)) => Err((txid, err).into()),
                 Ok(FetchResult::RetryWithBiggerBuffer) => Ok(CheckTransactionResponse::Pending),
                 Err(_) => unreachable!(), // should never happen

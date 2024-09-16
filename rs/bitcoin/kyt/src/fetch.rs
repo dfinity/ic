@@ -1,6 +1,6 @@
-use crate::blocklist_contains;
 use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError};
 use crate::types::{CheckTransactionError, CheckTransactionResponse};
+use crate::{blocklist_contains, state};
 use bitcoin::{address::FromScriptError, Address, Network, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -50,17 +50,10 @@ pub enum TryFetchResult<F> {
     ToFetch(F),
 }
 
-/// Trait that abstracts over state operations.
-pub trait FetchState {
-    type FetchGuard;
-    fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus>;
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus);
-    fn set_fetched_address(&self, txid: Txid, index: usize, address: Address);
-}
-
 /// Trait that abstracts over system functions like fetching transaction, calcuating cycles, etc.
 pub trait FetchEnv {
+    type FetchGuard;
+    fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
     async fn http_get_tx(
         &self,
         txid: Txid,
@@ -74,12 +67,11 @@ pub trait FetchEnv {
     /// - If it is already pending, return `Pending`.
     /// - If it is pending retry or not found, return a future that calls `fetch_tx`.
     /// - Or return other conditions like `HighLoad` or `Error`.
-    fn try_fetch_tx<State: FetchState>(
+    fn try_fetch_tx(
         &self,
-        state: &State,
         txid: Txid,
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let max_response_bytes = match state.get_fetch_status(txid) {
+        let max_response_bytes = match state::get_fetch_status(txid) {
             None => INITIAL_MAX_RESPONSE_BYTES,
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
@@ -88,7 +80,7 @@ pub trait FetchEnv {
             Some(FetchTxStatus::Error(msg)) => return TryFetchResult::Error(msg),
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
         };
-        let guard = match state.new_fetch_guard(txid) {
+        let guard = match self.new_fetch_guard(txid) {
             Ok(guard) => guard,
             Err(_) => return TryFetchResult::HighLoad,
         };
@@ -96,7 +88,7 @@ pub trait FetchEnv {
         if self.cycles_accept(cycle_cost) < cycle_cost {
             TryFetchResult::NotEnoughCycles
         } else {
-            TryFetchResult::ToFetch(self.fetch_tx(state, guard, txid, max_response_bytes))
+            TryFetchResult::ToFetch(self.fetch_tx(guard, txid, max_response_bytes))
         }
     }
 
@@ -109,10 +101,9 @@ pub trait FetchEnv {
     ///
     /// Note that this function does not return any error, but due to requirements
     /// of `try_join_all` it must return a `Result` type.
-    async fn fetch_tx<State: FetchState>(
+    async fn fetch_tx(
         &self,
-        state: &State,
-        _guard: State::FetchGuard,
+        _guard: Self::FetchGuard,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
@@ -123,13 +114,13 @@ pub trait FetchEnv {
                     tx,
                     input_addresses,
                 };
-                state.set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
+                state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
                 Ok(FetchResult::Fetched(fetched))
             }
             Err(HttpGetTxError::ResponseTooLarge)
                 if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
             {
-                state.set_fetch_status(
+                state::set_fetch_status(
                     txid,
                     FetchTxStatus::PendingRetry {
                         max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
@@ -138,7 +129,7 @@ pub trait FetchEnv {
                 Ok(FetchResult::RetryWithBiggerBuffer)
             }
             Err(err) => {
-                state.set_fetch_status(txid, FetchTxStatus::Error(err.clone()));
+                state::set_fetch_status(txid, FetchTxStatus::Error(err.clone()));
                 Ok(FetchResult::Error(err))
             }
         }
@@ -156,9 +147,8 @@ pub trait FetchEnv {
     ///   if all of them pass the check. Otherwise return `Failed`.
     ///
     /// Pre-condition: `txid` already exists in state with a `Fetched` status.
-    async fn check_fetched<State: FetchState>(
+    async fn check_fetched(
         &self,
-        state: &State,
         txid: Txid,
         fetched: &FetchedTx,
     ) -> Result<CheckTransactionResponse, CheckTransactionError> {
@@ -187,7 +177,7 @@ pub trait FetchEnv {
             if fetched.input_addresses[index].is_none() {
                 use TryFetchResult::*;
                 let input_txid = Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32]));
-                match self.try_fetch_tx(state, input_txid) {
+                match self.try_fetch_tx(input_txid) {
                     ToFetch(do_fetch) => {
                         jobs.push((index, input_txid, input.previous_output.vout));
                         futures.push(do_fetch)
@@ -195,7 +185,7 @@ pub trait FetchEnv {
                     Fetched(fetched) => {
                         let vout = input.previous_output.vout;
                         match transaction_output_address(&fetched.tx, vout) {
-                            Ok(address) => state.set_fetched_address(txid, index, address),
+                            Ok(address) => state::set_fetched_address(txid, index, address),
                             Err(err) => {
                                 return Err(CheckTransactionError::Address {
                                     txid: txid.as_ref().to_vec(),
@@ -230,7 +220,7 @@ pub trait FetchEnv {
             match result {
                 FetchResult::Fetched(fetched) => {
                     match transaction_output_address(&fetched.tx, vout) {
-                        Ok(address) => state.set_fetched_address(txid, index, address),
+                        Ok(address) => state::set_fetched_address(txid, index, address),
                         Err(err) => {
                             error = Some(CheckTransactionError::Address {
                                 txid: input_txid.as_ref().to_vec(),
@@ -248,12 +238,10 @@ pub trait FetchEnv {
             return Err(err);
         }
         // Check again to see if we have completed
-        match state
-            .get_fetch_status(txid)
-            .and_then(|result| match result {
-                FetchTxStatus::Fetched(fetched) => check_completed(&fetched),
-                _ => None,
-            }) {
+        match state::get_fetch_status(txid).and_then(|result| match result {
+            FetchTxStatus::Fetched(fetched) => check_completed(&fetched),
+            _ => None,
+        }) {
             Some(result) => Ok(result),
             None => Ok(CheckTransactionResponse::Pending),
         }

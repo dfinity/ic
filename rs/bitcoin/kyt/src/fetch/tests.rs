@@ -6,50 +6,13 @@ use bitcoin::{
 };
 use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::str::FromStr;
-
-struct MockState {
-    statuses: RefCell<BTreeMap<Txid, FetchTxStatus>>,
-    high_load: bool,
-}
-
-impl FetchState for MockState {
-    type FetchGuard = ();
-    fn new_fetch_guard(&self, _txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
-        if self.high_load {
-            Err(FetchGuardError::NoCapacity)
-        } else {
-            Ok(())
-        }
-    }
-    fn get_fetch_status(&self, txid: Txid) -> Option<FetchTxStatus> {
-        self.statuses.borrow().get(&txid).cloned()
-    }
-    fn set_fetch_status(&self, txid: Txid, status: FetchTxStatus) {
-        self.statuses.borrow_mut().insert(txid, status);
-    }
-    fn set_fetched_address(&self, txid: Txid, index: usize, address: Address) {
-        self.statuses.borrow_mut().entry(txid).and_modify(|status| {
-            if let FetchTxStatus::Fetched(fetched) = status {
-                fetched.input_addresses[index] = Some(address);
-            };
-        });
-    }
-}
-
-impl MockState {
-    fn new() -> Self {
-        Self {
-            statuses: RefCell::new(BTreeMap::default()),
-            high_load: false,
-        }
-    }
-}
 
 // A mock environment that provides simulated `get_tx` implementation, with
 // mock states and transactions used for testing purpose.
 struct MockEnv {
+    high_load: bool,
     calls: RefCell<VecDeque<(Txid, u32)>>,
     replies: RefCell<VecDeque<Result<Transaction, HttpGetTxError>>>,
     available_cycles: RefCell<u128>,
@@ -57,6 +20,15 @@ struct MockEnv {
 }
 
 impl FetchEnv for MockEnv {
+    type FetchGuard = ();
+
+    fn new_fetch_guard(&self, _txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
+        if self.high_load {
+            Err(FetchGuardError::NoCapacity)
+        } else {
+            Ok(())
+        }
+    }
     async fn http_get_tx(
         &self,
         txid: Txid,
@@ -89,6 +61,7 @@ impl FetchEnv for MockEnv {
 impl MockEnv {
     fn new(available_cycles: u128) -> Self {
         Self {
+            high_load: false,
             calls: RefCell::new(VecDeque::new()),
             replies: RefCell::new(VecDeque::new()),
             available_cycles: RefCell::new(available_cycles),
@@ -189,8 +162,7 @@ async fn test_mock_env() {
 
 #[test]
 fn test_try_fetch_tx() {
-    let mut state = MockState::new();
-    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
 
@@ -199,37 +171,34 @@ fn test_try_fetch_tx() {
         tx: mock_transaction(),
         input_addresses: vec![None],
     });
-    state.set_fetch_status(txid_0, fetched_0.clone());
+    state::set_fetch_status(txid_0, fetched_0.clone());
     assert!(matches!(
-        env.try_fetch_tx(&state, txid_0),
+        env.try_fetch_tx(txid_0),
         TryFetchResult::Fetched(_)
     ));
 
     // case Pending
-    state.set_fetch_status(txid_1, FetchTxStatus::PendingOutcall);
-    assert!(matches!(
-        env.try_fetch_tx(&state, txid_1),
-        TryFetchResult::Pending
-    ));
+    state::set_fetch_status(txid_1, FetchTxStatus::PendingOutcall);
+    assert!(matches!(env.try_fetch_tx(txid_1), TryFetchResult::Pending));
 
     // case HighLoad
-    state.high_load = true;
+    env.high_load = true;
     assert!(matches!(
-        env.try_fetch_tx(&state, mock_txid(2)),
+        env.try_fetch_tx(mock_txid(2)),
         TryFetchResult::HighLoad
     ));
-    state.high_load = false;
+    env.high_load = false;
 
     // case NotEnoughCycles
     assert!(matches!(
-        MockEnv::new(0).try_fetch_tx(&state, mock_txid(2)),
+        MockEnv::new(0).try_fetch_tx(mock_txid(2)),
         TryFetchResult::NotEnoughCycles
     ));
 
     // case ToFetch
     let available = env.cycles_available();
     assert!(matches!(
-        env.try_fetch_tx(&state, mock_txid(2)),
+        env.try_fetch_tx(mock_txid(2)),
         TryFetchResult::ToFetch(_)
     ));
     assert_eq!(
@@ -240,7 +209,6 @@ fn test_try_fetch_tx() {
 
 #[tokio::test]
 async fn test_fetch_tx() {
-    let state = MockState::new();
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
@@ -250,12 +218,10 @@ async fn test_fetch_tx() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
-    let result = env
-        .fetch_tx(&state, (), txid_0, INITIAL_MAX_RESPONSE_BYTES)
-        .await;
+    let result = env.fetch_tx((), txid_0, INITIAL_MAX_RESPONSE_BYTES).await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
-        state.get_fetch_status(txid_0),
+        state::get_fetch_status(txid_0),
         Some(FetchTxStatus::Fetched(_))
     ));
     if let Ok(FetchResult::Fetched(fetched)) = result {
@@ -267,35 +233,30 @@ async fn test_fetch_tx() {
 
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
-    let result = env
-        .fetch_tx(&state, (), txid_1, INITIAL_MAX_RESPONSE_BYTES)
-        .await;
+    let result = env.fetch_tx((), txid_1, INITIAL_MAX_RESPONSE_BYTES).await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
-                state.get_fetch_status(txid_1),
+                state::get_fetch_status(txid_1),
                 Some(FetchTxStatus::PendingRetry { max_response_bytes }) if max_response_bytes == RETRY_MAX_RESPONSE_BYTES));
 
     // case Err
     env.expect_get_tx_with_reply(Err(HttpGetTxError::TxEncoding(
         "failed to decode tx".to_string(),
     )));
-    let result = env
-        .fetch_tx(&state, (), txid_2, INITIAL_MAX_RESPONSE_BYTES)
-        .await;
+    let result = env.fetch_tx((), txid_2, INITIAL_MAX_RESPONSE_BYTES).await;
     assert!(matches!(
         result,
         Ok(FetchResult::Error(HttpGetTxError::TxEncoding(_)))
     ));
     assert!(matches!(
-        state.get_fetch_status(txid_2),
+        state::get_fetch_status(txid_2),
         Some(FetchTxStatus::Error(HttpGetTxError::TxEncoding(_)))
     ));
 }
 
 #[tokio::test]
 async fn test_check_fetched() {
-    let state = MockState::new();
-    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
         .unwrap()
         .assume_checked();
@@ -315,9 +276,9 @@ async fn test_check_fetched() {
         tx: tx_0.clone(),
         input_addresses: vec![Some(good_address.clone())],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Passed)
     ));
     // Check accepted cycles
@@ -328,50 +289,48 @@ async fn test_check_fetched() {
         tx: tx_0.clone(),
         input_addresses: vec![Some(good_address.clone()), Some(bad_address)],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Failed)
     ));
     // Check accepted cycle
     assert_eq!(env.cycles_accepted(), 0);
 
     // case HighLoad
-    let mut state = MockState::new();
-    state.high_load = true;
+    env.high_load = true;
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![Some(good_address), None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::HighLoad)
     ));
     // Check accepted cycle
     assert_eq!(env.cycles_accepted(), 0);
+    env.high_load = false;
 
     // case NotEnoughCycles
-    let state = MockState::new();
     let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) / 2);
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::NotEnoughCycles)
     ));
     // Check available cycles: we deduct all remaining cycles even when they are not enough
     assert_eq!(env.cycles_available(), 0);
 
     // case Pending: need 2 inputs, but only able to get 1 for now
-    let state = MockState::new();
     let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 3 / 2);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     assert!(matches!(
-        dbg!(env.check_fetched(&state, txid_0, &fetched).await),
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Pending)
     ));
     // Check remaining cycle: we deduct all remaining cycles when they are not enough
@@ -380,24 +339,25 @@ async fn test_check_fetched() {
     env.refill_cycles(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES));
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Passed)
     ));
     // Check remaining cycle
     assert_eq!(env.cycles_available(), 0);
 
     // case Passed: need 2 inputs, and getting both
-    let state = MockState::new();
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::clear_fetch_status(txid_1);
+    state::clear_fetch_status(txid_2);
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Passed)
     ));
     // Check remaining cycle
@@ -407,23 +367,23 @@ async fn test_check_fetched() {
     );
 
     // case Passed: need 2 inputs, and 1 already exists in cache.
-    let state = MockState::new();
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
-    state.set_fetch_status(
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(
         txid_1,
         FetchTxStatus::Fetched(FetchedTx {
             tx: tx_1.clone(),
             input_addresses: vec![],
         }),
     );
+    state::clear_fetch_status(txid_2);
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Passed)
     ));
     // Check remaining cycle
@@ -433,23 +393,24 @@ async fn test_check_fetched() {
     );
 
     // case Pending: need 2 input, but 1 of them gives RetryWithBiggerBuffer error.
-    let state = MockState::new();
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::clear_fetch_status(txid_1);
+    state::clear_fetch_status(txid_2);
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Pending)
     ));
     // Try again with bigger buffer, should Pass
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Passed)
     ));
     // Check remaining cycle
@@ -461,23 +422,24 @@ async fn test_check_fetched() {
     );
 
     // case Error: need 2 input, but 1 of them keeps giving RetryWithBiggerBuffer error.
-    let state = MockState::new();
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
         tx: tx_0.clone(),
         input_addresses: vec![None, None],
     };
-    state.set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::clear_fetch_status(txid_1);
+    state::clear_fetch_status(txid_2);
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
-        env.check_fetched(&state, txid_0, &fetched).await,
+        env.check_fetched(txid_0, &fetched).await,
         Ok(CheckTransactionResponse::Pending)
     ));
     // Try again with bigger buffer, still fails
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
-            env.check_fetched(&state, txid_0, &fetched).await,
+            env.check_fetched(txid_0, &fetched).await,
             Err(CheckTransactionError::ResponseTooLarge { txid }) if txid_2.as_ref() == txid));
     // Check remaining cycle
     assert_eq!(
