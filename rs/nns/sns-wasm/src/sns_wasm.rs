@@ -27,7 +27,10 @@ use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nns_constants::DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT;
+use ic_nns_constants::{
+    DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::{
     client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
@@ -1177,8 +1180,11 @@ where
                 subnet_id,
                 this_canister_id,
                 Cycles::new(initial_cycles_per_canister.into()),
-                (canister_type == SnsCanisterType::Governance)
-                    .then_some(DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT),
+                if canister_type == SnsCanisterType::Governance {
+                    DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
+                } else {
+                    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
+                },
             )
         };
 
@@ -2036,7 +2042,7 @@ mod test {
             _target_subnet: SubnetId,
             _controller_id: PrincipalId,
             _cycles: Cycles,
-            _wasm_memory_limit: Option<u64>,
+            _wasm_memory_limit: u64,
         ) -> Result<CanisterId, String> {
             let mut errors = self.errors_on_create_canister.lock().unwrap();
             if errors.len() > 0 {

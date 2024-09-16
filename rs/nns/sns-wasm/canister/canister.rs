@@ -69,12 +69,11 @@ impl CanisterApi for CanisterApiImpl {
         target_subnet: SubnetId,
         controller_id: PrincipalId,
         cycles: Cycles,
-        wasm_memory_limit: Option<u64>,
+        wasm_memory_limit: u64,
     ) -> Result<CanisterId, String> {
-        let mut settings = CanisterSettingsArgsBuilder::new().with_controllers(vec![controller_id]);
-        if let Some(wasm_memory_limit) = wasm_memory_limit {
-            settings = settings.with_wasm_memory_limit(wasm_memory_limit);
-        }
+        let settings = CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller_id])
+            .with_wasm_memory_limit(wasm_memory_limit);
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
             target_subnet.into(),
             &Method::CreateCanister.to_string(),

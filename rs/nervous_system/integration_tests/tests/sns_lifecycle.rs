@@ -1880,8 +1880,8 @@ fn test_sns_lifecycle(
         "No archives found from get_sns_canisters_summary response: {:#?}",
         response
     );
-    
-    // Check that the SNS framework canister settings are reasonable
+
+    // Check that the SNS framework canister settings are as expected
     {
         // get SNS canisters summary
         let sns_canisters_summary = get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);

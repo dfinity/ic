@@ -168,6 +168,9 @@ const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
 /// be passed anymore.
 pub const DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
+/// This value is 3GiB, which will leave a comfortable buffer in the situation when a canister runs out of memory
+pub const DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 3 * (1 << 30);
+
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
     if canister_id == GOVERNANCE_CANISTER_ID {
