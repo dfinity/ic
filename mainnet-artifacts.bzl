@@ -16,6 +16,7 @@ MAINNET_NNS_SUBNET_IC_VERSION = "99ab7f03700ba6cf832eb18ffd55228f56ae927a"
 #   <sha256>: this should be the SHA256 hash of the published gz-compressed binary.
 #     If <rev> equals MAINNET_NNS_SUBNET_IC_VERSION this hash is automatically updated
 #     by ci/scripts/update-mainnet-artifacts.sh.
+# Please make sure the key value pairs are contained on a single line otherwise ci/scripts/update-mainnet-artifacts.sh will fail to update them correctly.
 PUBLISHED_BINARIES = {
     "ic-recovery": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "8411814fd0a66fa52d1a4b096c2b1a3d7482faf6d31f3e4b6520021c2275c49b"},
     "ic-replay": {"rev": MAINNET_NNS_SUBNET_IC_VERSION, "sha256": "a6234ea2ad32cf8a5de7d45626988237f2e9ddc30cdc25d51166feb8735c5092"},
