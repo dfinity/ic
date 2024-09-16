@@ -58,7 +58,8 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings =
+                get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
@@ -87,7 +88,8 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings =
+                get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
@@ -125,7 +127,8 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateMacAddress { node_type }) => {
             let config_ini_settings = get_config_ini_settings(Path::new(&opts.config))?;
 
-            let deployment_json_settings = get_deployment_settings(Path::new(&opts.deployment_file))?;
+            let deployment_json_settings =
+                get_deployment_settings(Path::new(&opts.deployment_file))?;
             eprintln!("Deployment config: {:?}", deployment_json_settings);
 
             // TODO: NODE-1466: Remove in configuration revamp (HostOS and GuestOS integration).
