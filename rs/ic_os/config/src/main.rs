@@ -15,7 +15,7 @@ use config::types::{
 pub enum Commands {
     /// Creates SetupOSConfig object
     CreateSetuposConfig {
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_FILE_PATH, value_name = "config.ini")]
+        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
         config_ini_path: PathBuf,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]

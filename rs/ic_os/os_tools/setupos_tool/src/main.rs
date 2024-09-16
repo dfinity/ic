@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use config::types::SetupOSConfig;
 use config::{
-    deserialize_config, DEFAULT_SETUPOS_CONFIG_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
+    deserialize_config, DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
     DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
 use network::generate_network_config;
@@ -35,7 +35,7 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct SetupOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_FILE_PATH.to_string(), value_name = "FILE")]
+    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH.to_string(), value_name = "FILE")]
     config: String,
 
     #[arg(short, long, default_value_t = DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH.to_string(), value_name = "FILE")]
