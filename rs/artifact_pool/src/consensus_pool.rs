@@ -186,6 +186,7 @@ struct PoolMetrics {
     notarization_share: PerTypeMetrics<NotarizationShare>,
     finalization_share: PerTypeMetrics<FinalizationShare>,
     catch_up_package_share: PerTypeMetrics<CatchUpPackageShare>,
+    equivocation_proof: PerTypeMetrics<EquivocationProof>,
 }
 
 impl PoolMetrics {
@@ -210,6 +211,7 @@ impl PoolMetrics {
                 pool_portion,
                 "catch_up_package_share",
             ),
+            equivocation_proof: PerTypeMetrics::new(&registry, pool_portion, "equivocation_proof"),
         }
     }
 
@@ -236,6 +238,8 @@ impl PoolMetrics {
             .update_from_height_indexed_pool(pool_section.finalization_share());
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
+        self.equivocation_proof
+            .update_from_height_indexed_pool(pool_section.equivocation_proof());
     }
 
     fn update_count_per_height<T>(
@@ -263,6 +267,7 @@ impl PoolMetrics {
         update_count_per_height!(random_tape_share);
         update_count_per_height!(notarization_share);
         update_count_per_height!(finalization_share);
+        update_count_per_height!(equivocation_proof);
     }
 }
 
