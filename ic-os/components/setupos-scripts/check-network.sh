@@ -165,12 +165,10 @@ function ping_ipv6_gateway() {
 function query_nns_nodes() {
     echo "* Querying NNS nodes..."
 
-    nns_urls=$(get_config_value '.icos_settings.nns_urls')
-
-    local urls=($(echo ${nns_urls} | jq -r '.[]'))
+    local nns_urls=($(get_config_value '.icos_settings.nns_urls' | jq -r '.[]'))
     local success=false
 
-    for url in "${urls[@]}"; do
+    for url in "${nns_urls[@]}"; do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
