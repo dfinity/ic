@@ -1,10 +1,12 @@
 [package]
-name = "ic_nervous_system_common_validation"
-version = "0.1.0"
-edition = "2021"
+name = "ic-nervous-system-common-validation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
-name = "ic_nervous_system_common_validation"
 path = "src/lib.rs"
 
 [dependencies]
