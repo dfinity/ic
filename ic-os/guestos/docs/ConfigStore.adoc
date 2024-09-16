@@ -12,6 +12,10 @@ Not all configuration files and directories are required for GuestOS to run in p
 
 The following files and directories *are* required for GuestOS to run in production.
 
+=== CONFIGURED
+
+This file serves as a tag to indicate that the one-time bootstrap configuration has been completed. If the `/boot/config/CONFIGURED` file is not present, the boot sequence will search for a virtual USB stick (the bootstrap config image) containing the injected configuration files, and create the file.
+
 === store.keyfile
 
 This file contains the key material used to derive the wrapping key for all block device encryption. The `store.keyfile` is created during the first boot, and encrypted partitions are configured with it.
