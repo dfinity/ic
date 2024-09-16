@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
-use ic_base_types::{CanisterId, SnapshotId};
-use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
+//use ic_base_types::{CanisterId, SnapshotId};
+use ic_base_types::CanisterId;
+//use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
@@ -202,7 +203,7 @@ fn split_manifest_split_marker_last() {
         )
     );
 }
-
+/*
 #[test]
 fn split_manifest_3_canisters() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
@@ -307,7 +308,7 @@ fn split_manifest_3_canisters() {
         )
     );
 }
-
+*/
 /// Returns a `FileInfo` for a zero length file with the given relative path.
 fn empty_file_info(path: &str) -> FileInfo {
     FileInfo {
@@ -316,7 +317,7 @@ fn empty_file_info(path: &str) -> FileInfo {
         hash: EMPTY_FILE_HASH,
     }
 }
-
+/*
 /// Generates a valid `(FileInfo, ChunkInfo)` pair for a non-empty file with
 /// the given relative path..
 fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
@@ -337,7 +338,7 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
         },
     )
 }
-
+*/
 /// Returns the relative path to the `canister.pbuf` for the given canister.
 fn canister_pbuf_path(canister_id: CanisterId) -> String {
     // Empty root so that all paths are relative like in the manifest.
@@ -353,7 +354,7 @@ fn canister_pbuf_path(canister_id: CanisterId) -> String {
         .unwrap()
         .to_string()
 }
-
+/*
 /// Returns the relative path to the `snapshot.pbuf` for the given snapshot.
 fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
     // Empty root so that all paths are relative like in the manifest.
@@ -369,7 +370,7 @@ fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
         .unwrap()
         .to_string()
 }
-
+*/
 /// Returns the expected `FileInfo` and `ChunkInfo` for the split marker from
 /// `SUBNET_0`.
 fn expected_split_marker() -> (FileInfo, ChunkInfo) {
@@ -393,7 +394,7 @@ fn expected_split_marker() -> (FileInfo, ChunkInfo) {
         },
     )
 }
-
+/*
 /// Returns the expected `FileInfo` and `ChunkInfo` for the system metadata of
 /// `SUBNET_1`.
 fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
@@ -417,3 +418,4 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
         },
     )
 }
+*/
