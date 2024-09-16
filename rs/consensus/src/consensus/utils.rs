@@ -1,7 +1,4 @@
-use ic_consensus_utils::{
-    membership::Membership, pool_reader::PoolReader, ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP,
-    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
-};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::{PayloadValidationError, PayloadValidationFailure},
     time_source::TimeSource,
@@ -18,6 +15,11 @@ use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::{collections::BTreeSet, time::Duration};
+
+use super::{
+    ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP,
+    ACCEPTABLE_NOTARIZATION_CUP_GAP,
+};
 
 /// Return the hash of a block as a string.
 pub(super) fn get_block_hash_string(block: &Block) -> String {

@@ -19,24 +19,6 @@ pub mod crypto;
 pub mod membership;
 pub mod pool_reader;
 
-/// The acceptable gap between the finalized height and the certified height. If
-/// the actual gap is greater than this, consensus starts slowing down the block
-/// rate.
-pub const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the notarization/certification gap.
-pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the gap between notarized height and the height of the next pending CUP.
-pub const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
-
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above the next pending CUP.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-pub const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
-
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]
 pub struct RoundRobin {
