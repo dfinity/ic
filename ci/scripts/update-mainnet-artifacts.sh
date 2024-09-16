@@ -13,7 +13,7 @@ EXIT_STATUS=0
 
 # Retrieve the IC version (git revision) of the mainnet NNS subnet:
 MAINNET_NNS_SUBNET_ID="tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
-MAINNET_NNS_SUBNET_IC_VERSION="$(jq ".subnets.\"$MAINNET_NNS_SUBNET_ID\"" -r testnet/mainnet_revisions.json)"
+MAINNET_NNS_SUBNET_IC_VERSION="$(jq --arg subnetid "$MAINNET_NNS_SUBNET_ID" '.subnets[$subnetid]' -r testnet/mainnet_revisions.json)"
 
 # Write this IC version to mainnet-artifacts.bzl to give bazel access to it:
 sed -i "s/MAINNET_NNS_SUBNET_IC_VERSION = \".*\"/MAINNET_NNS_SUBNET_IC_VERSION = \"$MAINNET_NNS_SUBNET_IC_VERSION\"/" mainnet-artifacts.bzl
@@ -32,15 +32,17 @@ curl "https://download.dfinity.systems/ic/$MAINNET_NNS_SUBNET_IC_VERSION/binarie
 # without this script overwriting our override.
 sed_script=""
 while IFS= read -r line; do
-    binary_name="$(echo "$line" | cut -d: -f1 | tr -d '"' | xargs)"
-    existing_sha256="$(echo "$line" | cut -d: -f4 | tr -d '"},' | xargs)"
-    sha256="$(grep "$binary_name" "$binaries_SHA256SUMS" | cut -d' ' -f1)"
-    sed_script+="s/$existing_sha256/$sha256/;"
+    binary_name="$(cut <<<"$line" -d: -f1 | tr -d '"' | xargs)"
+    old_sha256="$(cut <<<"$line" -d: -f4 | tr -d '"},' | xargs)"
+    new_sha256="$(grep "$binary_name" "$binaries_SHA256SUMS" | cut -d' ' -f1)"
+    sed_script+="s/$old_sha256/$new_sha256/;"
 done <<<$(grep '"rev": MAINNET_NNS_SUBNET_IC_VERSION' mainnet-artifacts.bzl | grep -v '#')
 
 # Apply this sed script to the PUBLISHED_BINARIES dictionary in mainnet-artifacts.bzl
 # such that bazel will use the new binaries of IC version:
 sed -i "$sed_script" mainnet-artifacts.bzl
+
+exit 1
 
 # Stage files and check if anything changed
 git add mainnet-artifacts.bzl
