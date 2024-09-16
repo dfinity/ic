@@ -41,6 +41,7 @@ candid_parser = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+maplit = "1"
 mockall = { workspace = true }
 paste = "1.0.12"
 proptest = { workspace = true }

@@ -94,7 +94,7 @@ impl Farm {
         &self,
         group_base_name: &str,
         group_name: &str,
-        ttl: Duration,
+        ttl: Option<Duration>,
         mut spec: GroupSpec,
         env: &TestEnv,
     ) -> FarmResult<()> {
@@ -103,7 +103,7 @@ impl Farm {
             .clone()
             .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{}", group_name);
-        let ttl = ttl.as_secs() as u32;
+        let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
         let spec = spec.add_meta(env, group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
@@ -431,7 +431,7 @@ struct TimeoutSettings {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 struct CreateGroupRequest {
-    pub ttl: u32,
+    pub ttl: Option<u32>,
     pub spec: GroupSpec,
 }
 

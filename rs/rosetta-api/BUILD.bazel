@@ -12,11 +12,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
-    "//rs/constants",
     "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/limits",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
@@ -67,9 +67,12 @@ DEV_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
     "//rs/crypto/ed25519",
+    "//rs/rosetta-api",
     "//rs/rosetta-api/client:ic-icp-rosetta-client",
     "//rs/rosetta-api/icp_ledger/test_utils",
+    "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/test_utils",
+    "//rs/rosetta-api/icrc1/tokens_u256",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/test_utils",
@@ -143,7 +146,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(
@@ -159,6 +162,7 @@ rust_test_suite_with_extra_srcs(
         "//rs/replica",
         "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
@@ -167,6 +171,7 @@ rust_test_suite_with_extra_srcs(
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     extra_srcs = glob([
         "tests/system_tests/common/*.rs",

@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create large --lifetime-mins=180 --output-dir=./large -- --test_tmpdir=./large
 //
 // The --output-dir=./large will store the debug output of the test driver in the specified directory.

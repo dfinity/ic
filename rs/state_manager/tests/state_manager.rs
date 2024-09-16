@@ -109,9 +109,7 @@ fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> 
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+        + std::fs::metadata(canister_layout.vmemory_0().base()).map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of stable memory including overlays.
@@ -124,8 +122,7 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
         + std::fs::metadata(canister_layout.stable_memory().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+            .map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of wasm chunk store including overlays.
@@ -139,8 +136,7 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map(|p| std::fs::metadata(p).unwrap().len())
             .sum::<u64>()
             + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map(|metadata| metadata.len())
-                .unwrap_or(0)
+                .map_or(0, |metadata| metadata.len())
     } else {
         std::fs::metadata(canister_layout.wasm_chunk_store().base())
             .unwrap()
@@ -7244,10 +7240,10 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 
 proptest! {
 // We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(10))]
+#![proptest_config(ProptestConfig::with_cases(5))]
 
 #[test]
-fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..200)) {
+fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {

@@ -1,14 +1,14 @@
 use crate::IngressManager;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_pool::{
         ChangeAction::{
             MoveToValidated, PurgeBelowExpiry, RemoveFromUnvalidated, RemoveFromValidated,
         },
-        ChangeSet, IngressPool, IngressPoolObject,
+        IngressPool, IngressPoolObject, Mutations,
     },
-    p2p::consensus::ChangeSetProducer,
+    p2p::consensus::PoolMutationsProducer,
 };
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::debug;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_types::{
@@ -17,16 +17,16 @@ use ic_types::{
 };
 use ic_validator::RequestValidationError;
 
-impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
-    type ChangeSet = ChangeSet;
+impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
+    type Mutations = Mutations;
 
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> Mutations {
         // Skip on_state_change when ingress_message_setting is not available in
         // registry.
         let registry_version = self.registry_client.get_latest_version();
         let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
         else {
-            return ChangeSet::new();
+            return Mutations::new();
         };
 
         let _timer = self.metrics.ingress_handler_time.start_timer();
@@ -34,7 +34,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
 
         // Do not run on_state_change if consensus_time is not initialized yet.
         let Some(consensus_time) = self.consensus_time.consensus_time() else {
-            return ChangeSet::new();
+            return Mutations::new();
         };
 
         let mut change_set = Vec::new();
@@ -382,7 +382,7 @@ mod tests {
                         timestamp: time,
                     });
                     let change_set = ingress_manager.on_state_change(ingress_pool);
-                    ingress_pool.apply_changes(change_set);
+                    ingress_pool.apply(change_set);
                     ingress_manager.on_state_change(ingress_pool)
                 });
 

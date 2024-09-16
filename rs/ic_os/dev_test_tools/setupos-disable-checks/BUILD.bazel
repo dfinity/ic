@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/build_tools/partition_tools",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:indoc",
+]
+
+rust_binary(
+    name = "setupos-disable-checks",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = DEPENDENCIES,
+)

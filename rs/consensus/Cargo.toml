@@ -44,7 +44,7 @@ ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-consensus = { path = ".", features = ["malicious_code"] }
 ic-consensus-mocks = { path = "./mocks" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }

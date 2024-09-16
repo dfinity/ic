@@ -190,6 +190,41 @@ pub struct ConstructionMetadataRequest {
     pub public_keys: Option<Vec<PublicKey>>,
 }
 
+impl ConstructionMetadataRequest {
+    pub fn builder(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder::new(network_identifier)
+    }
+}
+
+pub struct ConstructionMetadataRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    options: Option<ObjectMap>,
+    public_keys: Option<Vec<PublicKey>>,
+}
+
+impl ConstructionMetadataRequestBuilder {
+    pub fn new(network_identifier: NetworkIdentifier) -> ConstructionMetadataRequestBuilder {
+        ConstructionMetadataRequestBuilder {
+            network_identifier,
+            options: None,
+            public_keys: None,
+        }
+    }
+
+    pub fn with_options(mut self, options: ObjectMap) -> Self {
+        self.options = Some(options);
+        self
+    }
+
+    pub fn build(self) -> ConstructionMetadataRequest {
+        ConstructionMetadataRequest {
+            network_identifier: self.network_identifier,
+            options: self.options,
+            public_keys: self.public_keys,
+        }
+    }
+}
+
 /// ConstructionPayloadsRequest is the request to `/construction/payloads`. It
 /// contains the network, a slice of operations, and arbitrary metadata that was
 /// returned by the call to `/construction/metadata`.  Optionally, the request
@@ -306,6 +341,58 @@ pub struct AccountBalanceRequest {
     #[serde(rename = "metadata")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ObjectMap>,
+}
+
+impl AccountBalanceRequest {
+    pub fn builder(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder::new(network_identifier, account_identifier)
+    }
+}
+
+pub struct AccountBalanceRequestBuilder {
+    network_identifier: NetworkIdentifier,
+    account_identifier: AccountIdentifier,
+    block_identifier: Option<PartialBlockIdentifier>,
+}
+
+impl AccountBalanceRequestBuilder {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        account_identifier: AccountIdentifier,
+    ) -> AccountBalanceRequestBuilder {
+        AccountBalanceRequestBuilder {
+            network_identifier,
+            account_identifier,
+            block_identifier: None,
+        }
+    }
+
+    pub fn with_block_index(mut self, block_index: u64) -> Self {
+        match self.block_identifier {
+            Some(ref mut block_identifier) => {
+                block_identifier.index = Some(block_index);
+            }
+            None => {
+                self.block_identifier = Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                });
+            }
+        }
+        self
+    }
+
+    pub fn build(self) -> AccountBalanceRequest {
+        AccountBalanceRequest {
+            network_identifier: self.network_identifier,
+            account_identifier: self.account_identifier,
+            block_identifier: self.block_identifier,
+            metadata: None,
+        }
+    }
 }
 
 /// ConstructionHashRequest is the input to the `/construction/hash` endpoint.

@@ -10,17 +10,17 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, ChangeSet, IngressPool},
+    ingress_pool::{ChangeAction, IngressPool, Mutations},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
@@ -138,7 +138,7 @@ fn prepare(
     num: usize,
     canisters: &[CanisterId],
 ) -> Time {
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     let ingress_size = 1024;
     let mut rng = rand::thread_rng();
     let mut pool = pool.write().unwrap();
@@ -166,7 +166,7 @@ fn prepare(
         });
         changeset.push(ChangeAction::MoveToValidated(message_id));
     }
-    pool.apply_changes(changeset);
+    pool.apply(changeset);
     assert_eq!(pool.unvalidated().size(), 0);
     assert_eq!(pool.validated().size(), num);
     now + 5 * MAX_INGRESS_TTL
