@@ -1849,7 +1849,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.212.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -8002,7 +8002,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "wasmparser 0.215.0",
 ]
 
@@ -12482,7 +12482,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower 0.4.13",
- "wasmprinter 0.212.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -14664,7 +14664,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.212.0",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -21727,7 +21727,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "unicode-xid 0.2.4",
+ "unicode-xid",
  "wasmparser 0.215.0",
 ]
 
