@@ -1,38 +1,30 @@
 #!/usr/bin/env bash
 
-# This script should only be executed from the gitlab-ci job context.
+# This script should only be executed from the ci job context.
 # To reproduce a build, invoke the Bazel command directly.
 # e.g. follow the buildfarm link -> details -> explicit command line.
 
 set -eufo pipefail
 
+# default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
-if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
+s3_upload="False"
+
+# if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
+if [[ "$CI_COMMIT_REF_PROTECTED" = "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
 fi
 
-if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
-    ic_version_rc_only="${CI_COMMIT_SHA}"
-    s3_upload="True"
-fi
-
-# We run the diff if the following is true:
-# - bazel target is //...
-# - merge request pipeline but not merge train pipeline
-# - target branch is not rc--*
-# - uploading to S3 has not been requested
-
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
-    RUN_ON_DIFF_ONLY="false"
-    s3_upload="True"
-fi
-
-if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
-    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+# check if the workflow was triggered by a pull request and if the job requested running only on diff
+if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
+    # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
+    if [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+        s3_upload="True"
+    elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+        # get bazel targets that changed within the MR
+        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+    fi
 fi
 
 # pass info about bazel targets to bazel-targets file

@@ -3,8 +3,6 @@ use crate::{
     pb::v1::NodeProvidersMonthlyXdrRewards,
     registry::Registry,
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::NodeRewardsTable,
@@ -57,6 +55,9 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
+
+    #[cfg(target_arch = "wasm32")]
+    use dfn_core::println;
     use ic_nervous_system_common_test_keys::{
         TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     };

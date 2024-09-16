@@ -48,6 +48,9 @@ message RegistryError {
     // is beyond the latest version in the registry.
     VERSION_BEYOND_LATEST = 4;
 
+    // The caller is not authorized.
+    AUTHORIZATION = 5;
+
     // A generic internal error occurred in the registry.
     INTERNAL_ERROR = 999;
   }

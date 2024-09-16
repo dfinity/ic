@@ -3,20 +3,16 @@
 set -euo pipefail
 VERSION=$(git rev-parse HEAD)
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
-    RUN_ON_DIFF_ONLY="false"
-fi
-
 cd "$CI_PROJECT_DIR"
 
-if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] \
-    || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
-    gitlab-ci/container/build-ic.sh -i -c -b
-elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
-    && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
-    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
-
+# run build with release on protected branches or if a pull_request is targeting an rc branch
+if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+    ci/container/build-ic.sh -i -c -b
+# if an override was requested to run all bazel targets with no release
+elif [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+    ci/container/build-ic.sh -i -c -b --no-release
+# check if the workflow was triggered by a pull request and if the job requested running only on diff
+elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 
@@ -39,9 +35,10 @@ elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
         touch build-ic.tar
         exit 0
     fi
-    gitlab-ci/container/build-ic.sh "${ARGS[@]}"
+    ci/container/build-ic.sh "${ARGS[@]}"
+# otherwise run full build but with no release
 else
-    gitlab-ci/container/build-ic.sh -i -c -b --no-release
+    ci/container/build-ic.sh -i -c -b --no-release
 fi
 
 if [ -d artifacts/icos ]; then

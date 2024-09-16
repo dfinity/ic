@@ -662,6 +662,7 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
+        let mut round_executed_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -761,6 +762,7 @@ impl SchedulerImpl {
                 );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
+            round_executed_canister_ids.extend(executed_canisters.iter().map(|c| c.canister_id()));
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             total_heap_delta += heap_delta;
@@ -875,6 +877,9 @@ impl SchedulerImpl {
         self.metrics
             .executable_canisters_per_round
             .observe(round_filtered_canisters.active_canister_ids.len() as f64);
+        self.metrics
+            .executed_canisters_per_round
+            .set(round_executed_canister_ids.len() as i64);
 
         self.metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -1789,8 +1794,12 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    // TODO(EXC-1722): remove after migrating to v2.
                     self.metrics
                         .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
+                    self.metrics
+                        .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
@@ -1872,6 +1881,13 @@ impl Scheduler for SchedulerImpl {
                         registry_settings.subnet_size,
                     );
                 }
+
+                self.metrics
+                    .canister_snapshots_memory_usage
+                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
+                self.metrics
+                    .num_canister_snapshots
+                    .set(final_state.canister_snapshots.count() as i64);
             }
             self.finish_round(&mut final_state, current_round_type);
             final_state
@@ -2226,10 +2242,10 @@ fn observe_replicated_state_metrics(
         .canisters_with_old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(canisters_with_old_open_call_contexts as i64);
-    let streams_response_bytes = state
+    let streams_guaranteed_response_bytes = state
         .metadata
         .streams()
-        .responses_size_bytes()
+        .guaranteed_responses_size_bytes()
         .values()
         .sum();
 
@@ -2303,7 +2319,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_queues_response_bytes(queues_response_bytes);
     metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
-    metrics.observe_streams_response_bytes(streams_response_bytes);
+    metrics.observe_streams_response_bytes(streams_guaranteed_response_bytes);
 
     metrics
         .ingress_history_length

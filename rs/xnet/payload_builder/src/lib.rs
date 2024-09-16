@@ -17,7 +17,6 @@ use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -29,6 +28,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -745,7 +745,7 @@ impl XNetPayloadBuilderImpl {
             SignalsValidationResult::Valid => {
                 self.metrics
                     .slice_messages
-                    .observe(slice.messages().map(|m| m.len()).unwrap_or(0) as f64);
+                    .observe(slice.messages().map_or(0, |m| m.len()) as f64);
                 self.metrics
                     .slice_payload_size
                     .observe(certified_slice.payload.len() as f64);
@@ -753,8 +753,7 @@ impl XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end: slice
                         .messages()
-                        .map(|messages| messages.end())
-                        .unwrap_or(expected.message_index),
+                        .map_or(expected.message_index, |messages| messages.end()),
                     signals_end: slice.header().signals_end(),
                     byte_size,
                 }
@@ -894,8 +893,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .network_topology
                     .subnets
                     .get(&subnet_id)
-                    .map(|subnet| subnet.subnet_type)
-                    .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
+                    .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
                     return None;
                 }

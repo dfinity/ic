@@ -6,9 +6,9 @@ use ic_consensus_utils::{
     active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
+    certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -32,8 +32,14 @@ use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, sync::Arc, time::Instant};
 use tokio::sync::watch;
 
-/// The Certification component, processing the changes on the certification
-/// pool and submitting the corresponding change sets.
+struct CertifierMetrics {
+    shares_created: IntCounter,
+    certifications_aggregated: IntCounter,
+    last_certified_height: IntGauge,
+    execution_time: Histogram,
+}
+
+/// The Certification component, producing the change set for the certification pool(s).
 pub struct CertifierImpl {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
@@ -49,18 +55,20 @@ pub struct CertifierImpl {
 
 /// The Certification component, processing the changes on the certification
 /// pool and submitting the corresponding change sets.
-pub struct CertifierGossipImpl {
+pub struct CertifierBouncer {
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
 }
 
-struct CertifierMetrics {
-    shares_created: IntCounter,
-    certifications_aggregated: IntCounter,
-    last_certified_height: IntGauge,
-    execution_time: Histogram,
+impl CertifierBouncer {
+    /// Construct a new CertifierBouncer.
+    pub fn new(consensus_pool_cache: Arc<dyn ConsensusPoolCache>) -> Self {
+        Self {
+            consensus_pool_cache,
+        }
+    }
 }
 
-impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for CertifierGossipImpl {
+impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for CertifierBouncer {
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
@@ -84,34 +92,6 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     fn refresh_period(&self) -> std::time::Duration {
         std::time::Duration::from_secs(3)
     }
-}
-
-/// Return both Certifier and CertifierGossip components.
-pub fn setup(
-    replica_config: ReplicaConfig,
-    registry_client: Arc<dyn RegistryClient>,
-    crypto: Arc<dyn CertificationCrypto>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    metrics_registry: MetricsRegistry,
-    log: ReplicaLogger,
-    max_certified_height_tx: watch::Sender<Height>,
-) -> (CertifierImpl, CertifierGossipImpl) {
-    (
-        CertifierImpl::new(
-            replica_config,
-            registry_client,
-            crypto,
-            state_manager,
-            consensus_pool_cache.clone(),
-            metrics_registry,
-            log,
-            max_certified_height_tx,
-        ),
-        CertifierGossipImpl {
-            consensus_pool_cache,
-        },
-    )
 }
 
 /// The certifier component is responsible for signing execution states.
@@ -142,11 +122,11 @@ pub fn setup(
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
 ///    artifacts below this height.
-impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
-    type ChangeSet = ChangeSet;
+impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
+    type Mutations = Mutations;
 
     /// Should be called on every change of the certification pool and timeouts.
-    fn on_state_change(&self, certification_pool: &T) -> ChangeSet {
+    fn on_state_change(&self, certification_pool: &T) -> Mutations {
         // This timer will make an entry in the metrics histogram automatically, when
         // it's dropped.
         let _timer = self.metrics.execution_time.start_timer();
@@ -430,7 +410,7 @@ impl CertifierImpl {
         &self,
         certification_pool: &dyn CertificationPool,
         state_hashes: &[(Height, CryptoHashOfPartialState)],
-    ) -> ChangeSet {
+    ) -> Mutations {
         // Iterate over all state hashes, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures.
 
@@ -724,7 +704,7 @@ mod tests {
                 );
                 let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
-                let (certifier, certifier_gossip) = setup(
+                let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
                     crypto,
@@ -734,6 +714,7 @@ mod tests {
                     log,
                     max_certified_height_tx,
                 );
+                let bouncer_factory = CertifierBouncer::new(pool.get_cache());
 
                 // generate a certifications for heights 1 and 3
                 for height in &[1, 3] {
@@ -741,9 +722,9 @@ mod tests {
                 }
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
-                let bouncer = certifier_gossip.new_bouncer(&cert_pool);
+                let bouncer = bouncer_factory.new_bouncer(&cert_pool);
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),
@@ -816,7 +797,7 @@ mod tests {
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // if the minimum chain length is outside of the interval (60, 120),
                 // then you need to adjust the test values below.
@@ -861,7 +842,7 @@ mod tests {
                 let height = Height::from(1);
                 assert!(cert_pool.certification_at_height(height).is_some());
 
-                cert_pool.apply_changes(vec![ChangeAction::RemoveAllBelow(purge_height)]);
+                cert_pool.apply(vec![ChangeAction::RemoveAllBelow(purge_height)]);
 
                 let mut back_off_factor = 1;
                 loop {
@@ -942,7 +923,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // emulates a call from inside on_state_change
                 let mut messages = vec![];
@@ -1025,7 +1006,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
                 assert_eq!(
@@ -1181,7 +1162,7 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 assert_eq!(change_set.len(), 1);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_some());
             })
@@ -1284,7 +1265,7 @@ mod tests {
                 // this moves unvalidated shares to validated
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1308,7 +1289,7 @@ mod tests {
                     "Both items should be RemoveFromUnvalidated"
                 );
 
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply(change_set);
 
                 // At level 4, we find a certification
                 assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);

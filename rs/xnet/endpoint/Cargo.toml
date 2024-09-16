@@ -7,11 +7,15 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+<<<<<<< HEAD
 axum = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 crossbeam-channel = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
+=======
+hyper = { version = "0.14.18", features = ["full", "tcp"] }
+>>>>>>> master
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -24,7 +28,6 @@ prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-threadpool = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }

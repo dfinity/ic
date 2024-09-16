@@ -613,7 +613,8 @@ impl HttpOutcallError {
 }
 
 pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal && message.contains("size limit")
+    code == &RejectionCode::SysFatal
+        && (message.contains("size limit") || message.contains("length limit"))
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;

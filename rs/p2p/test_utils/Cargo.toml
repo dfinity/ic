@@ -38,6 +38,8 @@ mockall = { workspace = true }
 pin-project-lite = "0.2"
 quinn = { workspace = true }
 quinn-udp = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }

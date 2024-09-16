@@ -13,15 +13,19 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/types/types",
+<<<<<<< HEAD
     "@crate_index//:axum",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
+=======
+    "//rs/xnet/hyper",
+    "@crate_index//:hyper_0_14_27",
+>>>>>>> master
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
-    "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tokio-rustls",
     "@crate_index//:tower",

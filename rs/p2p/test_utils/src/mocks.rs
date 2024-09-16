@@ -78,6 +78,10 @@ mock! {
 mock! {
     pub Peers {}
 
+    impl Clone for Peers {
+        fn clone(&self) -> Self;
+    }
+
     impl Peers for Peers {
         fn peers(&self) -> Vec<NodeId>;
     }

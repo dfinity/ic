@@ -25,7 +25,7 @@ use crate::{
     },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
-use wasmparser::{CompositeType, ExternalKind, FuncType, Operator, TypeRef, ValType};
+use wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -536,16 +536,6 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             )],
         ),
         (
-            "call_cycles_add128_up_to",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
             "canister_cycle_balance128",
             vec![(
                 API_VERSION_IC0,
@@ -792,8 +782,8 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             let field = entry.name;
             match &entry.ty {
                 TypeRef::Func(index) => {
-                    let func_ty = if let CompositeType::Func(func_ty) =
-                        &module.types[*index as usize].composite_type
+                    let func_ty = if let CompositeInnerType::Func(func_ty) =
+                        &module.types[*index as usize].composite_type.inner
                     {
                         func_ty
                     } else {
@@ -945,7 +935,7 @@ fn validate_export_section(
                         let type_index = module.functions[actual_fn_index] as usize;
                         &module.types[type_index].composite_type
                     };
-                    let CompositeType::Func(func_ty) = composite_type else {
+                    let CompositeInnerType::Func(func_ty) = &composite_type.inner else {
                         return Err(WasmValidationError::InvalidExportSection(format!(
                             "Function export doesn't have a function type. Type found: {:?}",
                             composite_type
