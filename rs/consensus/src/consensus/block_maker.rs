@@ -1,4 +1,8 @@
 #![deny(missing_docs)]
+use super::utils::{
+    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
+    get_notarization_delay_settings, is_time_to_make_block,
+};
 use crate::{
     consensus::{
         metrics::BlockMakerMetrics,
@@ -8,11 +12,7 @@ use crate::{
     dkg::payload_builder::create_payload as create_dkg_payload,
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
-use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, is_time_to_make_block,
-    membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{get_subnet_record, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
@@ -518,9 +518,9 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 mod tests {
     use crate::idkg::test_utils::create_idkg_pool;
 
+    use super::super::utils::get_block_maker_delay;
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
-    use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

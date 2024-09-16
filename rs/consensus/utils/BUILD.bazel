@@ -7,20 +7,17 @@ DEPENDENCIES = [
     "//rs/crypto/prng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
-    "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/consensus",
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
@@ -28,7 +25,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/management_canister_types",
-    "@crate_index//:assert_matches",
 ]
 
 rust_library(

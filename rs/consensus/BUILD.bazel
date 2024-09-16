@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:hex",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",

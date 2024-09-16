@@ -18,6 +18,7 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 mod status;
+mod utils;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
@@ -28,11 +29,11 @@ use crate::consensus::{
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
     notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+    share_aggregator::ShareAggregator, utils::get_notarization_delay_settings,
+    validator::Validator,
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
