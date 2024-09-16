@@ -10,7 +10,7 @@ set -eufo pipefail
 ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
 
-protected_branches=("master" "rc--*" "hotfix--*" "master-private")
+protected_branches=("master" "rc--*" "hotfix-*" "master-private")
 
 # if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
 for pattern in "${protected_branches[@]}"; do
