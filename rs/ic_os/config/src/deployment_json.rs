@@ -322,28 +322,27 @@ mod test {
 
     #[test]
     fn deserialize_deployment() {
-        let parsed_deployment: DeploymentSettings =
-            { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
+        let parsed_deployment: DeploymentSettings = serde_json::from_str(DEPLOYMENT_STR).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
 
         let parsed_deployment: DeploymentSettings =
-            { serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap() };
+            serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT_NO_MGMT_MAC, parsed_deployment);
 
         let parsed_deployment: DeploymentSettings =
-            { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC).unwrap() };
+            serde_json::from_str(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC, parsed_deployment);
 
         let parsed_cpu_deployment: DeploymentSettings =
-            { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
+            serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap();
 
         assert_eq!(*QEMU_CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
 
         let parsed_multi_url_deployment: DeploymentSettings =
-            { serde_json::from_str(MULTI_URL_STR).unwrap() };
+            serde_json::from_str(MULTI_URL_STR).unwrap();
 
         assert_eq!(*MULTI_URL_STRUCT, parsed_multi_url_deployment);
 
@@ -352,7 +351,7 @@ mod test {
         // writeback test below. In practice, we have used addresses without
         // this slash, so here we verify that this parses to the same value.
         let parsed_multi_url_sans_slash_deployment: DeploymentSettings =
-            { serde_json::from_str(MULTI_URL_SANS_SLASH_STR).unwrap() };
+            serde_json::from_str(MULTI_URL_SANS_SLASH_STR).unwrap();
 
         assert_eq!(*MULTI_URL_STRUCT, parsed_multi_url_sans_slash_deployment);
 
@@ -360,7 +359,7 @@ mod test {
         // DeserializeOwned is used by serde_json::from_reader, which is the
         // main entrypoint of this code, in practice.
         let parsed_deployment: DeploymentSettings =
-            { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
+            serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
     }
