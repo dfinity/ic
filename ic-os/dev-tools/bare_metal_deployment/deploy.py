@@ -603,7 +603,7 @@ def main():
     DISABLE_PROGRESS_BAR = args.ci_mode # noqa - ruff format wants to erroneously delete this
 
     network_image_url: str = (
-        f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
+        f"http://{args.file_share_url}/{args.file_share_image_filename}"
     )
     log.info(f"Using network_image_url: {network_image_url}")
 
