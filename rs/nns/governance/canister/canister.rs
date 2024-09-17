@@ -59,12 +59,7 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{
-    borrow::Cow,
-    boxed::Box,
-    str::FromStr,
-    time::{Duration, SystemTime},
-};
+use std::{borrow::Cow, boxed::Box, str::FromStr, time::Duration};
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -173,7 +168,7 @@ impl CanisterEnv {
             // the PRNG, but that wouldn't help much since after inception the pseudo-random
             // numbers could be predicted.
             rng: {
-                let now_nanos = ic_cdk::api::time();
+                let now_nanos = Duration::from_nanos(ic_cdk::api::time()).as_nanos();
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
