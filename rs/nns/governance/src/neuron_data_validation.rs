@@ -6,9 +6,8 @@ use crate::{
 };
 
 use candid::{CandidType, Deserialize};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use serde::Serialize;

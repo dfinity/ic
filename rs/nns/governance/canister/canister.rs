@@ -1,21 +1,22 @@
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
 use dfn_core::{
-    api::{arg_data, call_with_callbacks, now, reject_message},
+    api::{call_with_callbacks, reject_message},
     over, over_async,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, update,
+    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
+    println, query, update,
 };
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
-use ic_nervous_system_runtime::CdkRuntime;
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
@@ -58,7 +59,12 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
+use std::{
+    borrow::Cow,
+    boxed::Box,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -167,10 +173,7 @@ impl CanisterEnv {
             // the PRNG, but that wouldn't help much since after inception the pseudo-random
             // numbers could be predicted.
             rng: {
-                let now_nanos = now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos();
+                let now_nanos = ic_cdk::api::time();
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
@@ -185,12 +188,8 @@ impl CanisterEnv {
 #[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
-        self.time_warp.apply(
-            now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("Could not get the duration.")
-                .as_secs(),
-        )
+        self.time_warp
+            .apply(Duration::from_nanos(ic_cdk::api::time()).as_secs())
     }
 
     fn set_time_warp(&mut self, new_time_warp: GovTimeWarp) {
@@ -272,7 +271,9 @@ impl Environment for CanisterEnv {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        dfn_core::api::call_with_cleanup(target, method_name, on_wire::bytes, request).await
+        CdkRuntime::call_bytes_with_cleanup(target, method_name, &request)
+            .await
+            .map_err(|(code, msg)| (Some(code), msg))
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -308,10 +309,7 @@ fn panic_with_probability(probability: f64, message: &str) {
     // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
     // state, which makes sure that the next time still panics, unless some other operation modifies
     // the `rng` successfully, such as spawning a neuron.
-    let now_seconds = now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("Could not get the duration.")
-        .as_secs();
+    let now_seconds = Duration::from_nanos(ic_cdk::api::time()).as_secs();
     let random = ChaCha20Rng::seed_from_u64(now_seconds).next_u64();
     let should_panic = (random as f64) / (u64::MAX as f64) < probability;
     if should_panic {
@@ -324,7 +322,7 @@ fn panic_with_probability(probability: f64, message: &str) {
 fn canister_init() {
     ic_cdk::setup();
 
-    match ApiGovernanceProto::decode(&arg_data()[..]) {
+    match ApiGovernanceProto::decode(&arg_data_raw()[..]) {
         Err(err) => {
             println!(
                 "Error deserializing canister state in initialization: {}.",
@@ -371,7 +369,6 @@ fn canister_pre_upgrade() {
 
 #[post_upgrade]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
     let restored_state = with_upgrades_memory(|memory| {

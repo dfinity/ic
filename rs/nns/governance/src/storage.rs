@@ -1,8 +1,7 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,

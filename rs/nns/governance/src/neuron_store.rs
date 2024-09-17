@@ -17,10 +17,9 @@ use crate::{
     },
     Clock, IcClock,
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
@@ -400,7 +399,7 @@ impl NeuronStore {
                 return neuron_id;
             }
 
-            dfn_core::println!(
+            ic_cdk::println!(
                 "{}WARNING: A suspiciously near-impossible event has just occurred: \
                  we randomly picked a NeuronId, but it's already used: \
                  {:?}. Trying again...",

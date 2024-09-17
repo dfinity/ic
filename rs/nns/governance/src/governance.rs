@@ -68,11 +68,9 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
-use dfn_core::api::spawn;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{println, spawn};
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -1488,7 +1486,7 @@ pub trait Environment: Send + Sync {
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
 
-    /// Basically, the same as dfn_core::api::call.
+    /// Basically, the same as ic_cdk::api::call_raw.
     async fn call_canister_method(
         &mut self,
         target: CanisterId,
