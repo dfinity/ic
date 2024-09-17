@@ -26,6 +26,8 @@ linux-tools-virtual-hwe-24.04
 
 # performance testing additions
 fio
+stress-ng
+sysbench
 bpftrace
 linux-tools-common
 linux-tools-generic
