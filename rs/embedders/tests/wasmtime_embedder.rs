@@ -2790,23 +2790,45 @@ fn wasm64_cycles_burn128() {
 
 #[test]
 fn large_wasm64_memory_allocation_test() {
+    // This test checks if initial memory size and maximum memory size
+    // are capped to the maximum allowed memory size in 64 bit mode.
     let wat = r#"
     (module
-        (func $test (export "canister_update test"))
-        (memory i64 0 16777216)
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+            ;; store the result of memory.size at heap address 10
+            (i64.store (i64.const 0) (memory.size))
+            ;; return the result of memory.size
+            (call $msg_reply_data_append (i64.const 0) (i64.const 4))
+            (call $msg_reply)
+        )
+        (memory i64 16777216 200000000)
     )"#;
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
+        .with_api_type(ic_system_api::ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
         .with_wat(wat)
         .build();
 
-    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
-        Ok(_) => {}
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    // The reply is actually the encoding of 65_536 (the max size of memory).
+    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![0, 0, 1, 0]))));
 }
 
 #[test]

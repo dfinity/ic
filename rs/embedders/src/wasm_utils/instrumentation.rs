@@ -1982,6 +1982,10 @@ fn update_memories(
         if mem.memory64 {
             let max_wasm_memory_size_in_wasm_pages =
                 max_memory_size_in_wasm_pages(max_wasm_memory_size);
+            // Cap the initial memory size to the maximum allowed in case it's larger.
+            if mem.initial > max_wasm_memory_size_in_wasm_pages {
+                mem.initial = max_wasm_memory_size_in_wasm_pages;
+            }
             match mem.maximum {
                 Some(max) => {
                     // In case the maximum memory size is larger than the maximum allowed, cap it.
