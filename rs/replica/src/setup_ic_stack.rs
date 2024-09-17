@@ -48,8 +48,8 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// The subnets that can serve synchronous responses to update calls received
-/// on the `/api/v3/.../call`` endpoint.
+/// The subnets that serve synchronous responses to v3 update calls.
+/// The list contains all system subnets.
 const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 4] = [
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
     "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
