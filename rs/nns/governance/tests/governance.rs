@@ -39,8 +39,7 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{
@@ -11771,7 +11770,7 @@ lazy_static! {
                     Some(517576), // memory_allocation
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
-                    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, // wasm_memory_limit
+                    (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {

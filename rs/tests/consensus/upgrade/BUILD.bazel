@@ -1,121 +1,137 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-system_test_nns(
-    name = "node_assign_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+rust_library(
+    name = "common",
+    testonly = True,
+    srcs = ["common.rs"],
+    crate_name = "ic_consensus_system_test_upgrade_common",
     deps = [
         # Keep sorted.
-        "//rs/nns/constants",
-        "//rs/nns/governance/api",
-        "//rs/registry/canister",
         "//rs/registry/subnet_type",
-        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "upgrade_downgrade_app_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
 
 system_test_nns(
-    name = "node_reassignment_test",
+    name = "upgrade_downgrade_nns_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "k8s",
+        "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        ":common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "upgrade_app_subnet_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
 
 system_test_nns(
-    name = "node_registration_test",
+    name = "downgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/nns/constants",
-        "//rs/nns/governance/api",
-        "//rs/registry/canister",
+        ":common",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
-        "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
-    ],
-)
-
-system_test(
-    name = "cup_compatibility_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
-        "//rs/tests:cup_compatibility/binaries",
-    ],
-    deps = [
-        # Keep sorted.
-        "//rs/recovery",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
-        "@crate_index//:tempfile",
     ],
 )
 
 system_test_nns(
-    name = "ssh_access_to_nodes_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/nns/common",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
-    ],
-)
-
-system_test_nns(
-    name = "unstuck_subnet_test",
+    name = "upgrade_with_alternative_urls",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -124,38 +140,43 @@ system_test_nns(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
+    uses_guestos_dev = True,
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
+        # Keep sorted.
+        "//rs/nns/common",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
-        "@crate_index//:ssh2",
     ],
 )
 
 system_test_nns(
-    name = "rotate_ecdsa_idkg_key_test",
+    name = "unassigned_node_upgrade_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "system_test_hourly",
+        "system_test_nightly",
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    target_compatible_with = ["@platforms//os:linux"],
+    uses_guestos_dev = True,
+    uses_guestos_dev_test = True,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
-        "//rs/interfaces/registry",
-        "//rs/protobuf",
-        "//rs/registry/keys",
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
