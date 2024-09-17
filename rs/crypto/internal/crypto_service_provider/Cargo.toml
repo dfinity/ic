@@ -38,7 +38,7 @@ ic-metrics = { path = "../../../monitoring/metrics" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-sys = { path = "../../../sys" }
 ic-types = { path = "../../../types/types" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -59,7 +59,7 @@ tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 x509-parser = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -83,8 +83,8 @@ ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = { workspace = true }
 mockall = { workspace = true }
 num_cpus = "1.16"
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 rsa = "0.9"
 slog-async = { workspace = true }
 tracing = { workspace = true }

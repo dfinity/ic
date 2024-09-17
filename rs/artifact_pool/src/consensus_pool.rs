@@ -12,11 +12,11 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
+        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
+        ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ArtifactMutation, ChangeResult, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -29,7 +29,7 @@ use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum PoolSectionOp<T> {
     /// Insert the artifact into the pool section.
     Insert(T),
@@ -186,6 +186,7 @@ struct PoolMetrics {
     notarization_share: PerTypeMetrics<NotarizationShare>,
     finalization_share: PerTypeMetrics<FinalizationShare>,
     catch_up_package_share: PerTypeMetrics<CatchUpPackageShare>,
+    equivocation_proof: PerTypeMetrics<EquivocationProof>,
 }
 
 impl PoolMetrics {
@@ -210,6 +211,7 @@ impl PoolMetrics {
                 pool_portion,
                 "catch_up_package_share",
             ),
+            equivocation_proof: PerTypeMetrics::new(&registry, pool_portion, "equivocation_proof"),
         }
     }
 
@@ -236,6 +238,8 @@ impl PoolMetrics {
             .update_from_height_indexed_pool(pool_section.finalization_share());
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
+        self.equivocation_proof
+            .update_from_height_indexed_pool(pool_section.equivocation_proof());
     }
 
     fn update_count_per_height<T>(
@@ -263,6 +267,7 @@ impl PoolMetrics {
         update_count_per_height!(random_tape_share);
         update_count_per_height!(notarization_share);
         update_count_per_height!(finalization_share);
+        update_count_per_height!(equivocation_proof);
     }
 }
 
@@ -682,7 +687,7 @@ impl ConsensusPool for ConsensusPoolImpl {
 }
 
 impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
@@ -697,12 +702,12 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut mutations = vec![];
+        let mut transmits = vec![];
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -710,7 +715,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
                     }));
@@ -721,7 +726,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                        transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                             artifact: to_move.clone(),
                             is_latency_sensitive: false,
                         }));
@@ -790,10 +795,10 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        mutations.extend(
+        transmits.extend(
             self.apply_changes_validated(validated_ops)
                 .drain(..)
-                .map(ArtifactMutation::Remove),
+                .map(ArtifactTransmit::Abort),
         );
 
         if let Some(backup) = &self.backup {
@@ -804,8 +809,8 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
-        ChangeResult {
-            mutations,
+        ArtifactTransmits {
+            transmits,
             poll_immediately: changed,
         }
     }
@@ -1123,7 +1128,7 @@ mod tests {
                 ChangeAction::MoveToValidated(msg_0),
                 ChangeAction::RemoveFromUnvalidated(msg_1),
             ];
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Check timestamp is carried over for msg_0.
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
@@ -1186,33 +1191,31 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
-            assert_eq!(result.mutations.len(), 2);
+            let result = pool.apply(changeset);
+            assert_eq!(result.transmits.len(), 2);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_2.get_id()));
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_2.get_id()));
             assert!(matches!(
-                &result.mutations[1], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_3.get_id()));
+                &result.transmits[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
-            assert_eq!(result.mutations.len(), 3);
-            assert!(result.mutations.iter().any(
-                |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
+            assert_eq!(result.transmits.len(), 3);
+            assert!(result.transmits.iter().any(
+                |x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_2.get_id())
             ));
             assert!(result.poll_immediately);
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert_eq!(result.mutations.len(), 0);
+            let result = pool.apply(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
+            assert_eq!(result.transmits.len(), 0);
             assert!(result.poll_immediately);
 
-            let result = pool.apply_changes(vec![]);
+            let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
         })
     }
@@ -1264,26 +1267,25 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
+            let result = pool.apply(changeset);
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert_eq!(result.mutations.len(), 1);
+            assert_eq!(result.transmits.len(), 1);
             assert!(result.poll_immediately);
             assert!(matches!(
-                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_share_3.get_id()
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
             ));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
             assert!(!result
-                .mutations
+                .transmits
                 .iter()
-                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
-            assert_eq!(result.mutations.len(), 4);
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
-            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
+            assert_eq!(result.transmits.len(), 4);
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }
@@ -1441,7 +1443,7 @@ mod tests {
                 .into_message(),
             );
 
-            pool.apply_changes(
+            pool.apply(
                 messages
                     .into_iter()
                     .map(|msg| {
@@ -1553,7 +1555,7 @@ mod tests {
             //
             let block = fake_block(Height::new(3), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1569,7 +1571,7 @@ mod tests {
             let block1 = fake_block(Height::new(4), Rank(0));
             let block2 = fake_block(Height::new(4), Rank(1));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block1),
                 fake_notarization(&block1),
                 fake_block_proposal(&block2),
@@ -1586,7 +1588,7 @@ mod tests {
             //
             let block = fake_block(Height::new(5), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1759,7 +1761,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
             pool.backup.as_ref().unwrap().sync_backup();
@@ -1920,7 +1922,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
 
             // Make sure the subnet directory is empty, as we purged everything.
@@ -1933,7 +1935,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
             assert!(!path.exists());
         })
@@ -2049,7 +2051,7 @@ mod tests {
                 .collect();
 
             // Apply changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2082,7 +2084,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2099,7 +2101,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2115,7 +2117,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2131,7 +2133,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2148,7 +2150,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2286,11 +2288,11 @@ mod tests {
             assert!(pool.message_instant(&random_beacon_id).is_some());
 
             // Check that purging of instants respects PurgeValidatedBelow semantics
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height)]);
             assert!(pool.message_instant(&cup_id).is_some());
             assert!(pool.message_instant(&notarization_id).is_some());
             assert!(pool.message_instant(&random_beacon_id).is_some());
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
             assert!(pool.message_instant(&cup_id).is_none());
             assert!(pool.message_instant(&notarization_id).is_none());
             assert!(pool.message_instant(&random_beacon_id).is_none());

@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// The argument of the [update_balance] endpoint.
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateBalanceArgs {
     /// The owner of the account on the ledger.
     /// The minter uses the caller principal if the owner is None.
@@ -34,7 +34,7 @@ pub struct UpdateBalanceArgs {
 }
 
 /// The outcome of UTXO processing.
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum UtxoStatus {
     /// The UTXO value does not cover the KYT check cost.
     ValueTooSmall(Utxo),
@@ -58,14 +58,14 @@ pub enum ErrorCode {
     ConfigurationError = 1,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct PendingUtxo {
     pub outpoint: OutPoint,
     pub value: u64,
     pub confirmations: u32,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum UpdateBalanceError {
     /// The minter experiences temporary issues, try the call again later.
     TemporarilyUnavailable(String),

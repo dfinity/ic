@@ -8,9 +8,9 @@ DEPENDENCIES = [
     "//rs/bitcoin/replica_types",
     "//rs/canonical_state/certification_version",
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/sha2",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/phantom_newtype",
@@ -35,11 +35,13 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:slog",
+    "@crate_index//:static_assertions",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:uuid",
@@ -65,12 +67,14 @@ DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:proptest",
-    "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 BIN_DEPENDENCIES = [
     # Keep sorted.

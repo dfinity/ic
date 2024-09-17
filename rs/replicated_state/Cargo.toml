@@ -14,7 +14,7 @@ ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }
@@ -38,11 +38,13 @@ maplit = "1.0.2"
 nix = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
+prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
+static_assertions = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
@@ -68,10 +70,10 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
-proptest = "1.0"
-prost = { workspace = true }
+proptest = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde_cbor = { workspace = true }
+test-strategy = "0.4.0"
 
 [[bench]]
 name = "bench_allocator"

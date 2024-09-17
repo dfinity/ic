@@ -52,7 +52,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 struct DirectParticipantConfig {
     pub use_ticketing_system: bool,
 }
@@ -1270,7 +1270,6 @@ fn test_sns_lifecycle(
                 nns_proposal_id
             );
         };
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         neurons_fund_audit_info
             .final_neurons_fund_participation
             .unwrap()
@@ -1280,10 +1279,7 @@ fn test_sns_lifecycle(
             .into_iter()
             .map(|neurons_fund_neuron_portion| {
                 (
-                    neurons_fund_neuron_portion
-                        .controller
-                        .or(neurons_fund_neuron_portion.hotkey_principal)
-                        .unwrap(),
+                    neurons_fund_neuron_portion.controller.unwrap(),
                     neurons_fund_neuron_portion,
                 )
             })
@@ -1738,7 +1734,6 @@ fn test_sns_lifecycle(
             );
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let mut final_neurons_fund_participation: BTreeMap<PrincipalId, Vec<u64>> =
             neurons_fund_audit_info
                 .final_neurons_fund_participation
@@ -1750,10 +1745,7 @@ fn test_sns_lifecycle(
                 .fold(
                     BTreeMap::new(),
                     |mut neuron_portions_per_controller, neuron_portion| {
-                        let controller_principal_id = neuron_portion
-                            .controller
-                            .or(neuron_portion.hotkey_principal)
-                            .unwrap();
+                        let controller_principal_id = neuron_portion.controller.unwrap();
                         let amount_icp_e8s = neuron_portion.amount_icp_e8s.unwrap();
                         neuron_portions_per_controller
                             .entry(controller_principal_id)
@@ -1870,6 +1862,22 @@ fn test_sns_lifecycle(
             assert_eq!(controllers, expected_new_controllers);
         }
     }
+
+    // Ensure that the archive canister is spawned and can be found through SNS Root.
+    sns::ensure_archive_canister_is_spawned_or_panic(
+        &pocket_ic,
+        sns_governance_canister_id,
+        sns_ledger_canister_id,
+    );
+    // SNS Root polls archives every 24 hours, so we need to advance time to trigger the polling.
+    pocket_ic.advance_time(Duration::from_secs(24 * 60 * 60));
+    pocket_ic.tick();
+    let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+    assert!(
+        !response.archives_canister_summaries().is_empty(),
+        "No archives found from get_sns_canisters_summary response: {:#?}",
+        response
+    );
 }
 
 #[test]

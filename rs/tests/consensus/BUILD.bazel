@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -22,7 +22,6 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/backup",
-        "//rs/recovery",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
@@ -248,7 +247,19 @@ system_test_nns(
         MAINNET_REVISION_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/recovery",
+        "//rs/recovery/subnet_splitting",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(
@@ -360,8 +371,6 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:chrono",
-        "@crate_index//:futures",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "@crate_index//:slog",

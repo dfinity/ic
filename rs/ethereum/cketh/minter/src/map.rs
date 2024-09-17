@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 /// (since this would require searching first for a value in the map to retrieve the corresponding primary key).
 /// If this becomes necessary, additional duplication of the primary key might be needed (e.g., one map
 /// would be `BTreeMap<Key, (AltKey, V)>` while the second one would be `BTreeMap<AltKey, Key>`).
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct MultiKeyMap<Key, AltKey, V>
 where
     Key: Ord,
@@ -31,7 +31,7 @@ where
     by_key: BTreeMap<Key, AltKey>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct OccupiedError<Key, AltKey, V> {
     /// Primary key or alternative key in the map that was already occupied
     pub occupied_key: OccupiedKey<Key, AltKey>,
@@ -39,7 +39,7 @@ pub struct OccupiedError<Key, AltKey, V> {
     pub value: V,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum OccupiedKey<Key, AltKey> {
     /// Primary key in the map that was already occupied.
     Key(Key),
@@ -224,7 +224,7 @@ impl<Key: Ord, AltKey: Ord + Clone, V> FromIterator<(Key, AltKey, V)>
 /// and the entry (Key, V) given the alternative key.
 ///
 /// Internally, this struct is a simple wrapper around `MultiKeyMap<Key, AltKey, (Key, V)>`.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct DedupMultiKeyMap<Key, AltKey, V>
 where
     Key: Ord,

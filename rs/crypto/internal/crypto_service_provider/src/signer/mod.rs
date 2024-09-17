@@ -1,11 +1,9 @@
-use super::api::{CspSigVerifier, CspSigner};
+use super::api::CspSigner;
 use super::types::{CspPop, CspPublicKey, CspSignature};
 use super::Csp;
 use crate::key_id::KeyId;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
-use ed25519::types::PublicKeyBytes;
-use ed25519::types::SignatureBytes;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
@@ -206,81 +204,5 @@ impl CspSigner for Csp {
                 reason: "Not a multi-signature algorithm".to_string(),
             }),
         }
-    }
-}
-
-impl CspSigVerifier for Csp {
-    fn verify_batch(
-        &self,
-        key_signature_pairs: &[(CspPublicKey, CspSignature)],
-        msg: &[u8],
-        algorithm_id: AlgorithmId,
-    ) -> CryptoResult<()> {
-        // check that the public keys' `AlgorithmId` field is consistent with `algorithm_id`
-        for (pk, sig) in key_signature_pairs.iter() {
-            if pk.algorithm_id() != algorithm_id {
-                return Err(CryptoError::SignatureVerification {
-                    algorithm: pk.algorithm_id(),
-                    public_key_bytes: pk.pk_bytes().to_vec(),
-                    sig_bytes: sig.as_ref().to_vec(),
-                    internal_error: format!(
-                        "Invalid public key type: expected {algorithm_id} but found {}",
-                        pk.algorithm_id()
-                    ),
-                });
-            };
-        }
-
-        match algorithm_id {
-            // use more efficient batch verification for Ed25519
-            AlgorithmId::Ed25519 => {
-                // generate a random seed to be used in batched sig verification
-                let seed = self.csp_vault.new_public_seed()?;
-                // define a closure to convert a public key and a `CspSignature::Ed25519` to bytes
-                // or return an error if the input is not using Ed25519
-                let pk_and_sig_to_bytes =
-                    |pk: &CspPublicKey,
-                     sig: &CspSignature|
-                     -> CryptoResult<(PublicKeyBytes, SignatureBytes)> {
-                        let sig_bytes = match sig {
-                            CspSignature::Ed25519(bytes) => bytes.0.to_owned(),
-                            sig => {
-                                return Err(CryptoError::SignatureVerification {
-                                    algorithm: pk.algorithm_id(),
-                                    public_key_bytes: pk.pk_bytes().to_vec(),
-                                    sig_bytes: sig.as_ref().to_vec(),
-                                    internal_error: format!(
-                                    "Invalid signature type: expected {algorithm_id} but found {}",
-                                    sig.algorithm()
-                                ),
-                                })
-                            }
-                        };
-                        let mut pk_bytes = [0u8; 32];
-                        pk_bytes.copy_from_slice(pk.pk_bytes());
-
-                        Ok((PublicKeyBytes(pk_bytes), SignatureBytes(sig_bytes)))
-                    };
-
-                let key_sig_bytes_pairs: Vec<(PublicKeyBytes, SignatureBytes)> =
-                    key_signature_pairs
-                        .iter()
-                        .map(|(pk, sig)| pk_and_sig_to_bytes(pk, sig))
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                let pairs_of_refs: Vec<_> = key_sig_bytes_pairs
-                    .iter()
-                    .map(|(pk_bytes, sig_bytes)| (pk_bytes, sig_bytes))
-                    .collect();
-                ed25519::api::verify_batch(&pairs_of_refs[..], msg, seed)?;
-            }
-            // use iterative verification for other `AlgorithmId`s
-            _ => {
-                for (pk, sig) in key_signature_pairs {
-                    self.verify(sig, msg, algorithm_id, (*pk).to_owned())?;
-                }
-            }
-        }
-        Ok(())
     }
 }

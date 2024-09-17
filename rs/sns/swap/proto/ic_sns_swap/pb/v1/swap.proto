@@ -528,7 +528,7 @@ message CfParticipant {
   repeated CfNeuron cf_neurons = 2;
 
   // The principal that can vote on behalf of these Neurons' Fund neurons.
-  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // Deprecated. Please use `controller` instead
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -701,7 +701,7 @@ message CfInvestment {
 
   fixed64 nns_neuron_id = 2;
 
-  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -1194,9 +1194,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    // TODO(NNS1-3198): Remove
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

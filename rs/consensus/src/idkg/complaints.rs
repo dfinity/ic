@@ -34,7 +34,7 @@ pub(crate) trait IDkgComplaintHandler: Send {
     fn as_transcript_loader(&self) -> &dyn IDkgTranscriptLoader;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct ComplaintKey {
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
@@ -51,7 +51,7 @@ impl From<&SignedIDkgComplaint> for ComplaintKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct OpeningKey {
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
@@ -1194,7 +1194,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
                     complaint,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
@@ -1227,7 +1227,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint1)),
                     IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(complaint2)),
                 ];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Finalized height doesn't increase, so complaint1 shouldn't be purged
                 let change_set = complaint_handler.on_state_change(&idkg_pool);
@@ -1247,7 +1247,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Finalized height increases above complaint2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
@@ -1356,7 +1356,7 @@ mod tests {
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
 
-                idkg_pool.apply_changes(
+                idkg_pool.apply(
                     artifacts
                         .iter()
                         .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
@@ -1382,7 +1382,7 @@ mod tests {
                     Some(crypto_without_keys()),
                 );
 
-                idkg_pool.apply_changes(
+                idkg_pool.apply(
                     artifacts
                         .iter()
                         .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
@@ -1496,7 +1496,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
 
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
@@ -1515,7 +1515,7 @@ mod tests {
                 );
 
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
                 let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
@@ -1531,7 +1531,7 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
 
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
-                idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
@@ -1566,7 +1566,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
@@ -1619,7 +1619,7 @@ mod tests {
                     timestamp: UNIX_EPOCH,
                 });
                 let change_set = vec![IDkgChangeAction::AddToValidated(message)];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
                     &key_id,
@@ -1707,7 +1707,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
                     complaint,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
@@ -1715,14 +1715,14 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
                     complaint,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Complaint(
                     complaint,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Only id_1 is active
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
@@ -1808,7 +1808,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
@@ -1816,14 +1816,14 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Opening(
                     opening,
                 ))];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Only id_1 is active
                 let block_reader = TestIDkgBlockReader::for_complainer_test(
@@ -1969,7 +1969,7 @@ mod tests {
                 let complaint = match status {
                     TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
                         let complaint = complaints.remove(0);
-                        idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
+                        idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(
                             IDkgMessage::Complaint(complaint.clone()),
                         )]);
                         complaint
@@ -1992,7 +1992,7 @@ mod tests {
                         .sign(&content, node.id(), t.registry_version)
                         .expect("Failed to sign opening content");
                     let opening = SignedIDkgOpening { content, signature };
-                    idkg_pool.apply_changes(vec![IDkgChangeAction::AddToValidated(
+                    idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(
                         IDkgMessage::Opening(opening),
                     )]);
                 }

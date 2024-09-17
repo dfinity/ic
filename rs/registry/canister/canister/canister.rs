@@ -1,10 +1,10 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply, trap_with},
+    api::{arg_data, caller, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
@@ -19,14 +19,13 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryDelta,
-        RegistryError, RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
+        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
-use ic_types::PrincipalId;
 use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
@@ -72,8 +71,8 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
-        SubnetForCanister,
+        ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, GetSubnetForCanisterRequest,
+        NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
@@ -186,34 +185,63 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
-    let response_pb = match deserialize_get_changes_since_request(arg_data()) {
-        Ok(version) => {
-            let registry = registry();
+    fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
+        // Authorize: Only self-authenticating and anonymous principals are allowed to call us.
+        const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
+            Ok(PrincipalIdClass::SelfAuthenticating),
+            Ok(PrincipalIdClass::Anonymous),
+        ];
+        let class = caller().class();
+        if !ALLOWED_CALLER_CLASSES.contains(&class) {
+            return Err((
+                Code::Authorization,
+                format!(
+                    "Caller must be self-authenticating, or anonymous (but was {:?}).",
+                    class,
+                ),
+            ));
+        }
 
-            let max_versions = registry
-                .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
-                .min(MAX_VERSIONS_PER_QUERY);
+        // Parse request.
+        let request = deserialize_get_changes_since_request(arg_data())
+            .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
+        let version = request;
+
+        // All requirements met. Proceed with "real work".
+
+        let registry = registry();
+
+        let max_versions = registry
+            .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
+            .min(MAX_VERSIONS_PER_QUERY);
+
+        Ok(RegistryGetChangesSinceResponse {
+            error: None,
+            version: registry.latest_version(),
+            deltas: registry.get_changes_since(version, Some(max_versions)),
+        })
+    }
+
+    let response = main().unwrap_or_else(
+        // Convert Err to RegistryGetChangesSinceResponse
+        |(code, reason)| {
+            let code = code as i32;
 
             RegistryGetChangesSinceResponse {
-                error: None,
-                version: registry.latest_version(),
-                deltas: registry.get_changes_since(version, Some(max_versions)),
+                error: Some(RegistryError {
+                    code,
+                    reason,
+                    key: vec![],
+                }),
+                ..Default::default()
             }
-        }
-        Err(error) => RegistryGetChangesSinceResponse {
-            error: Some(RegistryError {
-                code: Code::MalformedMessage as i32,
-                reason: error.to_string(),
-                key: Vec::<u8>::default(),
-            }),
-            version: 0,
-            deltas: Vec::<RegistryDelta>::default(),
         },
-    };
-    let bytes =
-        serialize_get_changes_since_response(response_pb).expect("Error serializing response");
+    );
 
-    reply(&bytes);
+    let response =
+        serialize_get_changes_since_response(response).expect("Error serializing response");
+
+    reply(&response);
 }
 
 #[export_name = "canister_query get_certified_changes_since"]
@@ -882,6 +910,28 @@ fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRe
     registry().get_node_providers_monthly_xdr_rewards()
 }
 
+#[export_name = "canister_query get_api_boundary_node_ids"]
+fn get_api_boundary_node_ids() {
+    over(
+        candid_one,
+        |arg: GetApiBoundaryNodeIdsRequest| -> Result<Vec<ApiBoundaryNodeIdRecord>, String> {
+            get_api_boundary_node_ids_(arg)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_api_boundary_node_ids")]
+fn get_api_boundary_node_ids_(
+    _arg: GetApiBoundaryNodeIdsRequest,
+) -> Result<Vec<ApiBoundaryNodeIdRecord>, String> {
+    let ids = registry().get_api_boundary_node_ids()?;
+    let ids = ids
+        .iter()
+        .map(|k| ApiBoundaryNodeIdRecord { id: Some(k.get()) })
+        .collect();
+    Ok(ids)
+}
+
 #[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]
 fn get_node_operators_and_dcs_of_node_provider() {
     over(
@@ -1057,25 +1107,18 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-// This makes this Candid service self-describing, so that for example Candid
-// UI, but also other tools, can seamlessly integrate with it.
-// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-// works.
-//
-// We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unnecessary
-// runtime computation
-
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("registry.did").to_string())
 }
 
-/// Currently (May, 2024), unlike our other canisters, registry.did is NOT
-/// automatically generated by main. Instead, it is hand-crafted. We might later
-/// change our other canisters to do the same thing. registry is a trial balloon
-/// of sorts in this regard.
-fn main() {}
+fn main() {
+    // This block is intentionally left blank.
+}
 
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
 mod tests;

@@ -326,7 +326,7 @@ fn storage_as_buffer(storage: &Storage) -> Vec<u8> {
     result
 }
 
-#[derive(Eq, Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct StorageFiles {
     base: Option<PathBuf>,
     overlays: Vec<PathBuf>,
@@ -357,12 +357,12 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage_layout = ShardedTestStorageLayout {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
-    .unwrap();
+    };
+    let storage = Storage::load(&storage_layout).unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -373,6 +373,12 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
 
     // Verify `num_logical_pages`.
     assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
+    assert_eq!(
+        expected_num_pages as usize,
+        (&storage_layout as &dyn StorageLayout)
+            .memory_size_pages()
+            .unwrap()
+    );
 
     // Verify every single page in the range.
     for index in 0..storage.num_logical_pages() as u64 {
@@ -440,7 +446,7 @@ fn merge_assert_num_files(
 }
 
 /// An instruction to modify a storage.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "fuzzing_code", derive(Arbitrary))]
 pub enum Instruction {
     /// Create an overlay file with provided list of `PageIndex` to write.
@@ -552,8 +558,7 @@ fn write_overlays_and_verify_with_tempdir(
                 let mut page_map = PageMap::new_for_testing();
                 let num_pages = combined_delta
                     .max_page_index()
-                    .map(|index| index.get() + 1)
-                    .unwrap_or(0);
+                    .map_or(0, |index| index.get() + 1);
                 page_map.update(
                     combined_delta
                         .iter()

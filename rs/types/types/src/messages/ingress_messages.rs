@@ -27,14 +27,14 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use prost::bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, str::FromStr};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
+    str::FromStr,
 };
 
 /// The contents of a signed ingress message.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct SignedIngressContent {
     sender: UserId,
     canister_id: CanisterId,
@@ -166,11 +166,9 @@ pub struct SignedIngress {
 impl IdentifiableArtifact for SignedIngress {
     const NAME: &'static str = "ingress";
     type Id = IngressMessageId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.into()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for SignedIngress {
@@ -178,8 +176,6 @@ impl PbArtifact for SignedIngress {
     type PbIdError = ProxyDecodeError;
     type PbMessage = Bytes;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 impl PartialEq for SignedIngress {
@@ -357,7 +353,7 @@ impl CountBytes for SignedIngress {
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
 /// the message as it was received from the `HttpHandler`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 pub struct Ingress {
     pub source: UserId,
     pub receiver: CanisterId,
@@ -452,7 +448,7 @@ impl CountBytes for Ingress {
 }
 
 /// Errors returned when parsing an ingress payload.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ParseIngressError {
     /// The requested subnet method is not available.
     UnknownSubnetMethod,

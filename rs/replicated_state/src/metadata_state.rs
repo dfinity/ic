@@ -8,8 +8,8 @@ use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetric
 use ic_base_types::CanisterId;
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
-use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
@@ -35,6 +35,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
         is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        NO_DEADLINE,
     },
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
@@ -64,7 +65,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -179,7 +180,7 @@ pub struct SystemMetadata {
 ///
 /// Contains [`Arc`] references, so it is only safe to serialize for read-only
 /// use.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkTopology {
     pub subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -205,7 +206,7 @@ pub struct NetworkTopology {
 /// This entry is formed from two registry records - ApiBoundaryNodeRecord and NodeRecord.
 /// If an ApiBoundaryNodeRecord exists, then a corresponding NodeRecord must exist.
 /// The converse statement is not true.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ApiBoundaryNodeEntry {
     /// Domain name, required field from NodeRecord
     pub domain: String,
@@ -349,7 +350,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
@@ -412,7 +413,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
@@ -729,7 +730,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // properly set this value.
             ingress_history: Default::default(),
             streams: Arc::new(Streams {
-                responses_size_bytes: Streams::calculate_stats(&streams),
+                guaranteed_responses_size_bytes: Streams::calculate_stats(&streams),
                 streams,
             }),
             network_topology: try_from_option_field(
@@ -1213,7 +1214,7 @@ impl SystemMetadata {
 /// message; but because most signals are `Accept` we represent that queue as a
 /// combination of `signals_end` (pointing just beyond the last signal) plus a
 /// collection of exceptions, i.e. `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<RequestOrResponse>,
@@ -1257,7 +1258,6 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
         let reject_signals = item
             .reject_signals()
             .iter()
@@ -1274,7 +1274,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals: Vec::new(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
@@ -1294,42 +1293,18 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
-        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
-        let reject_signals = match (
-            item.reject_signals.as_slice(),
-            item.deprecated_reject_signals.as_slice(),
-        ) {
-            // No reject signals.
-            ([], []) => VecDeque::new(),
-
-            // Only contemporary reject signals.
-            (reject_signals, []) => reject_signals
-                .iter()
-                .map(|signal| {
-                    Ok(RejectSignal {
-                        reason: pb_queues::RejectReason::try_from(signal.reason)
-                            .map_err(ProxyDecodeError::DecodeError)?
-                            .try_into()?,
-                        index: signal.index.into(),
-                    })
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(ProxyDecodeError::DecodeError)?
+                        .try_into()?,
+                    index: signal.index.into(),
                 })
-                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
-
-            // Only deprecated reject signals.
-            ([], deprecated_reject_signals) => deprecated_reject_signals
-                .iter()
-                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
-                .collect(),
-
-            // Both contemporary and deprecated reject signals.
-            ([_, ..], [_, ..]) => {
-                return Err(ProxyDecodeError::Other(format!(
-                    "both contemporary and deprecated signals are populated \
-                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
-                    item.reject_signals, item.deprecated_reject_signals,
-                )));
-            }
-        };
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
         // Check reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
@@ -1545,13 +1520,13 @@ impl From<Stream> for StreamSlice {
 }
 
 /// Wrapper around a private `StreamMap` plus stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct Streams {
     /// Map of streams by destination `SubnetId`.
     streams: StreamMap,
 
     /// Map of response sizes in bytes by respondent `CanisterId`.
-    responses_size_bytes: BTreeMap<CanisterId, usize>,
+    guaranteed_responses_size_bytes: BTreeMap<CanisterId, usize>,
 }
 
 impl Streams {
@@ -1583,10 +1558,12 @@ impl Streams {
     /// subnet.
     pub fn push(&mut self, destination: SubnetId, msg: RequestOrResponse) {
         if let RequestOrResponse::Response(response) = &msg {
-            *self
-                .responses_size_bytes
-                .entry(response.respondent)
-                .or_default() += msg.count_bytes();
+            if response.deadline == NO_DEADLINE {
+                *self
+                    .guaranteed_responses_size_bytes
+                    .entry(response.respondent)
+                    .or_default() += msg.count_bytes();
+            }
         }
 
         self.streams.entry(destination).or_default().push(msg);
@@ -1604,7 +1581,10 @@ impl Streams {
         self.debug_validate_stats();
 
         match self.streams.get_mut(destination) {
-            Some(stream) => Some(StreamHandle::new(stream, &mut self.responses_size_bytes)),
+            Some(stream) => Some(StreamHandle::new(
+                stream,
+                &mut self.guaranteed_responses_size_bytes,
+            )),
             None => None,
         }
     }
@@ -1619,49 +1599,54 @@ impl Streams {
 
         StreamHandle::new(
             self.streams.entry(destination).or_default(),
-            &mut self.responses_size_bytes,
+            &mut self.guaranteed_responses_size_bytes,
         )
     }
 
-    /// Returns the response sizes by responder canister stat.
-    pub fn responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.responses_size_bytes
+    /// Returns the guaranteed response sizes by responder canister stat.
+    pub fn guaranteed_responses_size_bytes(&self) -> &BTreeMap<CanisterId, usize> {
+        &self.guaranteed_responses_size_bytes
     }
 
-    /// Prunes zero-valued response sizes entries.
+    /// Prunes zero-valued guaranteed response sizes entries.
     ///
     /// This is triggered explicitly by `ReplicatedState` after it has updated the
     /// canisters' copies of these values (including the zeroes).
-    pub fn prune_zero_responses_size_bytes(&mut self) {
-        self.responses_size_bytes.retain(|_, &mut value| value != 0);
+    pub fn prune_zero_guaranteed_responses_size_bytes(&mut self) {
+        self.guaranteed_responses_size_bytes
+            .retain(|_, &mut value| value != 0);
     }
 
-    /// Computes the `responses_size_bytes` map from scratch. Used when
+    /// Computes the `guaranteed_responses_size_bytes` map from scratch. Used when
     /// deserializing and in asserts.
     ///
     /// Time complexity: O(num_messages).
     pub fn calculate_stats(streams: &StreamMap) -> BTreeMap<CanisterId, usize> {
-        let mut responses_size_bytes: BTreeMap<CanisterId, usize> = BTreeMap::new();
+        let mut guaranteed_responses_size_bytes: BTreeMap<CanisterId, usize> = BTreeMap::new();
         for (_, stream) in streams.iter() {
             for (_, msg) in stream.messages().iter() {
                 if let RequestOrResponse::Response(response) = msg {
-                    *responses_size_bytes.entry(response.respondent).or_default() +=
-                        msg.count_bytes();
+                    if response.deadline == NO_DEADLINE {
+                        *guaranteed_responses_size_bytes
+                            .entry(response.respondent)
+                            .or_default() += msg.count_bytes();
+                    }
                 }
             }
         }
-        responses_size_bytes
+        guaranteed_responses_size_bytes
     }
 
     /// Checks that the running accounting of the sizes of responses in streams is
     /// accurate.
     #[cfg(debug_assertions)]
     fn debug_validate_stats(&self) {
-        let mut nonzero_responses_size_bytes = self.responses_size_bytes.clone();
-        nonzero_responses_size_bytes.retain(|_, &mut value| value != 0);
+        let mut nonzero_guaranteed_responses_size_bytes =
+            self.guaranteed_responses_size_bytes.clone();
+        nonzero_guaranteed_responses_size_bytes.retain(|_, &mut value| value != 0);
         debug_assert_eq!(
             Streams::calculate_stats(&self.streams),
-            nonzero_responses_size_bytes
+            nonzero_guaranteed_responses_size_bytes
         );
     }
 }
@@ -1671,17 +1656,17 @@ impl Streams {
 pub struct StreamHandle<'a> {
     stream: &'a mut Stream,
 
-    responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
+    guaranteed_responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
 }
 
 impl<'a> StreamHandle<'a> {
     pub fn new(
         stream: &'a mut Stream,
-        responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
+        guaranteed_responses_size_bytes: &'a mut BTreeMap<CanisterId, usize>,
     ) -> Self {
         Self {
             stream,
-            responses_size_bytes,
+            guaranteed_responses_size_bytes,
         }
     }
 
@@ -1716,10 +1701,12 @@ impl<'a> StreamHandle<'a> {
     pub fn push(&mut self, message: RequestOrResponse) -> usize {
         let size_bytes = message.count_bytes();
         if let RequestOrResponse::Response(response) = &message {
-            *self
-                .responses_size_bytes
-                .entry(response.respondent)
-                .or_default() += size_bytes;
+            if response.deadline == NO_DEADLINE {
+                *self
+                    .guaranteed_responses_size_bytes
+                    .entry(response.respondent)
+                    .or_default() += size_bytes;
+            }
         }
         self.stream.push(message);
         size_bytes
@@ -1750,11 +1737,15 @@ impl<'a> StreamHandle<'a> {
                 break;
             }
             if let RequestOrResponse::Response(response) = &msg {
-                let canister_responses_size_bytes = self
-                    .responses_size_bytes
-                    .get_mut(&response.respondent)
-                    .expect("No `responses_size_bytes` entry for discarded response");
-                *canister_responses_size_bytes -= msg.count_bytes();
+                if response.deadline == NO_DEADLINE {
+                    let canister_guaranteed_responses_size_bytes = self
+                        .guaranteed_responses_size_bytes
+                        .get_mut(&response.respondent)
+                        .expect(
+                            "No `guaranteed_responses_size_bytes` entry for discarded response",
+                        );
+                    *canister_guaranteed_responses_size_bytes -= msg.count_bytes();
+                }
             }
         }
 
@@ -1778,7 +1769,7 @@ impl<'a> StreamHandle<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// State associated with the history of statuses of ingress messages as they
 /// traversed through the system.
 pub struct IngressHistoryState {
@@ -2122,10 +2113,10 @@ pub(crate) fn days_since_unix_epoch(time: Time) -> u64 {
 /// There is an invariant (including checks at deserialization):
 /// - Each timestamp corresponding to a snapshot maps onto a unique day (as determined
 ///   by `days_since_unix_epoch()`).
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerMetricsTimeSeries(BTreeMap<Time, BlockmakerStatsMap>);
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStats {
     /// Successfully proposed blocks (blocks that became part of the blockchain).
     blocks_proposed_total: u64,
@@ -2135,7 +2126,7 @@ pub struct BlockmakerStats {
 }
 
 /// Per-node and overall blockmaker stats.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct BlockmakerStatsMap {
     /// Maps a node ID to it's blockmaker stats.
     node_stats: BTreeMap<NodeId, BlockmakerStats>,
@@ -2382,8 +2373,17 @@ pub(crate) mod testing {
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             f(&mut self.streams);
 
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
+            // Update `guaranteed_responses_size_bytes`, retaining all previous keys with a
+            // default byte size of zero (so that the respective canister's
+            // `transient_stream_guaranteed_responses_size_bytes` is correctly reset to
+            // zero).
+            self.guaranteed_responses_size_bytes
+                .values_mut()
+                .for_each(|size| *size = 0);
+            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
+                self.guaranteed_responses_size_bytes
+                    .insert(canister_id, size_bytes);
+            }
         }
     }
 

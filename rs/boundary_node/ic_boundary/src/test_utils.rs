@@ -9,6 +9,7 @@ use axum::Router;
 use clap::Parser;
 use http;
 use ic_base_types::NodeId;
+use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -39,12 +40,11 @@ use crate::{
     cache::Cache,
     cli::Cli,
     core::setup_router,
-    http::HttpClient,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
-    socket::TcpConnectInfo,
 };
 
+#[derive(Debug)]
 struct TestHttpClient(usize);
 
 #[async_trait]
@@ -251,6 +251,16 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+async fn add_conninfo(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    request
+        .extensions_mut()
+        .insert(Arc::new(ConnInfo::default()));
+    next.run(request).await
+}
+
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
@@ -259,9 +269,6 @@ pub fn setup_test_router(
     response_size: usize,
     rate_limit_subnet: Option<usize>,
 ) -> (Router, Vec<Subnet>) {
-    use axum::extract::connect_info::MockConnectInfo;
-    use std::net::SocketAddr;
-
     let mut args = vec![
         "",
         "--local-store-path",
@@ -321,10 +328,7 @@ pub fn setup_test_router(
         )),
     );
 
-    let router = router.layer(MockConnectInfo(TcpConnectInfo(SocketAddr::from((
-        [0, 0, 0, 0],
-        1337,
-    )))));
+    let router = router.layer(axum::middleware::from_fn(add_conninfo));
 
     (router, subnets)
 }

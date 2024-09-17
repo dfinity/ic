@@ -6,7 +6,7 @@ use std::future::Future;
 // A trait to help parameterize the switch from dfn_core to ic_cdk. It should
 // no longer exist after the switch is completed for all NNS/SNS canisters.
 #[async_trait]
-pub trait Runtime {
+pub trait Runtime: Send + Sync {
     // Invokes a Candid `method` on another canister identified by `id`.
     // Whether cleanup is done (call drop() on local variables in the context
     // upon a trap in its callback) depends on the specific Runtime

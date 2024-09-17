@@ -374,6 +374,7 @@ pub enum SubnetKind {
     NNS,
     SNS,
     System,
+    VerifiedApplication,
 }
 
 /// This represents which named subnets the user wants to create, and how
@@ -387,12 +388,14 @@ pub struct SubnetConfigSet {
     pub bitcoin: bool,
     pub system: usize,
     pub application: usize,
+    pub verified_application: usize,
 }
 
 impl SubnetConfigSet {
     pub fn validate(&self) -> Result<(), String> {
         if self.system > 0
             || self.application > 0
+            || self.verified_application > 0
             || self.nns
             || self.sns
             || self.ii
@@ -415,6 +418,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             bitcoin,
             system,
             application,
+            verified_application,
         }: SubnetConfigSet,
     ) -> Self {
         ExtendedSubnetConfigSet {
@@ -445,6 +449,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             },
             system: vec![SubnetSpec::default(); system],
             application: vec![SubnetSpec::default(); application],
+            verified_application: vec![SubnetSpec::default(); verified_application],
         }
     }
 }
@@ -454,6 +459,7 @@ pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
+    pub log_level: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -465,6 +471,7 @@ pub struct ExtendedSubnetConfigSet {
     pub bitcoin: Option<SubnetSpec>,
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
+    pub verified_application: Vec<SubnetSpec>,
 }
 
 /// Specifies various configurations for a subnet.
@@ -622,6 +629,7 @@ impl ExtendedSubnetConfigSet {
     pub fn validate(&self) -> Result<(), String> {
         if !self.system.is_empty()
             || !self.application.is_empty()
+            || !self.verified_application.is_empty()
             || self.nns.is_some()
             || self.sns.is_some()
             || self.ii.is_some()
@@ -648,6 +656,11 @@ impl ExtendedSubnetConfigSet {
             .collect();
         self.application = self
             .application
+            .into_iter()
+            .map(|conf| conf.with_dts_flag(dts_flag))
+            .collect();
+        self.verified_application = self
+            .verified_application
             .into_iter()
             .map(|conf| conf.with_dts_flag(dts_flag))
             .collect();
@@ -680,6 +693,10 @@ pub struct Topology(pub BTreeMap<SubnetId, SubnetConfig>);
 impl Topology {
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
         self.find_subnets(SubnetKind::Application, None)
+    }
+
+    pub fn get_verified_app_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(SubnetKind::VerifiedApplication, None)
     }
 
     pub fn get_benchmarking_app_subnets(&self) -> Vec<SubnetId> {
@@ -844,6 +861,7 @@ pub struct RawMockCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -851,6 +869,7 @@ pub struct MockCanisterHttpResponse {
     pub subnet_id: Principal,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
@@ -861,6 +880,7 @@ impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
             ),
             request_id: raw_mock_canister_http_response.request_id,
             response: raw_mock_canister_http_response.response,
+            additional_responses: raw_mock_canister_http_response.additional_responses,
         }
     }
 }
@@ -873,6 +893,7 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             },
             request_id: mock_canister_http_response.request_id,
             response: mock_canister_http_response.response,
+            additional_responses: mock_canister_http_response.additional_responses,
         }
     }
 }

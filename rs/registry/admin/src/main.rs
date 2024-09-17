@@ -52,6 +52,7 @@ use ic_nns_governance_api::{
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
+        proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
@@ -129,20 +130,16 @@ use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
-    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
-    do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
-    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-    do_update_elected_hostos_versions::{
-        ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
-    },
+    do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
@@ -196,12 +193,12 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',')]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true)]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
 
-    #[clap(short = 's', long)]
+    #[clap(short = 's', long, global = true)]
     /// The pem file containing a secret key to use while authenticating with
     /// the NNS.
     secret_key_pem: Option<PathBuf>,
@@ -210,27 +207,30 @@ struct Opts {
     subcmd: SubCommand,
 
     /// Use an HSM to sign calls.
-    #[clap(long)]
+    #[clap(long, global = true)]
     use_hsm: bool,
 
     /// The slot related to the HSM key that shall be used.
     #[clap(
         long = "slot",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     hsm_slot: Option<String>,
 
     /// The id of the key on the HSM that shall be used.
     #[clap(
         long = "key-id",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     key_id: Option<String>,
 
     /// The PIN used to unlock the HSM.
     #[clap(
         long = "pin",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     pin: Option<String>,
 
@@ -252,6 +252,10 @@ struct Opts {
     /// Return the output in JSON format.
     #[clap(long = "json", global = true)]
     json: bool,
+
+    /// silence notices, can be useful if ic-admin is executed from automation
+    #[clap(long = "silence-notices", global = true)]
+    silence_notices: bool,
 }
 
 /// List of sub-commands accepted by `ic-admin`.
@@ -262,10 +266,9 @@ enum SubCommand {
     GetPublicKey(GetPublicKeyCmd),
     /// Get the last version of a node's TLS certificate key from the registry.
     GetTlsCertificate(GetTlsCertificateCmd),
-    /// Submits a proposal to remove nodes from the subnets they are currently
-    /// assigned to.
-    ProposeToRemoveNodesFromSubnet(ProposeToRemoveNodesFromSubnetCmd),
     /// Submits a proposal to change node membership in a subnet.
+    /// Consider using instead the DRE tool to submit this type of proposals.
+    /// https://github.com/dfinity/dre
     ProposeToChangeSubnetMembership(ProposeToChangeSubnetMembershipCmd),
     /// Get the last version of a node from the registry.
     GetNode(GetNodeCmd),
@@ -297,8 +300,6 @@ enum SubCommand {
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
     ProposeToCreateServiceNervousSystem(ProposeToCreateServiceNervousSystemCmd),
-    /// Submits a proposal to update an existing subnet.
-    ProposeToAddNodesToSubnet(ProposeToAddNodesToSubnetCmd),
     /// Submits a proposal to update a subnet's recovery CUP
     ProposeToUpdateRecoveryCup(ProposeToUpdateRecoveryCupCmd),
     /// Submits a proposal to update an existing subnet's configuration.
@@ -500,43 +501,11 @@ pub trait ProposalTitle {
     fn title(&self) -> String;
 }
 
-/// Sub-command to submit a proposal to remove nodes from a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToRemoveNodesFromSubnetCmd {
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will leave the subnet.
-    pub node_ids: Vec<PrincipalId>,
-}
-
-impl ProposalTitle for ProposeToRemoveNodesFromSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Remove nodes: {} from their assigned subnets",
-                shortened_pids_string(&self.node_ids)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNodesFromSubnetCmd {
-    async fn payload(&self, _: &Agent) -> RemoveNodesFromSubnetPayload {
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-        RemoveNodesFromSubnetPayload { node_ids }
-    }
-}
-
 /// Sub-command to submit a proposal to replace in a subnet.
+/// Consider using instead the DRE tool to submit this type of proposals.
+/// https://github.com/dfinity/dre
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToChangeSubnetMembershipCmd {
     #[clap(long, required = true, alias = "subnet-id")]
     /// The subnet to modify
@@ -630,7 +599,7 @@ struct GetReplicaVersionCmd {
 /// Sub-command to submit a proposal to upgrade the replicas running a specific
 /// subnet to the given (blessed) version.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToAllSubnetNodesCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
@@ -640,7 +609,7 @@ struct ProposeToDeployGuestosToAllSubnetNodesCmd {
 
 /// Sub-command to submit a proposal to remove node operators.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveNodeOperatorsCmd {
     /// List of principal ids of node operators to remove
     #[clap(multiple_values(true))]
@@ -706,13 +675,13 @@ impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
 /// Obsolete; please use `ProposeToDeployGuestosToAllUnassignedNodes` or
 /// `ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes` instead.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser, Clone)]
+#[derive(Clone, Parser, ProposalMetadata)]
 struct ProposeToUpdateUnassignedNodesConfigCmd {}
 
 /// Sub-command to  submit a proposal to deploy a specific replica version to the set of all
 /// unassigned nodes.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToAllUnassignedNodesCmd {
     /// The ID of the replica version that all the unassigned nodes run.
     #[clap(long)]
@@ -742,7 +711,7 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
 /// Sub-command to submit a proposal to change the public keys with "readonly"
 /// access privileges. There is no easy way to set a privilege to an empty list.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// unassigned nodes.
@@ -781,7 +750,7 @@ impl ProposalPayload<UpdateSshReadOnlyAccessForAllUnassignedNodesPayload>
 
 /// Sub-command to submit a proposal for Xdr/Icp conversion rate.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeXdrIcpConversionRateCmd {
     #[clap(long)]
     pub xdr_permyriad_per_icp: u64,
@@ -816,15 +785,10 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
-
-    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
-    #[clap(long)]
-    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -861,15 +825,10 @@ impl ProposalAction for StartCanisterCmd {
 
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
-
-    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
-    #[clap(long)]
-    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -906,7 +865,7 @@ impl ProposalAction for StopCanisterCmd {
 
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToReviseElectedGuestssVersionsCmd {
     #[clap(long)]
     /// The replica version ID to elect.
@@ -956,57 +915,9 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
     }
 }
 
-/// Sub-command to submit a proposal to add nodes to an existing subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToAddNodesToSubnetCmd {
-    #[clap(long)]
-    #[allow(dead_code)]
-    /// Obsolete. Does nothing
-    subnet_handler_id: Option<String>,
-
-    #[clap(long, required = true, alias = "subnet-id")]
-    /// The subnet to modify
-    subnet: SubnetDescriptor,
-
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will be part of the new subnet.
-    pub node_ids: Vec<PrincipalId>,
-}
-
-impl ProposalTitle for ProposeToAddNodesToSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Add nodes: {} to subnet: {}",
-                shortened_pids_string(&self.node_ids),
-                shortened_subnet_string(&self.subnet)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
-    async fn payload(&self, agent: &Agent) -> AddNodesToSubnetPayload {
-        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-        AddNodesToSubnetPayload {
-            subnet_id: self.subnet.get_id(&registry_canister).await.get(),
-            node_ids,
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to upgrade an NNS canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToChangeNnsCanisterCmd {
     #[clap(long)]
     /// Whether to skip stopping the canister before installing. Generally,
@@ -1040,6 +951,10 @@ struct ProposeToChangeNnsCanisterCmd {
     /// canister.
     arg: Option<PathBuf>,
 
+    /// The sha256 of the arg binary file.
+    #[clap(long)]
+    arg_sha256: Option<String>,
+
     #[clap(long)]
     /// If set, it will update the canister's compute allocation to this value.
     /// See `ComputeAllocation` for the semantics of this field.
@@ -1049,10 +964,13 @@ struct ProposeToChangeNnsCanisterCmd {
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
 
-    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
-    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
-    #[clap(long)]
+    /// Keeping it around so that scripts that alreay pass this flag don't break.
+    #[clap(long, default_value = "true")]
     use_explicit_action_type: bool,
+
+    /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
+    #[clap(long)]
+    use_legacy_execute_nns_function: bool,
 }
 
 #[async_trait]
@@ -1064,10 +982,7 @@ impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let module_arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let module_arg = read_arg(&self.arg, &self.arg_sha256);
         let stop_upgrade_start = !self.skip_stopping_before_installing;
         UpgradeRootProposal {
             wasm_module,
@@ -1098,10 +1013,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let arg = read_arg(&self.arg, &self.arg_sha256);
         ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
@@ -1126,7 +1038,11 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             )
             .await,
         );
-        let arg = self.arg.as_ref().map(|path| read_file_fully(path));
+        let arg = Some(
+            self.arg
+                .as_ref()
+                .map_or(vec![], |path| read_file_fully(path)),
+        );
         let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
         let install_mode = match self.mode {
             CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
@@ -1148,7 +1064,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
 
 /// Sub-command to submit a proposal to upgrade an NNS canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToHardResetNnsRootToVersionCmd {
     #[clap(long)]
     /// The file system path to the new wasm module to ship.
@@ -1200,7 +1116,7 @@ impl ProposalPayload<HardResetNnsRootToVersionPayload> for ProposeToHardResetNns
 
 /// Sub-command to submit a proposal to uninstall the code of a canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUninstallCodeCmd {
     #[clap(long, required = true)]
     /// The ID of the canister to uninstall.
@@ -1228,7 +1144,7 @@ impl ProposalPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
 
 /// Sub-command to submit a subnet rental request proposal.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRentSubnetCmd {
     #[clap(long, required = true)]
     /// One of the predefined rental conditions of the subnet rental canister.
@@ -1263,7 +1179,7 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
 /// Sub-command to submit a proposal to update the settings of a canister. When neigther
 /// `--controllers` nor `--remove-all-controllers` is provided, the controllers will not be updated.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateCanisterSettingsCmd {
     #[clap(long, required = true)]
     /// The ID of the target canister.
@@ -1344,7 +1260,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
 
 /// Sub-command to submit a proposal to add a new NNS canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddNnsCanisterCmd {
     #[clap(long, required = true)]
     /// A unique name for the canister.
@@ -1415,7 +1331,7 @@ impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
 
 /// A command to propose to add an SNS wasm to the SNS-WASM canister
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddWasmToSnsWasmCmd {
     #[clap(long)]
     /// The file system path to the new wasm module to ship.
@@ -1474,7 +1390,7 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
 
 /// A struct to make command line representations of the version easier, which expects
 /// a hex-encoded sha256 sum of wasms.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct JsonSnsVersion {
     pub root_wasm_hash: Option<String>,
     pub governance_wasm_hash: Option<String>,
@@ -1553,7 +1469,7 @@ impl TryFrom<JsonSnsVersion> for SnsVersion {
 
 /// Proposal to insert SNS-W Upgrade Path Entries
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToInsertSnsWasmUpgradePathEntriesCmd {
     /// The sns_governance_canister_id that will get a custom response for the entries in the upgrade
     /// path
@@ -1670,7 +1586,7 @@ fn print_insert_sns_wasm_upgrade_path_entries_payload(payload: InsertUpgradePath
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
     #[clap(long)]
     /// Add SNS Subnet IDs to the list of subnets that SNS-WASM will deploy SNS instances to
@@ -1701,7 +1617,7 @@ impl ProposalPayload<UpdateSnsSubnetListRequest> for ProposeToUpdateSnsSubnetIds
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateSnsDeployWhitelistCmd {
     #[clap(long)]
     /// Principals to add to the SNS deploy whitelist
@@ -1714,7 +1630,7 @@ struct ProposeToUpdateSnsDeployWhitelistCmd {
 
 /// Obsolete; please use `CreateServiceNervousSystem` instead.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser, Clone)]
+#[derive(Clone, Parser, ProposalMetadata)]
 struct ProposeToOpenSnsTokenSwap {}
 
 impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
@@ -1738,7 +1654,7 @@ impl ProposalPayload<UpdateAllowedPrincipalsRequest> for ProposeToUpdateSnsDeplo
 
 /// Sub-command to submit a proposal to clear the provisional whitelist.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToClearProvisionalWhitelistCmd {}
 
 impl ProposalTitle for ProposeToClearProvisionalWhitelistCmd {
@@ -1757,7 +1673,7 @@ impl ProposalPayload<()> for ProposeToClearProvisionalWhitelistCmd {
 
 /// Sub-command to submit a proposal set the list of authorized subnets.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToSetAuthorizedSubnetworksCmd {
     /// The principal to be authorized to create canisters using ICPTs.
     /// If who is `None`, then the proposal will set the default list of subnets
@@ -1818,7 +1734,7 @@ impl ProposalPayload<SetAuthorizedSubnetworkListArgs> for ProposeToSetAuthorized
 /// Sub-command to submit a proposal to add or remove subnet types in cycles
 /// minting canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateSubnetTypeCmd {
     /// A value to indicate whether the subnet type is to be added or removed.
     #[clap(long, required = true)]
@@ -1858,7 +1774,7 @@ impl ProposalPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
 /// Sub-command to submit a proposal to add or remove subnets to/from a subnet
 /// type in cycles minting canister.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToChangeSubnetTypeAssignmentCmd {
     /// A value to indicate whether subnets are going to be added or removed
     /// to/from a subnet type.
@@ -1926,7 +1842,7 @@ struct SubnetPublicKeyCmd {
 
 /// Sub-command to submit a proposal to add or remove a node provider.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddOrRemoveNodeProviderCmd {
     /// The principal id of the node provider.
     #[clap(long, required = true)]
@@ -1956,7 +1872,7 @@ impl ProposalTitle for ProposeToAddOrRemoveNodeProviderCmd {
 
 /// Sub-command to submit a proposal to add a new node operator.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddNodeOperatorCmd {
     #[clap(long, required = true)]
     /// The principal id of the node operator
@@ -2026,7 +1942,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
 /// Sub-command to submit a proposal to update the configuration of a node
 /// operator.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateNodeOperatorConfigCmd {
     #[clap(long, required = true)]
     /// The principal id of the node operator
@@ -2113,7 +2029,7 @@ struct GetDataCenterCmd {
 
 /// Sub-command to submit a proposal to add or remove a data center.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddOrRemoveDataCentersCmd {
     /// The JSON-formatted Data Center records to add to the Registry.
     ///
@@ -2221,7 +2137,7 @@ impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRe
 
 /// Sub-command to submit a proposal to update the node rewards table.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateNodeRewardsTableCmd {
     /// A JSON-encoded map from region to a map from node type to the
     /// xdr_permyriad_per_node_per_month for that node type in that region
@@ -2272,7 +2188,7 @@ struct UpdateRegistryLocalStoreCmd {
 
 /// Sub-command to submit a proposal to update the firewall configuration.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToSetFirewallConfigCmd {
     /// File with the firewall configuration content
     pub firewall_config_file: PathBuf,
@@ -2322,7 +2238,7 @@ impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd
 
 /// Sub-command to submit a proposal to add firewall rules.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddFirewallRulesCmd {
     /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
@@ -2373,7 +2289,7 @@ impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
 
 /// Sub-command to submit a proposal to remove firewall rules.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveFirewallRulesCmd {
     /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
@@ -2418,7 +2334,7 @@ impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRule
 
 /// Sub-command to submit a proposal to update firewall rules.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateFirewallRulesCmd {
     /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
@@ -2490,7 +2406,7 @@ struct GetFirewallRulesetHashCmd {
 
 /// Sub-command to submit a proposal to remove nodes.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveNodesCmd {
     /// The IDs of the nodes to remove.
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
@@ -2569,7 +2485,7 @@ struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
 
 /// Sub-command to submit a proposal to modify the canister migrations.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToPrepareCanisterMigrationCmd {
     /// The list of canister ID ranges in migration.
     #[clap(long, multiple_values(true), required = true)]
@@ -2609,7 +2525,7 @@ impl ProposalPayload<PrepareCanisterMigrationPayload> for ProposeToPrepareCanist
 
 /// Sub-command to propose a change in the routing table.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRerouteCanisterRangesCmd {
     /// The list of canister ID ranges to be rerouted.
     #[clap(long, multiple_values(true), required = true)]
@@ -2649,7 +2565,7 @@ impl ProposalPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterR
 
 /// Sub-command to submit a proposal to remove some entries from the canister migrations.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToCompleteCanisterMigrationCmd {
     /// The list of canister ID ranges to be removed from canister migrations.
     #[clap(long, multiple_values(true), required = true)]
@@ -2688,7 +2604,7 @@ impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCani
 
 /// Sub-command to submit a proposal to set the bitcoin configuration.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToSetBitcoinConfig {
     pub network: BitcoinNetwork,
 
@@ -2752,7 +2668,7 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser, Clone, Debug)]
+#[derive(Clone, Debug, Parser, ProposalMetadata)]
 struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long)]
     name: String,
@@ -3216,12 +3132,12 @@ async fn propose_to_create_service_nervous_system(
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateElectedHostosVersionsCmd {}
 
 /// Sub-command to change the set of currently elected HostOS versions.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToReviseElectedHostosVersionsCmd {
     #[clap(long)]
     /// The HostOS version ID to elect.
@@ -3255,32 +3171,29 @@ impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedHostosVersionsPayload>
+impl ProposalPayload<ReviseElectedHostosVersionsPayload>
     for ProposeToReviseElectedHostosVersionsCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateElectedHostosVersionsPayload {
-        let payload = UpdateElectedHostosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedHostosVersionsPayload {
+        let payload = ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
             hostos_versions_to_unelect: self.hostos_versions_to_unelect.clone(),
         };
-        // TODO[NNS1-3000]: Use new Registry naming convention once NNS Governance supports it.
-        ReviseElectedHostosVersionsPayload::from(payload.clone())
-            .validate()
-            .expect("Failed to validate payload");
+        payload.validate().expect("Failed to validate payload");
         payload
     }
 }
 
 /// Obsolete; please use `ProposeToDeployHostosToSomeNodes` instead.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateNodesHostosVersionCmd {}
 
 /// Sub-command to deploy a HostOS version to a set of nodes.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployHostosToSomeNodesCmd {
     /// The list of nodes on which to set the given HostosVersion
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
@@ -3335,8 +3248,8 @@ impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosToSomeNodesCmd {
-    async fn payload(&self, _: &Agent) -> UpdateNodesHostosVersionPayload {
+impl ProposalPayload<DeployHostosToSomeNodes> for ProposeToDeployHostosToSomeNodesCmd {
+    async fn payload(&self, _: &Agent) -> DeployHostosToSomeNodes {
         let node_ids = self
             .node_ids
             .clone()
@@ -3344,7 +3257,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
             .map(NodeId::from)
             .collect();
 
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids,
             hostos_version_id: self.hostos_version_flag.simplify().clone(),
         }
@@ -3352,7 +3265,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToAddApiBoundaryNodesCmd {
     #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The nodes to assign as an API Boundary Node
@@ -3390,7 +3303,7 @@ impl ProposalPayload<AddApiBoundaryNodesPayload> for ProposeToAddApiBoundaryNode
 }
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveApiBoundaryNodesCmd {
     #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The set of API Boundary Nodes that should be returned to an unassigned state
@@ -3424,11 +3337,11 @@ impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBounda
 
 /// Obsolete; please use `ProposeToDeployGuestosToSomeApiBoundaryNodes` instead.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser, Clone)]
+#[derive(Clone, Parser, ProposalMetadata)]
 struct ProposeToUpdateApiBoundaryNodesVersionCmd {}
 
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
     #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The set of API Boundary Nodes that should have their version updated
@@ -3456,11 +3369,11 @@ impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
+impl ProposalPayload<DeployGuestosToSomeApiBoundaryNodes>
     for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateApiBoundaryNodesVersionPayload {
-        UpdateApiBoundaryNodesVersionPayload {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToSomeApiBoundaryNodes {
+        DeployGuestosToSomeApiBoundaryNodes {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }
@@ -3613,9 +3526,7 @@ async fn main() {
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToUpdateSubnetReplicaVersion(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
-            SubCommand::ProposeToAddNodesToSubnet(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
-            SubCommand::ProposeToRemoveNodesFromSubnet(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
@@ -3732,21 +3643,6 @@ async fn main() {
                 make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
                 opts.json,
-            )
-            .await;
-        }
-        SubCommand::ProposeToRemoveNodesFromSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::RemoveNodesFromSubnet,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
             )
             .await;
         }
@@ -4032,23 +3928,16 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToAddNodesToSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::AddNodeToSubnet,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
         SubCommand::ProposeToChangeSubnetMembership(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
+            if !opts.silence_notices {
+                println!(
+                    "Notice: invoking this command can undesirably worsen the decentralization."
+                );
+                println!(
+                    "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
+                )
+            }
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
@@ -4115,7 +4004,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
+            if !cmd.use_legacy_execute_nns_function {
                 propose_action_from_command(cmd, canister_client, proposer).await;
             } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
@@ -4192,17 +4081,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else {
-                propose_external_proposal_from_command(
-                    cmd,
-                    NnsFunction::StopOrStartNnsCanister,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4212,17 +4091,7 @@ async fn main() {
                 opts.nns_public_key_pem_file,
                 sender,
             );
-            if cmd.use_explicit_action_type {
-                propose_action_from_command(cmd, canister_client, proposer).await;
-            } else {
-                propose_external_proposal_from_command(
-                    cmd,
-                    NnsFunction::StopOrStartNnsCanister,
-                    canister_client,
-                    proposer,
-                )
-                .await;
-            }
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4564,7 +4433,7 @@ async fn main() {
             // A more proper way would be to adjust the upstream structs to flatten the "rates" and "table" fields
             // directly, but this breaks some of the candid encoding and decoding and also some of the tests.
             // Make sure to keep these structs in sync with the upstream ones.
-            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            #[derive(PartialEq, ::prost::Message, serde::Serialize)]
             pub struct NodeRewardRateFlattened {
                 #[prost(uint64, tag = "1")]
                 pub xdr_permyriad_per_node_per_month: u64,
@@ -4573,14 +4442,14 @@ async fn main() {
                 pub reward_coefficient_percent: Option<i32>,
             }
 
-            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            #[derive(PartialEq, ::prost::Message, serde::Serialize)]
             pub struct NodeRewardRatesFlattened {
                 #[prost(btree_map = "string, message", tag = "1")]
                 #[serde(flatten)]
                 pub rates: BTreeMap<String, NodeRewardRateFlattened>,
             }
 
-            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            #[derive(PartialEq, ::prost::Message, serde::Serialize)]
             pub struct NodeRewardsTableFlattened {
                 #[prost(btree_map = "string, message", tag = "1")]
                 #[serde(flatten)]
@@ -5225,7 +5094,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&action, &cmd);
+    print_proposal(&Action::from(action.clone()), &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -5595,6 +5464,22 @@ async fn read_wasm_module(
         .expect("Wasm module's sha256 does not match provided sha256");
 
     read_file_fully(&wasm_file_path)
+}
+
+fn read_arg(arg_path: &Option<PathBuf>, arg_sha256: &Option<String>) -> Vec<u8> {
+    match (arg_path, arg_sha256) {
+        // No arguments, which is fine and we default to empty blob.
+        (None, None) => vec![],
+        (Some(arg_path), Some(arg_sha256)) => {
+            check_file_hash(arg_path, arg_sha256)
+                .expect("Upgrade arg's sha256 does not match provided sha256");
+            read_file_fully(arg_path)
+        }
+        (Some(_), None) => panic!("Must provide a sha256 checksum for the upgrade arg",),
+        (None, Some(_)) => {
+            panic!("--arg-sha256 provided without --arg-path");
+        }
+    }
 }
 
 async fn download_wasm_module(url: &Url) -> PathBuf {

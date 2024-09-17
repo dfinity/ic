@@ -319,7 +319,7 @@ impl Registry {
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
 /// must be "blessed".
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
@@ -370,7 +370,7 @@ pub struct UpdateSubnetPayload {
     pub set_gossip_config_to_default: bool,
 }
 
-#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
@@ -445,7 +445,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
     }
 }
 
-#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: Option<MasterPublicKeyId>,
     pub pre_signatures_to_create_in_advance: Option<u32>,
