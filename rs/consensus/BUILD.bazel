@@ -66,6 +66,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:proptest",
     "@crate_index//:prost",
+    "@crate_index//:rstest",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog-async",
     "@crate_index//:slog-envlogger",

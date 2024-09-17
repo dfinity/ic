@@ -515,20 +515,25 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
         .any(|p| p.signature.signer == this_node)
 }
 
+const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
+const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 5;
+const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
+
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
-    let min_height = if max_height > Height::from(10) {
-        max_height - Height::new(10)
+    let min_height = if max_height > DYNAMIC_DELAY_LOOK_BACK_DISTANCE {
+        max_height - DYNAMIC_DELAY_LOOK_BACK_DISTANCE
     } else {
         Height::new(0)
     };
+
     pool.get_range(block, min_height, max_height)
         .filter(|block| block.rank > Rank(0))
         .count()
 }
 
 /// Calculate the required delay for block making based on the block maker's
-/// rank.
+/// rank and the number of non-0-rank blocks in its ancestry.
 pub(super) fn get_block_maker_delay(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
@@ -542,11 +547,12 @@ pub(super) fn get_block_maker_delay(
         get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
     let unit_delay = settings.unit_delay;
 
-    let dynamic_delay = if count_non_rank_0_blocks(pool, parent) > 3 {
-        unit_delay + Duration::from_secs(10)
-    } else {
-        unit_delay
-    };
+    let dynamic_delay =
+        if count_non_rank_0_blocks(pool, parent) > DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS {
+            unit_delay + DYNAMIC_DELAY_EXTRA_DURATION
+        } else {
+            unit_delay
+        };
 
     Some(dynamic_delay * rank.0 as u32)
 }
@@ -606,6 +612,7 @@ mod tests {
         crypto::CryptoHash,
         *,
     };
+    use rstest::rstest;
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -1033,6 +1040,118 @@ mod tests {
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(2)
             );
+        })
+    }
+
+    #[rstest]
+    #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
+    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(1 * (7 + 10)))]
+    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * (3 + 10)))]
+    fn get_block_maker_delay_many_non_rank_0_blocks(
+        #[case] rank: Rank,
+        #[case] unit_delay: Duration,
+        #[case] expected_block_maker_delay: Duration,
+    ) {
+        // there should be 6 non-rank-0 blocks in the past 30 heights
+        let initial = std::iter::repeat(Rank(1)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(24);
+        let terminal = std::iter::repeat(Rank(2)).take(5);
+
+        let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
+
+        assert_eq!(
+            block_maker_delay_test_case(&ranks, rank, unit_delay,),
+            expected_block_maker_delay,
+        );
+    }
+
+    #[rstest]
+    #[case(Rank(0), Duration::from_secs(2), Duration::from_secs(0))]
+    #[case(Rank(1), Duration::from_secs(4), Duration::from_secs(1 * 4))]
+    #[case(Rank(2), Duration::from_secs(6), Duration::from_secs(2 * 6))]
+    fn get_block_maker_delay_few_non_rank_0_blocks(
+        #[case] rank: Rank,
+        #[case] unit_delay: Duration,
+        #[case] expected_block_maker_delay: Duration,
+    ) {
+        // there should be 5 non-rank-0 blocks in the past 30 heights
+        let initial = std::iter::repeat(Rank(1)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(25);
+        let terminal = std::iter::repeat(Rank(2)).take(5);
+
+        let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
+
+        assert_eq!(
+            block_maker_delay_test_case(&ranks, rank, unit_delay,),
+            expected_block_maker_delay,
+        );
+    }
+
+    #[test]
+    fn get_block_maker_delay_short_chain() {
+        assert_eq!(
+            block_maker_delay_test_case(
+                &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
+                Rank(1),
+                Duration::from_secs(1)
+            ),
+            Duration::from_secs(11),
+        );
+    }
+
+    #[test]
+    fn get_block_maker_delay_short_chain_2() {
+        assert_eq!(
+            block_maker_delay_test_case(
+                &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
+                Rank(1),
+                Duration::from_secs(1)
+            ),
+            Duration::from_secs(1),
+        );
+    }
+
+    fn block_maker_delay_test_case(
+        past_block_ranks: &[Rank],
+        block_maker_rank: Rank,
+        unit_delay: Duration,
+    ) -> Duration {
+        let subnet_id = subnet_test_id(0);
+        let node_ids: Vec<_> = (0..100).map(node_test_id).collect();
+        let registry_version = 1;
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool, registry, ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_unit_delay(unit_delay)
+                        .build(),
+                )],
+            );
+
+            for rank in past_block_ranks {
+                pool.advance_round_with_block(&pool.make_next_block_with_rank(*rank));
+            }
+
+            let parent = pool.latest_notarized_blocks().next().unwrap();
+
+            let pool_reader = PoolReader::new(&pool);
+
+            get_block_maker_delay(
+                &no_op_logger(),
+                registry.as_ref(),
+                subnet_id,
+                &pool_reader,
+                parent,
+                RegistryVersion::from(registry_version),
+                block_maker_rank,
+            )
+            .expect("Should successfully compute the block maker delay with valid inputs")
         })
     }
 }

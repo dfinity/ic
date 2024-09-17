@@ -71,6 +71,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 proptest = { workspace = true }
 prost = { workspace = true }
+rstest = { workspace = true }
 serde_cbor = { workspace = true }
 slog-async = { workspace = true }
 slog-envlogger = "2.2.0"
