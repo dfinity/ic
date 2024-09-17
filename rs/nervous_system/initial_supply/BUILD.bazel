@@ -3,20 +3,23 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/runtime",
     "//rs/types/base_types",
     "//packages/icrc-ledger-types",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
-    "@crate_index//:tokio",
 ]
 
 PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tokio",
 ]
 
 LIB_SRCS = glob(

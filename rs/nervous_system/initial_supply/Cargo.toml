@@ -14,4 +14,6 @@ ic-nervous-system-runtime = { path = "../runtime" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 num-bigint = "0.4"
+
+[dev-dependencies]
 tokio = { workspace = true }
