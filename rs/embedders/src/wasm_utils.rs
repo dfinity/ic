@@ -200,7 +200,6 @@ fn validate_and_instrument(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
-    println!("validate_and_instrument");
     let (wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
     let instrumentation_output = instrument(
         module,
