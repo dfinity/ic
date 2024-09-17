@@ -214,7 +214,7 @@ class IcDeploymentInventory:
                 # That didn't work, try to build IPv6 from the MAC address
                 if ic_host:
                     ipv6_prefix = self._get_ipv6_prefix_for_ic_host(ic_host)
-                    ipv6_prefix_length = '/64'
+                    ipv6_subnet = '/64'
                     # For the mainnet deployments, the MAC address is calculated based on the number of guests on
                     # the physical host, so we need to enumerate and count the guests on each physical host.
                     # Assign a unique ID to each physical host. This will be a serial number if
@@ -234,7 +234,7 @@ class IcDeploymentInventory:
                             self.phy_serial_numbers_filename.absolute(),
                         )
                         sys.exit(1)
-                    ipv6 = ipv6_address_calculate_slaac(ipv6_prefix, ipv6_prefix_length, mac_address)
+                    ipv6 = ipv6_address_calculate_slaac(ipv6_prefix, ipv6_subnet, mac_address)
             if ipv6:
                 # Normalize the IPv6 address before using it elsewhere
                 ipv6 = ipaddress.ip_address(ipv6)
@@ -745,9 +745,9 @@ def mac_address_mainnet(phy_system_serial_number: str, deployment_name: str, gue
     return ansible_random_mac("52:00", mac_seed)
 
 
-def ipv6_address_calculate_slaac(ipv6_prefix: str, ipv6_prefix_length: str, mac_address: str):
+def ipv6_address_calculate_slaac(ipv6_prefix: str, ipv6_subnet: str, mac_address: str):
     """Calculate the same IPv6 address as SLAAC does, based on the interface MAC address."""
-    return mac2eui64(mac_address, f"{ipv6_prefix.strip()}::{ipv6_prefix_length.strip()}")
+    return mac2eui64(mac_address, f"{ipv6_prefix.strip()}::{ipv6_subnet.strip()}")
 
 
 def main():

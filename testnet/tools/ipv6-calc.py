@@ -77,9 +77,9 @@ def calc_mac_address(serial: str, deployment_name: str, node_index: str):
     return ansible_random_mac("52:00", f"{serial} {deployment_name} {node_index}")
 
 
-def ipv6_address_calculate_slaac(ipv6_prefix: str, ipv6_prefix_length: str, mac_address: str):
+def ipv6_address_calculate_slaac(ipv6_prefix: str, ipv6_subnet: str, mac_address: str):
     """Calculate the same IPv6 address as SLAAC does, based on the interface MAC address."""
-    return mac2eui64(mac_address, f"{ipv6_prefix.strip()}::{ipv6_prefix_length.strip()}")
+    return mac2eui64(mac_address, f"{ipv6_prefix.strip()}::{ipv6_subnet.strip()}")
 
 
 def ipv6_address_compressed(ipv6_address: str):

@@ -67,9 +67,9 @@ function get_network_settings() {
         "echo ${ipv6_address_system_full} | cut -d: -f1-4" \
         "Failed to get system's IPv6 prefix.")
 
-    ipv6_prefix_length_system=$(eval_command_with_retries \
+    ipv6_subnet_system=$(eval_command_with_retries \
         "echo ${ipv6_address_system_full} | awk -F '/' '{ print \"/\" \$2 }'" \
-        "Failed to get system's IPv6 prefix length.")
+        "Failed to get system's IPv6 subnet.")
 
     ipv6_gateway_system=$(eval_command_with_retries \
         "ip -6 route show | awk '(/^default/) { print \$3 }'" \
@@ -97,7 +97,7 @@ function print_network_settings() {
 
     echo "* Printing system's network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix_system}"
-    echo "  IPv6 Prefix Length : ${ipv6_prefix_length_system}"
+    echo "  IPv6 Subnet : ${ipv6_subnet_system}"
     echo "  IPv6 Gateway: ${ipv6_gateway_system}"
     echo " "
 
