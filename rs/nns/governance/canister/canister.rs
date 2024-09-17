@@ -59,7 +59,12 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, str::FromStr, time::Duration};
+use std::{
+    borrow::Cow,
+    boxed::Box,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -155,6 +160,19 @@ struct CanisterEnv {
     time_warp: GovTimeWarp,
 }
 
+fn time_u64_nanos() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        ic_cdk::api::time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
+}
+
 impl CanisterEnv {
     fn new() -> Self {
         CanisterEnv {
@@ -168,7 +186,7 @@ impl CanisterEnv {
             // the PRNG, but that wouldn't help much since after inception the pseudo-random
             // numbers could be predicted.
             rng: {
-                let now_nanos = Duration::from_nanos(ic_cdk::api::time()).as_nanos();
+                let now_nanos = Duration::from_nanos(time_u64_nanos()).as_nanos();
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
@@ -184,7 +202,7 @@ impl CanisterEnv {
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
         self.time_warp
-            .apply(Duration::from_nanos(ic_cdk::api::time()).as_secs())
+            .apply(Duration::from_nanos(time_u64_nanos()).as_secs())
     }
 
     fn set_time_warp(&mut self, new_time_warp: GovTimeWarp) {
@@ -304,7 +322,7 @@ fn panic_with_probability(probability: f64, message: &str) {
     // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
     // state, which makes sure that the next time still panics, unless some other operation modifies
     // the `rng` successfully, such as spawning a neuron.
-    let now_seconds = Duration::from_nanos(ic_cdk::api::time()).as_secs();
+    let now_seconds = Duration::from_nanos(time_u64_nanos()).as_secs();
     let random = ChaCha20Rng::seed_from_u64(now_seconds).next_u64();
     let should_panic = (random as f64) / (u64::MAX as f64) < probability;
     if should_panic {

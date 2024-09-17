@@ -137,7 +137,7 @@ use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 #[cfg(test)]
@@ -244,10 +244,24 @@ impl IcClock {
     }
 }
 
+fn time_u64_nanos() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        ic_cdk::api::time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
+}
+
 impl Clock for IcClock {
     fn now(&self) -> u64 {
         // Step 1: Read the real time.
-        let real_timestamp_seconds = Duration::from_nanos(ic_cdk::api::time()).as_secs();
+
+        let real_timestamp_seconds = Duration::from_nanos(time_u64_nanos()).as_secs();
 
         // Step 2: Apply time warp.
         let TimeWarp { delta_s } = self.time_warp;
