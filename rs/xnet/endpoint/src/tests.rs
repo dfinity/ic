@@ -594,12 +594,7 @@ fn http_url(path: &str, xnet_endpoint: &XNetEndpoint) -> String {
 
 /// Queries the given URL.
 async fn http_get(url: &str) -> Bytes {
-    reqwest::Client::builder()
-        .http2_prior_knowledge()
-        .build()
-        .unwrap()
-        .get(url)
-        .send()
+    reqwest::get(url)
         .await
         .expect("couldn't execute a GET request")
         .bytes()
