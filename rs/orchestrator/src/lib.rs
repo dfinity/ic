@@ -43,6 +43,7 @@ mod ipv4_network;
 mod metrics;
 pub mod orchestrator;
 mod process_manager;
+mod recovery;
 mod registration;
 mod registry_helper;
 mod signer;

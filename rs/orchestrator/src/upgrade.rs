@@ -6,8 +6,6 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
-use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-use ic_config::{Config, ConfigSource};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
@@ -17,7 +15,6 @@ use ic_image_upgrader::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
@@ -35,7 +32,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tokio::process::Command;
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
@@ -303,126 +299,16 @@ impl Upgrade {
         // If it is, we restart to pass the unsigned CUP to consensus.
         self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
 
-        if self.registry.should_create_checkpoint(subnet_id) {
-            info!(
-                self.logger,
-                "Should create checkpoint at latest certified height",
-            );
-            self.do_create_checkpoint(subnet_id).await?;
-            return Ok(Some(subnet_id));
+        if !self.registry.should_create_checkpoint(subnet_id) {
+            // This will start a new replica process if none is running.
+            self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
         }
-
-        // This will start a new replica process if none is running.
-        self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
         Ok(Some(subnet_id))
-    }
-
-    async fn do_create_checkpoint(&self, subnet_id: SubnetId) -> OrchestratorResult<()> {
-        if let Err(e) = self.stop_replica() {
-            warn!(self.logger, "Failed to stop replica with error {:?}", e);
-        }
-
-        let config_str = "/run/ic-node/config/ic.json5";
-        let replay = "/opt/ic/bin/ic-replay";
-
-        let tmpdir = tempfile::Builder::new()
-            .prefix("ic_config")
-            .tempdir()
-            .map_err(|err| {
-                OrchestratorError::IoError("Couldn't create a temporary directory".into(), err)
-            })?;
-
-        let config = Config::load_with_tmpdir(
-            ConfigSource::File(self.replica_config_file.clone()),
-            tmpdir.path().to_path_buf(),
-        );
-
-        let pool = CertificationPoolImpl::new(
-            self.node_id,
-            config.artifact_pool.into(),
-            self.logger.clone().into(),
-            MetricsRegistry::new(),
-        );
-
-        let Ok((height, _hash)) = pool
-            .persistent_pool
-            .certification_shares()
-            .get_highest()
-            .map(|share| (share.height, share.signed.content.hash))
-            .or_else(|_| {
-                pool.persistent_pool
-                    .certifications()
-                    .get_highest()
-                    .map(|cert| (cert.height, cert.signed.content.hash))
-            })
-        else {
-            warn!(self.logger, "No highest certification found",);
-            return Ok(());
-        };
-
-        info!(
-            self.logger,
-            "Found highest certification at height {height}",
-        );
-
-        let checkpoint_exists = self
-            .cup_provider
-            .get_checkpoint_heights()?
-            .any(|h| h == height.get());
-
-        if checkpoint_exists {
-            info!(self.logger, "Checkpoint at height {height} already exists");
-            return Ok(());
-        }
-
-        let mut cp = Command::new("cp");
-        cp.arg("-R")
-            .arg("/var/lib/ic/data/ic_state/checkpoints")
-            .arg("/var/lib/ic/backup/checkpoints");
-
-        info!(
-            self.logger,
-            "Copying existing checkpoints to backup partition: {cp:?}"
-        );
-        match cp.output().await {
-            Ok(output) => {
-                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
-                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-                stdout.lines().for_each(|line| info!(self.logger, "{line}"));
-                stderr.lines().for_each(|line| warn!(self.logger, "{line}"));
-            }
-            Err(err) => {
-                error!(self.logger, "{err:?}");
-            }
-        }
-
-        let mut replay = Command::new(replay);
-        replay
-            .arg(config_str)
-            .arg("--subnet-id")
-            .arg(subnet_id.to_string())
-            .arg("--replay-until-height")
-            .arg(height.to_string());
-
-        info!(self.logger, "Executing ic-replay: {replay:?}");
-        match replay.output().await {
-            Ok(output) => {
-                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
-                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-                stdout.lines().for_each(|line| info!(self.logger, "{line}"));
-                stderr.lines().for_each(|line| warn!(self.logger, "{line}"));
-            }
-            Err(err) => {
-                error!(self.logger, "{err:?}");
-            }
-        }
-
-        Ok(())
     }
 
     // Special case for when we are doing bootstrap subnet recovery for
