@@ -6,7 +6,6 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common::{E8, UNITS_PER_PERMYRIAD, i2d};
 use ic_nervous_system_initial_supply::{initial_supply_e8s, InitialSupplyOptions};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
 use ic_sns_swap_proto_library::pb::v1::{GetDerivedStateRequest, GetDerivedStateResponse};
 use icrc_ledger_types::icrc1::account::Account;

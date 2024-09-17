@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/initial_supply",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/string",
     "//rs/nns/cmc",
     "//rs/nns/constants",
     "//rs/sns/swap/proto_library",
