@@ -195,12 +195,6 @@ load(
     container_repositories = "repositories",
 )
 
-# Bitcoin core
-
-load("//third_party/bitcoin-core:bitcoin-core_repository.bzl", "bitcoin_core_repository")
-
-bitcoin_core_repository()
-
 container_repositories()
 
 load("@io_bazel_rules_docker//repositories:deps.bzl", container_deps = "deps")

@@ -99,15 +99,14 @@ rust_test_suite(
     aliases = ALIASES,
     data = [
         # Keep sorted.
-        "@bitcoin-core//:bitcoin-core",
-        "@bitcoin-core//:bitcoind",
         "@bitcoin_adapter_mainnet_blocks//file",
         "@bitcoin_adapter_mainnet_headers//file",
         "@bitcoin_adapter_testnet_blocks//file",
         "@bitcoin_adapter_testnet_headers//file",
+        "@bitcoin_core//:bin/bitcoind",
     ],
     env = {
-        "BITCOIN_CORE_PATH": "$(rootpath @bitcoin-core//:bitcoind)",
+        "BITCOIN_CORE_PATH": "$(rootpath @bitcoin_core//:bin/bitcoind)",
         "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
         "BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_blocks//file)",
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
