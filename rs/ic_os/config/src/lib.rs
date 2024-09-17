@@ -45,7 +45,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use std::path::PathBuf;
     use types::{
         GuestOSConfig, GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings,
@@ -115,40 +114,25 @@ mod tests {
             guestos_settings: guestos_settings.clone(),
         };
 
-        // Test serialization of SetupOSConfig
-        let mut buffer = Vec::new();
-        serde_json::to_writer_pretty(&mut buffer, &setupos_config_struct)
-            .expect("Failed to serialize SetupOS config");
-        assert!(!buffer.is_empty());
+        fn serialize_and_deserialize<T>(config: &T)
+        where
+            T: serde::Serialize
+                + serde::de::DeserializeOwned
+                + std::cmp::PartialEq
+                + std::fmt::Debug,
+        {
+            // Test serialization
+            let buffer = serde_json::to_vec_pretty(config).expect("Failed to serialize config");
+            assert!(!buffer.is_empty());
 
-        // Test deserialization of SetupOSConfig
-        let mut cursor = Cursor::new(buffer);
-        let deserialized_setupos_config: SetupOSConfig =
-            serde_json::from_reader(&mut cursor).expect("Failed to deserialize SetupOS config");
-        assert_eq!(setupos_config_struct, deserialized_setupos_config);
+            // Test deserialization
+            let deserialized_config: T =
+                serde_json::from_slice(&buffer).expect("Failed to deserialize config");
+            assert_eq!(*config, deserialized_config);
+        }
 
-        // Test serialization of HostOSConfig
-        let mut buffer = Vec::new();
-        serde_json::to_writer_pretty(&mut buffer, &hostos_config_struct)
-            .expect("Failed to serialize HostOS config");
-        assert!(!buffer.is_empty());
-
-        // Test deserialization of HostOSConfig
-        let mut cursor = Cursor::new(buffer);
-        let deserialized_hostos_config: HostOSConfig =
-            serde_json::from_reader(&mut cursor).expect("Failed to deserialize HostOS config");
-        assert_eq!(hostos_config_struct, deserialized_hostos_config);
-
-        // Test serialization of GuestOSConfig
-        let mut buffer = Vec::new();
-        serde_json::to_writer_pretty(&mut buffer, &guestos_config_struct)
-            .expect("Failed to serialize GuestOS config");
-        assert!(!buffer.is_empty());
-
-        // Test deserialization of GuestOSConfig
-        let mut cursor = Cursor::new(buffer);
-        let deserialized_guestos_config: GuestOSConfig =
-            serde_json::from_reader(&mut cursor).expect("Failed to deserialize GuestOS config");
-        assert_eq!(guestos_config_struct, deserialized_guestos_config);
+        serialize_and_deserialize(&setupos_config_struct);
+        serialize_and_deserialize(&hostos_config_struct);
+        serialize_and_deserialize(&guestos_config_struct);
     }
 }
