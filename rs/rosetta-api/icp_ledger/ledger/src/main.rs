@@ -26,7 +26,6 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "upgrade-to-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
@@ -832,30 +831,6 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args));
 }
 
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
-#[export_name = "canister_pre_upgrade"]
-fn pre_upgrade() {
-    let start = dfn_core::api::performance_counter(0);
-    setup::START.call_once(|| {
-        printer::hook();
-    });
-
-    let ledger = LEDGER
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut stable_writer = dfn_core::stable::StableWriter::new();
-    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
-        .expect("failed to write ledger state to stable memory");
-    let end = dfn_core::api::performance_counter(0);
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
-}
-
-#[cfg(feature = "upgrade-to-memory-manager")]
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = dfn_core::api::performance_counter(0);
