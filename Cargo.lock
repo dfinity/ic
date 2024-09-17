@@ -2396,12 +2396,9 @@ dependencies = [
  "anyhow",
  "canister-test",
  "canister_http",
- "futures",
  "ic-agent",
  "ic-base-types",
- "ic-canister-client",
  "ic-interfaces-registry",
- "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -2413,7 +2410,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
- "ic_consensus_system_test_upgrade_common",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
@@ -2484,6 +2480,29 @@ dependencies = [
  "slog",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "consensus-upgrade-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "futures",
+ "ic-agent",
+ "ic-canister-client",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "slog",
+ "tokio",
 ]
 
 [[package]]
@@ -3724,6 +3743,7 @@ dependencies = [
  "criterion",
  "ic-test-utilities-execution-environment",
  "ic-types",
+ "ic-wasm-transform",
 ]
 
 [[package]]
@@ -5262,7 +5282,6 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-handler-root",
  "ic-nns-init",
@@ -9493,6 +9512,7 @@ dependencies = [
  "ic-sns-wasm",
  "serde",
  "tempfile",
+ "thiserror",
  "tokio",
 ]
 
@@ -9502,7 +9522,6 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-ledger-core",
@@ -9630,6 +9649,10 @@ dependencies = [
  "libflate",
  "prometheus-parse",
 ]
+
+[[package]]
+name = "ic-nervous-system-common-validation"
+version = "0.9.0"
 
 [[package]]
 name = "ic-nervous-system-governance"
@@ -9965,6 +9988,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
+ "ic-nervous-system-common-validation",
  "ic-nervous-system-proto",
  "ic-nns-common",
  "ic-protobuf",
@@ -11423,7 +11447,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
@@ -11474,6 +11498,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
  "ic-nervous-system-lock",
  "ic-nervous-system-proto",
@@ -11582,6 +11607,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-proto",
  "ic-nns-constants",
+ "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-init-protobuf-generator",
  "ic-sns-root",
@@ -11684,6 +11710,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
@@ -13275,21 +13302,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "slog",
  "tokio",
-]
-
-[[package]]
-name = "ic_consensus_system_test_upgrade_common"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-agent",
- "ic-management-canister-types",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
- "slog",
 ]
 
 [[package]]
