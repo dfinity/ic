@@ -24,8 +24,8 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
     let setup_config = SetupConfig {
         archive_state_dir_name: "fiduciary_state",
         extra_canister_range: RangeInclusive::new(
-            CanisterId::from_u64(0x2300000),
-            CanisterId::from_u64(0x23FFFFE),
+            CanisterId::from_u64(0),
+            CanisterId::from_u64(u64::MAX),
         ),
         hypervisor_config: Some(Config {
             rate_limiting_of_instructions: FlagStatus::Disabled,
@@ -69,8 +69,8 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
     let setup_config = SetupConfig {
         archive_state_dir_name: "sns_state",
         extra_canister_range: RangeInclusive::new(
-            CanisterId::from_u64(0x2000000),
-            CanisterId::from_u64(0x20FFFFE),
+            CanisterId::from_u64(0),
+            CanisterId::from_u64(u64::MAX),
         ),
         hypervisor_config: Some(Config {
             rate_limiting_of_instructions: FlagStatus::Disabled,
