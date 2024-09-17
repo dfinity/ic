@@ -1492,7 +1492,7 @@ pub trait Environment: Send + Sync {
 
     /// Basically, the same as ic_cdk::api::call_raw.
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

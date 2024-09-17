@@ -56,7 +56,7 @@ impl Environment for DegradedEnv {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,
