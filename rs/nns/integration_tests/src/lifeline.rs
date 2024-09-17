@@ -9,13 +9,10 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::{
-    pb::v1::{
-        install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
-        manage_neuron_response::Command as CommandResponse, InstallCodeRequest,
-        MakeProposalRequest, NnsFunction, ProposalActionRequest, ProposalStatus, Vote,
-    },
-    proposal_submission_helpers::create_external_update_proposal_candid,
+use ic_nns_governance_api::pb::v1::{
+    install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
+    manage_neuron_response::Command as CommandResponse, InstallCodeRequest, MakeProposalRequest,
+    ProposalActionRequest, ProposalStatus, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
