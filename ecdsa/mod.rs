@@ -1,4 +1,4 @@
-//! The ECDSA API.
+//! Threshold ECDSA signing API.
 
 use crate::api::call::{call, call_with_payment128, CallResult};
 use candid::Principal;
@@ -23,7 +23,7 @@ pub async fn ecdsa_public_key(
 ///
 /// This call requires cycles payment.
 /// This method handles the cycles cost under the hood.
-/// Check [Gas and cycles cost](https://internetcomputer.org/docs/current/developer-docs/gas-cost) for more details.
+/// Check [Threshold signatures](https://internetcomputer.org/docs/current/references/t-sigs-how-it-works) for more details.
 pub async fn sign_with_ecdsa(arg: SignWithEcdsaArgument) -> CallResult<(SignWithEcdsaResponse,)> {
     call_with_payment128(
         Principal::management_canister(),

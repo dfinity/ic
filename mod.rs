@@ -15,3 +15,4 @@ pub mod ecdsa;
 pub mod http_request;
 pub mod main;
 pub mod provisional;
+pub mod schnorr;
