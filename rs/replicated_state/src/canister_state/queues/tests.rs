@@ -2353,6 +2353,9 @@ fn test_garbage_collect_restores_defaults() {
     let mut queues = CanisterQueues::default();
     assert_eq!(CanisterQueues::default(), queues);
 
+    // Set the transient response size to a non-zero value.
+    queues.set_stream_guaranteed_responses_size_bytes(123);
+
     // Push and pop an ingress message.
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
     assert!(queues.pop_input().is_some());
@@ -2361,7 +2364,7 @@ fn test_garbage_collect_restores_defaults() {
 
     // But `garbage_collect()` should restore the struct to its default value.
     queues.garbage_collect();
-    assert_eq!(CanisterQueues::default(), queues);
+    assert_eq!(0, pb_queues::CanisterQueues::from(&queues).encoded_len());
 }
 
 #[test]

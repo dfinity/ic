@@ -1,10 +1,7 @@
-use anyhow::Result;
-use ic_agent::Agent;
+use crate::CallCanisters;
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use serde::{Deserialize, Serialize};
-
-use crate::call;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
@@ -12,7 +9,10 @@ pub struct GovernanceCanister {
 }
 
 impl GovernanceCanister {
-    pub async fn metadata(&self, agent: &Agent) -> Result<GetMetadataResponse> {
-        call(agent, self.canister_id, GetMetadataRequest {}).await
+    pub async fn metadata<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<GetMetadataResponse, C::Error> {
+        agent.call(self.canister_id, GetMetadataRequest {}).await
     }
 }
