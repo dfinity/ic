@@ -201,7 +201,7 @@ impl Environment for MockEnvironment {
         unimplemented!();
     }
 
-    fn execute_nns_function(
+    async fn execute_nns_function(
         &self,
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,

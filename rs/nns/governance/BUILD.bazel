@@ -73,6 +73,7 @@ BASE_DEPENDENCIES = [
     "//conditions:default": [
         "@crate_index//:csv",
         "//rs/nervous_system/common/test_keys",
+        "@crate_index//:futures",
     ],
 })
 
@@ -118,7 +119,6 @@ DEV_DEPENDENCIES = [
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:candid_parser",
-    "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",

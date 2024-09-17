@@ -56,7 +56,7 @@ impl Environment for MockEnvironment {
         todo!()
     }
 
-    fn execute_nns_function(
+    async fn execute_nns_function(
         &self,
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,

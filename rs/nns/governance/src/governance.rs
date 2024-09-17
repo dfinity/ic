@@ -69,8 +69,11 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use dfn_protobuf::ToProto;
+use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::{println, spawn};
+use ic_cdk::println;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -1473,7 +1476,7 @@ pub trait Environment: Send + Sync {
     /// result back
     ///
     /// See also call_candid_method.
-    fn execute_nns_function(
+    async fn execute_nns_function(
         &self,
         proposal_id: u64,
         update: &ExecuteNnsFunction,
@@ -3410,7 +3413,9 @@ impl Governance {
                                 .and_then(|proposal| proposal.title.clone())
                         );
                         // The proposal was executed 'now'.
+                        println!("Before NOW in ex status");
                         proposal_data.executed_timestamp_seconds = self.env.now();
+                        println!("After NOW in ex status");
                         // If the proposal previously failed to be
                         // executed, it is no longer that case that the
                         // proposal failed to be executed.
@@ -3980,11 +3985,13 @@ impl Governance {
                 .ok();
             }
         }
-
+        println!("Right before EXECUTION");
         if let Some(action) = action {
             // A yes decision as been made, execute the proposal!
+            println!("Executing?");
             self.start_proposal_execution(proposal_id, &action);
         } else {
+            println!("No action?");
             self.set_proposal_execution_status(
                 proposal_id,
                 Err(GovernanceError::new_with_message(
@@ -4050,7 +4057,19 @@ impl Governance {
         //
         // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(pid, action.clone()));
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            spawn(governance.perform_action(pid, action.clone()));
+        }
+        // This is needed for tests
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            governance
+                .perform_action(pid, action.clone())
+                .now_or_never()
+                .expect("Future could not execute in non-WASM environment");
+        }
     }
 
     /// Mints node provider rewards to a neuron or to a ledger account.
@@ -4314,6 +4333,7 @@ impl Governance {
     }
 
     async fn perform_action(&mut self, pid: u64, action: Action) {
+        println!("Performing action? {:?}", action);
         match action {
             Action::ManageNeuron(mgmt) => {
                 // An adopted neuron management command is executed
@@ -4357,6 +4377,7 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(ne) => {
+                print!("What's wrong with mg ne?");
                 if let Some(economics) = &mut self.heap_data.economics {
                     // The semantics of the proposal is to modify all values specified with a
                     // non-default value in the proposed new `NetworkEconomics`.
@@ -4396,6 +4417,7 @@ impl Governance {
                     // 'economics' proto, use the proposed one.
                     self.heap_data.economics = Some(ne)
                 }
+                println!("We got to here?!");
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             // A motion is not executed, just recorded for posterity.
@@ -4405,7 +4427,7 @@ impl Governance {
             Action::ExecuteNnsFunction(m) => {
                 // This will eventually set the proposal execution
                 // status.
-                match self.env.execute_nns_function(pid, &m) {
+                match self.env.execute_nns_function(pid, &m).await {
                     Ok(()) => {
                         // The status will be set as a result of this
                         // call. We don't set it now.
