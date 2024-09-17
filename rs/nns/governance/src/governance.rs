@@ -3414,9 +3414,7 @@ impl Governance {
                                 .and_then(|proposal| proposal.title.clone())
                         );
                         // The proposal was executed 'now'.
-                        println!("Before NOW in ex status");
                         proposal_data.executed_timestamp_seconds = self.env.now();
-                        println!("After NOW in ex status");
                         // If the proposal previously failed to be
                         // executed, it is no longer that case that the
                         // proposal failed to be executed.
@@ -3986,13 +3984,11 @@ impl Governance {
                 .ok();
             }
         }
-        println!("Right before EXECUTION");
+
         if let Some(action) = action {
             // A yes decision as been made, execute the proposal!
-            println!("Executing?");
             self.start_proposal_execution(proposal_id, &action);
         } else {
-            println!("No action?");
             self.set_proposal_execution_status(
                 proposal_id,
                 Err(GovernanceError::new_with_message(
@@ -4334,7 +4330,6 @@ impl Governance {
     }
 
     async fn perform_action(&mut self, pid: u64, action: Action) {
-        println!("Performing action? {:?}", action);
         match action {
             Action::ManageNeuron(mgmt) => {
                 // An adopted neuron management command is executed
@@ -4378,7 +4373,6 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(ne) => {
-                print!("What's wrong with mg ne?");
                 if let Some(economics) = &mut self.heap_data.economics {
                     // The semantics of the proposal is to modify all values specified with a
                     // non-default value in the proposed new `NetworkEconomics`.
@@ -4418,7 +4412,6 @@ impl Governance {
                     // 'economics' proto, use the proposed one.
                     self.heap_data.economics = Some(ne)
                 }
-                println!("We got to here?!");
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             // A motion is not executed, just recorded for posterity.
