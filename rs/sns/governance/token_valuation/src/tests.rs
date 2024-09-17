@@ -164,25 +164,6 @@ async fn test_icps_per_sns_token_client() {
                                 approve: None,
                                 transfer: None,
                             },
-
-                            // DO NOT MERGE
-                            Transaction {
-                                mint: Some(Mint {
-                                    amount: Nat::from(100_u64),
-                                    to: Account {
-                                        owner: PrincipalId::new_user_test_id(711_452_149).0,
-                                        subaccount: None,
-                                    },
-                                    created_at_time: Some(GENESIS_TIMESTAMP_NANOSECONDS + 1),
-                                    memo: None,
-                                }),
-                                timestamp: GENESIS_TIMESTAMP_NANOSECONDS + 1,
-                                kind: "mint".to_string(),
-
-                                burn: None,
-                                approve: None,
-                                transfer: None,
-                            },
                         ],
 
                         first_index: Nat::from(0_u64),
