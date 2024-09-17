@@ -3,6 +3,8 @@ use tla_instrumentation::{
     Label, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
 };
 
+use super::common::{default_account, function_domain_union, governance_account_id};
+
 pub fn claim_neuron_desc() -> Update {
     const PID: &str = "Claim_Neuron";
     let default_locals = VarAssignment::new()

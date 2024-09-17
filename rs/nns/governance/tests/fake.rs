@@ -321,7 +321,7 @@ impl IcpLedger for FakeDriver {
             Destination::new("ledger"),
             "BalanceQuery",
             tla::TlaValue::Record(BTreeMap::from([
-                ("account".to_string(), account_to_tla(account))
+                ("account_id".to_string(), account_to_tla(account))
             ]))
         );
 

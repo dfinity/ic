@@ -25,6 +25,8 @@ use icp_ledger::Subaccount;
 mod common;
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
+mod claim_neuron;
+pub use claim_neuron::claim_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = gov
