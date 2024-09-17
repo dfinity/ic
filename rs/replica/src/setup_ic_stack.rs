@@ -59,7 +59,7 @@ const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 4] = [
 
 /// Returns true if the subnet is whitelisted to serve synchronous responses to v3
 /// update calls.
-fn subnet_has_enabled_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
+fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
     let subnet_is_in_disabled_list =
         SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3
             .iter()
@@ -375,7 +375,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        subnet_is_whitelisted_for_synchronous_call_v3(&subnet_id),
+        enable_synchronous_call_handler_for_v3_endpoint(&subnet_id),
     );
 
     Ok((
