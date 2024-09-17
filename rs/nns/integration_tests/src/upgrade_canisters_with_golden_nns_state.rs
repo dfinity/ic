@@ -237,7 +237,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     *canister_id,
                     wasm_content.clone(),
                     module_arg.clone(),
-                    false,
+                    true,
                 );
 
                 // Step 3: Verify result(s): In a short while, the canister should

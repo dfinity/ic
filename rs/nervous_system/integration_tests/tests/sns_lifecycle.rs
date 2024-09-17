@@ -1862,6 +1862,22 @@ fn test_sns_lifecycle(
             assert_eq!(controllers, expected_new_controllers);
         }
     }
+
+    // Ensure that the archive canister is spawned and can be found through SNS Root.
+    sns::ensure_archive_canister_is_spawned_or_panic(
+        &pocket_ic,
+        sns_governance_canister_id,
+        sns_ledger_canister_id,
+    );
+    // SNS Root polls archives every 24 hours, so we need to advance time to trigger the polling.
+    pocket_ic.advance_time(Duration::from_secs(24 * 60 * 60));
+    pocket_ic.tick();
+    let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+    assert!(
+        !response.archives_canister_summaries().is_empty(),
+        "No archives found from get_sns_canisters_summary response: {:#?}",
+        response
+    );
 }
 
 #[test]

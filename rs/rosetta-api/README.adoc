@@ -67,20 +67,21 @@ Query Bazel for the produced image
 
 ```
 $ bazel cquery //rs/rosetta-api:rosetta_image.tar --output=files
+<path to image>
 ```
 
 The load the image in docker
 
 ```
-$ docker load -i <bazel_path_to>/rosetta_image.tar
+$ docker load -i <path to image>
 ...
-Loaded image(s): localhost/bazel/rs/rosetta-api:rosetta_image
+Loaded image(s): <image>
 ```
 
 Finally run the image
 
 ```
-$ docker run localhost/bazel/rs/rosetta-api:rosetta_image
+$ docker run <image>
 ```
 
 Remember to mount `/home/rosetta/log` and `/data` to persist logs and data after shutting down the docker container.

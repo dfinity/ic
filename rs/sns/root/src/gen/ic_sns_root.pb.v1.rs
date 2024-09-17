@@ -30,10 +30,6 @@ pub struct SnsRootCanister {
     /// CanisterIds of the archives of the SNS Ledger blocks.
     #[prost(message, repeated, tag = "5")]
     pub archive_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    /// The timestamp of the latest poll for archives of the ledger canister,
-    /// in seconds since the Unix epoch.
-    #[prost(uint64, optional, tag = "6")]
-    pub latest_ledger_archive_poll_timestamp_seconds: ::core::option::Option<u64>,
     /// Required.
     ///
     /// The SNS Index canister ID
