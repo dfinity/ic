@@ -21,7 +21,7 @@ use crate::wasmtime_embedder::{
 use crate::{
     wasm_utils::instrumentation::{
         main_memory_type, WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-        DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        DIRTY_PAGES_COUNTER_GLOBAL_NAME, WASM_PAGE_SIZE,
     },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
@@ -1017,11 +1017,12 @@ fn validate_wasm_memory_size(
     if let Some(mem) = module.memories.first() {
         if mem.memory64 {
             // This check is only needed by Wasm64 modules, for Wasm32 the check is done by Wasmtime.
-            if let Some(max_size) = mem.maximum {
-                if max_size > max_wasm_memory_size.get() {
+            if let Some(declared_size_in_wasm_pages) = mem.maximum {
+                let allowed_size_in_wasm_pages = max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+                if declared_size_in_wasm_pages > allowed_size_in_wasm_pages {
                     return Err(WasmValidationError::WasmMemoryTooLarge {
-                        defined_size: max_size,
-                        allowed_size: max_wasm_memory_size.get(),
+                        defined_size: declared_size_in_wasm_pages,
+                        allowed_size: allowed_size_in_wasm_pages,
                     });
                 }
             }

@@ -1145,21 +1145,24 @@ fn validate_wasm64_memory_size() {
         ..Default::default()
     };
     // Define a size larger than the maximum allowed size.
-    let canister_size = embedders_config.max_wasm_memory_size.get() * 2;
+    let declared_mem_in_wasm_pages =
+        embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64 + 5;
+    let allowed_mem_in_wasm_pages =
+        embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
     let wasm = wat2wasm(&format!(
         r#"
         (module
             (memory i64 {} {})
         )"#,
-        canister_size, canister_size,
+        declared_mem_in_wasm_pages, declared_mem_in_wasm_pages,
     ))
     .unwrap();
 
     assert_eq!(
         validate_wasm_binary(&wasm, &embedders_config),
         Err(WasmValidationError::WasmMemoryTooLarge {
-            defined_size: canister_size,
-            allowed_size: embedders_config.max_wasm_memory_size.get()
+            defined_size: declared_mem_in_wasm_pages,
+            allowed_size: allowed_mem_in_wasm_pages
         })
     );
 }

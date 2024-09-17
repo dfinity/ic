@@ -136,7 +136,7 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+pub(crate) const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
 pub enum WasmMemoryType {

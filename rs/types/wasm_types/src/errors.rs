@@ -214,8 +214,8 @@ impl std::fmt::Display for WasmValidationError {
                 allowed_size,
             } => write!(
                 f,
-                "Wasm module declared memory size of {defined_size} \
-                    exceeds the maximum allowed size of {allowed_size}.",
+                "Wasm module declared memory size of {defined_size} pages \
+                    exceeds the maximum allowed size of {allowed_size} pages.",
             ),
         }
     }
