@@ -99,14 +99,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             .0;
 
         let target_height = args.replay_until_height;
-        if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {} ", h)
-                + "cannot be used for deterministic state computation if it is not a CUP height.\n"
-                + "Continue?";
-            // if !consent_given(&question) {
-            //     return;
-            // }
-        }
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             let _enter_guard = rt.enter();
@@ -209,17 +201,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     });
     let ret = result.borrow().clone();
     ret
-}
-
-/// Prints a question to the user and returns `true`
-/// if the user replied with a yes.
-pub fn consent_given(question: &str) -> bool {
-    use std::io::{stdin, stdout, Write};
-    println!("{} [Y/n] ", question);
-    let _ = stdout().flush();
-    let mut s = String::new();
-    stdin().read_line(&mut s).expect("Couldn't read user input");
-    matches!(s.as_str(), "\n" | "y\n" | "Y\n")
 }
 
 // Creates a recovery CUP by using the latest CUP and overriding the height and
