@@ -497,6 +497,72 @@ fn callback_stats() {
 }
 
 #[test]
+fn test_expired_callbacks() {
+    fn callback_with_deadline(deadline: CoarseTime) -> Callback {
+        Callback::new(
+            CallContextId::from(1),
+            canister_test_id(1),
+            canister_test_id(2),
+            Cycles::zero(),
+            Cycles::new(42),
+            Cycles::new(84),
+            WasmClosure::new(0, 1),
+            WasmClosure::new(2, 3),
+            None,
+            deadline,
+        )
+    }
+
+    let mut ccm = CallContextManager::default();
+
+    let deadline_1 = CoarseTime::from_secs_since_unix_epoch(1);
+    let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
+    let deadline_3 = CoarseTime::from_secs_since_unix_epoch(3);
+    let deadline_4 = CoarseTime::from_secs_since_unix_epoch(4);
+    let deadline_5 = CoarseTime::from_secs_since_unix_epoch(5);
+
+    let callback_1 = ccm.register_callback(callback_with_deadline(deadline_1));
+    let callback_1b = ccm.register_callback(callback_with_deadline(deadline_1));
+    let _callback_n = ccm.register_callback(callback_with_deadline(NO_DEADLINE));
+    let callback_3 = ccm.register_callback(callback_with_deadline(deadline_3));
+    let callback_4 = ccm.register_callback(callback_with_deadline(deadline_4));
+    assert_eq!(5, ccm.callbacks().len());
+
+    // No callbacks expire at deadline 1.
+    assert_eq!(0, ccm.expired_callbacks(deadline_1).count());
+
+    // Expire all callbacks with deadlines before 3.
+    assert_eq!(
+        vec![callback_1, callback_1b],
+        ccm.expired_callbacks(deadline_3).collect::<Vec<_>>()
+    );
+    // The callbacks are still in place, expiration doesn't actually touch them.
+    assert_eq!(5, ccm.callbacks().len());
+    // And making the same call is a no-op.
+    assert_eq!(0, ccm.expired_callbacks(deadline_3).count());
+
+    // Unregister one of the expired callbacks.
+    ccm.unregister_callback(callback_1);
+    // And one of the unexpired ones.
+    ccm.unregister_callback(callback_3);
+    // 3 callbacks left.
+    assert_eq!(3, ccm.callbacks().len());
+
+    // Register a callback with a deadline in the past. Technically, this cannot
+    // happen on a subnet, but we also don't have an explicit check against it.
+    let callback_2 = ccm.register_callback(callback_with_deadline(deadline_2));
+
+    // Expire the remaining callbacks (callback 4 and the newly registered callback
+    // 2; in order of their expiration times).
+    assert_eq!(
+        vec![callback_2, callback_4],
+        ccm.expired_callbacks(deadline_5).collect::<Vec<_>>()
+    );
+    // 3 + 1 callbacks left.
+    assert_eq!(4, ccm.callbacks().len());
+}
+
+#[test]
 fn call_context_stats() {
     fn new_call_context(ccm: &mut CallContextManager, origin: CallOrigin) -> CallContextId {
         ccm.new_call_context(
@@ -656,4 +722,72 @@ fn call_context_stats() {
     assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(btreemap! {}, calculate_call_context_counts(&ccm, None));
     assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts(None));
+}
+
+/// Tests that an encode-decode roundtrip yields a result equal to the original.
+#[test]
+fn roundtrip_encode() {
+    let mut ccm = CallContextManager::default();
+
+    let this = canister_test_id(13);
+    let other = canister_test_id(14);
+    let deadline_1 = CoarseTime::from_secs_since_unix_epoch(1);
+    let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
+
+    // Create a new call context.
+    let call_context_id = ccm.new_call_context(
+        CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE),
+        Cycles::new(30),
+        Time::from_nanos_since_unix_epoch(0),
+        RequestMetadata::new(0, UNIX_EPOCH),
+    );
+
+    // Register two best-effort and one guaranteed response callbacks.
+    let callback_1 = ccm.register_callback(Callback::new(
+        call_context_id,
+        this,
+        other,
+        Cycles::new(21),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 1),
+        WasmClosure::new(2, 3),
+        None,
+        deadline_1,
+    ));
+    ccm.register_callback(Callback::new(
+        call_context_id,
+        this,
+        other,
+        Cycles::zero(),
+        Cycles::new(43),
+        Cycles::new(85),
+        WasmClosure::new(4, 5),
+        WasmClosure::new(6, 7),
+        Some(WasmClosure::new(8, 9)),
+        deadline_2,
+    ));
+    ccm.register_callback(Callback::new(
+        call_context_id,
+        this,
+        other,
+        Cycles::zero(),
+        Cycles::new(44),
+        Cycles::new(86),
+        WasmClosure::new(10, 11),
+        WasmClosure::new(12, 13),
+        None,
+        NO_DEADLINE,
+    ));
+
+    // Expire the first callback.
+    assert_eq!(
+        vec![callback_1],
+        ccm.expired_callbacks(deadline_2).collect::<Vec<_>>()
+    );
+
+    let encoded: pb::CallContextManager = (&ccm).into();
+    let decoded = encoded.try_into().unwrap();
+
+    assert_eq!(ccm, decoded);
 }
