@@ -164,7 +164,7 @@ fn test_search_transactions_by_index() {
                             maximum_number_returnable_transactions as usize
                         );
 
-                        // The transactiosn should be returned in descending order of block index
+                        // The transactions should be returned in descending order of block index
                         assert_eq!(
                             to_hash(&result.transactions.first().unwrap().block_identifier.hash)
                                 .unwrap(),
