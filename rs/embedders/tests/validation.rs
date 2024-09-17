@@ -1132,3 +1132,34 @@ fn wasm_with_multiple_code_sections_is_invalid() {
         ))
     )
 }
+
+#[test]
+fn validate_wasm64_memory_size() {
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    // Define a size larger than the maximum allowed size.
+    let canister_size = embedders_config.max_wasm_memory_size.get() * 2;
+    let wasm = wat2wasm(&format!(
+        r#"
+        (module
+            (memory i64 {} {})
+        )"#,
+        canister_size, canister_size,
+    ))
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &embedders_config),
+        Err(WasmValidationError::WasmMemoryTooLarge {
+            defined_size: canister_size,
+            allowed_size: embedders_config.max_wasm_memory_size.get()
+        })
+    );
+}

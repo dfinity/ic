@@ -1001,11 +1001,30 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
             },
         }
     }
-
     let mem_type = main_memory_type(module);
 
     for d in &module.data {
         validate_segment(d, mem_type)?;
+    }
+    Ok(())
+}
+
+fn validate_wasm_memory_size(
+    module: &Module,
+    max_wasm_memory_size: NumBytes,
+) -> Result<(), WasmValidationError> {
+    if let Some(mem) = module.memories.first() {
+        if mem.memory64 {
+            // This check is only needed by Wasm64 modules, for Wasm32 the check is done by Wasmtime.
+            if let Some(max_size) = mem.maximum {
+                if max_size > max_wasm_memory_size.get() {
+                    return Err(WasmValidationError::WasmMemoryTooLarge {
+                        defined_size: max_size,
+                        allowed_size: max_wasm_memory_size.get(),
+                    });
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1511,6 +1530,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
+    validate_wasm_memory_size(&module, config.max_wasm_memory_size)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((
