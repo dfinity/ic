@@ -57,5 +57,21 @@ fn extract_claim_neuron_constants(pid: &str, trace: &[ResolvedStatePair]) -> Tla
 }
 
 fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
-    //TODO
+    for ResolvedStatePair {ref mut start, ref mut end} in trace {
+        for state in &mut [start, end] {
+            state.0.0.remove("min_stake").expect("Didn't record min stake.");
+            if !state.0 .0.contains_key("governance_to_ledger") {
+                state.0 .0.insert(
+                    "governance_to_ledger".to_string(),
+                    TlaValue::Seq(Vec::new()),
+                );
+            }
+            if !state.0 .0.contains_key("ledger_to_governance") {
+                state.0 .0.insert(
+                    "ledger_to_governance".to_string(),
+                    TlaValue::Set(BTreeSet::new()),
+                );
+            }
+        }
+    }
 }
