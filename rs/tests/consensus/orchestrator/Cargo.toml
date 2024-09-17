@@ -10,12 +10,9 @@ documentation.workspace = true
 anyhow = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 canister_http = { path = "../../networking/canister_http" }
-futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canister-client = { path = "../../../canister_client" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
-ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
@@ -27,7 +24,6 @@ ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-ic_consensus_system_test_upgrade_common = { path = "./upgrade_common" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
@@ -64,27 +60,3 @@ path = "unstuck_subnet_test.rs"
 [[bin]]
 name = "ic-systest-node-assign-test"
 path = "node_assign_test.rs"
-
-[[bin]]
-name = "ic-systest-unassigned-node-upgrade"
-path = "unassigned_node_upgrade_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-with-alternative-urls"
-path = "upgrade_with_alternative_urls.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-app-subnet"
-path = "upgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-downgrade-app-subnet"
-path = "downgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-downgrade-app-subnet"
-path = "upgrade_downgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-upgrade-downgrade-nns-subnet"
-path = "upgrade_downgrade_nns_subnet_test.rs"
