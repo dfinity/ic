@@ -20,6 +20,15 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     } = options;
     let ledger = ThickLedgerClient::new(ledger_canister_id);
 
+    const STANDARD_MAX_TRANSACTIONS_PER_LEDGER_RESPONSE: u64 = 2_000;
+    let batch_size = batch_size.clamp(
+        // batch_size == 0 would lead to an infinite loop, so we don't allow that.
+        1,
+        // batch_size > the max transactions per ledger_response is something
+        // that we cannot handle (yet. This leads to a panic.).
+        STANDARD_MAX_TRANSACTIONS_PER_LEDGER_RESPONSE,
+    );
+
     let mut result = Nat(BigUint::from(0_u64));
     let mut transaction_count: u64 = 0;
     let mut first_timestamp = None;
