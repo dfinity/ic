@@ -39,7 +39,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         })
         .transpose()?;
 
-    // Per PFOPS - ipv4_prefix_length will always be 64
+    // Per PFOPS - ipv6_prefix_length will always be 64
     let ipv6_prefix_length = 64_u8;
 
     // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
