@@ -37,10 +37,13 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
             .get_transactions::<MyRuntime>(transaction_count, batch_size)
             .await?;
 
-        if transactions.is_empty() {
-            // No more transactions -> Done!
-            break;
-        }
+        // This will be used later to determine whether we can break early.
+        let len = transactions.len();
+        let len = u64::try_from(len)
+            .map_err(|err| format!(
+                "Unable to convert transactions length ({}) to a u64: {:?}",
+                len, err,
+            ))?;
 
         for transaction in transactions {
             // Look at timestamp. If != first_timestamp, we are done.
@@ -81,6 +84,21 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
             transaction_count = transaction_count
                 .checked_add(1)
                 .ok_or_else(|| "Transaction count overflowed u64.".to_string())?;
+        }
+
+        if len < batch_size {
+            // The previous condition tells us that we have scanned ALL
+            // transactions.
+            //
+            // (This is necessary, and not "just" an optimization to avoid the
+            // next iteration of the 'outer loop. In particular, if len == 0,
+            // then without this, we would never make it past the 'outer loop.)
+            //
+            // What this means is that the only transactions that currently
+            // exist are just the initial minting transactions. This is strange,
+            // but not wrong. Normally, we break out of the outer loop when
+            // transaction.timestamp != first_timestamp.
+            break;
         }
     }
 
