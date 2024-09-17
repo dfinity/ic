@@ -3074,7 +3074,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
         // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result.into())
+        Ok(result)
     }
 }
 
