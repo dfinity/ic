@@ -71,8 +71,9 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "@crate_index//:csv",
+        # Keep sorted.
         "//rs/nervous_system/common/test_keys",
+        "@crate_index//:csv",
         "@crate_index//:futures",
     ],
 })

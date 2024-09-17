@@ -37,6 +37,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dyn-clone = "1.0.14"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
@@ -107,7 +108,6 @@ build-info-build = { workspace = true }
 candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-futures = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
