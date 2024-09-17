@@ -192,15 +192,27 @@ go_deps.bzl               @dfinity/idx
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/rosetta-api/                                        @dfinity/finint
-/rs/rust_canisters/                                     @dfinity/nns-team
 /rs/rust_canisters/backtrace-canister                   @dfinity/execution
-/rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
+/rs/rust_canisters/canister_creator                     @dfinity/execution
+/rs/rust_canisters/canister_log                         @dfinity/nns-team
+/rs/rust_canisters/canister_profiler                    @dfinity/nns-team
+/rs/rust_canisters/canister_serve                       @dfinity/nns-team
+/rs/rust_canisters/canister_test                        @dfinity/nns-team
+/rs/rust_canisters/dfn_*                                @dfinity/nns-team
+/rs/rust_canisters/downstream_calls_test                @dfinity/nns-team
+/rs/rust_canisters/ecdsa                                @dfinity/nns-team
+/rs/rust_canisters/http_types                           @dfinity/nns-team
+/rs/rust_canisters/memory_test/                         @dfinity/execution
+/rs/rust_canisters/on_wire                              @dfinity/nns-team
+/rs/rust_canisters/pmap                                 @dfinity/nns-team
 /rs/rust_canisters/proxy_canister/                      @dfinity/networking
 /rs/rust_canisters/response_payload_test/               @dfinity/execution
-/rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
-/rs/rust_canisters/canister_creator                     @dfinity/execution
+/rs/rust_canisters/stable_reader                        @dfinity/nns-team
+/rs/rust_canisters/stable_structures/                   @dfinity/execution
+/rs/rust_canisters/statesync_test                       @dfinity/nns-team
+/rs/rust_canisters/tests                                @dfinity/nns-team
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
 /rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
