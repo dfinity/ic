@@ -1001,6 +1001,7 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
             },
         }
     }
+
     let mem_type = main_memory_type(module);
 
     for d in &module.data {
