@@ -368,7 +368,7 @@ impl SnsConfigurationFile {
             )),
         };
 
-        validate_user_submitted_proposal_fields(&(proposal.clone().into()))
+        validate_user_submitted_proposal_fields(&(proposal.clone()))
             .map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
