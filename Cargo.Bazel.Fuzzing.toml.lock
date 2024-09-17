@@ -2132,6 +2132,24 @@ dependencies = [
 [[package]]
 name = "cloudflare"
 version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
+dependencies = [
+ "chrono",
+ "http 0.2.12",
+ "percent-encoding",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "serde_with 2.3.3",
+ "thiserror",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "cloudflare"
+version = "0.12.0"
 source = "git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae#f14720e42184ee176a97676e85ef2d2d85bc3aae"
 dependencies = [
  "chrono",
@@ -3058,7 +3076,7 @@ dependencies = [
  "cidr",
  "clap 3.2.25",
  "clap 4.4.6",
- "cloudflare",
+ "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
  "colored",
  "comparable",
  "console 0.11.3",
@@ -3329,10 +3347,10 @@ dependencies = [
  "walkdir",
  "warp",
  "wasm-bindgen",
- "wasm-encoder 0.212.0",
+ "wasm-encoder 0.215.0",
  "wasm-smith",
- "wasmparser 0.212.0",
- "wasmprinter 0.212.0",
+ "wasmparser 0.215.0",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
  "wast",
@@ -4998,7 +5016,7 @@ dependencies = [
  "base64 0.22.0",
  "bytes",
  "chacha20poly1305",
- "cloudflare",
+ "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
  "derive-new",
  "fqdn",
  "futures",
@@ -9002,6 +9020,7 @@ version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
+ "async-compression",
  "base64 0.21.4",
  "bytes",
  "encoding_rs",
@@ -9028,6 +9047,7 @@ dependencies = [
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
+ "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -12074,6 +12094,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb56df3e06b8e6b77e37d2969a50ba51281029a9aeb3855e76b7f49b6418847"
 dependencies = [
  "leb128",
+ "wasmparser 0.215.0",
 ]
 
 [[package]]
@@ -12141,17 +12162,6 @@ dependencies = [
  "indexmap 2.2.6",
  "semver",
  "serde",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.212.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -12280,7 +12290,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.215.0",
  "wasmparser 0.215.0",
- "wasmprinter 0.215.0",
+ "wasmprinter",
  "wasmtime-types",
 ]
 

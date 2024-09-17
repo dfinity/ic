@@ -281,7 +281,6 @@ members = [
     "rs/rosetta-api/icrc1/test_utils",
     "rs/rosetta-api/icrc1/tokens_u64",
     "rs/rosetta-api/icrc1/tokens_u256",
-    "rs/rosetta-api/hardware_wallet_tests",
     "rs/rosetta-api/test_utils",
     "rs/rosetta-api/test_utils/sender_canister",
     "rs/rosetta-api/tvl",
@@ -352,6 +351,7 @@ members = [
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
@@ -484,7 +484,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/cloudflare/cloudflare-rs.git", rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae", default-features = false, feature = [
+cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
     "rustls-tls",
 ] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
@@ -688,9 +688,10 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
-wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
-wasmparser = "0.212.0"
-wasmprinter = "0.212.0"
+walrus = "0.21.1"
+wasm-encoder = { version = "0.215.0", features = ["wasmparser"] }
+wasmparser = "0.215.0"
+wasmprinter = "0.215.0"
 wast = "212.0.0"
 wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
