@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
