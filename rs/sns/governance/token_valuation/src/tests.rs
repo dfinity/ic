@@ -8,22 +8,21 @@
 use super::*;
 use candid::{
     de::IDLDeserialize,
+    decode_args, encode_args,
     ser::IDLBuilder,
     types::principal::Principal,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Encode, encode_args, decode_args,
+    Encode,
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;
-use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse, Transaction, Mint};
+use icrc_ledger_types::icrc3::transactions::{
+    GetTransactionsRequest, GetTransactionsResponse, Mint, Transaction,
+};
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use mockall::predicate;
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    future::Future,
-};
+use std::{cell::RefCell, collections::HashMap, future::Future};
 
 #[tokio::test]
 async fn test_try_get_balance_valuation_factors() {
@@ -226,11 +225,22 @@ async fn test_icps_per_sns_token_client() {
                     .borrow_mut()
                     .remove(&(callee_canister_id, method_name.to_string()))
                     .unwrap_or_else(|| {
-                        panic!("Unexpected call: {} {} {:?}", canister_id2name(callee_canister_id), method_name, args);
+                        panic!(
+                            "Unexpected call: {} {} {:?}",
+                            canister_id2name(callee_canister_id),
+                            method_name,
+                            args
+                        );
                     })
             });
 
-            assert_eq!(args, expected_args, "{} {}", canister_id2name(callee_canister_id), method_name);
+            assert_eq!(
+                args,
+                expected_args,
+                "{} {}",
+                canister_id2name(callee_canister_id),
+                method_name
+            );
 
             Ok(response)
         }
@@ -254,13 +264,11 @@ async fn test_icps_per_sns_token_client() {
 
     // Step 2: Call code under test.
 
-    let observed_icps_per_sns_token = IcpsPerSnsTokenClient::<MockRuntime>::new(
-        *SWAP_CANISTER_ID,
-        *SNS_TOKEN_LEDGER_CANISTER_ID,
-    )
-    .get()
-    .await
-    .unwrap();
+    let observed_icps_per_sns_token =
+        IcpsPerSnsTokenClient::<MockRuntime>::new(*SWAP_CANISTER_ID, *SNS_TOKEN_LEDGER_CANISTER_ID)
+            .get()
+            .await
+            .unwrap();
 
     // Step 3: Inspect results.
 
