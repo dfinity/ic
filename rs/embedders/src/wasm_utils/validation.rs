@@ -1010,25 +1010,20 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
     Ok(())
 }
 
-fn validate_wasm_memory_size(
-    module: &Module,
-    max_wasm_memory_size: NumBytes,
-) -> Result<(), WasmValidationError> {
-    if let Some(mem) = module.memories.first() {
+// Checks if the module has a Wasm64 main memory and if so, caps the size of
+// the memory to the maximum allowed size.
+fn cap_wasm64_memory_size(module: &mut Module, max_wasm_memory_size: NumBytes) {
+    if let Some(mem) = module.memories.first_mut() {
         if mem.memory64 {
             // This check is only needed by Wasm64 modules, for Wasm32 the check is done by Wasmtime.
             if let Some(declared_size_in_wasm_pages) = mem.maximum {
                 let allowed_size_in_wasm_pages = max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
                 if declared_size_in_wasm_pages > allowed_size_in_wasm_pages {
-                    return Err(WasmValidationError::WasmMemoryTooLarge {
-                        defined_size: declared_size_in_wasm_pages,
-                        allowed_size: allowed_size_in_wasm_pages,
-                    });
+                    mem.maximum = Some(allowed_size_in_wasm_pages);
                 }
             }
         }
     }
-    Ok(())
 }
 
 // Checks that no more than `max_globals` are defined in the module
@@ -1521,7 +1516,7 @@ pub(super) fn validate_wasm_binary<'a>(
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
-    let module = Module::parse(wasm.as_slice(), false)
+    let mut module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
     validate_export_section(
@@ -1532,7 +1527,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    validate_wasm_memory_size(&module, config.max_wasm_memory_size)?;
+    cap_wasm64_memory_size(&mut module, config.max_wasm_memory_size);
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((

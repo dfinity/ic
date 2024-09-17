@@ -24,6 +24,9 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
+use ic_wasm_transform::Module;
+use ic_wasm_types::WasmValidationError;
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
@@ -223,6 +226,17 @@ pub fn validate_and_instrument_for_testing(
     wasm: &BinaryEncodedWasm,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
     validate_and_instrument(wasm, embedder.config())
+}
+
+/// Only exposed for tests that need to inspect the instrumented wasm or
+/// validation details.
+#[doc(hidden)]
+pub fn validate_and_return_module<'a>(
+    wasm: &'a BinaryEncodedWasm,
+    config: &'a EmbeddersConfig,
+) -> Result<Module<'a>, WasmValidationError> {
+    let (_wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
+    Ok(module)
 }
 
 fn compile_inner(

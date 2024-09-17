@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
-        validate_and_instrument_for_testing,
+        validate_and_instrument_for_testing, validate_and_return_module,
         validation::{extract_custom_section_name, RESERVED_SYMBOLS},
         Complexity, WasmImportsDetails, WasmValidationDetails,
     },
@@ -1149,20 +1149,27 @@ fn validate_wasm64_memory_size() {
         embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64 + 5;
     let allowed_mem_in_wasm_pages =
         embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
-    let wasm = wat2wasm(&format!(
-        r#"
-        (module
-            (memory i64 {} {})
-        )"#,
-        declared_mem_in_wasm_pages, declared_mem_in_wasm_pages,
-    ))
-    .unwrap();
 
-    assert_eq!(
-        validate_wasm_binary(&wasm, &embedders_config),
-        Err(WasmValidationError::WasmMemoryTooLarge {
-            defined_size: declared_mem_in_wasm_pages,
-            allowed_size: allowed_mem_in_wasm_pages
-        })
-    );
+    let mut module = wasm_encoder::Module::new();
+    let memory_type = wasm_encoder::MemoryType {
+        minimum: 1,
+        maximum: Some(declared_mem_in_wasm_pages),
+        memory64: true,
+        shared: false,
+        page_size_log2: None,
+    };
+    let mut memory_section = wasm_encoder::MemorySection::new();
+    memory_section.memory(memory_type);
+    module.section(&memory_section);
+
+    let wasm = BinaryEncodedWasm::new(module.finish());
+
+    let result = validate_and_return_module(&wasm, &embedders_config);
+    match result {
+        Err(e) => panic!("{}", e.to_string()),
+        Ok(module) => {
+            let memory64_size = module.memories.first().unwrap().maximum.unwrap();
+            assert_eq!(memory64_size, allowed_mem_in_wasm_pages);
+        }
+    }
 }
