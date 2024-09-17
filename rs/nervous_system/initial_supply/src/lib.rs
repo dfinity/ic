@@ -245,7 +245,7 @@ fn normalize_get_transactions_response(
     if response.first_index != start {
         return Err(format!(
             "GetTransactionsResponse seems to be missing requested transactions \
-             from {} to ({} - 1). (This is might not be a retry-able failure.)",
+             from {} to ({} - 1). (This is probably not retry-able failure.)",
             start, response.first_index,
         ));
     }
