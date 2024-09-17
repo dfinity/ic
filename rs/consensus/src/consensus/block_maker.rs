@@ -131,6 +131,7 @@ impl BlockMaker {
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
+                        parent.get_value().clone(),
                         height,
                         rank,
                         self.time_source.as_ref(),
@@ -514,17 +515,40 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
         .any(|p| p.signature.signer == this_node)
 }
 
+fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
+    let max_height = block.height();
+    let min_height = if max_height > Height::from(10) {
+        max_height - Height::new(10)
+    } else {
+        Height::new(0)
+    };
+    pool.get_range(block, min_height, max_height)
+        .filter(|block| block.rank > Rank(0))
+        .count()
+}
+
 /// Calculate the required delay for block making based on the block maker's
 /// rank.
 pub(super) fn get_block_maker_delay(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
+    pool: &PoolReader<'_>,
+    parent: Block,
     registry_version: RegistryVersion,
     rank: Rank,
 ) -> Option<Duration> {
-    get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)
-        .map(|settings| settings.unit_delay * rank.0 as u32)
+    let settings =
+        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
+    let unit_delay = settings.unit_delay;
+
+    let dynamic_delay = if count_non_rank_0_blocks(pool, parent) > 3 {
+        unit_delay + Duration::from_secs(10)
+    } else {
+        unit_delay
+    };
+
+    Some(dynamic_delay * rank.0 as u32)
 }
 
 /// Return true if the time since round start is greater than the required block
@@ -534,6 +558,7 @@ pub(super) fn is_time_to_make_block(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
+    parent: Block,
     height: Height,
     rank: Rank,
     time_source: &dyn TimeSource,
@@ -541,9 +566,15 @@ pub(super) fn is_time_to_make_block(
     let Some(registry_version) = pool.registry_version(height) else {
         return false;
     };
-    let Some(block_maker_delay) =
-        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
-    else {
+    let Some(block_maker_delay) = get_block_maker_delay(
+        log,
+        registry_client,
+        subnet_id,
+        pool,
+        parent,
+        registry_version,
+        rank,
+    ) else {
         return false;
     };
 
@@ -655,11 +686,14 @@ mod tests {
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
                 dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+            let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
                     &no_op_logger(),
                     registry.as_ref(),
                     subnet_id,
+                    &pool_reader,
+                    start.as_ref().clone(),
                     RegistryVersion::from(10),
                     Rank(4),
                 )

@@ -72,12 +72,10 @@ impl<'a> PoolReader<'a> {
         block: Block,
         min: Height,
         max: Height,
-    ) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(
-            self.chain_iterator(block)
-                .skip_while(move |block| block.height > max)
-                .take_while(move |block| block.height >= min),
-        )
+    ) -> impl Iterator<Item = Block> + '_ {
+        self.chain_iterator(block)
+            .skip_while(move |block| block.height > max)
+            .take_while(move |block| block.height >= min)
     }
 
     /// Return a `Vec` of all of the `Payload` between the provided `start`

@@ -1061,6 +1061,10 @@ impl Validator {
                 }
             }
 
+            let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {
+                continue;
+            };
+
             // We only validate blocks from a block maker of a certain rank after a
             // rank-based delay. If this time has not elapsed yet, we ignore the block for
             // now.
@@ -1069,6 +1073,7 @@ impl Validator {
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
                 pool_reader,
+                parent,
                 proposal.height(),
                 proposal.rank(),
                 self.time_source.as_ref(),
@@ -2567,6 +2572,7 @@ pub mod test {
                 .initial_notary_delay
                 + Duration::from_nanos(1);
 
+            let pool_reader = PoolReader::new(&pool);
             // After sufficiently advancing the time, ensure that the validator validates
             // the block
             let delay = monotonic_block_increment
@@ -2574,9 +2580,9 @@ pub mod test {
                     &no_op_logger(),
                     registry_client.as_ref(),
                     replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
+                    &pool_reader,
+                    parent.clone(),
+                    pool_reader.registry_version(test_block.height()).unwrap(),
                     rank,
                 )
                 .unwrap();
@@ -3268,15 +3274,17 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
+            let parent = pool.latest_notarized_blocks().next().unwrap();
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
+            let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
                 replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
+                &pool_reader,
+                parent.clone(),
+                pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
             )
             .unwrap();
@@ -3321,13 +3329,14 @@ pub mod test {
             // Continue stalling the clock, and validate a rank > 0 block.
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
+            let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
                 replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
+                &pool_reader,
+                parent.clone(),
+                pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
             )
             .unwrap();
