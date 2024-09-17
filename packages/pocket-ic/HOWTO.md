@@ -491,7 +491,7 @@ fn test_query_stats() {
 In this section, we show how to test your dapp integrating with the [IC Bitcoin API](https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-bitcoin-api)
 served by the management canister.
 
-First, we start a `bitcoind` process (the `bitcoind` binary can be downloaded from [here](https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz)):
+First, we start a `bitcoind` process (the `bitcoind` binary can be downloaded from [here](https://bitcoin.org/en/download)):
 
 ```rust
     use tempfile::tempdir;
@@ -583,14 +583,14 @@ Next we deploy the bitcoin testnet canister (canister ID `g4xu7-jiaaa-aaaan-aaaa
     );
 ```
 
-To mine blocks with rewards of 50 BTC per block credited to a given `bitcoin_address: String`, you can use the JSON-RPC API:
+To mine blocks with rewards credited to a given `bitcoin_address: String`, you can use the JSON-RPC API:
 
 *Notes.*
 - By default, the `bitcoind` process configured with `regtest=1` listens at port 18444
   and serves its JSON-RPC API at port 18443.
 - We use the dummy authentication specified in the `bitcoind` configuration created above.
 - You need to mine at least 100 blocks (Coinbase maturity rule) so that the reward for the first block
-  can be sent out.
+  can be transferred to a different address.
 
 ```rust
     use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
