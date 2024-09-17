@@ -12232,6 +12232,7 @@ dependencies = [
  "wasmtime-jit-icache-coherence",
  "wasmtime-slab",
  "wasmtime-versioned-export-macros",
+ "wasmtime-wmemcheck",
  "windows-sys 0.52.0",
 ]
 
@@ -12366,6 +12367,12 @@ dependencies = [
  "indexmap 2.2.6",
  "wit-parser",
 ]
+
+[[package]]
+name = "wasmtime-wmemcheck"
+version = "24.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c99a2680d7ff4fa07cd3c26968275581497c212ea40a556ea69b9436f6f6392"
 
 [[package]]
 name = "wast"

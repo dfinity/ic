@@ -1,5 +1,5 @@
 {
-  "checksum": "339b81ae381c208e11c61ce38eeb4b3f305e2cbf83acd1e738d42318b671348b",
+  "checksum": "a864a60e9b19ca192cd4dfabfbbda1a0b4353f8df0cb41762c9215c0d9a0af15",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -72066,7 +72066,8 @@
             "gc",
             "parallel-compilation",
             "runtime",
-            "std"
+            "std",
+            "wmemcheck"
           ],
           "selects": {}
         },
@@ -72167,6 +72168,10 @@
             {
               "id": "wasmtime-slab 24.0.0",
               "target": "wasmtime_slab"
+            },
+            {
+              "id": "wasmtime-wmemcheck 24.0.0",
+              "target": "wasmtime_wmemcheck"
             }
           ],
           "selects": {
@@ -72481,7 +72486,8 @@
         ],
         "crate_features": {
           "common": [
-            "gc"
+            "gc",
+            "wmemcheck"
           ],
           "selects": {}
         },
@@ -72601,7 +72607,8 @@
           "common": [
             "compile",
             "gc",
-            "std"
+            "std",
+            "wmemcheck"
           ],
           "selects": {}
         },
@@ -72969,6 +72976,44 @@
           ],
           "selects": {}
         },
+        "edition": "2021",
+        "version": "24.0.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "wasmtime-wmemcheck 24.0.0": {
+      "name": "wasmtime-wmemcheck",
+      "version": "24.0.0",
+      "package_url": "https://github.com/bytecodealliance/wasmtime",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmtime-wmemcheck/24.0.0/download",
+          "sha256": "8c99a2680d7ff4fa07cd3c26968275581497c212ea40a556ea69b9436f6f6392"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmtime_wmemcheck",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmtime_wmemcheck",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "edition": "2021",
         "version": "24.0.0"
       },

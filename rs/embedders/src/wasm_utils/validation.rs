@@ -1418,6 +1418,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.wasm_relaxed_simd(false);
     // Tail calls may be enabled in the future.
     config.wasm_tail_call(false);
+    config.wmemcheck(true);
 
     config
         // The maximum size in bytes where a linear memory is considered
