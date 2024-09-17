@@ -103,10 +103,10 @@ rust_test_suite(
         "@bitcoin_adapter_mainnet_headers//file",
         "@bitcoin_adapter_testnet_blocks//file",
         "@bitcoin_adapter_testnet_headers//file",
-        "@bitcoin_core//:bin/bitcoind",
+        "@bitcoin_core//:bitcoind",
     ],
     env = {
-        "BITCOIN_CORE_PATH": "$(rootpath @bitcoin_core//:bin/bitcoind)",
+        "BITCOIN_CORE_PATH": "$(rootpath @bitcoin_core//:bitcoind)",
         "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
         "BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_blocks//file)",
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",

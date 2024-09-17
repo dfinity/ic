@@ -959,8 +959,8 @@ http_archive(
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(
-    name = "contents",
-    srcs = glob(["**/*"]),
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
 )
 """,
     sha256 = "2a6974c5486f528793c79d42694b5987401e4a43c97f62b1383abf35bcee44a8",

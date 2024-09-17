@@ -208,14 +208,14 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "@bitcoin_core//:bin/bitcoind",
+        "@bitcoin_core//:bitcoind",
         "@bitcoin_example_canister//file",
         "@btc_canister//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
-        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bin/bitcoind)",
+        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
     },
     deps = TEST_DEPENDENCIES,
