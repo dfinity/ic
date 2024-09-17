@@ -2396,12 +2396,9 @@ dependencies = [
  "anyhow",
  "canister-test",
  "canister_http",
- "futures",
  "ic-agent",
  "ic-base-types",
- "ic-canister-client",
  "ic-interfaces-registry",
- "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -2413,7 +2410,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
- "ic_consensus_system_test_upgrade_common",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
@@ -2484,6 +2480,29 @@ dependencies = [
  "slog",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "consensus-upgrade-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "futures",
+ "ic-agent",
+ "ic-canister-client",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "slog",
+ "tokio",
 ]
 
 [[package]]
@@ -9494,6 +9513,7 @@ dependencies = [
  "ic-sns-wasm",
  "serde",
  "tempfile",
+ "thiserror",
  "tokio",
 ]
 
@@ -9503,7 +9523,6 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-ledger-core",
@@ -13277,21 +13296,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "slog",
  "tokio",
-]
-
-[[package]]
-name = "ic_consensus_system_test_upgrade_common"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-agent",
- "ic-management-canister-types",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
- "slog",
 ]
 
 [[package]]
