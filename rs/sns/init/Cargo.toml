@@ -20,6 +20,7 @@ ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }

@@ -47,7 +47,7 @@ use ic_nns_governance::{
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        validate_proposal_title, Environment, Governance, HeapGrowthPotential,
+        Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
@@ -94,6 +94,10 @@ use ic_nns_governance::{
     },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
+};
+use ic_nns_governance_api::{
+    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    proposal_validation::validate_proposal_title,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -11881,7 +11885,7 @@ lazy_static! {
             )
         };
 
-        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)
+        let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(create_service_nervous_system))
             .expect(
                 "Cannot build SNS_INIT_PAYLOAD from \
                 CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."
