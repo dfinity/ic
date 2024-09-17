@@ -8,7 +8,6 @@ LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
     "//rs/boundary_node/ic_boundary",
-    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/ed25519",
@@ -42,22 +41,24 @@ LIB_DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
-    "@crate_index//:axum_server_0_6_0",
+    "@crate_index//:axum-server",
     "@crate_index//:backoff",
     "@crate_index//:base64",
+    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
+    "@crate_index//:fqdn",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:http",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
-    "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:rand",
@@ -80,8 +81,11 @@ LIB_DEPENDENCIES = [
 TEST_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/interfaces/registry",
+    "//rs/registry/canister",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
@@ -90,6 +94,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-utils",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
@@ -100,7 +105,9 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 
@@ -131,21 +138,15 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "5.0.0",
+    version = "6.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_ic_test(
     name = "pic_test",
-    srcs = glob(["src/**"]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
@@ -157,19 +158,19 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
-    aliases = {
-        "@crate_index//:ic_agent_call_v3": "ic_agent_call_v3",
-    },
+    aliases = {},
     data = [
         ":pocket-ic-server",
+        "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
-    deps = TEST_DEPENDENCIES + ["@crate_index//:ic_agent_call_v3"],
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_test(

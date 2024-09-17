@@ -7,7 +7,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/constants",
     "//rs/crypto/prng",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
@@ -16,6 +15,7 @@ DEPENDENCIES = [
     "//rs/embedders",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",
@@ -61,6 +61,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/state_manager/mocks",
+    "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
@@ -117,7 +118,7 @@ rust_ic_test(
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved
     #                 or we have new darwin runners in use
     tags = [
-        "test_macos_master",
+        "test_macos_slow",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -128,8 +129,10 @@ rust_ic_test_suite(
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
     compile_data = glob(["tests/test-data/**"]),
-    data = DATA,
-    env = ENV,
+    data = DATA + ["//rs/rust_canisters/backtrace_canister:backtrace-canister"],
+    env = dict(ENV.items() + [
+        ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+    ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "test_macos",
@@ -149,14 +152,15 @@ BENCH_DEPENDENCIES = [
     # Keep sorted.
     ":execution_environment",
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "//rs/rust_canisters/canister_test",
     "//rs/system_api",
     "//rs/test_utilities",
     "//rs/test_utilities/execution_environment",
@@ -167,6 +171,7 @@ BENCH_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
+    "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
     "@crate_index//:tempfile",
@@ -230,7 +235,6 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
-        "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "//rs/types/types_test_utils",
@@ -245,7 +249,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
-        "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
         "@crate_index//:serde",
@@ -263,7 +266,6 @@ rust_ic_bench(
         # Keep sorted.
         ":utils",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
-        "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "@crate_index//:candid",
         "@crate_index//:serde",

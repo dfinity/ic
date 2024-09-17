@@ -2,12 +2,12 @@ use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
 };
 use serde::{Deserialize, Serialize};
 
 /// Various traps that a canister can create.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TrapCode {
     StackOverflow,
     HeapOutOfBounds,
@@ -46,7 +46,7 @@ impl std::fmt::Display for TrapCode {
 ///
 /// Should be used as the wrapped error by various components that need to
 /// handle such cases.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterOutOfCyclesError {
     pub canister_id: CanisterId,
     pub available: Cycles,
@@ -70,7 +70,7 @@ impl std::fmt::Display for CanisterOutOfCyclesError {
 }
 
 /// Errors returned by the Hypervisor.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum HypervisorError {
     /// The message sent to the canister refers a function not found in the
     /// table. The payload contains the index of the table and the index of the
@@ -343,12 +343,6 @@ impl CountBytes for HypervisorError {
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
-        fn doc_ref(section: &str) -> String {
-            format!(
-                "http://internetcomputer.org/docs/current/references/execution-errors#{}",
-                section
-            )
-        }
         match self {
             Self::FunctionNotFound(_, _)
             | Self::ToolchainContractViolation { .. }

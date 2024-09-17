@@ -7,12 +7,14 @@ pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
-use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
+use crate::{
+    CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
+};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -25,6 +27,8 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
@@ -46,7 +50,7 @@ lazy_static! {
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
 /// Enumerates use cases of consumed cycles.
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
 pub enum CyclesUseCase {
     Memory = 1,
     ComputeAllocation = 2,
@@ -139,7 +143,7 @@ enum ConsumingCycles {
     No,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
 // protobuf/def/state/canister_state_bits/v1/canister_state_bits.proto:
@@ -187,9 +191,10 @@ pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>
 /// The system can drop the oldest canister changes from the list to keep its length bounded
 /// (with `20` latest canister changes to always remain in the list).
 /// The system also drops all canister changes if the canister runs out of cycles.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct CanisterHistory {
     /// The canister changes stored in the order from the oldest to the most recent.
+    #[validate_eq(Ignore)]
     changes: Arc<VecDeque<Arc<CanisterChange>>>,
     /// The `total_num_changes` records the total number of canister changes
     /// that have ever been recorded. In particular, if the system drops some canister changes,
@@ -265,15 +270,18 @@ impl CanisterHistory {
 /// Contains structs needed for running and maintaining the canister on the IC.
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
     // This must remain private, in order to properly enforce system states (running, stopping,
     // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
+    #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -335,15 +343,18 @@ pub struct SystemState {
     pub canister_version: u64,
 
     /// Canister history.
+    #[validate_eq(CompareWithValidateEq)]
     canister_history: CanisterHistory,
 
     /// Store of Wasm chunks to support installation of large Wasm modules.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_chunk_store: WasmChunkStore,
 
     /// Log visibility of the canister.
-    pub log_visibility: LogVisibility,
+    pub log_visibility: LogVisibilityV2,
 
     /// Log records of the canister.
+    #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
 
     /// The Wasm memory limit. This is a field in developer-visible canister
@@ -354,10 +365,16 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
+
+    /// Cumulative memory usage of all snapshots that belong to this canister.
+    ///
+    /// This amount contributes to the total `memory_usage` of the canister as
+    /// reported by `CanisterState::memory_usage`.
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,
@@ -438,12 +455,12 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
 }
 
 /// The id of a paused execution stored in the execution environment.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PausedExecutionId(pub u64);
 
 /// Represents a task that needs to be executed before processing canister
 /// inputs.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ExecutionTask {
     /// A heartbeat task exists only within an execution round. It is never
     /// serialized.
@@ -598,8 +615,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -616,8 +632,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;
@@ -710,6 +725,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
@@ -719,10 +735,11 @@ impl SystemState {
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            snapshots_memory_usage: NumBytes::from(0),
         }
     }
 
@@ -732,6 +749,7 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
@@ -746,16 +764,19 @@ impl SystemState {
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
+        snapshots_memory_usage: NumBytes,
+        metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
-        Self {
+        let system_state = Self {
             controllers,
             canister_id,
             queues,
             memory_allocation,
+            wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,
@@ -776,7 +797,12 @@ impl SystemState {
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
-        }
+            snapshots_memory_usage,
+        };
+        system_state.check_invariants().unwrap_or_else(|msg| {
+            metrics.observe_broken_soft_invariant(msg);
+        });
+        system_state
     }
 
     pub fn new_running_for_testing(
@@ -1079,7 +1105,8 @@ impl SystemState {
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///  * `NonMatchingResponse` if no response is expected, the callback is not
-    ///    found or the respondent does not match.
+    ///    found, the respondent does not match or this is a duplicate guaranteed
+    ///    response.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -1210,10 +1237,11 @@ impl SystemState {
         self.canister_history.get_memory_usage()
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.queues.set_stream_responses_size_bytes(size_bytes);
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
+        self.queues
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
@@ -1294,18 +1322,18 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Times out requests in the `OutputQueues` of `self.queues`. Returns the number of requests
+    /// Drops expired messages given a current time. Returns the number of messages
     /// that were timed out.
     ///
-    /// See [`CanisterQueues::time_out_requests`] for further details.
-    pub fn time_out_requests(
+    /// See [`CanisterQueues::time_out_messages`] for further details.
+    pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> u64 {
+    ) -> usize {
         self.queues
-            .time_out_requests(current_time, own_canister_id, local_canisters)
+            .time_out_messages(current_time, own_canister_id, local_canisters)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`

@@ -74,13 +74,25 @@ impl Wasm {
         eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
+                let path = Path::new(&path);
+                // If the path to the WASM is relative we check for the optional environment variable
+                // RUNFILES which should point to the directory where bazel has stored the
+                // symlink tree of runtime dependencies including the WASM binaries. If that's defined
+                // the final path of the WASM is set to $RUNFILES/$path, if not we just use $path.
+                // We need this to find WASMs in system-tests where each test is executed in its
+                // own process and in its own dedicated working directory. Since the latter working directory
+                // is different than $RUNFILES we need the logic below to reference the actual WASMs.
+                let path = match env::var("RUNFILES") {
+                    Ok(runfiles) if path.is_relative() => Path::new(&runfiles).join(path),
+                    _ => path.to_path_buf(),
+                };
                 let wasm = Wasm::from_file(path.clone());
                 eprintln!(
                     "Using pre-built binary for {} with features: {:?} (size = {}, path = {})",
                     bin_name,
                     features,
                     wasm.0.len(),
-                    path,
+                    path.display(),
                 );
                 Some(wasm)
             }

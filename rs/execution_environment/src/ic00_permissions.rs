@@ -5,7 +5,7 @@ use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 pub(crate) struct Ic00MethodPermissions {
     method: Ic00Method,
 
@@ -119,6 +119,11 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::BitcoinGetUtxos => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::BitcoinGetBlockHeaders => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

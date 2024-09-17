@@ -22,8 +22,7 @@ end::catalog[] */
 
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
-    NnsInstallationBuilder,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
@@ -78,7 +77,6 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
@@ -159,12 +157,13 @@ mod holder {
     }
 
     pub async fn upgrade(rt: &Runtime, nns_canister_id: &CanisterId) {
-        ic_nns_test_utils::itest_helpers::upgrade_nns_canister_by_proposal(
+        ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal(
             &Canister::new(rt, *nns_canister_id),
             &Canister::new(rt, ic_nns_constants::GOVERNANCE_CANISTER_ID),
             &Canister::new(rt, ic_nns_constants::ROOT_CANISTER_ID),
             true,
             Wasm::from_bytes(HOLDER_CANISTER_WASM.to_vec()),
+            None,
         )
         .await;
     }

@@ -1,12 +1,8 @@
 //! This module implements the IDKG payload builder.
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::enum_variant_names)]
-#![allow(clippy::result_large_err)]
-
 use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
 use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
-use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
+use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -221,14 +217,14 @@ fn create_summary_payload_helper(
 
         if created_key_transcript.is_none() {
             if let Some(metrics) = idkg_payload_metrics {
-                metrics.critical_error_ecdsa_key_transcript_missing.inc();
+                metrics.critical_error_master_key_transcript_missing.inc();
             }
 
             error!(
                 log,
                 "{}: Key not created in previous interval, \
                 keep trying in next interval(height = {}), key_transcript = {}",
-                CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
+                CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING,
                 height,
                 key_transcript
             );
@@ -565,6 +561,7 @@ pub(crate) fn create_data_payload_helper(
     Ok(Some(idkg_payload))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_data_payload_helper_2(
     idkg_payload: &mut IDkgPayload,
     height: Height,
@@ -1977,7 +1974,10 @@ mod tests {
                 idkg::KeyTranscriptCreation::Begin
             );
             // Critical error counter should be set to 0
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 0);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                0
+            );
             // pre-signatures and xnet reshares should still be unchanged:
             assert_eq!(
                 payload_0.available_pre_signatures.len(),
@@ -2028,7 +2028,10 @@ mod tests {
                 current_key_transcript.transcript_id(),
             );
             // Critical error counter should be set to 1
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                1
+            );
             // pre-signatures and xnet reshares should still be unchanged:
             assert_eq!(
                 payload_2.available_pre_signatures.len(),
@@ -2087,7 +2090,10 @@ mod tests {
             );
 
             // Critical error counter should still be set to 1
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                1
+            );
 
             // Now, pre-signatures and xnet reshares should be purged
             assert!(payload_4.pre_signatures_in_creation.is_empty());

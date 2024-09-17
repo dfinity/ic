@@ -13,8 +13,6 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
@@ -87,10 +85,8 @@ pub(crate) struct IncompleteState {
     metrics: StateManagerMetrics,
     started_at: Instant,
     fetch_started_at: Option<Instant>,
-    own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -135,8 +131,7 @@ impl Drop for IncompleteState {
                         } else {
                             state_sync_file_group
                                 .get(&(*ix as u32))
-                                .map(|vec| vec.len())
-                                .unwrap_or(0)
+                                .map_or(0, |vec| vec.len())
                         }
                     })
                     .sum();
@@ -223,10 +218,8 @@ impl IncompleteState {
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
-            own_subnet_type: state_sync.state_manager.own_subnet_type,
             thread_pool,
             state_sync_refs: state_sync.state_sync_refs.clone(),
-            fd_factory: state_sync.state_manager.fd_factory.clone(),
             malicious_flags: state_sync.state_manager.malicious_flags.clone(),
         })
     }
@@ -784,9 +777,7 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        own_subnet_type: SubnetType,
         thread_pool: &mut scoped_threadpool::Pool,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -799,36 +790,21 @@ impl IncompleteState {
             "state sync: start to make a checkpoint from the scratchpad"
         );
 
-        let ro_layout = CheckpointLayout::<ReadOnly>::new_untracked(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
-
-        // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint(
-            &ro_layout,
-            own_subnet_type,
-            &metrics.checkpoint_metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        ) {
-            let elapsed = started_at.elapsed();
-            metrics
-                .state_sync_metrics
-                .duration
-                .with_label_values(&["unrecoverable"])
-                .observe(elapsed.as_secs_f64());
-
-            fatal!(
-                log,
-                "Failed to recover synced state {} after {:?}: {}",
-                height,
-                elapsed,
-                err
-            )
-        }
-
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
+
+        scratchpad_layout
+            .create_unverified_checkpoint_marker()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create a checkpoint marker for state {} at path {}: {}",
+                    height,
+                    scratchpad_layout.raw_path().display(),
+                    err,
+                )
+            });
 
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
             Ok(_) => {
@@ -1368,9 +1344,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            self.own_subnet_type,
                             &mut self.thread_pool.lock().unwrap(),
-                            Arc::clone(&self.fd_factory),
                         );
 
                         self.state_sync.deliver_state_sync(
@@ -1547,9 +1521,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        self.own_subnet_type,
                         &mut self.thread_pool.lock().unwrap(),
-                        Arc::clone(&self.fd_factory),
                     );
 
                     self.state_sync.deliver_state_sync(

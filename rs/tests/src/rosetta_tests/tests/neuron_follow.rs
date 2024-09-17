@@ -1,30 +1,33 @@
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::{
-    create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
-    one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
+        one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
 use assert_json_diff::assert_json_eq;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::Neuron;
-use ic_rosetta_api::convert::neuron_subaccount_bytes_from_public_key;
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{AddHotKey, Follow, PublicKeyOrPrincipal};
+use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_rosetta_api::{
+    convert::neuron_subaccount_bytes_from_public_key,
+    request::{request_result::RequestResult, Request},
+    request_types::{AddHotKey, Follow, PublicKeyOrPrincipal},
+};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 const PORT: u32 = 8108;
-const VM_NAME: &str = "rosetta-neuron-follow";
+const VM_NAME: &str = "neuron-follow";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

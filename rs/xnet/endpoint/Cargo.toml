@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = { workspace = true }
 hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
@@ -23,7 +22,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
-threadpool = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]

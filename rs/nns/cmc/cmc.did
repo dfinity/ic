@@ -12,6 +12,7 @@ type CanisterSettings = record {
   reserved_cycles_limit : opt nat;
   log_visibility : opt log_visibility;
   wasm_memory_limit : opt nat;
+  wasm_memory_threshold : opt nat;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;
@@ -84,13 +85,6 @@ type CreateCanisterError = variant {
 
     // The reason why creating a canister failed.
     create_error : text;
-  };
-  RefundFailed : record {
-    // The reason why creating a canister failed.
-    create_error : text;
-
-    // The reason why refunding cycles failed.
-    refund_error : text;
   };
 };
 

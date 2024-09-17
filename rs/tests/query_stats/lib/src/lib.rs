@@ -1,13 +1,13 @@
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
+use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
-use ic_tests::consensus::catch_up_test::await_node_certified_height;
 use ic_types::{epoch_from_height, Height};
 use ic_universal_canister::wasm;
 use itertools::Itertools;

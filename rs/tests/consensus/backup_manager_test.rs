@@ -34,12 +34,16 @@ use ic_consensus_system_test_utils::{
         generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted, AuthMean,
     },
+    subnet::enable_chain_key_on_subnet,
+    upgrade::{
+        assert_assigned_replica_version, bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    },
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -51,16 +55,8 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
 };
-use ic_tests::orchestrator::utils::{
-    subnet_recovery::enable_chain_key_on_subnet,
-    upgrade::{
-        assert_assigned_replica_version, bless_public_replica_version,
-        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
-    },
-};
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
-use std::time::Duration;
 use std::{
     ffi::OsStr,
     fs::{self, OpenOptions},
@@ -69,6 +65,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::{fs::File, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -131,24 +128,12 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = env.get_dependency_path("rs/tests");
+    let testing_dir = get_dependency_path("rs/tests");
     let binaries_path = testing_dir.join("backup/binaries");
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
     copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
     copy_file(&binaries_path, &backup_binaries_dir, "compiler_sandbox");
-
-    info!(
-        log,
-        "Download the binaries needed for replay of the mainnet version"
-    );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("could not read mainnet version!");
-
-    // Download all the binaries needed for the replay of the mainnet version
-    // This can be moved to the bazel script and completely avoid downloading them
-    download_mainnet_binaries(&log, &backup_dir, &mainnet_version);
 
     // Generate keypair and store the private key
     info!(log, "Create backup user credentials");
@@ -240,7 +225,8 @@ pub fn test(env: TestEnv) {
         serde_json::to_string(&config).expect("Config structure can't be converted to json");
     info!(log, "Config: {}", config_str);
     let config_file = config_dir.join("config.json5");
-    write_file(&config_file, config_str).expect("writing config file failed");
+    let mut f = File::create(&config_file).expect("Should be able to create the config file");
+    write!(f, "{}", config_str).expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path = binaries_path.join("ic-backup");
@@ -257,6 +243,8 @@ pub fn test(env: TestEnv) {
         .expect("Failed to start backup process");
     info!(log, "Started process: {}", child.id());
 
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .expect("could not read mainnet version!");
     info!(log, "Elect the mainnet replica version");
     info!(log, "TARGET_VERSION: {}", mainnet_version);
     block_on(bless_public_replica_version(
@@ -497,32 +485,6 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
             .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
-}
-
-fn download_mainnet_binaries(log: &Logger, backup_dir: &Path, mainnet_version: &str) {
-    let binaries_dir = backup_dir.join("binaries").join(mainnet_version);
-    let replica_version =
-        ReplicaVersion::try_from(mainnet_version).expect("Replica version should be valid");
-    fs::create_dir_all(&binaries_dir).expect("failure creating backup binaries directory");
-    download_binary_file(log, &replica_version, &binaries_dir, "ic-replay");
-    download_binary_file(log, &replica_version, &binaries_dir, "sandbox_launcher");
-    download_binary_file(log, &replica_version, &binaries_dir, "canister_sandbox");
-}
-
-fn download_binary_file(
-    log: &Logger,
-    replica_version: &ReplicaVersion,
-    binaries_dir: &Path,
-    binary: &str,
-) {
-    info!(log, "Downloading binary: {binary}");
-    block_on(download_binary(
-        log,
-        replica_version.clone(),
-        binary.to_string(),
-        binaries_dir,
-    ))
-    .expect("error downloading binaty");
 }
 
 fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {

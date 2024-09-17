@@ -4,12 +4,12 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
+        Mutations, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
-    p2p::consensus::{ChangeResult, MutablePool},
+    p2p::consensus::{ArtifactTransmits, MutablePool},
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -256,7 +256,8 @@ impl TestConsensusPool {
         block.context.registry_version = registry_version;
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
-        BlockProposal::fake(block, node_test_id(0))
+        let signer = self.get_block_maker_by_rank(block.height(), rank);
+        BlockProposal::fake(block, signer)
     }
 
     pub fn make_next_beacon(&self) -> RandomBeacon {
@@ -267,6 +268,27 @@ impl TestConsensusPool {
     pub fn make_next_tape(&self) -> RandomTape {
         let finalized_height = self.validated().finalization().max_height().unwrap();
         RandomTape::fake(RandomTapeContent::new(finalized_height))
+    }
+
+    /// Creates an equivocation proof for the given height and rank. Make sure
+    /// the rank is valid, otherwise this function panics.
+    pub fn make_equivocation_proof(&self, rank: Rank, height: Height) -> EquivocationProof {
+        let signer = self.get_block_maker_by_rank(height, rank);
+        EquivocationProof {
+            signer,
+            version: self
+                .pool
+                .validated()
+                .highest_catch_up_package()
+                .content
+                .version,
+            height,
+            subnet_id: self.subnet_id,
+            hash1: CryptoHashOf::new(CryptoHash(vec![1, 2, 3])),
+            signature1: BasicSigOf::new(BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![4, 5, 6])),
+            signature2: BasicSigOf::new(BasicSig(vec![])),
+        }
     }
 
     pub fn make_catch_up_package(&self, height: Height) -> CatchUpPackage {
@@ -696,7 +718,7 @@ impl TestConsensusPool {
     pub fn insert_random_tape(&mut self, height: Height) {
         let msg = RandomTape::fake(RandomTapeContent::new(height)).into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -706,13 +728,13 @@ impl TestConsensusPool {
 
     pub fn purge_validated_below<T: ConsensusMessageHashable + HasHeight>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
+        self.apply(vec![ChangeAction::PurgeValidatedBelow(msg.height())]);
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
         let time_source = self.time_source.clone();
-        self.apply_changes(vec![ChangeAction::AddToValidated(
+        self.apply(vec![ChangeAction::AddToValidated(
             ValidatedConsensusArtifact {
                 msg,
                 timestamp: time_source.get_relative_time(),
@@ -722,7 +744,7 @@ impl TestConsensusPool {
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
         let msg = value.into_message();
-        self.apply_changes(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
+        self.apply(vec![ChangeAction::RemoveFromUnvalidated(msg)]);
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -773,7 +795,7 @@ impl ConsensusPool for TestConsensusPool {
 }
 
 impl MutablePool<ConsensusMessage> for TestConsensusPool {
-    type ChangeSet = ChangeSet;
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
@@ -783,7 +805,7 @@ impl MutablePool<ConsensusMessage> for TestConsensusPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
-        self.pool.apply_changes(change_set)
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
+        self.pool.apply(change_set)
     }
 }

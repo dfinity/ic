@@ -645,13 +645,13 @@ pub mod proposal {
         /// Create a new SNS.
         #[prost(message, tag = "24")]
         CreateServiceNervousSystem(super::CreateServiceNervousSystem),
-        /// Calls install_code for a canister (install, reinstall, or upgrade).
+        /// Install, reinstall or upgrade the code of a canister that is controlled by the NNS.
         #[prost(message, tag = "25")]
         InstallCode(super::InstallCode),
-        /// Stops or starts a canister controlled by Root.
+        /// Stop or start a canister that is controlled by the NNS.
         #[prost(message, tag = "26")]
         StopOrStartCanister(super::StopOrStartCanister),
-        /// Updates canister settings for those controlled by NNS Root.
+        /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
     }
@@ -1434,11 +1434,6 @@ pub struct ProposalData {
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
-    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
-    /// conclude_community_fund_participation Candid method is called to either
-    /// mint ICP, or restore CF neuron maturity.
-    #[prost(message, repeated, tag = "18")]
-    pub cf_participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
     /// This gets set to one of the terminal values (i.e. Committed or Aborted)
     /// when the swap canister calls our conclude_community_fund_participation
     /// Candid method. Initially, it is set to Open, because swap is supposed to
@@ -1630,13 +1625,8 @@ pub mod neurons_fund_snapshot {
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        #[deprecated]
-        #[prost(message, optional, tag = "4")]
-        pub hotkey_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
 }
 /// Absolute constraints of this swap needed that the Neurons' Fund need to be aware of.
@@ -2805,6 +2795,9 @@ pub mod governance {
         #[prost(message, optional, tag = "38")]
         pub non_self_authenticating_controller_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "39")]
+        pub public_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3076,6 +3069,16 @@ pub struct ListNeurons {
     /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: ::core::option::Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    #[prost(bool, optional, tag = "4")]
+    pub include_public_neurons_in_full_neurons: ::core::option::Option<bool>,
 }
 /// A response to a `ListNeurons` request.
 ///
@@ -3352,8 +3355,8 @@ pub mod settle_neurons_fund_participation_request {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -3390,10 +3393,6 @@ pub mod settle_neurons_fund_participation_response {
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -3674,6 +3673,37 @@ pub mod restore_aging_summary {
         }
     }
 }
+/// The historical rewards that were provided to node providers, along with the contextual data
+/// needed to calculate it.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArchivedMonthlyNodeProviderRewards {
+    /// The version of the rewards data.  These versions are added to accommodate changes to the
+    /// rewards data structure over time.
+    #[prost(oneof = "archived_monthly_node_provider_rewards::Version", tags = "1")]
+    pub version: ::core::option::Option<archived_monthly_node_provider_rewards::Version>,
+}
+/// Nested message and enum types in `ArchivedMonthlyNodeProviderRewards`.
+pub mod archived_monthly_node_provider_rewards {
+    /// The first version of the stored rewards.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct V1 {
+        #[prost(message, optional, tag = "1")]
+        pub rewards: ::core::option::Option<super::MonthlyNodeProviderRewards>,
+    }
+    /// The version of the rewards data.  These versions are added to accommodate changes to the
+    /// rewards data structure over time.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Version {
+        #[prost(message, tag = "1")]
+        Version1(V1),
+    }
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.
@@ -3740,8 +3770,8 @@ pub enum Topic {
     /// creating new subnets, adding and removing subnet nodes, and
     /// splitting subnets.
     SubnetManagement = 7,
-    /// Installing and upgrading “system” canisters that belong to the network.
-    /// For example, upgrading the NNS.
+    /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
+    /// Management or Service Nervous System Management).
     NetworkCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
@@ -3777,11 +3807,11 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
-    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
-    /// protocol, without which the IC will not be able to function properly.
+    /// All proposals to manage protocol canisters, which are considered part of the ICP protocol and
+    /// are essential for its proper functioning.
     ProtocolCanisterManagement = 17,
-    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
-    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    /// All proposals to manage the canisters of service nervous systems (SNS), including upgrading
+    /// relevant canisters and managing SNS framework canister WASMs through SNS-W.
     ServiceNervousSystemManagement = 18,
 }
 impl Topic {

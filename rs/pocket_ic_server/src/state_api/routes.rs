@@ -6,10 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, DashboardRequest,
-    ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
-    GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
-    SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
+    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory,
+    GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
@@ -32,15 +32,18 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_types::CanisterId;
+use ic_state_machine_tests::Level;
+use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawMessageId, RawMockCanisterHttpResponse, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
+    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
+    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
+    RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
+use std::str::FromStr;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -127,7 +130,15 @@ where
         )
         .directory_route(
             "/canister/:ecid/read_state",
-            post(handler_read_state)
+            post(handler_canister_read_state)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/subnet/:sid/read_state",
+            post(handler_subnet_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -198,6 +209,8 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new()
+        // List all HTTP gateways.
+        .api_route("/", get(list_http_gateways))
         // Create a new HTTP gateway instance. Takes a HttpGatewayConfig.
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
@@ -280,7 +293,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct OpConversionError;
 
 #[async_trait]
@@ -703,15 +716,24 @@ pub async fn handler_query(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_read_state(
+pub async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = ReadStateRequest {
+    let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
     };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = SubnetReadStateRequest { subnet_id, bytes };
     handle_raw(api_state, instance_id, op).await
 }
 
@@ -754,7 +776,9 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
-            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+            Json(ApiResponse::Success(
+                RawSubmitIngressResult::try_from(opout).unwrap(),
+            )),
         )
             .into_response(),
         OpOut::NoOutput => (
@@ -1029,7 +1053,8 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
             .into_iter()
             .flatten()
             .chain(config.system)
-            .chain(config.application),
+            .chain(config.application)
+            .chain(config.verified_application),
         |spec: pocket_ic::common::rest::SubnetSpec| {
             spec.get_subnet_id().is_some() || !spec.is_supported()
         },
@@ -1079,12 +1104,29 @@ pub async fn create_instance(
         );
     }
 
+    let log_level = if let Some(log_level) = instance_config.log_level {
+        match Level::from_str(&log_level) {
+            Ok(log_level) => Some(log_level),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: format!("Failed to parse log level: {:?}", e),
+                    }),
+                )
+            }
+        }
+    } else {
+        None
+    };
+
     let pocket_ic = tokio::task::spawn_blocking(move || {
         PocketIc::new(
             runtime,
             subnet_configs,
             instance_config.state_dir,
             instance_config.nonmainnet_features,
+            log_level,
         )
     })
     .await
@@ -1116,20 +1158,29 @@ pub async fn delete_instance(
     StatusCode::OK
 }
 
+pub async fn list_http_gateways(
+    State(AppState { api_state, .. }): State<AppState>,
+) -> Json<Vec<HttpGatewayDetails>> {
+    let http_gateways = api_state.list_http_gateways().await;
+    Json(http_gateways)
+}
+
 /// Create a new HTTP gateway instance from a given HTTP gateway configuration.
 /// The new InstanceId and HTTP gateway's port will be returned.
 pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created(HttpGatewayInfo {
-            instance_id,
-            port,
-        })),
-    )
+    match api_state.create_http_gateway(http_gateway_config).await {
+        Ok(http_gateway_info) => (
+            StatusCode::CREATED,
+            Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
+        ),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+        ),
+    }
 }
 
 /// Stops an HTTP gateway instance.
@@ -1144,9 +1195,19 @@ pub async fn stop_http_gateway(
 pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
+    extract::Json(auto_progress_config): extract::Json<AutoProgressConfig>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    api_state.auto_progress(id).await;
-    (StatusCode::OK, Json(ApiResponse::Success(())))
+    if let Err(e) = api_state
+        .auto_progress(id, auto_progress_config.artificial_delay_ms)
+        .await
+    {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error { message: e }),
+        )
+    } else {
+        (StatusCode::OK, Json(ApiResponse::Success(())))
+    }
 }
 
 pub async fn stop_progress(

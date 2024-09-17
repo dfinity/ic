@@ -1,10 +1,4 @@
 //! Artifact related types.
-//!
-//! Notably it includes the following definitions and their sub-types:
-//!
-//! - [`Artifact`]
-//! - [`ArtifactId`]
-//!
 use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
@@ -29,9 +23,7 @@ use std::{
 pub trait IdentifiableArtifact: Send + 'static {
     const NAME: &'static str;
     type Id: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;
-    type Attribute: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;
     fn id(&self) -> Self::Id;
-    fn attribute(&self) -> Self::Attribute;
 }
 
 pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
@@ -48,16 +40,9 @@ pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
         + TryInto<Self, Error = Self::PbMessageError>
         + Default;
     type PbMessageError: std::error::Error + Into<ProxyDecodeError>;
-
-    type PbAttribute: prost::Message
-        + From<Self::Attribute>
-        + TryInto<Self::Attribute, Error = Self::PbAttributeError>
-        + Default;
-    /// Protobuf to rust conversion error
-    type PbAttributeError: std::error::Error + Into<ProxyDecodeError>;
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum UnvalidatedArtifactMutation<Artifact: IdentifiableArtifact> {
     Insert((Artifact, NodeId)),
     Remove(Artifact::Id),
@@ -68,7 +53,7 @@ pub enum UnvalidatedArtifactMutation<Artifact: IdentifiableArtifact> {
 
 /// Consensus message identifier carries both a message hash and a height,
 /// which is used by the consensus pool to help lookup.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ConsensusMessageId {
     pub hash: ConsensusMessageHash,
     pub height: Height,
@@ -115,7 +100,7 @@ impl From<&ConsensusMessage> for ConsensusMessageId {
 // Ingress artifacts
 
 /// [`IngressMessageId`] includes expiry time in addition to [`MessageId`].
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressMessageId {
     expiry: Time,
@@ -181,7 +166,7 @@ impl TryFrom<pb::IngressMessageId> for IngressMessageId {
 
 /// Certification message identifier carries both message hash and a height,
 /// which is used by the certification pool to help lookup.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CertificationMessageId {
     pub hash: CertificationMessageHash,
     pub height: Height,

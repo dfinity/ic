@@ -10,7 +10,6 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
-use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
 use std::time::Duration;
 
@@ -37,8 +36,8 @@ fn canister_queue_push_request_succeeds() {
     const CAPACITY: usize = 1;
     let mut queue = CanisterQueue::new(CAPACITY);
 
-    let id = new_request_message_id(13, Class::BestEffort);
-    queue.push_request(id);
+    let reference = new_request_message_id(13, Class::BestEffort);
+    queue.push_request(reference);
 
     assert_eq!(1, queue.len());
     assert!(queue.has_used_slots());
@@ -52,8 +51,8 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     // Peek, then pop the request.
-    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
-    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
+    assert_eq!(Some(reference), queue.peek());
+    assert_eq!(Some(reference), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -84,8 +83,8 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
 
     // Push response into reseerved slot.
-    let id = new_response_message_id(13, GuaranteedResponse);
-    queue.push_response(id);
+    let reference = new_response_message_id(13, GuaranteedResponse);
+    queue.push_response(reference);
 
     assert_eq!(1, queue.len());
     assert!(queue.has_used_slots());
@@ -96,8 +95,8 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     // Peek, then pop the response reference.
-    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
-    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
+    assert_eq!(Some(reference), queue.peek());
+    assert_eq!(Some(reference), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -222,13 +221,13 @@ fn canister_queue_push_without_reserved_slot_panics() {
     queue.push_response(new_response_message_id(13, Class::BestEffort));
 }
 
-/// Generator for an arbitrary `MessageReference`.
-fn arbitrary_message_reference() -> impl Strategy<Value = CanisterQueueItem> + Clone {
+/// Generator for an arbitrary message reference.
+fn arbitrary_message_reference() -> impl Strategy<Value = message_pool::Id> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::BestEffort))),
-        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| new_request_message_id(gen, Class::GuaranteedResponse)),
+        1 => any::<u64>().prop_map(|gen| new_request_message_id(gen, Class::BestEffort)),
+        1 => any::<u64>().prop_map(|gen| new_response_message_id(gen, Class::GuaranteedResponse)),
+        1 => any::<u64>().prop_map(|gen| new_response_message_id(gen, Class::BestEffort)),
     ]
 }
 
@@ -246,12 +245,12 @@ proptest! {
         // Push all references onto the queue.
         for reference in references.iter() {
             match reference {
-                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
-                    queue.push_request(*id);
+                reference if reference.kind() == Kind::Request => {
+                    queue.push_request(*reference);
                 }
-                CanisterQueueItem::Reference(id) => {
+                reference => {
                     queue.try_reserve_response_slot().unwrap();
-                    queue.push_response(*id);
+                    queue.push_response(*reference);
                 }
             }
             prop_assert_eq!(Ok(()), queue.check_invariants());
@@ -260,7 +259,7 @@ proptest! {
         // Check the contents of the queue via `peek` and `pop`.
         while let Some(r) = queue.peek() {
             let reference = references.pop_front();
-            prop_assert_eq!(reference.as_ref(), Some(r));
+            prop_assert_eq!(reference, Some(r));
             prop_assert_eq!(reference, queue.pop());
         }
 
@@ -281,12 +280,12 @@ proptest! {
         // Push all references onto the queue.
         for reference in references.iter() {
             match reference {
-                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
-                    queue.push_request(*id);
+                reference if reference.kind() == Kind::Request => {
+                    queue.push_request(*reference);
                 }
-                CanisterQueueItem::Reference(id) => {
+                reference => {
                     queue.try_reserve_response_slot().unwrap();
-                    queue.push_response(*id);
+                    queue.push_response(*reference);
                 }
             }
             prop_assert_eq!(Ok(()), queue.check_invariants());
@@ -353,6 +352,7 @@ fn make_request(callback_id: u64, deadline_seconds: u32) -> Request {
         .build()
 }
 
+#[test]
 fn canister_queue_try_from_input_queue() {
     let req1 = make_request(1, 0);
     let req2 = make_request(2, 0);

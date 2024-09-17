@@ -16,7 +16,6 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -28,6 +27,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -61,7 +61,7 @@ use tokio::{runtime, sync::mpsc};
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
 pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,
@@ -265,7 +265,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -284,7 +284,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -485,15 +485,15 @@ impl XNetPayloadBuilderImpl {
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`;
+    ///     signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`;
+    ///     `signals_end <= stream.messages_end()`;
     ///
     ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    /// and
+    ///     and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -744,7 +744,7 @@ impl XNetPayloadBuilderImpl {
             SignalsValidationResult::Valid => {
                 self.metrics
                     .slice_messages
-                    .observe(slice.messages().map(|m| m.len()).unwrap_or(0) as f64);
+                    .observe(slice.messages().map_or(0, |m| m.len()) as f64);
                 self.metrics
                     .slice_payload_size
                     .observe(certified_slice.payload.len() as f64);
@@ -752,8 +752,7 @@ impl XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end: slice
                         .messages()
-                        .map(|messages| messages.end())
-                        .unwrap_or(expected.message_index),
+                        .map_or(expected.message_index, |messages| messages.end()),
                     signals_end: slice.header().signals_end(),
                     byte_size,
                 }
@@ -893,8 +892,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .network_topology
                     .subnets
                     .get(&subnet_id)
-                    .map(|subnet| subnet.subnet_type)
-                    .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
+                    .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
                     return None;
                 }
@@ -1415,13 +1413,13 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SignalsValidationResult {
     Valid,
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SliceValidationResult {
     /// Slice is valid.
     Valid {

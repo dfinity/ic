@@ -8,30 +8,30 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-hex = { workspace = true }
 cached = { version = "0.49", default-features = false }
-parking_lot = "0.12.1"
+hex = { workspace = true }
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }
-ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-types = { path = "../../types" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
 lazy_static = { workspace = true }
+parking_lot = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-subtle = "2.4"
 strum_macros = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+subtle = "2.4"
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 
 [[bench]]
 name = "zk"

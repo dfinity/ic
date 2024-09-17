@@ -7,7 +7,10 @@ on:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/minimal-runner-image:0.1
     if: ${{ github.repository != 'dfinity/ic' }}
     steps:
     - name: Checkout

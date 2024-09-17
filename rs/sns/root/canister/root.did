@@ -1,6 +1,18 @@
-type CanisterCallError = record { code : opt int32; description : text };
-type CanisterIdRecord = record { canister_id : principal };
-type CanisterInstallMode = variant { reinstall; upgrade; install };
+type CanisterCallError = record {
+  code : opt int32;
+  description : text;
+};
+
+type CanisterIdRecord = record {
+  canister_id : principal;
+};
+
+type CanisterInstallMode = variant {
+  reinstall;
+  upgrade;
+  install;
+};
+
 type CanisterStatusResult = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -10,6 +22,7 @@ type CanisterStatusResult = record {
   module_hash : opt blob;
   reserved_cycles : opt nat;
 };
+
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -18,11 +31,18 @@ type CanisterStatusResultV2 = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
 };
-type CanisterStatusType = variant { stopped; stopping; running };
+
+type CanisterStatusType = variant {
+  stopped;
+  stopping;
+  running;
+};
+
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
+
 type ChangeCanisterRequest = record {
   arg : blob;
   wasm_module : blob;
@@ -32,24 +52,34 @@ type ChangeCanisterRequest = record {
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
+
 type DefiniteCanisterSettings = record {
   freezing_threshold : opt nat;
   controllers : vec principal;
   reserved_cycles_limit : opt nat;
+  log_visibility : opt LogVisibility;
+  wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
+
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
+  wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
 };
+
 type FailedUpdate = record {
   err : opt CanisterCallError;
   dapp_canister_id : opt principal;
 };
-type GetSnsCanistersSummaryRequest = record { update_canister_list : opt bool };
+
+type GetSnsCanistersSummaryRequest = record {
+  update_canister_list : opt bool;
+};
+
 type GetSnsCanistersSummaryResponse = record {
   root : opt CanisterSummary;
   swap : opt CanisterSummary;
@@ -59,6 +89,7 @@ type GetSnsCanistersSummaryResponse = record {
   dapps : vec CanisterSummary;
   archives : vec CanisterSummary;
 };
+
 type ListSnsCanistersResponse = record {
   root : opt principal;
   swap : opt principal;
@@ -68,6 +99,12 @@ type ListSnsCanistersResponse = record {
   dapps : vec principal;
   archives : vec principal;
 };
+
+type LogVisibility = variant {
+  controllers;
+  public;
+};
+
 type ManageDappCanisterSettingsRequest = record {
   freezing_threshold : opt nat64;
   canister_ids : vec principal;
@@ -77,24 +114,38 @@ type ManageDappCanisterSettingsRequest = record {
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
 };
-type ManageDappCanisterSettingsResponse = record { failure_reason : opt text };
-type RegisterDappCanisterRequest = record { canister_id : opt principal };
-type RegisterDappCanistersRequest = record { canister_ids : vec principal };
+
+type ManageDappCanisterSettingsResponse = record {
+  failure_reason : opt text;
+};
+
+type RegisterDappCanisterRequest = record {
+  canister_id : opt principal;
+};
+
+type RegisterDappCanistersRequest = record {
+  canister_ids : vec principal;
+};
+
 type SetDappControllersRequest = record {
   canister_ids : opt RegisterDappCanistersRequest;
   controller_principal_ids : vec principal;
 };
-type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
+
+type SetDappControllersResponse = record {
+  failed_updates : vec FailedUpdate;
+};
+
 type SnsRootCanister = record {
   dapp_canister_ids : vec principal;
   testflight : bool;
-  latest_ledger_archive_poll_timestamp_seconds : opt nat64;
   archive_canister_ids : vec principal;
   governance_canister_id : opt principal;
   index_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
 };
+
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister : (ChangeCanisterRequest) -> ();

@@ -11,15 +11,15 @@ name = "canister_creator_canister"
 path = "src/main.rs"
 
 [dependencies]
-dfn_core = { path = "../dfn_core" }
-dfn_macro = { path = "../dfn_macro" }
-dfn_json = { path = "../dfn_json" }
 candid = { workspace = true }
+dfn_core = { path = "../dfn_core" }
+dfn_json = { path = "../dfn_json" }
+dfn_macro = { path = "../dfn_macro" }
 futures = { workspace = true }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

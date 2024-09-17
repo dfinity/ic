@@ -18,7 +18,7 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../../../../crypto/ed25519" }
 ic-icrc-rosetta = { path = ".." }
 ic-rosetta-api = { path = "../../.." }
@@ -31,5 +31,5 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-pocket-ic = { path = "../../../../../packages/pocket-ic" }
 ic-icrc-rosetta-runner = { path = "../runner" }
+pocket-ic = { path = "../../../../../packages/pocket-ic" }

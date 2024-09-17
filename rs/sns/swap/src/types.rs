@@ -8,8 +8,8 @@ use crate::{
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
-        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
-        OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
+        Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
@@ -19,6 +19,7 @@ use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
 use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -139,8 +140,8 @@ impl Init {
     }
 
     pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
-        use ic_nervous_system_common::ledger::IcpLedgerCanister;
 
         let sns_root = {
             let sns_root_canister_id = self
@@ -161,7 +162,7 @@ impl Init {
             let icp_ledger_canister_id = self
                 .icp_ledger()
                 .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
-            IcpLedgerCanister::new(icp_ledger_canister_id)
+            IcpLedgerCanister::<DfnRuntime>::new(icp_ledger_canister_id)
         };
 
         let sns_ledger = {
@@ -250,10 +251,6 @@ impl Init {
         if self.max_icp_e8s.is_some() {
             // 19
             obsolete_field_names.push("max_icp_e8s".to_string());
-        }
-        if self.neurons_fund_participants.is_some() {
-            // 27
-            obsolete_field_names.push("neurons_fund_participants".to_string());
         }
         if obsolete_field_names.is_empty() {
             Ok(())
@@ -666,38 +663,6 @@ impl TransferableAmount {
     }
 }
 
-impl OpenRequest {
-    pub fn validate(&self, current_timestamp_seconds: u64, init: &Init) -> Result<(), String> {
-        let mut defects = vec![];
-
-        // Inspect params.
-        match self.params.as_ref() {
-            None => {
-                defects.push("The parameters of the swap are missing.".to_string());
-            }
-            Some(params) => {
-                if let Err(err) = params.is_valid_if_initiated_at(current_timestamp_seconds) {
-                    defects.push(err);
-                } else if let Err(err) = params.validate(init) {
-                    defects.push(err);
-                }
-            }
-        }
-
-        // Inspect open_sns_token_swap_proposal_id.
-        if self.open_sns_token_swap_proposal_id.is_none() {
-            defects.push("The open_sns_token_swap_proposal_id field has no value.".to_string());
-        }
-
-        // Return result.
-        if defects.is_empty() {
-            Ok(())
-        } else {
-            Err(defects.join("\n"))
-        }
-    }
-}
-
 impl DirectInvestment {
     pub fn validate(&self) -> Result<(), String> {
         if !is_valid_principal(&self.buyer_principal) {
@@ -744,7 +709,7 @@ impl CfInvestment {
 }
 
 impl SnsNeuronRecipe {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
             sns.validate()?;
         } else {
@@ -782,6 +747,7 @@ impl CfParticipant {
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
+    /// Tries to get the controller, returning an error if it is not set
     pub fn try_get_controller(&self) -> Result<PrincipalId, String> {
         #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         match (
@@ -902,7 +868,7 @@ impl TransferResult {
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct ScheduledVestingEvent {
     /// The dissolve_delay of the neuron
     pub(crate) dissolve_delay_seconds: u64,
@@ -1097,7 +1063,7 @@ impl SettleNeuronsFundParticipationResult {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<[u8; 32]> for SaleNeuronId {
+impl From<[u8; 32]> for SwapNeuronId {
     fn from(value: [u8; 32]) -> Self {
         Self { id: value.to_vec() }
     }
@@ -1105,25 +1071,16 @@ impl From<[u8; 32]> for SaleNeuronId {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<NeuronId> for SaleNeuronId {
+impl From<NeuronId> for SwapNeuronId {
     fn from(neuron_id: NeuronId) -> Self {
         Self { id: neuron_id.id }
     }
 }
 
-// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
-// SNS governance.proto
-impl TryInto<NeuronId> for SaleNeuronId {
-    type Error = String;
-
-    fn try_into(self) -> Result<NeuronId, Self::Error> {
-        match Subaccount::try_from(self.id) {
-            Ok(subaccount) => Ok(NeuronId::from(subaccount)),
-            Err(err) => Err(format!(
-                "Followee could not be parsed into NeuronId. Err {:?}",
-                err
-            )),
-        }
+impl From<SwapNeuronId> for NeuronId {
+    fn from(src: SwapNeuronId) -> Self {
+        let SwapNeuronId { id } = src;
+        NeuronId { id }
     }
 }
 
@@ -1180,25 +1137,16 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
     fn try_from(
         value: crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron,
     ) -> Result<Self, Self::Error> {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove this once hotkey_principal is removed
         let crate::pb::v1::settle_neurons_fund_participation_response::NeuronsFundNeuron {
             nns_neuron_id,
             amount_icp_e8s,
             controller,
             hotkeys,
             is_capped,
-            hotkey_principal,
         } = value;
         let hotkeys = hotkeys.unwrap_or_default().principals;
-
-        let controller = match (controller, hotkey_principal) {
-            (Some(controller), _) => controller,
-            // TODO(NNS1-3198): Remove this case once hotkey_principal is removed
-            (None, Some(hotkey_principal)) => PrincipalId::from_str(&hotkey_principal)
-                .map_err(|_| format!("Invalid hotkey_principal {}", hotkey_principal))?,
-            (None, None) => {
-                return Err("Either controller or hotkey_principal must be specified".to_string())
-            }
+        let Some(controller) = controller else {
+            return Err("NeuronsFundNeuron.controller must be specified".to_string());
         };
 
         match (nns_neuron_id, amount_icp_e8s, is_capped) {
@@ -1221,26 +1169,20 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
 }
 
 #[cfg(test)]
-// TODO(NNS1-3198): remove #[allow(deprecated)] once hotkey_principal is removed.
-// Unfortunately, this must be applied to the whole module to avoid warnings on the hotkey_principal field in lazy_static.
-#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::{
         pb::v1::{
             CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
-            NeuronBasketConstructionParameters, OpenRequest, Params, Participant,
+            NeuronBasketConstructionParameters, Params, Participant,
         },
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
-    use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
     use std::mem;
-
-    const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
     const PARAMS: Params = Params {
         max_participant_icp_e8s: 1_000 * E8,
@@ -1258,22 +1200,6 @@ mod tests {
         }),
         sale_delay_seconds: None,
     };
-
-    lazy_static! {
-        static ref OPEN_REQUEST: OpenRequest = OpenRequest {
-            params: Some(PARAMS),
-            cf_participants: vec![CfParticipant {
-                controller: Some(PrincipalId::new_user_test_id(423939)),
-                hotkey_principal: PrincipalId::new_user_test_id(423939).to_string(),
-                cf_neurons: vec![CfNeuron::try_new(
-                    42,
-                    99,
-                    Vec::new() // TODO(NNS1-3199): populate with some hotkey principals
-                ).unwrap()],
-            }],
-            open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-        };
-    }
 
     lazy_static! {
         // Fill out Init just enough to test Params validation. These values are
@@ -1316,11 +1242,6 @@ mod tests {
     }
 
     #[test]
-    fn open_request_validate_ok() {
-        assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
-    }
-
-    #[test]
     fn params_high_participants_validate_ok() {
         let params = Params {
             min_participants: 500,
@@ -1333,66 +1254,8 @@ mod tests {
     }
 
     #[test]
-    fn open_request_validate_invalid_params() {
-        let request = OpenRequest {
-            params: Some(Params {
-                swap_due_timestamp_seconds: 42,
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
-    }
-
-    #[test]
-    fn open_request_reject_one_neuron_in_basket() {
-        let request_fail = OpenRequest {
-            params: Some(Params {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1, // 1 should be too little
-                    dissolve_delay_interval_seconds: 7890000,
-                }),
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        let request_success = OpenRequest {
-            params: Some(Params {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2, // 2 should be enough
-                    dissolve_delay_interval_seconds: 7890000,
-                }),
-                ..PARAMS.clone()
-            }),
-            ..OPEN_REQUEST.clone()
-        };
-
-        let error = request_fail
-            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
-            .unwrap_err();
-        assert_eq!(
-            error,
-            "neuron_basket_construction_parameters.count (1) must be >= 2".to_string()
-        );
-        request_success
-            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
-            .unwrap();
-    }
-
-    #[test]
-    fn open_request_validate_no_proposal_id() {
-        let request = OpenRequest {
-            open_sns_token_swap_proposal_id: None,
-            ..OPEN_REQUEST.clone()
-        };
-
-        assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
-    }
-
-    #[test]
     fn participant_total_icp_e8s_no_overflow() {
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         let participant = CfParticipant {
             controller: None,
             hotkey_principal: "".to_string(),

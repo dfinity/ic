@@ -34,19 +34,3 @@ httpbin = tc_httpbin agentConfig
 
 toTransformFn :: Maybe (String, a) -> Blob -> Maybe (Rec ('R.R '["context" 'R.:-> a, "function" 'R.:-> Candid.FuncRef r]))
 toTransformFn arg cid = fmap (\(n, c) -> empty .+ #function .== (Candid.FuncRef (Principal cid) (T.pack n)) .+ #context .== c) arg
-
--- The following line noise is me getting out of my way
--- to be able to use `ic_create` etc. by passing a record that contains
--- a subset of settings, without Maybe
-type family UnRec r where
-  UnRec (R.Rec r) = r
-
-type PartialSettings r = (R.Forall r R.Unconstrained1, R.Map Maybe r .// UnRec Settings ≈ UnRec Settings)
-
-fromPartialSettings :: (PartialSettings r) => R.Rec r -> Settings
-fromPartialSettings r =
-  R.map' Just r
-    .// R.default' @(R.IsA R.Unconstrained1 Maybe) @(UnRec Settings) d
-  where
-    d :: forall a. (R.IsA R.Unconstrained1 Maybe a) => a
-    d = case R.as @R.Unconstrained1 @Maybe @a of R.As -> Nothing

@@ -2,13 +2,11 @@
 Common dependencies for system-tests.
 """
 
-load("//bazel:defs.bzl", "symlink_dir")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/artifact_pool",
     "//rs/async_utils",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
@@ -20,7 +18,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/certification",
     "//rs/config",
-    "//rs/constants",
+    "//rs/limits",
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
@@ -29,7 +27,7 @@ DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
-    "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/dev_test_tools/deterministic_ips",
     "//rs/ic_os/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",
@@ -41,7 +39,7 @@ DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/gtc",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/root/impl:root",
@@ -51,8 +49,6 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/prep",
     "//rs/protobuf",
-    "//rs/recovery",
-    "//rs/recovery/subnet_splitting:subnet_splitting",
     "//rs/registry/canister",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -79,7 +75,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/test_utils",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
@@ -101,6 +96,7 @@ DEPENDENCIES = [
     "//rs/tree_deserializer",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/registry/canister/api",
     "//rs/types/types_test_utils",
     "//rs/types/types",
     "//rs/types/wasm_types",
@@ -138,6 +134,7 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:nix",
     "@crate_index//:num_cpus",
+    "@crate_index//:num-traits",
     "@crate_index//:once_cell",
     "@crate_index//:openssh-keys",
     "@crate_index//:pem",
@@ -255,13 +252,16 @@ SNS_CANISTER_WASM_PROVIDERS = {
     },
 }
 
-def canister_runtime_deps_impl(name, canister_wasm_providers, qualifying_canisters):
-    """Declares a runtime dependency for a canister suite.
+def canister_runtime_deps_impl(canister_wasm_providers, qualifying_canisters):
+    """
+    Return the canister runtime dependencies.
 
     Args:
-      name: base name to use for the rule providing the canister WASM.
       canister_wasm_providers: dict with (canister names as keys) and (values representing WASM-producing rules, tip-of-branch or mainnet).
       qualifying_canisters: list of canisters to be qualified for the release, i.e., these should be built from the current branch.
+
+    Returns:
+      the runtime dependencies for a canister suite paired with a set of environment variables pointing to the WASMs.
     """
     for cname in qualifying_canisters:
         if cname not in canister_wasm_providers.keys():
@@ -274,75 +274,42 @@ def canister_runtime_deps_impl(name, canister_wasm_providers, qualifying_caniste
         for cname, providers in canister_wasm_providers.items()
     }
 
-    # Include the information about which WASMs were actually picked
-    selected = "selected-" + name
-    selected_out = selected + ".json"
-    selected_map = {("\"" + cname + "\""): ("\"mainnet\"" if provider.startswith("@mainnet_") else "\"tip-of-branch\"") for provider, cname in targets.items()}
-    native.genrule(
-        name = selected,
-        outs = [selected_out],
-        cmd = """echo "{selected_map}" > $(OUTS)""".format(selected_map = selected_map),
-    )
-    targets[selected] = selected_out
+    runtime_deps = targets.keys()
+    env = {
+        "{}_WASM_PATH".format(cname.upper().replace("-", "_")): "$(rootpath {})".format(target)
+        for target, cname in targets.items()
+    }
+    return runtime_deps, env
 
-    symlink_dir(
-        name = name,
-        targets = targets,
-    )
+NNS_CANISTER_RUNTIME_DEPS, NNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = NNS_CANISTER_WASM_PROVIDERS.keys(),
+)
 
-def mainnet_nns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = [],
-    )
+MAINNET_NNS_CANISTER_RUNTIME_DEPS, MAINNET_NNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = [],
+)
 
-def tip_nns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = NNS_CANISTER_WASM_PROVIDERS.keys(),
-    )
+QUALIFYING_NNS_CANISTER_RUNTIME_DEPS, QUALIFYING_NNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = QUALIFYING_NNS_CANISTERS,
+)
 
-def qualifying_nns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = QUALIFYING_NNS_CANISTERS,
-    )
+SNS_CANISTER_RUNTIME_DEPS, SNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
+)
 
-def mainnet_sns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = [],
-    )
+MAINNET_SNS_CANISTER_RUNTIME_DEPS, MAINNET_SNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = [],
+)
 
-def tip_sns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
-    )
-
-def qualifying_sns_canisters(name):
-    canister_runtime_deps_impl(
-        name = name,
-        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-        qualifying_canisters = QUALIFYING_SNS_CANISTERS,
-    )
-
-NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:tip-nns-canisters"]
-
-MAINNET_NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:mainnet-nns-canisters"]
-
-QUALIFYING_NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:qualifying-nns-canisters"]
-
-SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:tip-sns-canisters"]
-
-MAINNET_SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:mainnet-sns-canisters"]
-
-QUALIFYING_SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:qualifying-sns-canisters"]
+QUALIFYING_SNS_CANISTER_RUNTIME_DEPS, QUALIFYING_SNS_CANISTER_ENV = canister_runtime_deps_impl(
+    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+    qualifying_canisters = QUALIFYING_SNS_CANISTERS,
+)
 
 UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",

@@ -1,11 +1,8 @@
 use ic_crypto_internal_csp::api::{
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspSigner, CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
-use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
-use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
     CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError,
@@ -16,12 +13,11 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
+use ic_types::crypto::{AlgorithmId, CryptoResult};
 use ic_types::{NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 mock! {
     pub AllCryptoServiceProvider {}
@@ -59,15 +55,6 @@ mock! {
             &self,
             signers: Vec<CspPublicKey>,
             signature: CspSignature,
-            msg: &[u8],
-            algorithm_id: AlgorithmId,
-        ) -> CryptoResult<()>;
-    }
-
-    impl CspSigVerifier for AllCryptoServiceProvider {
-        fn verify_batch(
-            &self,
-            key_signature_pairs: &[(CspPublicKey, CspSignature)],
             msg: &[u8],
             algorithm_id: AlgorithmId,
         ) -> CryptoResult<()>;
@@ -198,15 +185,5 @@ mock! {
         fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
 
         fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
-    }
-
-    impl CspPublicKeyStore for AllCryptoServiceProvider {
-        fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
-        fn current_node_public_keys_with_timestamps(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
-        fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
-    }
-
-    impl CspTlsHandshakeSignerProvider for AllCryptoServiceProvider {
-        fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
     }
 }

@@ -8,7 +8,7 @@ use crate::rosetta_tests::{
     test_neurons::TestNeurons,
 };
 use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::Neuron;
+use ic_nns_governance_api::pb::v1::Neuron;
 use ic_rosetta_api::{
     models::EdKeypair,
     request::{request_result::RequestResult, Request},
@@ -20,7 +20,7 @@ use icp_ledger::AccountIdentifier;
 use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8109;
-const VM_NAME: &str = "rosetta-neuron-maturity";
+const VM_NAME: &str = "neuron-maturity";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

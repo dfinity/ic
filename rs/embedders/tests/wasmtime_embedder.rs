@@ -5,6 +5,7 @@ use ic_config::{
 };
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
+    wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
@@ -96,8 +97,14 @@ fn correctly_count_instructions() {
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
@@ -151,10 +158,20 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
-    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let drop_const_cost =
+        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32) + const_cost;
+    let global_set_cost = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -1544,8 +1561,14 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
     3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 
@@ -2783,5 +2806,174 @@ fn large_wasm64_memory_allocation_test() {
     match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
         Ok(_) => {}
         Err(e) => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[test]
+fn large_wasm64_stable_read_write_test() {
+    // This test checks if we allow stable_read and stable_write to work with offsets
+    // larger than 4 GiB in the wasm heap memory in 64 bit mode.
+    let wat = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "stable64_read"
+            (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+        (import "ic0" "stable64_write"
+            (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+
+            (i64.store (i64.const 4294967312) (i64.const 72))
+            (i64.store (i64.const 4294967313) (i64.const 101))
+            (i64.store (i64.const 4294967314) (i64.const 108))
+            (i64.store (i64.const 4294967315) (i64.const 108))
+            (i64.store (i64.const 4294967316) (i64.const 111))
+           
+            (drop (call $stable_grow (i64.const 10)))
+
+            ;; Write to stable memory from large heap offset.
+            (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
+            ;; Read from stable memory at a different heap offset.
+            (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
+           
+            ;; Return the result of the read operation.
+            (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
+            (call $msg_reply)
+        )
+        (memory i64 70007 70007)
+    )"#;
+
+    let gb = 1024 * 1024 * 1024;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    // Declare a large heap.
+    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_api_type(ic_system_api::ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(wat)
+        .with_canister_memory_limit(NumBytes::from(40 * gb))
+        .build();
+
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    assert_eq!(
+        wasm_res,
+        Ok(Some(WasmResult::Reply(vec![72, 101, 108, 108, 111])))
+    );
+}
+
+#[test]
+fn wasm64_saturate_fun_index() {
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i64 i64)
+                    (param $method_name_src i64)    (param $method_name_len i64)
+                    (param $reply_fun i64)          (param $reply_env i64)
+                    (param $reject_fun i64)         (param $reject_env i64)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i64) (param $size i64))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "call_on_cleanup"
+                (func $ic0_call_on_cleanup (param $fun i64) (param $env i64)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i64.const 100) (i64.const 10)  ;; callee canister id = 777
+                    (i64.const 0) (i64.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i64.const -1) (i64.const 22)   ;; on_reply closure
+                    (i64.const -1) (i64.const 44)   ;; on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i64.const 19) (i64.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (call $ic0_call_on_cleanup
+                    (i64.const -1) (i64.const 66)   ;; cleanup closure
+                )
+                (call $ic0_call_perform)
+                drop
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "some_remote_method XYZ")
+            (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+
+    let api = ic_system_api::ApiType::update(
+        UNIX_EPOCH,
+        vec![],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+    );
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_api_type(api)
+        .build();
+    let _res = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+
+    let system_state_changes = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_system_state_changes();
+
+    // call_perform should trigger one callback update
+    let callback_update = system_state_changes
+        .callback_updates
+        .first()
+        .unwrap()
+        .clone();
+    match callback_update {
+        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Register(_id, callback) => {
+            assert_eq!(
+                callback.on_reply,
+                WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 22
+                }
+            );
+            assert_eq!(
+                callback.on_reject,
+                WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 44
+                }
+            );
+            assert_eq!(
+                callback.on_cleanup,
+                Some(WasmClosure {
+                    func_idx: u32::MAX,
+                    env: 66
+                })
+            );
+        }
+        ic_system_api::sandbox_safe_system_state::CallbackUpdate::Unregister(_) => {
+            panic!("Expected registration of new calback")
+        }
     }
 }

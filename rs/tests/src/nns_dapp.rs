@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
     boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer, IcNodeSnapshot,
+        load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
         NnsCustomizations,
     },
 };
@@ -24,19 +24,19 @@ use std::collections::HashMap;
 use std::env;
 
 /// Init and post_upgrade arguments for SNS aggregator.
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Config {
     pub update_interval_ms: u64,
     pub fast_interval_ms: u64,
 }
 
 /// Init and post_upgrade arguments for NNS frontend dapp.
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum SchemaLabel {
     Map,
     AccountsInStableMemory,
 }
-#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterArguments {
     pub args: Vec<(String, String)>,
     pub schema: Option<SchemaLabel>,
@@ -85,7 +85,7 @@ pub fn install_sns_aggregator(
     let farm_url = boundary_node.get_playnet().unwrap();
 
     let sns_agent = sns_node.build_default_agent();
-    let sns_aggregator_wasm = env.load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
+    let sns_aggregator_wasm = load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
         let sns_aggregator_canister_id =
@@ -153,13 +153,13 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         .with_token_name("ckETH".to_string())
         .build();
     let cketh_canister_id = nns_node.create_and_install_canister_with_arg(
-        &env::var("ICRC1_LEDGER_WASM_PATH").expect("ICRC1_LEDGER_WASM_PATH not set"),
+        &env::var("IC_ICRC1_LEDGER_WASM_PATH").expect("IC_ICRC1_LEDGER_WASM_PATH not set"),
         Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
     );
 
     // now that we know all required canister IDs, install the NNS dapp
     let nns_agent = nns_node.build_default_agent();
-    let nns_dapp_wasm = env.load_wasm(env::var("NNS_DAPP_WASM_PATH").unwrap());
+    let nns_dapp_wasm = load_wasm(env::var("NNS_DAPP_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
         let nns_dapp_metadata = vec![

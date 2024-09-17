@@ -44,13 +44,14 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
 
 /// Convert an object into CBOR binary.
@@ -198,11 +199,18 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return fetch_canister_logs(
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
                     );
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
@@ -282,6 +290,10 @@ impl InternalHttpQueryHandler {
     }
 }
 
+// TODO(EXC-1678): remove after release.
+/// Feature flag to enable/disable allowed viewers for canister log visibility.
+const ALLOWED_VIEWERS_ENABLED: bool = false;
+
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
@@ -295,10 +307,19 @@ fn fetch_canister_logs(
         )
     })?;
 
-    match canister.log_visibility() {
-        LogVisibility::Public => Ok(()),
-        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+    let log_visibility = match canister.log_visibility() {
+        // If the feature is disabled override `AllowedViewers` with default value.
+        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+            &LogVisibilityV2::default()
+        }
+        other => other,
+    };
+    match log_visibility {
+        LogVisibilityV2::Public => Ok(()),
+        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",

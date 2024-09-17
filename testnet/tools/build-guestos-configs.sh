@@ -179,16 +179,14 @@ function prepare_build_directories() {
 }
 
 function download_registry_canisters() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+    "${REPO_ROOT}"/ci/src/artifacts/rclone_download.py \
         --git-rev "${GIT_REVISION}" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
-
-    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
 
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "${OUTPUT}/canisters/"
 }
 
 function download_binaries() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+    "${REPO_ROOT}"/ci/src/artifacts/rclone_download.py \
         --git-rev "${GIT_REVISION}" --remote-path=release --out="${IC_PREP_DIR}/bin"
 
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"

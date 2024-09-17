@@ -31,18 +31,20 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-    SubnetSnapshot,
-};
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
+    driver::{
+        group::SystemTestGroup,
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SubnetSnapshot,
+        },
+    },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    systest,
     util::*,
 };
 use ic_types::Height;
@@ -53,7 +55,7 @@ use std::collections::BTreeMap;
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
 
-const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
+const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -191,7 +193,10 @@ async fn assert_metric_sum(
     log: &Logger,
 ) {
     let mut count = 0;
-    let metric_with_label = format!("{}{{key_id=\"{}\"}}", ECDSA_KEY_TRANSCRIPT_CREATED, key_id);
+    let metric_with_label = format!(
+        "{}{{key_id=\"{}\"}}",
+        MASTER_KEY_TRANSCRIPTS_CREATED, key_id
+    );
     let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
     loop {
         match metrics.fetch::<u64>().await {

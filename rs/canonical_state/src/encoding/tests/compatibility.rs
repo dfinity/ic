@@ -304,7 +304,6 @@ fn canonical_encoding_stream_header_v19_plus() {
 ///         CyclesUseCase::Instructions => 80_000_000_000.into(),
 ///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
 ///     },
-///     ecdsa_signature_agreements: 2,
 ///     num_canisters: 5,
 ///     canister_state_bytes: (5 * 1024 * 1024).into(),
 ///     update_transactions_total: 4200,
@@ -346,7 +345,6 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
         metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
         metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
         metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
-        metrics.ecdsa_signature_agreements = 2;
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;

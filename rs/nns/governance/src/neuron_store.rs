@@ -2,10 +2,8 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{
-        neuron_id_range_to_u64_range,
-        types::{normalized, Neuron},
-    },
+    neuron::types::Neuron,
+    neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
@@ -33,13 +31,13 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
-    ops::{Deref, RangeBounds},
+    ops::Deref,
 };
 
 pub mod metrics;
 pub(crate) use metrics::NeuronMetrics;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
     NeuronNotFound {
         neuron_id: NeuronId,
@@ -103,11 +101,6 @@ impl NeuronStoreError {
             neuron_id,
         }
     }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct NeuronNotFound {
-    neuron_id: NeuronId,
 }
 
 impl Display for NeuronStoreError {
@@ -195,7 +188,7 @@ dyn_clone::clone_trait_object!(PracticalClock);
 impl PracticalClock for IcClock {}
 
 /// This structure represents a whole Neuron's Fund neuron.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,
@@ -572,22 +565,25 @@ impl NeuronStore {
                 .ok()
                 .map(Cow::Owned)
         });
-        let (neuron, storage_location) = match (stable_neuron, heap_neuron) {
+
+        match (stable_neuron, heap_neuron) {
+            // 1 copy cases.
+            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+            // 2 copies case.
             (Some(stable), Some(_)) => {
                 println!(
                     "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                        we are at risk of having stale copies",
+                     we are at risk of having stale copies",
                     LOG_PREFIX, neuron_id
                 );
-                (stable, StorageLocation::Stable)
+                Ok((stable, StorageLocation::Stable))
             }
-            (Some(stable), None) => (stable, StorageLocation::Stable),
-            (None, Some(heap)) => (heap, StorageLocation::Heap),
-            (None, None) => return Err(NeuronStoreError::not_found(neuron_id)),
-        };
 
-        let neuron = normalized(neuron);
-        Ok((neuron, storage_location))
+            // 0 copies case.
+            (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
+        }
     }
 
     // Loads the entire neuron from either heap or stable storage and returns its primary storage.
@@ -693,21 +689,6 @@ impl NeuronStore {
         self.heap_neurons.values()
     }
 
-    /// Returns Neurons in heap starting with the first one whose ID is >= begin.
-    ///
-    /// The len of the result is at most limit. It is also maximal; that is, if the return value has
-    /// len < limit, then the caller can assume that there are no more Neurons.
-    pub fn range_heap_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
-    where
-        R: RangeBounds<NeuronId>,
-    {
-        let range = neuron_id_range_to_u64_range(&range);
-
-        self.heap_neurons
-            .range(range)
-            .map(|(_id, neuron)| neuron.clone())
-    }
-
     /// Internal - map over neurons after filtering
     fn map_heap_neurons_filtered<R>(
         &self,
@@ -732,8 +713,7 @@ impl NeuronStore {
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
-            // TODO(NNS1-3198): This should be replaced with a call to `n.hotkeys()`
-            hotkeys: Vec::new(),
+            hotkeys: pick_most_important_hotkeys(&n.hot_keys),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()
@@ -797,12 +777,7 @@ impl NeuronStore {
             return Ok(neuron_clone);
         }
 
-        let is_authorized_to_vote_for_any_neuron_manager = neuron_clone
-            .neuron_managers()
-            .into_iter()
-            .any(|neuron_manager| self.is_authorized_to_vote(principal_id, neuron_manager));
-
-        if is_authorized_to_vote_for_any_neuron_manager {
+        if self.can_principal_vote_on_proposals_that_target_neuron(principal_id, &neuron_clone) {
             Ok(neuron_clone)
         } else {
             Err(NeuronStoreError::not_authorized_to_get_full_neuron(
@@ -822,6 +797,17 @@ impl NeuronStore {
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
         .unwrap_or(false)
+    }
+
+    pub fn can_principal_vote_on_proposals_that_target_neuron(
+        &self,
+        principal_id: PrincipalId,
+        neuron: &Neuron,
+    ) -> bool {
+        neuron
+            .neuron_managers()
+            .into_iter()
+            .any(|manager_neuron_id| self.is_authorized_to_vote(principal_id, manager_neuron_id))
     }
 
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,

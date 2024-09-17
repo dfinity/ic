@@ -1,13 +1,11 @@
-use std::{
-    net::{SocketAddr, TcpListener},
-    time::Duration,
-};
+use std::{net::SocketAddr, time::Duration};
 
-use axum::Server;
 use candid::Principal;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use ic_bn_lib::http::server;
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
 use rand::prelude::*;
+use tokio_util::sync::CancellationToken;
 
 use ic_boundary::test_utils::setup_test_router;
 
@@ -50,10 +48,17 @@ fn benchmark(c: &mut Criterion) {
     group.sample_size(250);
     group.measurement_time(Duration::from_secs(15));
 
-    let (app, _) = setup_test_router(true, true, 40, 15, 16384);
+    let (app, _) = setup_test_router(true, true, 40, 15, 16384, None);
 
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
+    let server_opts = server::Options {
+        backlog: 256,
+        http1_header_read_timeout: Duration::from_secs(15),
+        http2_max_streams: 1000,
+        http2_keepalive_interval: Duration::from_secs(60),
+        http2_keepalive_timeout: Duration::from_secs(30),
+        grace_period: Duration::from_secs(60),
+        max_requests_per_conn: Some(1000),
+    };
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -62,16 +67,25 @@ fn benchmark(c: &mut Criterion) {
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     runtime.spawn(async move {
-        let server = Server::from_tcp(listener)
-            .unwrap()
-            .serve(app.into_make_service_with_connect_info::<SocketAddr>());
-        tx.send(()).unwrap();
-        server.await.expect("server error");
+        let listener =
+            server::Listener::new(server::Addr::Tcp("127.0.0.1:0".parse().unwrap()), 1024).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = server::Server::new_with_registry(
+            server::Addr::Tcp("127.0.0.1:0".parse().unwrap()),
+            app,
+            server_opts,
+            &prometheus::Registry::new(),
+            None,
+        );
+
+        tx.send(addr).unwrap();
+        server
+            .serve_with_listener(listener, CancellationToken::new())
+            .await
+            .expect("server error");
     });
 
-    runtime.block_on(async {
-        rx.await.unwrap();
-    });
+    let addr = runtime.block_on(async { rx.await.unwrap() });
 
     let cli = reqwest::ClientBuilder::new().build().unwrap();
 
@@ -91,44 +105,9 @@ fn benchmark(c: &mut Criterion) {
             },
         );
     }
+
     group.finish();
 }
 
 criterion_group!(benches, benchmark);
 criterion_main!(benches);
-
-// Don't remove, sometimes useful for manual measurements
-#[allow(dead_code)]
-#[tokio::main]
-async fn main2() {
-    use std::time::Instant;
-
-    let (app, _) = setup_test_router(false, false, 100, 50, 16384); // 16k is > than 97% IC responses
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
-        let server = Server::from_tcp(listener)
-            .unwrap()
-            .serve(app.into_make_service_with_connect_info::<SocketAddr>());
-        tx.send(()).unwrap();
-        server.await.expect("server error");
-    });
-
-    rx.await.unwrap();
-
-    let cli = reqwest::ClientBuilder::new().build().unwrap();
-
-    let n = 1;
-    let start = Instant::now();
-
-    for _ in 0..n {
-        let req = gen_request(&cli, &addr, 1024);
-        let resp = cli.execute(req).await.unwrap();
-        assert_eq!(resp.status(), http::StatusCode::OK);
-        resp.text().await.unwrap();
-    }
-
-    println!("{:?}", start.elapsed() / n);
-}

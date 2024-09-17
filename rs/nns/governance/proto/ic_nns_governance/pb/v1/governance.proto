@@ -84,8 +84,8 @@ enum Topic {
   // creating new subnets, adding and removing subnet nodes, and
   // splitting subnets.
   TOPIC_SUBNET_MANAGEMENT = 7;
-  // Installing and upgrading “system” canisters that belong to the network.
-  // For example, upgrading the NNS.
+  // All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
+  // Management or Service Nervous System Management).
   TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
   // Proposals that update KYC information for regulatory purposes,
   // for example during the initial Genesis distribution of ICP in the
@@ -125,12 +125,12 @@ enum Topic {
   // Proposals related to subnet rental.
   TOPIC_SUBNET_RENTAL = 16;
 
-  // Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
-  // protocol, without which the IC will not be able to function properly.
+  // All proposals to manage protocol canisters, which are considered part of the ICP protocol and
+  // are essential for its proper functioning.
   TOPIC_PROTOCOL_CANISTER_MANAGEMENT = 17;
 
-  // Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
-  // Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+  // All proposals to manage the canisters of service nervous systems (SNS), including upgrading
+  // relevant canisters and managing SNS framework canister WASMs through SNS-W.
   TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT = 18;
 
   // Superseded by SNS_COMMUNITY_FUND.
@@ -873,11 +873,11 @@ message Proposal {
     OpenSnsTokenSwap open_sns_token_swap = 23 [deprecated = true];
     // Create a new SNS.
     CreateServiceNervousSystem create_service_nervous_system = 24;
-    // Calls install_code for a canister (install, reinstall, or upgrade).
+    // Install, reinstall or upgrade the code of a canister that is controlled by the NNS.
     InstallCode install_code = 25;
-    // Stops or starts a canister controlled by Root.
+    // Stop or start a canister that is controlled by the NNS.
     StopOrStartCanister stop_or_start_canister = 26;
-    // Updates canister settings for those controlled by NNS Root.
+    // Update the settings of a canister that is controlled by the NNS.
     UpdateCanisterSettings update_canister_settings = 27;
   }
 }
@@ -1400,10 +1400,8 @@ message ProposalData {
   // This is populated when an OpenSnsTokenSwap proposal is first made.
   optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 
-  // This is populated when OpenSnsTokenSwap is executed. It is used when our
-  // conclude_community_fund_participation Candid method is called to either
-  // mint ICP, or restore CF neuron maturity.
-  repeated ic_sns_swap.pb.v1.CfParticipant cf_participants = 18;
+  reserved "cf_participants";
+  reserved 18;
 
   // This gets set to one of the terminal values (i.e. Committed or Aborted)
   // when the swap canister calls our conclude_community_fund_participation
@@ -1552,11 +1550,10 @@ message NeuronsFundSnapshot {
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
-    // TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
     repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4 [deprecated = true];
+    reserved 4;
+    reserved "hotkey_principal";
   }
 
   repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;
@@ -2312,6 +2309,7 @@ message Governance {
     }
 
     NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
+    NeuronSubsetMetrics public_neuron_subset_metrics = 39;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -2492,6 +2490,15 @@ message ListNeurons {
   // if this field is not provided, it defaults to true, in order to maintain backwards
   // compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
   optional bool include_empty_neurons_readable_by_caller = 3;
+  // If this is set to true, and a neuron in the "requested list" has its
+  // visibility set to public, then, it will (also) be included in the
+  // full_neurons field in the response (which is of type ListNeuronsResponse).
+  // Note that this has no effect on which neurons are in the "requested list".
+  // In particular, this does not cause all public neurons to become part of the
+  // requested list. In general, you probably want to set this to true, but
+  // since this feature was added later, it is opt in to avoid confusing
+  // existing (unmigrated) callers.
+  optional bool include_public_neurons_in_full_neurons = 4;
 }
 
 // A response to a `ListNeurons` request.
@@ -2691,8 +2698,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
@@ -2712,8 +2719,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.
@@ -2838,5 +2845,20 @@ message RestoreAgingSummary {
     optional uint64 previous_total_stake_e8s = 3;
     // The current total stake of neurons in this group when considering to restore aging.
     optional uint64 current_total_stake_e8s = 4;
+  }
+}
+
+// The historical rewards that were provided to node providers, along with the contextual data
+// needed to calculate it.
+message ArchivedMonthlyNodeProviderRewards {
+  // The version of the rewards data.  These versions are added to accommodate changes to the
+  // rewards data structure over time.
+  oneof version {
+    V1 version_1 = 1;
+  }
+
+  // The first version of the stored rewards.
+  message V1 {
+    ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
 }

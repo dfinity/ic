@@ -532,7 +532,7 @@ fn duplicate_txns() {
     // Corner case 2 -- attempts which are transaction_window + drift apart from
     // each other
     let t = state.blockchain.last_timestamp + Duration::from_secs(200);
-    let drift = ic_constants::PERMITTED_DRIFT;
+    let drift = ic_limits::PERMITTED_DRIFT;
 
     assert_eq!(
         PaymentError::TransferError(TransferError::TxCreatedInFuture),
@@ -686,7 +686,7 @@ fn test_purge() {
         "A purge before the end of the window doesn't remove the notification"
     );
 
-    let later = genesis + Duration::from_secs(10) + ic_constants::PERMITTED_DRIFT;
+    let later = genesis + Duration::from_secs(10) + ic_limits::PERMITTED_DRIFT;
     core_ledger::purge_old_transactions(&mut ledger, later);
 
     let res3 = ledger.blocks_notified.get(1);

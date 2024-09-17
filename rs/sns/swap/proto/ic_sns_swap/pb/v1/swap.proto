@@ -200,8 +200,9 @@ message Swap {
   // Specified on creation. That is, always specified and immutable.
   Init init = 1;
 
-  // Specified in the transition from PENDING to OPEN and immutable
-  // thereafter.
+  // Derived from `init`, always specified and immutable. In most cases `init`
+  // should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   Params params = 4;
 
   // Neurons' Fund participation.  Specified in the transition from
@@ -221,8 +222,11 @@ message Swap {
   // to the outcome of the swap.
   repeated SnsNeuronRecipe neuron_recipes = 7;
 
-  // Gets set to whatever value is in the corresponding field of OpenRequest
-  // (that field is required at the application level).
+  // The proposal ID that was used to create the SNS that opened this swap.
+  // Note: the name is a historical artifact because the swap used to be opened
+  // with an OpenSnsTokenSwap request.
+  // This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   optional uint64 open_sns_token_swap_proposal_id = 9;
 
   // A lock stored in Swap state. If set to true, then a finalize_swap
@@ -406,7 +410,11 @@ message Init {
   optional uint64 nns_proposal_id = 26;
 
   // The Neurons' Fund participants of this SNS decentralization swap.
-  optional NeuronsFundParticipants neurons_fund_participants = 27;
+  //
+  // This field is obsolete, as Neurons' Fund participants are now determined at the end of
+  // a successful swap and cannot be specified during SNS initialization.
+  reserved 27;
+  reserved "neurons_fund_participants";
 
   // Controls whether swap finalization should be attempted automatically in the
   // canister heartbeat. If set to false, `finalize_swap` must be called
@@ -495,11 +503,6 @@ message LinearScalingCoefficient {
   optional uint64 intercept_icp_e8s = 5;
 }
 
-// Represents multiple Neurons' Fund participants.
-message NeuronsFundParticipants {
-  repeated CfParticipant cf_participants = 1;
-}
-
 // Represents one NNS neuron from the Neurons' Fund participating in this swap.
 message CfNeuron {
   // The NNS neuron ID of the participating neuron.
@@ -525,7 +528,7 @@ message CfParticipant {
   repeated CfNeuron cf_neurons = 2;
 
   // The principal that can vote on behalf of these Neurons' Fund neurons.
-  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // Deprecated. Please use `controller` instead
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -698,7 +701,7 @@ message CfInvestment {
 
   fixed64 nns_neuron_id = 2;
 
-  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -772,17 +775,6 @@ message SnsNeuronRecipe {
 //
 // === Request/Response Messages
 //
-
-message OpenRequest {
-  // The parameters of the swap.
-  Params params = 1;
-  // Neurons' Fund participation.
-  repeated CfParticipant cf_participants = 2;
-  // The ID of the proposal whose execution consists of calling this method.
-  optional uint64 open_sns_token_swap_proposal_id = 3;
-}
-
-message OpenResponse {}
 
 message GetCanisterStatusRequest {}
 
@@ -1181,8 +1173,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
@@ -1202,9 +1194,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    // TODO(NNS1-3198): Remove
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

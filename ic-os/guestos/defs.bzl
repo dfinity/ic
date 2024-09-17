@@ -33,7 +33,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",  # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",  # Need for the canister/compilation sandboxing to work.
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin integration.
-            "//rs/https_outcalls/adapter:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
+            "//publish/binaries:ic-https-outcalls-adapter-https-only": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",  # Crypto operations provider, required by the IC protocol (signing, etc).
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",  # Replica process manager, required by the IC protocol (upgrades, node addition, etc).
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Main protocol binary, required by the IC protocol. Installs the malicious replica iff set only in test builds.
@@ -43,16 +43,16 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
-            "//publish/binaries:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
-            "//publish/binaries:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
-            "//publish/binaries:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
-            "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
+            "//rs/ic_os/release:fstrim_tool": "/opt/ic/bin/fstrim_tool:0755",  # The GuestOS periodically calls fstrim to trigger the host os to free the memory that stored old version of the secret key store, so that it can be garbage collected more quickly.
+            "//rs/ic_os/release:guestos_tool": "/opt/ic/bin/guestos_tool:0755",  # Tool for generating network config and hardware observability.
+            "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
+            "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",  # Parallel restorecon replacement for filesystem relabeling.
-            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
+            "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
 
             # additional libraries to install
-            "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
+            "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
         },
 
         # Set various configuration values

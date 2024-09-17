@@ -4,7 +4,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create large --lifetime-mins=180 --output-dir=./large -- --test_tmpdir=./large
 //
 // The --output-dir=./large will store the debug output of the test driver in the specified directory.
@@ -51,9 +51,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use ic_tests::nns_dapp::{
@@ -98,7 +96,6 @@ pub fn setup(env: TestEnv) {
     // set up NNS canisters
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 
@@ -149,7 +146,7 @@ pub fn setup(env: TestEnv) {
             set_sns_subnet(&env, sns_subnet.subnet_id);
 
             // upload SNS canister WASMs to the SNS-W canister
-            add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
+            add_all_wasms_to_sns_wasm(&env);
 
             // install II, NNS dapp, and Subnet Rental Canister
             install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));

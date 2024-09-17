@@ -3,8 +3,8 @@ name: Release Testing
 on:
   push:
     branches:
-      - 'hotfix-*'
-      - 'rc--*'
+      - "hotfix-*"
+      - "rc--*"
   workflow_dispatch:
 
 # new commits interrupt any running workflow on the same branch
@@ -14,26 +14,20 @@ concurrency:
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
-  CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
   CI_JOB_ID: ${{ github.job }} # github does not expose this variable https://github.com/orgs/community/discussions/8945
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+    image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -54,7 +48,15 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+  docker-login: &docker-login
+    name: Login to Dockerhub
+    shell: bash
+    run: ./ci/scripts/docker-login.sh
+    env:
+      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 jobs:
   ci-main:
@@ -68,6 +70,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -77,6 +80,17 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   bazel-system-test-staging:
     name: Bazel System Test Staging
@@ -85,6 +99,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -94,6 +109,17 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_staging"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
@@ -102,6 +128,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -111,6 +138,17 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS_RULES: "--test_tag_filters=system_test_hotfix"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   dependency-scan-release-cut:
     name: Dependency Scan for Release
@@ -127,6 +165,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - <<: *docker-login
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
@@ -137,6 +176,44 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
+
+  setup-guest-os-qualification:
+    name: Setting up guest os qualification pipeline
+    <<: *dind-large-setup
+    outputs:
+      matrix: ${{ steps.generate.outputs.output }}
+    steps:
+      - name: Sparse checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          sparse-checkout: ".github/scripts/determine-initial-guest-os-versions.py"
+      - id: generate
+        name: Fetch beginning versions for qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUTPUT=$(python .github/scripts/determine-initial-guest-os-versions.py)
+          echo "output=$OUTPUT" >> $GITHUB_OUTPUT
+
+  guest-os-qualification:
+    name: Qualifying ${{ matrix.version }} -> ${{ github.sha }}
+    needs: setup-guest-os-qualification
+    strategy:
+      matrix: ${{ fromJson(needs.setup-guest-os-qualification.outputs.matrix) }}
+    <<: *dind-large-setup
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - <<: *docker-login
+      - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/tests/dre:guest_os_qualification"
+          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
+          BAZEL_EXTRA_ARGS_RULES: "--test_timeout=7200 --test_env=OLD_VERSION=${{ matrix.version }}"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}

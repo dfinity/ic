@@ -7,21 +7,21 @@
 //! How it works:
 //!
 //! 1. We deliver both the payload for finalized block at height h together with
-//! a random tape at height h. This is handled by the finalizer.
+//!    a random tape at height h. This is handled by the finalizer.
 //!
 //! 2. As soon as we finalize a block at height h, we start to create the random
-//! tape for height h+1. This is handled by random tape maker.
+//!    tape for height h+1. This is handled by random tape maker.
 //!
 //! 3. For security purpose, when the payload of height h is executed, it should
-//! not access random tape at the same height. This is because the random tape
-//! at h may be already known before a block at h is finalized, creating a
-//! window for a malicious blockmaker to launch an attack. To mitigate this
-//! attack, accessing randomness in a canister has to be an async call, where
-//! the randomness of height h+1 will be returned when the next block/batch/
-//! random tape is delivered.
+//!    not access random tape at the same height. This is because the random tape
+//!    at h may be already known before a block at h is finalized, creating a
+//!    window for a malicious blockmaker to launch an attack. To mitigate this
+//!    attack, accessing randomness in a canister has to be an async call, where
+//!    the randomness of height h+1 will be returned when the next block/batch/
+//!    random tape is delivered.
 
 use ic_consensus_utils::{
-    active_low_threshold_transcript,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
@@ -132,10 +132,10 @@ impl RandomTapeMaker {
     ) -> Option<RandomTapeShare> {
         let content = RandomTapeContent::new(height);
 
-        if let Some(transcript) = active_low_threshold_transcript(pool.as_cache(), height) {
+        if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
             match self
                 .crypto
-                .sign(&content, self.replica_config.node_id, transcript.dkg_id)
+                .sign(&content, self.replica_config.node_id, dkg_id)
             {
                 Ok(signature) => Some(RandomTapeShare { content, signature }),
                 Err(err) => {
@@ -233,7 +233,7 @@ mod tests {
 
             // After adding our random tape share for height 2, we should not create
             // any more shares
-            pool.apply_changes(add_all_to_validated(
+            pool.apply(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));
@@ -257,7 +257,7 @@ mod tests {
             // when we advance the pool by three heights again (advancing the finalized
             // height to 7), but we add a full random tape for height 7, we should
             // only construct a share for heights 6 and 8.
-            pool.apply_changes(add_all_to_validated(
+            pool.apply(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));
@@ -282,7 +282,7 @@ mod tests {
             // 8 already was delivered so there is no need to construct random tape 8
             // anymore. We therefore expect the random tape maker to only add a
             // share for height 10.
-            pool.apply_changes(add_all_to_validated(
+            pool.apply(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));

@@ -13,12 +13,14 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
+    consensus::{
+        idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank, Threshold,
+    },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
     },
-    Height, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -55,8 +57,8 @@ pub struct RoundRobin {
 
 impl RoundRobin {
     /// Call the next function in the given list of calls according to a round
-    /// robin schedule. Return as soon as a call returns a non-empty ChangeSet.
-    /// Otherwise try calling the next one, and return empty ChangeSet if all
+    /// robin schedule. Return as soon as a call returns a non-empty Mutations.
+    /// Otherwise try calling the next one, and return empty Mutations if all
     /// calls from the given list have been tried.
     pub fn call_next<T>(&self, calls: &[&dyn Fn() -> Vec<T>]) -> Vec<T> {
         let mut result;
@@ -185,7 +187,7 @@ pub fn get_adjusted_notary_delay(
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum NotaryDelay {
     /// Notary can notarize after this delay.
     CanNotarizeAfter(Duration),
@@ -272,26 +274,35 @@ pub fn get_adjusted_notary_delay_from_settings(
     NotaryDelay::CanNotarizeAfter(Duration::from_millis(certified_adjusted_delay))
 }
 
-/// Return the validated block proposals with the lowest rank at height `h`, if
-/// there are any. Else return `None`.
-pub fn find_lowest_ranked_proposals(pool: &PoolReader<'_>, h: Height) -> Vec<BlockProposal> {
-    let (_, best_proposals) = pool
+/// Return the validated block proposals with the lowest rank at height `h` that
+/// have not been disqualified, if there are any. Else, return an empty Vec.
+pub fn find_lowest_ranked_non_disqualified_proposals(
+    pool: &PoolReader<'_>,
+    h: Height,
+) -> Vec<BlockProposal> {
+    let disqualified: BTreeSet<NodeId> = pool
+        .pool()
+        .validated()
+        .equivocation_proof()
+        .get_by_height(h)
+        .map(|proof| proof.signer)
+        .collect();
+
+    let mut best_proposals = vec![];
+    for proposal in pool
         .pool()
         .validated()
         .block_proposal()
         .get_by_height(h)
-        .fold(
-            (None, Vec::new()),
-            |(mut best_rank, mut best_proposals), proposal| {
-                if best_rank.is_none() || best_rank.unwrap() > proposal.rank() {
-                    best_rank = Some(proposal.rank());
-                    best_proposals = vec![proposal];
-                } else if Some(proposal.rank()) == best_rank {
-                    best_proposals.push(proposal);
-                }
-                (best_rank, best_proposals)
-            },
-        );
+        .filter(|proposal| !disqualified.contains(&proposal.signature.signer))
+    {
+        let best_rank = best_proposals.first().map(HasRank::rank);
+        if !best_rank.is_some_and(|rank| rank <= proposal.rank()) {
+            best_proposals = vec![proposal];
+        } else if Some(proposal.rank()) == best_rank {
+            best_proposals.push(proposal);
+        }
+    }
     best_proposals
 }
 
@@ -458,22 +469,56 @@ pub fn registry_version_at_height(
 }
 
 /// Return the current low transcript for the given height if it was found.
-pub fn active_low_threshold_transcript(
+pub fn active_low_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::LowThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            transcript.dkg_id
+        })
     })
 }
 
 /// Return the current high transcript for the given height if it was found.
-pub fn active_high_threshold_transcript(
+pub fn active_high_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgTranscript> {
+) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_at_given_summary(block, height, NiDkgTag::HighThreshold)
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            transcript.dkg_id
+        })
+    })
+}
+
+/// Return the current low transcript for the given height if it was found.
+pub fn active_low_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
+    })
+}
+
+/// Return the current high transcript for the given height if it was found.
+pub fn active_high_threshold_committee(
+    reader: &dyn ConsensusPoolCache,
+    height: Height,
+) -> Option<(Threshold, NiDkgReceivers)> {
+    get_active_data_at(reader, height, |block, height| {
+        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
+            (
+                transcript.threshold.get().get() as usize,
+                transcript.committee.clone(),
+            )
+        })
     })
 }
 
@@ -520,21 +565,20 @@ fn get_registry_version_at_given_summary(
     }
 }
 
-fn get_transcript_at_given_summary(
+fn get_transcript_data_at_given_summary<T>(
     summary_block: &Block,
     height: Height,
     tag: NiDkgTag,
-) -> Option<NiDkgTranscript> {
+    getter: impl Fn(&NiDkgTranscript) -> T,
+) -> Option<T> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(dkg_summary.current_transcript(&tag).clone())
+        Some(getter(dkg_summary.current_transcript(&tag)))
     } else if dkg_summary.next_interval_includes(height) {
-        Some(
-            dkg_summary
-                .next_transcript(&tag)
-                .unwrap_or_else(|| dkg_summary.current_transcript(&tag))
-                .clone(),
-        )
+        let transcript = dkg_summary
+            .next_transcript(&tag)
+            .unwrap_or_else(|| dkg_summary.current_transcript(&tag));
+        Some(getter(transcript))
     } else {
         None
     }
@@ -587,7 +631,7 @@ mod tests {
     use std::{str::FromStr, sync::Arc};
 
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
@@ -599,10 +643,13 @@ mod tests {
         messages::RequestBuilder,
     };
     use ic_types::{
-        consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
-            MasterKeyTranscript, PreSigId, UnmaskedTranscript,
+        consensus::{
+            get_faults_tolerated,
+            idkg::{
+                common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
+                schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
+                MasterKeyTranscript, PreSigId, UnmaskedTranscript,
+            },
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -990,5 +1037,40 @@ mod tests {
             None,
             get_oldest_idkg_state_registry_version(&idkg_without_pre_sigs, &state)
         );
+    }
+
+    #[test]
+    fn test_ignore_disqualified_ranks() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const SUBNET_SIZE: u64 = 10;
+            let Dependencies { mut pool, .. } = dependencies(pool_config, SUBNET_SIZE);
+
+            let height = Height::new(1);
+
+            // We fill the validated pool with blocks from every rank and incrementally
+            // disqualify the lowest qualified rank. Each time we assert that it's
+            // ignored by [`find_lowest_ranked_non_disqualified_proposals`].
+            let f = get_faults_tolerated(SUBNET_SIZE as usize) as u64;
+            for i in 0..f + 1 {
+                pool.insert_validated(pool.make_next_block_with_rank(Rank(i)));
+            }
+
+            assert_matches!(
+                &find_lowest_ranked_non_disqualified_proposals(&PoolReader::new(&pool), height)[..],
+                [b] if b.content.as_ref().rank == Rank(0)
+            );
+            for i in 0..f {
+                pool.insert_validated(pool.make_equivocation_proof(Rank(i), height));
+                // We disqualify rank i, so lowest ranked proposal must be i + 1
+                match &find_lowest_ranked_non_disqualified_proposals(
+                    &PoolReader::new(&pool),
+                    height,
+                )[..]
+                {
+                    [proposal] => assert_eq!(proposal.content.as_ref().rank, Rank(i + 1)),
+                    _ => panic!("expected exactly one proposal at the given height"),
+                }
+            }
+        });
     }
 }

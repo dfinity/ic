@@ -75,7 +75,7 @@ thread_local! {
 }
 
 /// Configuration of the archive node.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
     max_memory_size_bytes: u64,
@@ -394,7 +394,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

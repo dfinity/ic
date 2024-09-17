@@ -15,7 +15,7 @@ use ic_nervous_system_clients::{
     canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID};
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -43,11 +43,6 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 use dfn_core::println;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
-
-/// The current value is 4 GiB, s.t. the SNS framework canisters never hit the soft memory limit.
-/// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
-/// be passed anymore.
-pub const DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
 thread_local! {
     static SNS_WASM: RefCell<SnsWasmCanister<CanisterStableMemory>> = RefCell::new(SnsWasmCanister::new());
@@ -329,7 +324,9 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
+    SNS_WASM.with(|c| {
+        c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory());
+    });
 
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
@@ -587,58 +584,18 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, which means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation.
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("sns-wasm.did").to_string())
 }
 
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-/// A test that fails if the API was updated but the candid definition was not.
-#[test]
-fn check_wasm_candid_file() {
-    let did_path = std::path::PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-    )
-    .join("canister/sns-wasm.did");
-
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/sns-wasm.did. \
-            Run `bazel run :generate_did > canister/sns-wasm.did` (no nix and/or direnv) or \
-            `cargo run --bin sns-wasm-canister > canister/sns-wasm.did` in \
-            rs/nns/sns-wasm to update canister/sns-wasm.did."
-        )
-    }
-}
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
+#[cfg(test)]
+mod tests;

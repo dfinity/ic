@@ -1,21 +1,18 @@
 [package]
-name = "fees-and-limits"
+name = "icp-config"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "3.2.25", features = ["derive"] }
+eyre = "0.6.8"
 ic-config = { path = "../../config" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
-candid = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
-eyre = "0.6.8"
-ic-agent = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
 
 [[bin]]
-name = "fees_and_limits"
-path = "src/fees_and_limits.rs"
+name = "icp_config"
+path = "src/icp_config.rs"

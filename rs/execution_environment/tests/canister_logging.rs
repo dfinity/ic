@@ -1,9 +1,9 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, DataSize, EmptyBlob, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibility, Payload,
+    self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
+    CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -12,7 +12,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
@@ -79,7 +79,7 @@ fn setup_with_controller(wasm: Vec<u8>) -> (StateMachine, CanisterId, PrincipalI
     let controller = PrincipalId::new_user_test_id(42);
     let (env, canister_id) = setup_and_install_wasm(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Controllers)
+            .with_log_visibility(LogVisibilityV2::Controllers)
             .with_controllers(vec![controller])
             .build(),
         wasm,
@@ -111,7 +111,7 @@ fn fetch_canister_logs(
 fn test_fetch_canister_logs_via_submit_ingress() {
     let (env, canister_id) = setup_and_install_wasm(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Public)
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister().build_wasm(),
     );
@@ -125,7 +125,7 @@ fn test_fetch_canister_logs_via_submit_ingress() {
         result,
         Err(SubmitIngressError::UserError(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         )))
     );
 }
@@ -135,7 +135,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
     // Test fetch_canister_logs API call results.
     let (env, canister_id) = setup_and_install_wasm(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Public)
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister().build_wasm(),
     );
@@ -149,7 +149,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         ))
     );
 }
@@ -159,7 +159,7 @@ fn test_fetch_canister_logs_via_query_call() {
     // Test fetch_canister_logs API call results.
     let (env, canister_id) = setup_and_install_wasm(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Public)
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
         wat_canister().build_wasm(),
     );
@@ -178,6 +178,26 @@ fn test_fetch_canister_logs_via_query_call() {
             .encode(),
         ))
     );
+}
+
+#[test]
+fn test_metrics_for_fetch_canister_logs_via_query_call() {
+    fn fetch_canister_logs_count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(
+            env.metrics_registry(),
+            "execution_subnet_query_message_duration_seconds",
+        )
+        .get(&labels(&[
+            ("method_name", "query_ic00_fetch_canister_logs"),
+            ("status", "success"),
+        ]))
+        .map_or(0, |stats| stats.count)
+    }
+    let (env, canister_id, controller) = setup_with_controller(wat_canister().build_wasm());
+
+    assert_eq!(fetch_canister_logs_count(&env), 0);
+    let _ = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(fetch_canister_logs_count(&env), 1);
 }
 
 #[test]
@@ -230,37 +250,63 @@ fn test_fetch_canister_logs_via_composite_query_call() {
 #[test]
 fn test_log_visibility_of_fetch_canister_logs() {
     // Test combinations of log_visibility and sender for fetch_canister_logs API call.
-    let controller = PrincipalId::new_user_test_id(27);
-    let not_a_controller = PrincipalId::new_user_test_id(42);
+    let controller = PrincipalId::new_user_test_id(1);
+    let not_a_controller = PrincipalId::new_user_test_id(2);
+    let allowed_viewer = PrincipalId::new_user_test_id(3);
+    let not_allowed_viewer = PrincipalId::new_user_test_id(4);
+    let allowed_viewers = BoundedAllowedViewers::new(vec![allowed_viewer]);
     let ok = Ok(WasmResult::Reply(
         FetchCanisterLogsResponse {
             canister_log_records: vec![],
         }
         .encode(),
     ));
-    let error = Err(UserError::new(
-        ErrorCode::CanisterRejectedMessage,
-        format!(
-            "Caller {not_a_controller} is not allowed to query ic00 method fetch_canister_logs"
-        ),
-    ));
+    fn not_allowed_error(caller: &PrincipalId) -> Result<WasmResult, UserError> {
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to query ic00 method fetch_canister_logs"),
+        ))
+    }
     let test_cases = vec![
         // (log_visibility, sender, expected_result)
-        (LogVisibility::Public, controller, ok.clone()),
-        (LogVisibility::Public, not_a_controller, ok.clone()),
-        (LogVisibility::Controllers, controller, ok),
-        (LogVisibility::Controllers, not_a_controller, error),
+        (LogVisibilityV2::Public, controller, ok.clone()),
+        (LogVisibilityV2::Public, not_a_controller, ok.clone()),
+        (LogVisibilityV2::Controllers, controller, ok.clone()),
+        (
+            LogVisibilityV2::Controllers,
+            not_a_controller,
+            not_allowed_error(&not_a_controller),
+        ),
+        (
+            LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
+            allowed_viewer,
+            // TODO(EXC-1675): when disabled works as for controllers, change to ok when enabled.
+            not_allowed_error(&allowed_viewer),
+        ),
+        (
+            LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
+            not_allowed_viewer,
+            not_allowed_error(&not_allowed_viewer),
+        ),
+        (
+            LogVisibilityV2::AllowedViewers(allowed_viewers),
+            controller,
+            ok,
+        ),
     ];
     for (log_visibility, sender, expected_result) in test_cases {
         let (env, canister_id) = setup_and_install_wasm(
             CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(log_visibility)
+                .with_log_visibility(log_visibility.clone())
                 .with_controllers(vec![controller])
                 .build(),
             wat_canister().build_wasm(),
         );
         let actual_result = fetch_canister_logs(&env, sender, canister_id);
-        assert_eq!(actual_result, expected_result);
+        assert_eq!(
+            actual_result, expected_result,
+            "Failed for log_visibility: {log_visibility:?}, sender: {sender}"
+        );
     }
 }
 
@@ -730,7 +776,7 @@ fn test_logging_debug_print_persists_over_upgrade() {
 fn test_logging_trap_at_install_start() {
     let (env, canister_id) = setup(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Public)
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
     );
     env.advance_time(TIME_STEP);
@@ -763,7 +809,7 @@ fn test_logging_trap_at_install_start() {
 fn test_logging_trap_at_install_init() {
     let (env, canister_id) = setup(
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibility::Public)
+            .with_log_visibility(LogVisibilityV2::Public)
             .build(),
     );
     env.advance_time(TIME_STEP);
@@ -1177,7 +1223,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
 #[test]
 fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes";
+    let metric = "canister_log_memory_usage_bytes_v2";
     const PAYLOAD_SIZE: usize = 1_000;
     let (env, canister_id, _controller) = setup_with_controller(
         wat_canister()

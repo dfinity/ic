@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/config",
+    "//rs/ic_os/network",
+    "//rs/ic_os/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "setupos_tool",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "setupos_tool",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)
