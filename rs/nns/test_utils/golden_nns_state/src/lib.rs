@@ -7,8 +7,8 @@ use ic_state_machine_tests::{
 use ic_types::NumInstructions;
 
 use ic_config::flag_status::FlagStatus;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use std::{
-    ops::RangeInclusive,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -21,12 +21,10 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
         PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
             .unwrap(),
     );
+    let routing_table = create_routing_table(0x2300000, 0x23FFFFE, fiduciary_subnet_id);
     let setup_config = SetupConfig {
         archive_state_dir_name: "fiduciary_state",
-        extra_canister_range: RangeInclusive::new(
-            CanisterId::from_u64(0),
-            CanisterId::from_u64(u64::MAX),
-        ),
+        routing_table,
         hypervisor_config: Some(Config {
             rate_limiting_of_instructions: FlagStatus::Disabled,
             ..Config::default()
@@ -43,16 +41,14 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap(),
     );
+    // using the canister ranges of both the NNS and II subnets. Note. The
+    // last canister ID in the canister range of the II subnet is omitted so
+    // that the canister range of the II subnet is not used for automatic
+    // generation of new canister IDs.
+    let routing_table = create_routing_table(0x2100000, 0x21FFFFE, nns_subnet_id);
     let setup_config = SetupConfig {
         archive_state_dir_name: "nns_state",
-        // using the canister ranges of both the NNS and II subnets. Note. The
-        // last canister ID in the canister range of the II subnet is omitted so
-        // that the canister range of the II subnet is not used for automatic
-        // generation of new canister IDs.
-        extra_canister_range: RangeInclusive::new(
-            CanisterId::from_u64(0x2100000),
-            CanisterId::from_u64(0x21FFFFE),
-        ),
+        routing_table,
         hypervisor_config: None,
         scp_location: NNS_STATE_SOURCE,
         subnet_id: nns_subnet_id,
@@ -66,12 +62,10 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae")
             .unwrap(),
     );
+    let routing_table = create_routing_table(0x2000000, 0x20FFFFE, sns_subnet_id);
     let setup_config = SetupConfig {
         archive_state_dir_name: "sns_state",
-        extra_canister_range: RangeInclusive::new(
-            CanisterId::from_u64(0),
-            CanisterId::from_u64(u64::MAX),
-        ),
+        routing_table,
         hypervisor_config: Some(Config {
             rate_limiting_of_instructions: FlagStatus::Disabled,
             ..Config::default()
@@ -86,7 +80,7 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
 fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> StateMachine {
     let SetupConfig {
         archive_state_dir_name,
-        extra_canister_range,
+        routing_table,
         hypervisor_config,
         scp_location,
         subnet_id,
@@ -99,7 +93,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
 
     let state_machine_builder = StateMachineBuilder::new()
         .with_current_time()
-        .with_extra_canister_range(extra_canister_range);
+        .with_routing_table(routing_table);
 
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -224,11 +218,65 @@ impl ScpLocation {
 
 struct SetupConfig {
     archive_state_dir_name: &'static str,
-    extra_canister_range: RangeInclusive<CanisterId>,
+    routing_table: RoutingTable,
     hypervisor_config: Option<Config>,
     scp_location: ScpLocation,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+}
+
+/// Create a routing table for the `StateMachine`, with the provided canister IDs being routed to
+/// the local subnet, and all other canister IDs being routed to non-existent subnets. Any leftover
+/// responses destined for other subnets will be routed to a stream and will stay there. In
+/// particular, they will not cause a panic, causing the test to fail.
+fn create_routing_table(
+    canister_range_start: u64,
+    canister_range_end: u64,
+    subnet_id: SubnetId,
+) -> RoutingTable {
+    let mut routing_table = RoutingTable::new();
+    if canister_range_start > 0 {
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
+        add_canister_range_to_routing_table(
+            &mut routing_table,
+            subnet_id,
+            0,
+            canister_range_start - 1,
+        );
+    }
+    add_canister_range_to_routing_table(
+        &mut routing_table,
+        subnet_id,
+        canister_range_start,
+        canister_range_end,
+    );
+    if canister_range_end < u64::MAX {
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(u64::MAX));
+        add_canister_range_to_routing_table(
+            &mut routing_table,
+            subnet_id,
+            canister_range_end + 1,
+            u64::MAX,
+        );
+    }
+    routing_table
+}
+
+fn add_canister_range_to_routing_table(
+    routing_table: &mut RoutingTable,
+    subnet_id: SubnetId,
+    canister_range_start: u64,
+    canister_range_end: u64,
+) {
+    routing_table
+        .insert(
+            CanisterIdRange {
+                start: CanisterId::from_u64(canister_range_start),
+                end: CanisterId::from_u64(canister_range_end),
+            },
+            subnet_id,
+        )
+        .expect("should be able to insert canister range into routing table");
 }
 
 fn download_golden_nns_state_or_panic(scp_location: ScpLocation, destination: &Path) {

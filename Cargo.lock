@@ -10360,6 +10360,7 @@ version = "0.0.1"
 dependencies = [
  "ic-base-types",
  "ic-config",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
