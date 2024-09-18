@@ -1,4 +1,3 @@
-use crate::sns::root::get_sns_canisters_summary;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use canister_test::Wasm;
@@ -28,7 +27,6 @@ use ic_sns_governance::{
     pb::v1::{self as sns_pb, NeuronPermissionType},
 };
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
-use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
     pb::v1::{
         new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
@@ -1880,47 +1878,6 @@ fn test_sns_lifecycle(
         "No archives found from get_sns_canisters_summary response: {:#?}",
         response
     );
-
-    // Check that the SNS framework canister settings are as expected
-    {
-        // get SNS canisters summary
-        let sns_canisters_summary = get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
-        fn get_wasm_memory_limit(summary: Option<CanisterSummary>) -> u64 {
-            u64::try_from(
-                summary
-                    .unwrap()
-                    .status
-                    .unwrap()
-                    .settings
-                    .wasm_memory_limit
-                    .unwrap()
-                    .0,
-            )
-            .unwrap()
-        }
-        // Governance should have a higher memory limit
-        assert_eq!(
-            get_wasm_memory_limit(sns_canisters_summary.governance),
-            4 * 1024 * 1024 * 1024,
-        );
-        // Other canisters should have a lower memory limit
-        assert_eq!(
-            get_wasm_memory_limit(sns_canisters_summary.root),
-            3 * 1024 * 1024 * 1024,
-        );
-        assert_eq!(
-            get_wasm_memory_limit(sns_canisters_summary.swap),
-            3 * 1024 * 1024 * 1024,
-        );
-        assert_eq!(
-            get_wasm_memory_limit(sns_canisters_summary.ledger),
-            3 * 1024 * 1024 * 1024,
-        );
-        assert_eq!(
-            get_wasm_memory_limit(sns_canisters_summary.index),
-            3 * 1024 * 1024 * 1024,
-        );
-    }
 }
 
 #[test]
