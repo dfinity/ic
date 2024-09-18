@@ -96,9 +96,8 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.json
             profile.json
-            trace.json
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -140,9 +139,8 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.json
             profile.json
-            trace.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 120
@@ -185,9 +183,8 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.json
             profile.json
-            trace.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -220,15 +217,15 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
       - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
           retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.json
             profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -265,9 +262,8 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.pb
+            bazel-bep.json
             profile.json
-            trace.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
