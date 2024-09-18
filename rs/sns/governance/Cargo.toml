@@ -50,6 +50,7 @@ ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/collections/union_multi_map" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
