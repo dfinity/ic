@@ -14,7 +14,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "xnet_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "xnet_test",
     version = "0.9.0",
     deps = DEPENDENCIES,

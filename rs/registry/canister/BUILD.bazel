@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -100,8 +100,8 @@ ALIASES = {}
 
 LIB_SRCS = glob(
     [
-        "gen/**",
-        "src/**",
+        "gen/**/*.rs",
+        "src/**/*.rs",
     ],
     exclude = ["**/*tests*/**"],
 )

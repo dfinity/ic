@@ -36,7 +36,7 @@ cargo_build_script(
 
 rust_canister(
     name = "test_canister",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nervous_system_common_test_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",

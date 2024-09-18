@@ -34,7 +34,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "clients",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nervous_system_clients",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",

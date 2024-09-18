@@ -31,7 +31,7 @@ ALIASES = {}
 rust_library(
     name = "canister_test",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "canister_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
