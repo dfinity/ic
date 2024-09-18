@@ -1008,23 +1008,6 @@ impl SystemState {
         }
     }
 
-    /// Helper function to get a mutable reference to the `CallContextManager`, when
-    /// `Running` or `Stopping`. Returns an error if the canister is `Stopped`.
-    ///
-    /// Do not make this public. Use the methods below instead.
-    fn call_context_manager_mut(&mut self) -> Result<&mut CallContextManager, StateError> {
-        match &mut self.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Ok(call_context_manager),
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => Ok(call_context_manager),
-            CanisterStatus::Stopped => Err(StateError::CanisterStopped(self.canister_id)),
-        }
-    }
-
     /// Creates a new call context and returns its ID. Returns an error if the
     /// canister is `Stopped`.
     pub fn new_call_context(
@@ -1034,8 +1017,8 @@ impl SystemState {
         time: Time,
         metadata: RequestMetadata,
     ) -> Result<CallContextId, StateError> {
-        Ok(self
-            .call_context_manager_mut()?
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
             .new_call_context(call_origin, cycles, time, metadata))
     }
 
@@ -1049,8 +1032,8 @@ impl SystemState {
         call_context_id: CallContextId,
         cycles: Cycles,
     ) -> Result<&CallContext, &str> {
-        self.call_context_manager_mut()
-            .map_err(|_| "Canister is stopped")?
+        call_context_manager_mut(&mut self.status)
+            .ok_or("Canister is stopped")?
             .withdraw_cycles(call_context_id, cycles)
     }
 
@@ -1062,11 +1045,9 @@ impl SystemState {
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
-        Ok(self.call_context_manager_mut()?.on_canister_result(
-            call_context_id,
-            result,
-            instructions_used,
-        ))
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .on_canister_result(call_context_id, result, instructions_used))
     }
 
     /// Marks all call contexts as deleted and produces reject responses for the
@@ -1077,11 +1058,9 @@ impl SystemState {
         &mut self,
         reject: impl Fn(&CallContext) -> Option<R>,
     ) -> Vec<R> {
-        if let Ok(call_context_manager) = self.call_context_manager_mut() {
-            call_context_manager.delete_all_call_contexts(reject)
-        } else {
-            Vec::new()
-        }
+        call_context_manager_mut(&mut self.status)
+            .map(|call_context_manager| call_context_manager.delete_all_call_contexts(reject))
+            .unwrap_or_default()
     }
 
     /// Registers a callback and returns its ID. Returns an error if the canister is
@@ -1090,7 +1069,9 @@ impl SystemState {
     // TODO: Check whether this could be done implicitly, when pushing an outbound
     // request.
     pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
-        Ok(self.call_context_manager_mut()?.register_callback(callback))
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .register_callback(callback))
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
@@ -1099,8 +1080,8 @@ impl SystemState {
         &mut self,
         callback_id: CallbackId,
     ) -> Result<Option<Arc<Callback>>, StateError> {
-        Ok(self
-            .call_context_manager_mut()?
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
             .unregister_callback(callback_id))
     }
 
@@ -1852,6 +1833,22 @@ pub(crate) fn push_input(
     res
 }
 
+/// Helper function to get a mutable reference to the `CallContextManager` when
+/// `Running` or `Stopping`, `None` if `Stopped`.
+fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
+    match status {
+        CanisterStatus::Running {
+            call_context_manager,
+        }
+        | CanisterStatus::Stopping {
+            call_context_manager,
+            ..
+        } => Some(call_context_manager),
+
+        CanisterStatus::Stopped => None,
+    }
+}
+
 pub mod testing {
     pub use super::call_context_manager::testing::*;
     use super::*;
@@ -1913,7 +1910,7 @@ pub mod testing {
         }
 
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId {
-            self.call_context_manager_mut()
+            call_context_manager_mut(&mut self.status)
                 .unwrap()
                 .with_call_context(call_context)
         }
