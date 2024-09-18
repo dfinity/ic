@@ -10961,7 +10961,6 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
- "ic-crypto-test-utils-ni-dkg",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
