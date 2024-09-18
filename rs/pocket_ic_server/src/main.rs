@@ -16,6 +16,7 @@ use axum::{
 };
 use axum_server::Handle;
 use clap::Parser;
+use ic_btc_adapter::bitcoin_adapter_main;
 use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
@@ -25,12 +26,14 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
-use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
 use pocket_ic_server::state_api::{
-    routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
+    routes::{
+        handler_read_graph, http_gateway_routes, instances_routes, status, timeout_or_default,
+        AppState, RouterExt,
+    },
     state::PocketIcApiStateBuilder,
 };
-use pocket_ic_server::BlobStore;
+use pocket_ic_server::{BlobStore, RUN_AS_BITCOIN_ADAPTER_FLAG};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -95,6 +98,14 @@ fn main() {
         sandbox_launcher_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
         compiler_sandbox_main();
+    } else if std::env::args().any(|arg| arg == RUN_AS_BITCOIN_ADAPTER_FLAG) {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .worker_threads(16)
+            .build()
+            .expect("Failed to create tokio runtime!");
+        let runtime_arc = Arc::new(rt);
+        runtime_arc.block_on(bitcoin_adapter_main());
     } else {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()

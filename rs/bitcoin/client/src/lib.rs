@@ -24,7 +24,7 @@ use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 use tracing::instrument;
 
-pub fn convert_tonic_error(status: tonic::Status) -> RpcError {
+fn convert_tonic_error(status: tonic::Status) -> RpcError {
     match status.code() {
         tonic::Code::Unavailable => RpcError::Unavailable(status.message().to_string()),
         tonic::Code::Cancelled => RpcError::Cancelled(status.message().to_string()),

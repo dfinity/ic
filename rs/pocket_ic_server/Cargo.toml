@@ -12,6 +12,7 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
@@ -26,6 +27,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
+ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }

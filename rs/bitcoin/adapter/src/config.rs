@@ -58,7 +58,7 @@ fn default_idle_seconds() -> u64 {
 
 /// This function is used to get the address limits for the `AddressBook`
 /// based on the provided `Network`.
-pub fn address_limits(network: Network) -> (usize, usize) {
+pub(crate) fn address_limits(network: Network) -> (usize, usize) {
     match network {
         Network::Bitcoin => (500, 2000),
         Network::Testnet => (100, 1000),

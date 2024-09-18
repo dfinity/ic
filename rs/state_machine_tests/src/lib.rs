@@ -1,23 +1,13 @@
-use bitcoin::Network;
 use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_btc_adapter::{
-    config::{address_limits, Config as BitcoinAdapterConfig},
-    start_main_event_loop, AdapterState, BlockchainState, GetSuccessorsHandler,
-    TransactionManagerRequest,
-};
-use ic_btc_adapter_client::convert_tonic_error;
+use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
-use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
-    SendTransactionResponse,
-};
-use ic_btc_service::{BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse};
 use ic_config::{
+    adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    logger::Config as LoggerConfig, state_manager::LsmtConfig, subnet_config::SubnetConfig,
+    state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
@@ -48,7 +38,6 @@ use ic_interfaces::{
     p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
@@ -180,7 +169,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
-    net::{Ipv6Addr, SocketAddr},
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
@@ -188,11 +177,9 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
-use tokio::sync::mpsc::{channel, Sender};
 use tokio::{
     runtime::Runtime,
-    sync::{mpsc, watch, Mutex as TokioMutex},
-    task::JoinHandle,
+    sync::{mpsc, watch},
 };
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
@@ -770,122 +757,6 @@ impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
     }
 }
 
-struct BrokenConnectionBitcoinClient;
-
-impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinClient {
-    type Response = BitcoinAdapterResponseWrapper;
-
-    fn send_blocking(
-        &self,
-        _request: BitcoinAdapterRequestWrapper,
-        _opts: Options,
-    ) -> RpcResult<BitcoinAdapterResponseWrapper> {
-        Err(RpcError::ConnectionBroken)
-    }
-}
-
-struct PocketBitcoinClient {
-    adapter_state: AdapterState,
-    get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: Sender<TransactionManagerRequest>,
-    rt_handle: Arc<Runtime>,
-    join_handle: JoinHandle<()>,
-}
-
-impl PocketBitcoinClient {
-    fn new(
-        config: BitcoinAdapterConfig,
-        metrics_registry: &MetricsRegistry,
-        logger: ReplicaLogger,
-        rt_handle: Arc<Runtime>,
-    ) -> Self {
-        let adapter_state = AdapterState::new(config.idle_seconds);
-        let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-        let blockchain_state = Arc::new(TokioMutex::new(BlockchainState::new(
-            &config,
-            metrics_registry,
-        )));
-        let get_successors_handler = GetSuccessorsHandler::new(
-            &config,
-            blockchain_state.clone(),
-            blockchain_manager_tx,
-            metrics_registry,
-        );
-        let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-
-        let adapter_state_clone = adapter_state.clone();
-        let metrics_registry = metrics_registry.clone();
-        let join_handle = start_main_event_loop(
-            &config,
-            logger,
-            blockchain_state.clone(),
-            transaction_manager_rx,
-            adapter_state_clone,
-            blockchain_manager_rx,
-            &metrics_registry,
-        );
-
-        Self {
-            adapter_state,
-            get_successors_handler,
-            transaction_manager_tx,
-            rt_handle,
-            join_handle,
-        }
-    }
-}
-
-impl Drop for PocketBitcoinClient {
-    fn drop(self: &mut PocketBitcoinClient) {
-        self.join_handle.abort()
-    }
-}
-
-impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for PocketBitcoinClient {
-    type Response = BitcoinAdapterResponseWrapper;
-
-    fn send_blocking(
-        &self,
-        request: BitcoinAdapterRequestWrapper,
-        _opts: Options,
-    ) -> RpcResult<BitcoinAdapterResponseWrapper> {
-        self.adapter_state.received_now();
-        match request {
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(request) => {
-                let request = BtcServiceGetSuccessorsRequest {
-                    processed_block_hashes: request.processed_block_hashes,
-                    anchor: request.anchor,
-                };
-                let response: BtcServiceGetSuccessorsResponse = self
-                    .rt_handle
-                    .block_on(
-                        self.get_successors_handler
-                            .get_successors(request.try_into().unwrap()),
-                    )
-                    .map_err(convert_tonic_error)?
-                    .try_into()
-                    .unwrap();
-                Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                    GetSuccessorsResponseComplete {
-                        blocks: response.blocks,
-                        next: response.next,
-                    },
-                ))
-            }
-            BitcoinAdapterRequestWrapper::SendTransactionRequest(request) => {
-                self.rt_handle
-                    .block_on(self.transaction_manager_tx.send(
-                        TransactionManagerRequest::SendTransaction(request.transaction),
-                    ))
-                    .unwrap();
-                Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(
-                    SendTransactionResponse {},
-                ))
-            }
-        }
-    }
-}
-
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
@@ -1045,7 +916,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
     log_level: Option<Level>,
-    bitcoind_addr: Option<SocketAddr>,
+    bitcoin_testnet_uds_path: Option<PathBuf>,
 }
 
 impl StateMachineBuilder {
@@ -1079,7 +950,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             dts: true,
             log_level: None,
-            bitcoind_addr: None,
+            bitcoin_testnet_uds_path: None,
         }
     }
 
@@ -1265,10 +1136,9 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
-    /// Only use from tokio contexts.
-    pub fn with_bitcoind_addr(self, bitcoind_addr: Option<SocketAddr>) -> Self {
+    pub fn with_bitcoin_testnet_uds_path(self, bitcoin_testnet_uds_path: Option<PathBuf>) -> Self {
         Self {
-            bitcoind_addr,
+            bitcoin_testnet_uds_path,
             ..self
         }
     }
@@ -1344,7 +1214,7 @@ impl StateMachineBuilder {
         self,
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
-        let bitcoind_addr = self.bitcoind_addr;
+        let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
@@ -1376,48 +1246,25 @@ impl StateMachineBuilder {
             sm.replica_logger.clone(),
         ));
 
-        let bitcoin_client: Box<
-            dyn RpcAdapterClient<
-                BitcoinAdapterRequestWrapper,
-                Response = BitcoinAdapterResponseWrapper,
-            >,
-        > = if let Some(bitcoind_addr) = bitcoind_addr {
-            let bitcoin_network = Network::Regtest;
-            let level = match sm.replica_logger.inner_logger.level {
-                Level::Critical => ic_config::logger::Level::Critical,
-                Level::Error => ic_config::logger::Level::Error,
-                Level::Warning => ic_config::logger::Level::Warning,
-                Level::Info => ic_config::logger::Level::Info,
-                Level::Debug => ic_config::logger::Level::Debug,
-                Level::Trace => ic_config::logger::Level::Trace,
-            };
-            let logger_config = LoggerConfig {
-                level,
-                ..Default::default()
-            };
-            let bitcoin_adapter_config = BitcoinAdapterConfig {
-                network: bitcoin_network,
-                nodes: vec![bitcoind_addr],
-                socks_proxy: None,
-                ipv6_only: false,
-                logger: logger_config,
-                address_limits: address_limits(bitcoin_network),
-                ..Default::default()
-            };
-            Box::new(PocketBitcoinClient::new(
-                bitcoin_adapter_config,
-                &sm.metrics_registry,
-                sm.replica_logger.clone(),
-                sm.runtime.clone(),
-            ))
-        } else {
-            Box::new(BrokenConnectionBitcoinClient)
+        let adapters_config = AdaptersConfig {
+            bitcoin_mainnet_uds_path: None,
+            bitcoin_mainnet_uds_metrics_path: None,
+            bitcoin_testnet_uds_path,
+            bitcoin_testnet_uds_metrics_path: None,
+            https_outcalls_uds_path: None,
+            https_outcalls_uds_metrics_path: None,
         };
+        let bitcoin_clients = setup_bitcoin_adapter_clients(
+            sm.replica_logger.clone(),
+            &sm.metrics_registry,
+            sm.runtime.handle().clone(),
+            adapters_config,
+        );
         let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
             sm.state_manager.clone(),
             &sm.metrics_registry,
-            Box::new(BrokenConnectionBitcoinClient),
-            bitcoin_client,
+            bitcoin_clients.btc_mainnet_client,
+            bitcoin_clients.btc_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),

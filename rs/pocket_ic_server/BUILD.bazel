@@ -7,6 +7,7 @@ BUILD_DEPENDENCIES = []
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
+    "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
@@ -44,6 +45,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum-server",
     "@crate_index//:backoff",
     "@crate_index//:base64",
+    "@crate_index//:bitcoin",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",

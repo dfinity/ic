@@ -60,7 +60,7 @@ rust_library(
     crate_name = "ic_btc_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    visibility = ["//rs/state_machine_tests:__subpackages__"],
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
