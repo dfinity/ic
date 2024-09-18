@@ -1,35 +1,27 @@
 use async_trait::async_trait;
-use candid::Nat;
-use dfn_core::CanisterId;
+use dfn_core::{call, CanisterId};
+use dfn_protobuf::protobuf;
 use ic_ledger_core::block::BlockIndex;
-use ic_nervous_system_common::{
-    ledger::{ICRC1Ledger, IcpLedger},
-    NervousSystemError,
-};
-use ic_nervous_system_runtime::Runtime;
+use ic_nervous_system_common::ledger::{ICRC1Ledger, IcpLedger};
+use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
-    TransferArgs, TransferError,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
+    Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use std::marker::PhantomData;
 
-pub struct IcpLedgerCanister<Rt: Runtime> {
-    canister_id: CanisterId,
-    _phantom: PhantomData<Rt>,
+pub struct IcpLedgerCanister {
+    id: CanisterId,
 }
 
-impl<Rt: Runtime + Send + Sync> IcpLedgerCanister<Rt> {
-    pub fn new(canister_id: CanisterId) -> Self {
-        IcpLedgerCanister {
-            canister_id,
-            _phantom: PhantomData,
-        }
+impl IcpLedgerCanister {
+    pub fn new(id: CanisterId) -> Self {
+        IcpLedgerCanister { id }
     }
 }
 
 #[async_trait]
-impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
+impl ICRC1Ledger for IcpLedgerCanister {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -38,7 +30,7 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         to: Account,
         memo: u64,
     ) -> Result<BlockIndex, NervousSystemError> {
-        <IcpLedgerCanister<Rt> as IcpLedger>::transfer_funds(
+        <IcpLedgerCanister as IcpLedger>::transfer_funds(
             self,
             amount_e8s,
             fee_e8s,
@@ -50,11 +42,11 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister<Rt> as IcpLedger>::total_supply(self).await
+        <IcpLedgerCanister as IcpLedger>::total_supply(self).await
     }
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister<Rt> as IcpLedger>::account_balance(
+        <IcpLedgerCanister as IcpLedger>::account_balance(
             self,
             icrc1_account_to_icp_accountidentifier(account),
         )
@@ -62,12 +54,12 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.canister_id
+        self.id
     }
 }
 
 #[async_trait]
-impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
+impl IcpLedger for IcpLedgerCanister {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -83,48 +75,39 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         // this method, make sure that the staked amount
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
-        let result: Result<(Result<u64, TransferError>,), (i32, String)> =
-            Rt::call_without_cleanup(
-                self.canister_id,
-                "transfer",
-                (TransferArgs {
-                    memo: Memo(memo),
-                    amount: Tokens::from_e8s(amount_e8s),
-                    fee: Tokens::from_e8s(fee_e8s),
-                    from_subaccount,
-                    to: to.to_address(),
-                    created_at_time: None,
-                },),
-            )
-            .await;
+        let result: Result<u64, (Option<i32>, String)> = call(
+            self.id,
+            "send_pb",
+            protobuf,
+            SendArgs {
+                memo: Memo(memo),
+                amount: Tokens::from_e8s(amount_e8s),
+                fee: Tokens::from_e8s(fee_e8s),
+                from_subaccount,
+                to,
+                created_at_time: None,
+            },
+        )
+        .await;
 
-        result
-            .map_err(|(code, msg)| {
-                NervousSystemError::new_with_message(format!(
-                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
-                ))
-            })
-            .and_then(|inner_result: (Result<u64, TransferError>,)| {
-                inner_result.0.map_err(|e: TransferError| {
-                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
-                })
-            })
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!(
+                "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
+                code, msg
+            ))
+        })
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        let result: Result<Tokens, (i32, String)> =
-            Rt::call_without_cleanup(self.canister_id, "icrc1_total_supply", ((),))
+        let result: Result<Tokens, (Option<i32>, String)> =
+            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {})
                 .await
-                .map(|e8s: (Nat,)| {
-                    Tokens::try_from(e8s.0)
-                        .expect("Should always succeed, as ICP ledger internally stores u64")
-                });
+                .map(tokens_from_proto);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'total_supply' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )
@@ -135,20 +118,19 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        let result: Result<Tokens, (i32, String)> = Rt::call_without_cleanup(
-            self.canister_id,
-            "account_balance",
-            (BinaryAccountBalanceArgs {
-                account: account.to_address(),
-            },),
+        let result: Result<Tokens, (Option<i32>, String)> = call(
+            self.id,
+            "account_balance_pb",
+            protobuf,
+            AccountBalanceArgs { account },
         )
         .await
-        .map(|tokens: (Tokens,)| tokens.0);
+        .map(tokens_from_proto);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
+                    "Error calling method 'account_balance_pb' of the ledger canister. Code: {:?}. Message: {}",
                     code, msg
                 )
             )
@@ -156,7 +138,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.canister_id
+        self.id
     }
 }
 

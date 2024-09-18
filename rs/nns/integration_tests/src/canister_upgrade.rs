@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
     },
 };
 
-fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
+fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm, use_proposal_action: bool) {
     let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
@@ -32,7 +32,7 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
         canister_id,
         modified_wasm.clone(),
         vec![],
-        true,
+        use_proposal_action,
     );
 
     let controller_canister_id = if canister_id == ROOT_CANISTER_ID {
@@ -48,29 +48,34 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
         controller_canister_id,
     );
 
-    let proposal_info =
-        nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
-    let action = proposal_info.proposal.unwrap().action.unwrap();
-    if let Action::InstallCode(install_code) = action {
-        assert_eq!(
-            install_code.wasm_module_hash,
-            Some(Sha256::hash(&modified_wasm).to_vec())
-        );
-        assert_eq!(install_code.arg_hash, Some(vec![]));
-        assert_eq!(
-            install_code.install_mode,
-            Some(CanisterInstallMode::Upgrade as i32)
-        );
-        assert_eq!(install_code.canister_id, Some(canister_id.get()));
-        assert_eq!(install_code.skip_stopping_before_installing, None);
-    } else {
-        panic!("Unexpected action: {:?}", action);
+    if use_proposal_action {
+        let proposal_info =
+            nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
+        let action = proposal_info.proposal.unwrap().action.unwrap();
+        if let Action::InstallCode(install_code) = action {
+            assert_eq!(
+                install_code.wasm_module_hash,
+                Some(Sha256::hash(&modified_wasm).to_vec())
+            );
+            assert_eq!(install_code.arg_hash, Some(vec![]));
+            assert_eq!(
+                install_code.install_mode,
+                Some(CanisterInstallMode::Upgrade as i32)
+            );
+            assert_eq!(install_code.canister_id, Some(canister_id.get()));
+            assert_eq!(install_code.skip_stopping_before_installing, None);
+        } else {
+            panic!("Unexpected action: {:?}", action);
+        }
     }
 }
 
 #[test]
 fn upgrade_canisters_by_proposal() {
-    test_upgrade_canister(GOVERNANCE_CANISTER_ID, build_governance_wasm());
-    test_upgrade_canister(ROOT_CANISTER_ID, build_root_wasm());
-    test_upgrade_canister(LIFELINE_CANISTER_ID, build_lifeline_wasm());
+    test_upgrade_canister(GOVERNANCE_CANISTER_ID, build_governance_wasm(), true);
+    test_upgrade_canister(GOVERNANCE_CANISTER_ID, build_governance_wasm(), false);
+    test_upgrade_canister(ROOT_CANISTER_ID, build_root_wasm(), false);
+    test_upgrade_canister(ROOT_CANISTER_ID, build_root_wasm(), true);
+    test_upgrade_canister(LIFELINE_CANISTER_ID, build_lifeline_wasm(), true);
+    test_upgrade_canister(LIFELINE_CANISTER_ID, build_lifeline_wasm(), false);
 }

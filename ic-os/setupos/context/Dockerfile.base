@@ -16,7 +16,7 @@
 # 1. Get your MR approved and merged into master
 # 2. On the next hourly master pipeline, click the "deploy-setup-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
-FROM ubuntu:24.04
+FROM ubuntu:20.04
 
 USER root:root
 

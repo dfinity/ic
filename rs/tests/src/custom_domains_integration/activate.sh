@@ -1,8 +1,20 @@
 #!/run/current-system/sw/bin/bash
 
-# load all necessary images
+function load() {
+    NAME=$1
 
-docker load -i "/config/coredns.tar"
-docker load -i "/config/pebble.tar"
-docker load -i "/config/python3.tar"
-docker load -i "/config/openssl.tar"
+    # Load image
+    docker load -i "/config/${NAME}.tar"
+
+    # Rename image
+    docker tag \
+        bazel/image:image "${NAME}"
+
+    # Remove temporary image
+    docker rmi bazel/image:image
+}
+
+load coredns
+load pebble
+load python3
+load openssl

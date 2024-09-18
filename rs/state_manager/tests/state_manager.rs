@@ -109,7 +109,9 @@ fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> 
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0().base()).map_or(0, |metadata| metadata.len())
+        + std::fs::metadata(canister_layout.vmemory_0().base())
+            .map(|metadata| metadata.len())
+            .unwrap_or(0)
 }
 
 /// Combined size of stable memory including overlays.
@@ -122,7 +124,8 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
         + std::fs::metadata(canister_layout.stable_memory().base())
-            .map_or(0, |metadata| metadata.len())
+            .map(|metadata| metadata.len())
+            .unwrap_or(0)
 }
 
 /// Combined size of wasm chunk store including overlays.
@@ -136,7 +139,8 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map(|p| std::fs::metadata(p).unwrap().len())
             .sum::<u64>()
             + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map_or(0, |metadata| metadata.len())
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
     } else {
         std::fs::metadata(canister_layout.wasm_chunk_store().base())
             .unwrap()

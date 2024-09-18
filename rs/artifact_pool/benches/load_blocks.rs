@@ -4,7 +4,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
-    ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
+    ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
@@ -51,7 +51,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
         .next()
         .unwrap();
     let parent = cup.content.block.as_ref();
-    let mut changeset = Mutations::new();
+    let mut changeset = ChangeSet::new();
     for i in 0..num {
         let mut block = Block::from_parent(parent);
         block.rank = Rank(i as u64);
@@ -77,7 +77,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             timestamp: UNIX_EPOCH,
         }));
     }
-    pool.apply(changeset);
+    pool.apply_changes(changeset);
 }
 
 fn sum_block_heights(pool: &dyn ConsensusPool) -> u64 {

@@ -22,7 +22,7 @@ pub fn clamp_string_len(s: &str, max_len: usize) -> String {
     format!("{}...{}", &s[0..head_len], &s[tail_begin..s.len()])
 }
 
-pub fn clamp_debug_len(object: &impl Debug, max_len: usize) -> String {
+pub fn clamp_debug_len(object: impl Debug, max_len: usize) -> String {
     clamp_string_len(&format!("{:#?}", object), max_len)
 }
 

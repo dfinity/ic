@@ -13,8 +13,6 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
-#[cfg(feature = "test")]
-use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -250,10 +248,9 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
-            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-        ))
-        .unwrap();
+        let converted =
+            SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())
+                .unwrap();
 
         // Step 3: Inspect the result.
 
@@ -501,7 +498,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             });
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(original));
+        let converted = SnsInitPayload::try_from(original);
 
         // Step 3: Inspect the result: Err must contain "wait for quiet".
         match converted {
@@ -579,10 +576,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
             };
 
-            let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
-                create_service_nervous_system,
-            ))
-            .unwrap();
+            let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system).unwrap();
 
             SnsInitPayload {
                 neurons_fund_participation_constraints: Some(
@@ -1587,6 +1581,10 @@ fn test_validate_execute_nns_function() {
         ExecuteNnsFunction {
             nns_function: NnsFunction::CreateSubnet as i32,
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
         },
         ExecuteNnsFunction {
             nns_function: NnsFunction::IcpXdrConversionRate as i32,

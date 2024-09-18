@@ -236,7 +236,7 @@ mod tests {
         net::{Ipv4Addr, SocketAddr},
         sync::Arc,
     };
-    use tokio::sync::Barrier;
+    use tokio::sync::Notify;
     use turmoil::Builder;
 
     use crate::connection_handle::SendStreamDropGuard;
@@ -256,10 +256,10 @@ mod tests {
 
         // If the sender closes the connection immediately after sending, then
         // quinn might abort transmitting the message for the sender.
-        // Thus we wait with closing the endpoints until all client simulations
-        // complete.
-        let client_completed = Arc::new(Barrier::new(2));
-        let client_completed_clone = client_completed.clone();
+        // Thus we wait with closing the sender's quinn endpoint, and killing the connection,
+        // until the receiver has received the message.
+        let receiver_received_message = Arc::new(Notify::new());
+        let receiver_received_message_clone = receiver_received_message.clone();
 
         sim.client(receiver, async move {
             let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
@@ -286,6 +286,8 @@ mod tests {
                 .unwrap();
 
             let server_result = recv_stream.read_to_end(MAX_READ_SIZE).await;
+            receiver_received_message_clone.notify_one();
+
             if stream_is_finished_and_stopped {
                 assert_matches!(
                     server_result,
@@ -296,8 +298,6 @@ mod tests {
                     Err(ReadToEndError::Read(ReadError::Reset { .. }))
                 );
             }
-            client_completed_clone.wait().await;
-
             Ok(())
         });
 
@@ -356,7 +356,7 @@ mod tests {
             };
 
             drop(drop_guard);
-            client_completed.wait().await;
+            receiver_received_message.notified().await;
 
             Ok(())
         });

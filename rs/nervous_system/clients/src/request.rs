@@ -1,7 +1,7 @@
 use candid::CandidType;
 use serde::de::DeserializeOwned;
 
-pub trait Request: CandidType + Send {
+pub trait Request: CandidType {
     type Response: CandidType + DeserializeOwned;
     const METHOD: &'static str;
 

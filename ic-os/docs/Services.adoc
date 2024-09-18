@@ -1,0 +1,75 @@
+= Services
+
+== Packages
+
+We use Focal (20.04) package repositories for our Ubuntu packages.
+To see the full list of packages included in each IC-OS, refer to the context/packages.common file in each respective OS.
+
+== Services
+
+In addition to the regular, built-in Ubuntu services, a unique set of systemd services are added or managed for each IC-OS. Some services are enabled in context/Dockerfile, and custom services are defined at etc/systemd/services.
+
+The specific systemd services for each IC-OS are as follows:
+
+[NOTE]
+These lists may be out-of-date. For the source of truth, see each OSes `context/Dockerfile` and `etc/systemd`.
+
+=== SetupOS
+
+|====
+|Name                           |Type   |State   |Upstream|Description
+|config                         |service|Enabled |No      |Normalize config.ini configuration file
+|generate-network-config        |service|Enabled |No      |Configure physical network interfaces, bonds and bridges
+|setupos                        |service|Enabled |No      |Initiate the SetupOS installation
+|systemd-networkd-wait-online   |service|Enabled |Yes     |Wait for Network to be Configured
+|systemd-networkd               |service|Enabled |Yes     |Network Service
+|systemd-resolved               |service|Enabled |Yes     |Network Name Resolution
+|systemd-timesyncd              |service|Disabled|Yes     |NTP Client
+|====
+
+=== HostOS
+
+|====
+|Name                           |Type   |State  |Upstream|Description
+|chrony                         |service|Enabled|Yes     |chrony, an NTP client/server
+|deploy-updated-ssh-account-keys|service|Enabled|No      |Manage SSH public keys
+|generate-guestos-config        |service|Enabled|No      |Configure virtual machine XML configuration from template
+|generate-network-config        |service|Enabled|No      |Configure physical network interfaces, bonds and bridges
+|guestos                        |service|Enabled|No      |Start and stop virtual machine
+|filebeat                       |service|Enabled|No      |Logging daemon
+|libvirtd                       |service|Enabled|Yes     |Virtualization daemon
+|metrics-proxy                  |service|Enabled|No      |Prometheus metrics proxy
+|monitor-guestos                |service|Enabled|No      |Monitor virtual machine service
+|monitor-guestos                |timer  |Enabled|No      |Monitor virtual machine interval
+|nftables                       |service|Enabled|Yes     |nftables firewall
+|node_exporter                  |service|Enabled|No      |Prometheus node_exporter daemon
+|relabel-machine-id             |service|Enabled|No      |Relabel unique machine ID
+|save-machine-id                |service|Enabled|No      |Save unique machine ID
+|setup-hostname                 |service|Enabled|No      |Configure hostname
+|setup-libvirt                  |service|Enabled|No      |Configure Libvirt
+|setup-node_exporter-keys       |service|Enabled|No      |Configure node_exporter daemon
+|setup-ssh-account-keys         |service|Enabled|No      |Configure SSH public keys
+|setup-ssh-keys                 |service|Enabled|No      |Generate SSH host keys
+|systemd-journal-gatewayd       |service|Enabled|No      |Journal Gateway Service
+|systemd-networkd-wait-online   |service|Enabled|Yes     |Wait for Network to be Configured
+|systemd-networkd               |service|Enabled|Yes     |Network Service
+|systemd-resolved               |service|Enabled|Yes     |Network Name Resolution
+|vsock-agent                    |service|Enabled|No      |VSOCK agent daemon
+|====
+
+== 3rd Party Software
+
+Below is a list of 3rd party software installed from their official sources. We strictly install software using vendor-packaged archives, preferably tarballs, to maintain the highest level of control over the installation process.
+
+|====
+|Name           |Description | IC-OS |URL
+
+|Filebeat       |Lightweight shipper for forwarding and centralizing log data from systemd journals. | HostOS, GuestOS |https://www.elastic.co/downloads/past-releases#filebeat-oss
+
+|node_exporter  |Service that collects and publishes system metrics. | HostOS, GuestOS |https://github.com/prometheus/node_exporter/releases
+
+|QEMU           |Quick Emulator, a hypervisor.| HostOS |https://download.qemu.org/
+
+|SEV           |Hardware-based memory encryption.| SetupOS |https://github.com/dfinity/AMDSEV/releases
+
+|====

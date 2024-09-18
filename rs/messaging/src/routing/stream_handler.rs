@@ -516,7 +516,8 @@ impl StreamHandlerImpl {
             stream_slice.header().begin(),
             stream_slice
                 .messages()
-                .map_or_else(|| stream_slice.header().end(), |q| q.end()),
+                .map(|q| q.end())
+                .unwrap_or_else(|| stream_slice.header().end()),
             StreamComponent::MessagesFrom(remote_subnet),
         );
         assert_valid_slice_messages_for_stream(

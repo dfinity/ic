@@ -3,7 +3,7 @@ use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifa
 use ic_types::{
     artifact::IngressMessageId,
     messages::{MessageId, SignedIngress},
-    CountBytes, NodeId, Time,
+    CountBytes, Time,
 };
 
 // tag::interface[]
@@ -19,32 +19,25 @@ pub struct IngressPoolObject {
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
 
-    // TODO: Once/if we start signing ingress messages, determine the `originator_id` by extracting
-    // the signer from the signature.
-    /// Which the ingress message originates from.
-    pub originator_id: NodeId,
-
     /// Byte size of the ingress message.
     byte_size: usize,
-}
-
-impl IngressPoolObject {
-    pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
-        let message_id = signed_ingress.id();
-        let byte_size = signed_ingress.count_bytes();
-
-        Self {
-            signed_ingress,
-            message_id,
-            originator_id,
-            byte_size,
-        }
-    }
 }
 
 impl CountBytes for IngressPoolObject {
     fn count_bytes(&self) -> usize {
         self.byte_size
+    }
+}
+
+impl From<SignedIngress> for IngressPoolObject {
+    fn from(signed_ingress: SignedIngress) -> Self {
+        let message_id = signed_ingress.id();
+        let byte_size = signed_ingress.count_bytes();
+        Self {
+            signed_ingress,
+            message_id,
+            byte_size,
+        }
     }
 }
 
@@ -60,8 +53,8 @@ pub type ValidatedIngressArtifact = ValidatedArtifact<IngressPoolObject>;
 /// Unvalidated ingress artifact
 pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 
-/// List of mutations
-pub type Mutations = Vec<ChangeAction>;
+/// Change set for processing unvalidated ingress messages
+pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -113,9 +106,6 @@ pub trait IngressPool: Send + Sync {
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
-
-    /// Check whether we already have too many messages from the node.
-    fn exceeds_limit(&self, originator_id: &NodeId) -> bool;
 }
 
 /// Interface to throttle user ingress messages

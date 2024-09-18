@@ -37,13 +37,13 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{
-        ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
+        ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache, ValidatedConsensusArtifact,
     },
     dkg::DkgPool,
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -286,14 +286,14 @@ impl ConsensusImpl {
 
     /// Call the given sub-component's `on_state_change` function, mark the
     /// time it takes to complete, increment its invocation counter, and mark
-    /// the size of the [`Mutations`] result.
+    /// the size of the [`ChangeSet`] result.
     fn call_with_metrics<F>(
         &self,
         sub_component: ConsensusSubcomponent,
         on_state_change: F,
-    ) -> Mutations
+    ) -> ChangeSet
     where
-        F: FnOnce() -> Mutations,
+        F: FnOnce() -> ChangeSet,
     {
         self.last_invoked
             .borrow_mut()
@@ -371,17 +371,17 @@ impl ConsensusImpl {
     }
 }
 
-impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
-    type Mutations = Mutations;
+impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
+    type ChangeSet = ChangeSet;
     /// Invoke `on_state_change` on each subcomponent in order.
-    /// Return the first non-empty [Mutations] as returned by a subcomponent.
-    /// Otherwise return an empty [Mutations] if all subcomponents return
+    /// Return the first non-empty [ChangeSet] as returned by a subcomponent.
+    /// Otherwise return an empty [ChangeSet] if all subcomponents return
     /// empty.
     ///
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    ///    non-empty [Mutations]. It is important that a [Mutations] is fully
+    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
     ///    applied to the pool or timer before another subcomponent uses
     ///    them, because each subcomponent expects to see full state in order to
     ///    make correct decisions on what to do next.
@@ -398,7 +398,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
     ///    on the memory consumption of our advertised validated pool.
     ///    The order of the rest subcomponents decides whom is given
     ///    a priority, but it should not affect liveness or correctness.
-    fn on_state_change(&self, pool: &T) -> Mutations {
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
 
@@ -415,7 +415,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
                 self.log,
                 "consensus is halted by instructions of the subnet record in the registry"
             );
-            return Mutations::new();
+            return ChangeSet::new();
         }
 
         // Log some information about the state of consensus
@@ -486,7 +486,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             })
         };
 
-        let calls: [&'_ dyn Fn() -> Mutations; 10] = [
+        let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
             &finalize,
             &make_catch_up_package,
             &aggregate,
@@ -560,7 +560,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
     timestamp: Time,
     messages: Vec<T>,
-) -> Mutations {
+) -> ChangeSet {
     messages
         .into_iter()
         .map(|msg| {
@@ -572,7 +572,7 @@ pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
         .collect()
 }
 
-fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> Mutations {
+fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> ChangeSet {
     msg.map(|msg| {
         ChangeAction::AddToValidated(ValidatedConsensusArtifact {
             msg: msg.into_message(),

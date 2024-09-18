@@ -61,6 +61,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".ic_sns_swap.pb.v1.IdealMatchedParticipationFunction",
         "#[derive(Eq)]",
     );
+    config.type_attribute(
+        ".ic_sns_swap.pb.v1.NeuronId",
+        "#[derive(Eq, Ord, PartialOrd)]",
+    );
 
     // Add serde_bytes for efficiently parsing blobs.
     let blob_fields = vec!["NeuronId.id"];

@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:sha2",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

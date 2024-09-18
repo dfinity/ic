@@ -57,8 +57,8 @@ pub struct RoundRobin {
 
 impl RoundRobin {
     /// Call the next function in the given list of calls according to a round
-    /// robin schedule. Return as soon as a call returns a non-empty Mutations.
-    /// Otherwise try calling the next one, and return empty Mutations if all
+    /// robin schedule. Return as soon as a call returns a non-empty ChangeSet.
+    /// Otherwise try calling the next one, and return empty ChangeSet if all
     /// calls from the given list have been tried.
     pub fn call_next<T>(&self, calls: &[&dyn Fn() -> Vec<T>]) -> Vec<T> {
         let mut result;

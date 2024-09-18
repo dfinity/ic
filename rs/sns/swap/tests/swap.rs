@@ -38,20 +38,20 @@ use ic_neurons_fund::{
     PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
-    claim_swap_neurons_response::ClaimSwapNeuronsResult,
-    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
-    SetModeResponse,
+    claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsResponse,
+    NeuronId, SetMode, SetModeResponse,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
     memory,
     pb::v1::{
+        claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
         settle_neurons_fund_participation_response::NeuronsFundNeuron,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
+        ClaimSwapNeuronsRequest,
         Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
-        NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
-        *,
+        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NeuronIds as SwapNeuronIds,
+        SetDappControllersRequest, SetDappControllersResponse, *,
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
@@ -3509,28 +3509,25 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
             neuron_recipes: vec![
                 NeuronRecipe {
                     controller: Some(*TEST_USER1_PRINCIPAL),
-                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                        *TEST_USER1_PRINCIPAL,
-                        10,
+                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
+                        compute_neuron_staking_subaccount_bytes(*TEST_USER1_PRINCIPAL, 10),
                     ))),
                     stake_e8s: Some((10 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-                    followees: Some(NeuronIds {
-                        neuron_ids: vec![NeuronId::new_test_neuron_id(10)],
-                    }),
+                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
                     participant: Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {})),
                 },
                 NeuronRecipe {
                     controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
-                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
-                        NNS_GOVERNANCE_CANISTER_ID.get(),
-                        0,
+                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
+                        compute_neuron_staking_subaccount_bytes(
+                            NNS_GOVERNANCE_CANISTER_ID.get(),
+                            0,
+                        ),
                     ))),
                     stake_e8s: Some((20 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(0),
-                    followees: Some(NeuronIds {
-                        neuron_ids: vec![NeuronId::new_test_neuron_id(20)],
-                    }),
+                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
                     participant: Some(neuron_recipe::Participant::NeuronsFund(
                         neuron_recipe::NeuronsFund {
                             nns_neuron_id: Some(100),
@@ -3541,6 +3538,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 },
             ],
         }),
+        ..Default::default()
     });
     assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }

@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
@@ -61,6 +62,7 @@ ALIASES = {}
 
 rust_library(
     name = "replay",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_replay",
@@ -75,6 +77,7 @@ rust_library(
 
 rust_binary(
     name = "ic-replay",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

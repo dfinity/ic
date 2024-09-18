@@ -358,7 +358,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
                     "Unable to determine ICPs per SNS token, because calling swap canister \
                      {} failed. Request:\n{}\nerr: {:?}",
                     self.swap_canister_id,
-                    clamp_debug_len(&request, /* max_len = */ 100),
+                    clamp_debug_len(request, /* max_len = */ 100),
                     err,
                 ))
             })

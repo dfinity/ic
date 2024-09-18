@@ -91,7 +91,7 @@ impl ConsensusMetrics {
             ),
             on_state_change_change_set_size: metrics_registry.histogram_vec(
                 "consensus_on_state_change_change_set_size",
-                "The size of the Mutations returned by on_state_change()",
+                "The size of the ChangeSet returned by on_state_change()",
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
                 &["sub_component"],

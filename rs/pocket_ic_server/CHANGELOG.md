@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Fixed
-
-- Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
-
 
 
 ## 6.0.0 - 2024-09-12

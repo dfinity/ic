@@ -452,6 +452,12 @@ impl ResponseHelper {
                 round.counters.charging_from_balance_error,
             );
 
+        if let Some(state_changes) = &canister_state_changes {
+            let requested = state_changes.system_state_changes.removed_cycles();
+            // A cleanup callback cannot accept and send cycles.
+            assert_eq!(requested.get(), 0);
+        }
+
         apply_canister_state_changes(
             canister_state_changes,
             self.canister.execution_state.as_mut().unwrap(),

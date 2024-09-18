@@ -18,6 +18,7 @@ bytes = { workspace = true }
 by_address = "1.1.0"
 async-trait = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }

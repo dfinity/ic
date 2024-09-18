@@ -136,9 +136,10 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
 
         echo "Making certs directory in $(pwd) ..."
         docker load -i /config/minica.tar
+        docker tag bazel/image:image minica
         docker run \
             -v "$(pwd)":/output \
-            minica:image \
+            minica \
             -ip-addresses="$ipv6${{ipv4:+,$ipv4}}"
 
         echo "Updating service certificate folder name so it can be fed to ssl-proxy container ..."
@@ -146,14 +147,15 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         sudo chmod -R 755 ipv6
 
         echo "Setting up httpbin on port 20443 ..."
-        docker load -i /config/httpbin.tar
+        docker load -i /config/httpbin_image.tar
+        docker tag bazel/rs/tests/httpbin-rs:httpbin_image httpbin
         sudo docker run \
             --rm \
             -d \
             -p 20443:80 \
             -v "$(pwd)/ipv6":/certs \
             --name httpbin \
-            httpbin:image \
+            httpbin \
             --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80
     "#
         ))

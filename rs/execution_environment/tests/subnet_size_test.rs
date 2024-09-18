@@ -38,44 +38,31 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
     use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
-    use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
-        MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
+        MeteringType::None => |_op: &wasmparser::Operator| 0u64,
     };
 
-    let cc = instruction_to_cost(
-        &wasmparser::Operator::I32Const { value: 1 },
-        WasmMemoryType::Wasm32,
-    );
-    let cs = instruction_to_cost(
-        &wasmparser::Operator::I32Store {
-            memarg: wasmparser::MemArg {
-                align: 0,
-                max_align: 0,
-                offset: 0,
-                memory: 0,
-            },
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
         },
-        WasmMemoryType::Wasm32,
-    );
-    let cl = instruction_to_cost(
-        &wasmparser::Operator::I32Load {
-            memarg: wasmparser::MemArg {
-                align: 0,
-                max_align: 0,
-                offset: 0,
-                memory: 0,
-            },
+    });
+    let cl = instruction_to_cost(&wasmparser::Operator::I32Load {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
         },
-        WasmMemoryType::Wasm32,
-    );
-    let ca = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
-    let ccall = instruction_to_cost(
-        &wasmparser::Operator::Call { function_index: 0 },
-        WasmMemoryType::Wasm32,
-    );
+    });
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
+    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
     let csys = match config.embedders_config.metering_type {
         MeteringType::New => {
             ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND

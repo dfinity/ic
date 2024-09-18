@@ -58,7 +58,6 @@ proptest! {
                     )
                     .build(),
             ),
-            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
@@ -78,7 +77,7 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(
+                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated(
                             message_id.clone(),
                         )]);
                         // check that message is indeed in the pool

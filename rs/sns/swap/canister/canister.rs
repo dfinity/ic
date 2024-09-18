@@ -355,8 +355,8 @@ fn now_seconds() -> u64 {
 /// Returns a real ledger stub that communicates with the specified
 /// canister, which is assumed to be the ICP production ledger or a
 /// canister that implements that same interface.
-fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<DfnRuntime> {
-    IcpLedgerCanister::<DfnRuntime>::new(id)
+fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister {
+    IcpLedgerCanister::new(id)
 }
 
 #[export_name = "canister_init"]

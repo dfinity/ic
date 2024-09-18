@@ -303,7 +303,6 @@ pub(crate) mod tests {
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
         consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
-        ingress_pool_max_count: Option<usize>,
         run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
     ) {
         let ingress_hist_reader = ingress_hist_reader.unwrap_or_else(|| {
@@ -327,7 +326,7 @@ pub(crate) mod tests {
             ),
         ));
         with_test_replica_logger(|log| {
-            with_test_pool_config(|mut pool_config| {
+            with_test_pool_config(|pool_config| {
                 let metrics_registry = MetricsRegistry::new();
                 const VALIDATOR_NODE_ID: u64 = 42;
                 let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
@@ -338,9 +337,6 @@ pub(crate) mod tests {
                         .with_subnet_id(subnet_id)
                         .build(),
                 );
-                if let Some(ingress_pool_max_count) = ingress_pool_max_count {
-                    pool_config.ingress_pool_max_count = ingress_pool_max_count;
-                }
                 let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
                     node_test_id(VALIDATOR_NODE_ID),
                     pool_config,
@@ -372,9 +368,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn setup(run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>)) {
-        setup_with_params(
-            None, None, None, None, /*ingress_pool_max_count=*/ None, run,
-        )
+        setup_with_params(None, None, None, None, run)
     }
 
     /// This function takes a lock on the ingress pool and allows the closure to access it.

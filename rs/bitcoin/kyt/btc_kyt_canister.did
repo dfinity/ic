@@ -1,60 +1,16 @@
-type BitcoinAddress = text;
+type tx_id = text;
+
+type bitcoin_address = text;
 
 type CheckAddressArgs = record {
     // Bitcoin address to be checked.
-    address: BitcoinAddress;
+    address: bitcoin_address;
 };
 
 type CheckAddressResponse = variant { Passed; Failed };
 
-type CheckTransactionArgs = record { txid : blob };
-
-// The result of a check_transaction call.
-type CheckTransactionResponse = variant {
-    // When check finishes and all input addresses passed KYT.
-    Passed;
-    // When check finishes and one or more input addresses failed KYT.
-    // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
-    Failed: vec BitcoinAddress;
-    // Unknown case where it is unable to give a final answer of Passed or Failed.
-    // The caller should examine the status and decide how to handle it.
-    Unknown: CheckTransactionStatus;
-};
-
-type CheckTransactionStatus = variant {
-    // Caller should call with a minimum of 40 billion cycles.
-    NotEnoughCycles;
-    // The result is pending, and the caller can call again later.
-    Pending: CheckTransactionPending;
-    /// The result is unknown due to an irrecoverable error.
-    Error: CheckTransactionError;
-};
-
-type CheckTransactionPending = variant {
-    // Work is already in progress, and the result is pending.
-    Pending;
-    // The service is experience high load.
-    HighLoad;
-    // There was a transient error fetching data.
-    TransientInternalError: text;
-};
-
-type CheckTransactionError = variant {
-    // Response size is too large (>400kB) when fetching transaction data.
-    ResponseTooLarge : record { txid: blob };
-    // Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
-    InvalidTransaction : text;
-};
-
 service : {
-    // Check input addresses of a transaction matching the given transaction id.
-    // See `CheckTransactionResponse` for more details on the return result.
-    //
-    // The caller should attach at least 40 billion cycles with each call.
-    // The actual cost may be well less than that, and unspent cycles will be refunded.
-    // There is also a service charge of 0.1 billion cycles for each call, regardless
-    // of the return result.
-    check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
+    get_inputs: (tx_id) -> (vec bitcoin_address);
 
     // Return `Passed` if the given bitcoin address passes the KYT check, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.

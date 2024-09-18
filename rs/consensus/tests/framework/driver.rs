@@ -7,10 +7,10 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusBouncer;
 use ic_interfaces::{
     certification,
-    consensus_pool::{ChangeAction, Mutations as ConsensusChangeSet},
+    consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
     idkg::{IDkgChangeAction, IDkgChangeSet},
-    p2p::consensus::{MutablePool, PoolMutationsProducer},
+    p2p::consensus::{ChangeSetProducer, MutablePool},
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -27,15 +27,12 @@ impl<'a> ConsensusDriver<'a> {
     pub fn new(
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: Box<
-            dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>,
-        >,
+        consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
         consensus_bouncer: ConsensusBouncer,
         dkg: ic_consensus::dkg::DkgImpl,
-        idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, Mutations = IDkgChangeSet>>,
+        idkg: Box<dyn ChangeSetProducer<IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
         certifier: Box<
-            dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations>
-                + 'a,
+            dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
         >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         dkg_pool: Arc<RwLock<DkgPoolImpl>>,
@@ -99,7 +96,10 @@ impl<'a> ConsensusDriver<'a> {
                     _ => (),
                 }
             }
-            self.consensus_pool.write().unwrap().apply(changeset);
+            self.consensus_pool
+                .write()
+                .unwrap()
+                .apply_changes(changeset);
         }
         loop {
             let changeset = self.dkg.on_state_change(&*self.dkg_pool.read().unwrap());
@@ -114,7 +114,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply(changeset);
+                dkg_pool.apply_changes(changeset);
             }
         }
         loop {
@@ -135,7 +135,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply(changeset);
+                certification_pool.apply_changes(changeset);
             }
         }
         loop {
@@ -157,7 +157,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut idkg_pool = self.idkg_pool.write().unwrap();
-                idkg_pool.apply(changeset);
+                idkg_pool.apply_changes(changeset);
             }
         }
         to_deliver

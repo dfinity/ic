@@ -4,10 +4,10 @@ use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, Mutations},
+    certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -166,7 +166,7 @@ impl CertificationPoolImpl {
 }
 
 impl MutablePool<CertificationMessage> for CertificationPoolImpl {
-    type Mutations = Mutations;
+    type ChangeSet = ChangeSet;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
         let label = msg.message.label().to_owned();
@@ -202,13 +202,13 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
     }
 
-    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<CertificationMessage> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationMessage> {
         let changed = !change_set.is_empty();
-        let mut transmits = vec![];
+        let mut mutations = vec![];
 
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
-                transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                     artifact: msg.clone(),
                     is_latency_sensitive: true,
                 }));
@@ -221,7 +221,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
-                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: msg.clone(),
                         // relayed
                         is_latency_sensitive: false,
@@ -252,11 +252,11 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::RemoveAllBelow(height) => {
                 self.remove_all_unvalidated_below(height);
-                transmits.extend(
+                mutations.extend(
                     self.persistent_pool
                         .purge_below(height)
                         .drain(..)
-                        .map(ArtifactTransmit::Abort),
+                        .map(ArtifactMutation::Remove),
                 );
             }
 
@@ -274,8 +274,8 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
             self.update_metrics();
         }
 
-        ArtifactTransmits {
-            transmits,
+        ChangeResult {
+            mutations,
             poll_immediately: changed,
         }
     }
@@ -573,15 +573,15 @@ mod tests {
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
-            let result = pool.apply(vec![
+            let result = pool.apply_changes(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.transmits.len(), 2);
+            assert_eq!(result.mutations.len(), 2);
             assert!(!result
-                .transmits
+                .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -607,15 +607,15 @@ mod tests {
             let cert_msg = fake_cert(20);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            let result = pool.apply(vec![
+            let result = pool.apply_changes(vec![
                 ChangeAction::MoveToValidated(share_msg.clone()),
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
             let expected = cert_msg.id();
             assert!(
-                matches!(&result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == expected)
+                matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
             );
-            assert_eq!(result.transmits.len(), 1);
+            assert_eq!(result.mutations.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
@@ -656,7 +656,7 @@ mod tests {
             let cert_msg = fake_cert(10);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            pool.apply(vec![
+            pool.apply_changes(vec![
                 ChangeAction::MoveToValidated(share_msg),
                 ChangeAction::MoveToValidated(cert_msg),
             ]);
@@ -678,7 +678,7 @@ mod tests {
                 1
             );
 
-            let result = pool.apply(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
+            let result = pool.apply_changes(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
             let mut back_off_factor = 1;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(
@@ -693,10 +693,10 @@ mod tests {
                 }
             }
             assert!(!result
-                .transmits
+                .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
-            assert_eq!(result.transmits.len(), 2);
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+            assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
@@ -734,18 +734,18 @@ mod tests {
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
             );
-            let result = pool.apply(vec![ChangeAction::HandleInvalid(
+            let result = pool.apply_changes(vec![ChangeAction::HandleInvalid(
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
-            assert!(result.transmits.is_empty());
+            assert!(result.mutations.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0
             );
 
-            let result = pool.apply(vec![]);
+            let result = pool.apply_changes(vec![]);
             assert!(!result.poll_immediately);
             // INVARIANT: The sizes the unvalidated pool and the height index must be equal
             assert_eq!(
@@ -806,15 +806,15 @@ mod tests {
                 .get(&CertificationMessageId::from(&cert_msg))
                 .is_none());
 
-            let result = pool.apply(vec![
+            let result = pool.apply_changes(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.transmits.len(), 2);
+            assert_eq!(result.mutations.len(), 2);
             assert!(!result
-                .transmits
+                .mutations
                 .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -862,7 +862,7 @@ mod tests {
                 }
             }
 
-            pool.apply(messages);
+            pool.apply_changes(messages);
 
             let get_signer = |m: &CertificationMessage| match m {
                 CertificationMessage::CertificationShare(x) => x.signed.signature.signer,

@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:serde",
     "@crate_index//:tempfile",
-    "@crate_index//:thiserror",
     "@crate_index//:tokio",
 ]
 

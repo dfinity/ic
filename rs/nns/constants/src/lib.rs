@@ -163,13 +163,10 @@ const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024
 // The default memory allocation to set for the remaining NNS canister (1GiB)
 const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
 
-/// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
+/// The current value is 4 GiB, s.t. the SNS framework canisters never hit the soft memory limit.
 /// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
 /// be passed anymore.
-pub const DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
-
-/// This value is 3GiB, which will leave a comfortable buffer in the situation when a canister runs out of memory
-pub const DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT: u64 = 3 * (1 << 30);
+pub const DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {

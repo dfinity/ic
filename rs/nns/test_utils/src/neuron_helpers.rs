@@ -5,10 +5,9 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
-    install_code::CanisterInstallMode, manage_neuron_response::Command, InstallCodeRequest,
-    MakeProposalRequest, Neuron, ProposalActionRequest,
+    manage_neuron_response::Command, ExecuteNnsFunction, MakeProposalRequest, Neuron, NnsFunction,
+    ProposalActionRequest,
 };
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;
@@ -71,13 +70,12 @@ pub fn get_some_proposal() -> MakeProposalRequest {
         title: Some("<proposal created from initialization>".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-            canister_id: Some(ROOT_CANISTER_ID.get()),
-            wasm_module: Some(vec![]),
-            install_mode: Some(CanisterInstallMode::Upgrade as i32),
-            arg: Some(vec![]),
-            skip_stopping_before_installing: None,
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload: Vec::new(),
+            },
+        )),
     }
 }
 

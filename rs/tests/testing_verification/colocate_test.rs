@@ -21,7 +21,7 @@ use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
-use slog::{error, info, Logger};
+use slog::{debug, error, info, Logger};
 use ssh2::Session;
 
 const UVM_NAME: &str = "test-driver";
@@ -153,30 +153,12 @@ fn setup(env: TestEnv) {
         Path::new("/home/admin").join(ENV_TAR_ZST),
     );
 
-    // Create a temporary environment file that we SCP into the UVM. These environment
-    // variables are then forward to the docker container with --env-file.
-    // (scoped to delete tempfile asap)
-    {
-        let tmpdir = tempfile::tempdir().expect("Could not create tempdir");
-        let filepath = tmpdir.path().join("env");
-        let mut file = File::create(filepath.clone()).expect("Could not create tempfile");
-
-        // We remove some problematic (and unnecessary) environment variables
-        // (docker/podman struggles to parse them)
-        let output = Command::new("env")
-            .env("BASH_FUNC_rlocation%%", "")
-            .env("BASH_FUNC_is_absolute%%", "")
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to list env: {e}"));
-
-        file.write_all(&output.stdout).expect("Could not write env");
-
-        scp(
-            log.clone(),
-            &session,
-            filepath,
-            Path::new("/home/admin/env_vars").to_path_buf(),
-        );
+    let docker_env_vars = {
+        let mut env_vars = String::from("");
+        for (key, value) in env::vars() {
+            env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
+        }
+        env_vars
     };
 
     let required_host_features = {
@@ -192,6 +174,8 @@ fn setup(env: TestEnv) {
         }
     };
 
+    debug!(log, "Docker env vars: {docker_env_vars}");
+
     info!(log, "Creating final docker image ...");
 
     let forward_ssh_agent =
@@ -205,10 +189,10 @@ cd /home/admin
 tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level=runfiles
 tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level=root_env
 
-docker load -i /config/ubuntu_test_runtime.tar
+docker load -i /config/image.tar
 
 cat <<EOF > /home/admin/Dockerfile
-FROM ubuntu_test_runtime:image
+FROM bazel/image:image
 COPY runfiles /home/root/runfiles
 COPY root_env /home/root/root_env
 RUN chmod 700 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
@@ -227,7 +211,8 @@ else
     echo "No ssh-agent to forward."
 fi
 docker run --name {COLOCATE_CONTAINER_NAME} --network host \
-  --env-file /home/admin/env_vars --env RUNFILES=/home/root/runfiles \
+  {docker_env_vars}
+  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
   final \
   /home/root/runfiles/{colocated_test_bin} \

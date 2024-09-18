@@ -61,13 +61,6 @@ impl ProposalTemplate {
             .expect("failed to write hex args");
     }
 
-    pub fn args_sha256_hex(&self) -> String {
-        match self {
-            ProposalTemplate::Upgrade(template) => template.upgrade_args.args_sha256_hex(),
-            ProposalTemplate::Install(template) => template.install_args.args_sha256_hex(),
-        }
-    }
-
     pub fn render(&self) -> String {
         match self {
             ProposalTemplate::Upgrade(template) => template.render(),

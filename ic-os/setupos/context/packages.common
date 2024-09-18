@@ -3,20 +3,18 @@
 # operation for the "prod" image.
 
 # Need kernel to boot anything
-linux-image-generic-hwe-24.04
+linux-image-generic-hwe-20.04
 initramfs-tools
 
 # Need systemd for boot process
 systemd
 systemd-sysv
 systemd-journal-remote
-systemd-resolved
 
 # Third-party services we will be running
 chrony
 
 # Required system setup tools
-ssh
 attr
 ca-certificates
 curl

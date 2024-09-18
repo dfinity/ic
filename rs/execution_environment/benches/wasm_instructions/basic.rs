@@ -390,20 +390,20 @@ pub fn benchmarks() -> Vec<Benchmark> {
     for op in first_or_all(&["i32.load", "i64.load", "f32.load", "f64.load"]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_memtype)))");
+        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_i32)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
-    // Store: `({op} $address_i32/64 $x_{type})`
+    // Store: `({op} $address_i32 $x_{type})`
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&["i32.store", "i64.store", "f32.store", "f64.store"]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("({op} (local.get $address_memtype) (local.get $x_{ty}))");
+        let code = &format!("({op} (local.get $address_i32) (local.get $x_{ty}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
-    // Extending Load: `$x_{type} = ({op} $address_i64))`
+    // Extending Load: `$x_{type} = ({op} $address_i32))`
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&[
         "i32.load8_s",
@@ -419,11 +419,11 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_memtype)))");
+        let code = &format!("(global.set $x_{ty} ({op} (local.get $address_i32)))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
-    // Wrapping Store: `({op} $address_i64 $x_{type})`
+    // Wrapping Store: `({op} $address_i32 $x_{type})`
     // The throughput for the following benchmarks is ~2.2 Gops/s
     for op in first_or_all(&[
         "i32.store8",
@@ -434,7 +434,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ]) {
         let ty = dst_type(op);
         let name = format!("memop/{op}");
-        let code = &format!("({op} (local.get $address_memtype) (local.get $x_{ty}))");
+        let code = &format!("({op} (local.get $address_i32) (local.get $x_{ty}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
@@ -442,22 +442,22 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~0.2 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.size",
-        "(global.set $x_memtype (memory.size))",
+        "(global.set $x_i32 (memory.size))",
     ));
     // The throughput for the following benchmarks is ~0.006 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.grow",
-        "(global.set $x_memtype (memory.grow (local.get $zero_memtype)))",
+        "(global.set $x_i32 (memory.grow (local.get $zero_i32)))",
     ));
     // The throughput for the following benchmarks is ~0.03 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.fill",
-        "(memory.fill (local.get $zero_memtype) (local.get $zero_i32) (local.get $zero_memtype))",
+        "(memory.fill (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
     ));
     // The throughput for the following benchmarks is ~0.02 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "memop/memory.copy",
-        "(memory.copy (local.get $zero_memtype) (local.get $zero_memtype) (local.get $zero_memtype))"
+        "(memory.copy (local.get $zero_i32) (local.get $zero_i32) (local.get $zero_i32))",
     ));
 
     ////////////////////////////////////////////////////////////////////
@@ -467,7 +467,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // The throughput for the following benchmarks is ~1.4 Gops/s
     benchmarks.extend(benchmark_with_confirmation(
         "ctrlop/select",
-        "(global.set $x_i32 (select (global.get $zero_i32) (global.get $x_i32) (global.get $y_i32)))"
+        "(global.set $x_i32 (select (global.get $zero_i32) (global.get $x_i32) (global.get $y_i32)))",
     ));
     // The throughput for the following benchmarks is ~0.2 Gops/s
     benchmarks.extend(benchmark_with_confirmation(

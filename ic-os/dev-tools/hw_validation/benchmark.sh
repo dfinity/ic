@@ -15,26 +15,17 @@ if ! command -v sysbench &>/dev/null; then
     exit
 fi
 
-TARGET_DIR="${TARGET_DIR:-/var/lib/ic/data/benchmark}"
-mkdir -p "${TARGET_DIR}"
-
-TARGET_DIR_FS=$(stat -f -c %T "${TARGET_DIR}")
-if [ "$TARGET_DIR_FS" == "tmpfs" ]; then
+TMP_DIR_FS=$(stat -f -c %T /tmp)
+if [ "$TMP_DIR_FS" == "tmpfs" ]; then
     echo "/tmp is mounted as a tmpfs. Need a suitable location for benchmarking file io from disk. Exiting."
     exit
 fi
 
 NUM_PROCS=$(nproc)
-OUTPUT_DIR="$(pwd)/results"
-mkdir -p "${OUTPUT_DIR}"
-TEST_NAME="bench_results_$(hostname)_$(date +%Y-%m-%dT%H-%M-%S)"
-OUTPUT_FILE="${OUTPUT_DIR}/${TEST_NAME}.txt"
+OUTPUT_FILE="$(pwd)/bench_results_$(hostname)_$(date +%Y-%m-%dT%H-%M-%S).txt"
 
 # Wrapped in code block to reroute all output to log
 {
-    echo "${TEST_NAME}"
-
-    pushd "${TARGET_DIR}"
 
     # CPU tests - 1 vs all
     print_exec sysbench cpu run \
@@ -83,6 +74,13 @@ OUTPUT_FILE="${OUTPUT_DIR}/${TEST_NAME}.txt"
     # File IO test
     ## Benchmarks: sync, mmap, fsync all, fsync every 10th
 
+    ## Use tmp to not junk up CWD
+    TEMP_DIR="/tmp/sysbench_$(date +%s)"
+    mkdir -p "$TEMP_DIR"
+    pushd "$TEMP_DIR" || {
+        echo "Unable to create test directory $TEMP_DIR"
+        exit 1
+    }
     print_exec sysbench fileio prepare --file-test-mode=rndrw
 
     ## Single threaded
@@ -98,7 +96,7 @@ OUTPUT_FILE="${OUTPUT_DIR}/${TEST_NAME}.txt"
     print_exec sysbench fileio run --file-test-mode=rndrw --file-io-mode=sync --threads="$NUM_PROCS" --file-fsync-freq=10
 
     print_exec sysbench fileio cleanup
-
-    popd
+    popd || { exit 1; }
+    rmdir "$TEMP_DIR"
 
 } >>"$OUTPUT_FILE"

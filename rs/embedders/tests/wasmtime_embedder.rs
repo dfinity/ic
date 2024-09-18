@@ -5,7 +5,6 @@ use ic_config::{
 };
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
-    wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
@@ -97,14 +96,8 @@ fn correctly_count_instructions() {
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost(
-        &wasmparser::Operator::I32Const { value: 1 },
-        WasmMemoryType::Wasm32,
-    );
-    let call_cost = instruction_to_cost(
-        &wasmparser::Operator::Call { function_index: 0 },
-        WasmMemoryType::Wasm32,
-    );
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
@@ -158,20 +151,10 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost(
-        &wasmparser::Operator::I32Const { value: 1 },
-        WasmMemoryType::Wasm32,
-    );
-    let call_cost = instruction_to_cost(
-        &wasmparser::Operator::Call { function_index: 0 },
-        WasmMemoryType::Wasm32,
-    );
-    let drop_const_cost =
-        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32) + const_cost;
-    let global_set_cost = instruction_to_cost(
-        &wasmparser::Operator::GlobalSet { global_index: 0 },
-        WasmMemoryType::Wasm32,
-    );
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
+    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -1561,14 +1544,8 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost(
-        &wasmparser::Operator::I32Const { value: 1 },
-        WasmMemoryType::Wasm32,
-    );
-    let call_cost = instruction_to_cost(
-        &wasmparser::Operator::Call { function_index: 0 },
-        WasmMemoryType::Wasm32,
-    );
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
     3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 

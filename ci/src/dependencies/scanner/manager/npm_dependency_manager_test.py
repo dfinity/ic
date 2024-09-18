@@ -588,7 +588,7 @@ class FakeNPM:
 
 def test_findings_helper_no_vulnerabilities(npm_test):
     repository = "ic"
-    project = Project("ic", __test_get_ic_path())
+    project = Project("ic", "ic")
     fake_npm = FakeNPM(1)
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
@@ -600,7 +600,7 @@ def test_findings_helper_no_vulnerabilities(npm_test):
 
 def test_findings_helper_one_finding(npm_test):
     repository = "ic"
-    project = Project("ic", __test_get_ic_path())
+    project = Project("ic", "ic")
     fake_npm = FakeNPM(2)
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
@@ -651,7 +651,7 @@ def test_findings_helper_one_finding(npm_test):
 
 def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
     repository = "ic"
-    project = Project("ic", __test_get_ic_path())
+    project = Project("ic", "ic")
     fake_npm = FakeNPM(3)
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
@@ -663,7 +663,7 @@ def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
 
 def test_findings_helper_transitive_vulnerability(npm_test):
     repository = "ic"
-    project = Project("ic", __test_get_ic_path())
+    project = Project("ic", "ic")
     fake_npm = FakeNPM(4)
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output

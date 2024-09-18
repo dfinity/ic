@@ -1,5 +1,9 @@
-use bitcoin::{consensus::Decodable, Address, Transaction};
-use ic_btc_interface::Txid;
+use bitcoin::{
+    address::FromScriptError,
+    consensus::{encode, Decodable},
+    Address, Network, Transaction,
+};
+use futures::future::try_join_all;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
@@ -7,31 +11,21 @@ use ic_cdk::api::management_canister::http_request::{
 };
 
 pub mod blocklist;
-mod fetch;
-mod state;
 mod types;
-
-pub use fetch::{
-    get_tx_cycle_cost, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
-    INITIAL_MAX_RESPONSE_BYTES,
-};
-use fetch::{FetchEnv, FetchResult, TryFetchResult};
-use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
-impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
-    fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionResponse {
-        let txid = txid.as_ref().to_vec();
-        match err {
-            HttpGetTxError::Rejected { message, .. } => {
-                CheckTransactionPending::TransientInternalError(message).into()
-            }
-            HttpGetTxError::ResponseTooLarge => {
-                (CheckTransactionError::ResponseTooLarge { txid }).into()
-            }
-            _ => CheckTransactionError::InvalidTransaction(format!("{:?}", err)).into(),
-        }
-    }
+#[derive(Debug)]
+pub enum BitcoinTxError {
+    Address(FromScriptError),
+    Encoding(encode::Error),
+    TxIdMismatch {
+        expected: String,
+        decoded: String,
+    },
+    Rejected {
+        code: RejectionCode,
+        message: String,
+    },
 }
 
 pub fn blocklist_contains(address: &Address) -> bool {
@@ -40,129 +34,87 @@ pub fn blocklist_contains(address: &Address) -> bool {
         .is_ok()
 }
 
-pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal
-        && (message.contains("size limit") || message.contains("length limit"))
-}
+pub async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTxError> {
+    let tx = get_tx(tx_id).await?;
 
-struct KytCanisterEnv;
+    let mut addresses = vec![];
+    let mut futures = vec![];
+    let mut vouts = vec![];
 
-impl FetchEnv for KytCanisterEnv {
-    type FetchGuard = state::FetchGuard;
+    for input in tx.input.iter() {
+        vouts.push(input.previous_output.vout as usize);
+        futures.push(get_tx(input.previous_output.txid.to_string()));
+    }
+    let input_txs = try_join_all(futures).await?;
 
-    fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
-        state::FetchGuard::new(txid)
+    for (index, input_tx) in input_txs.iter().enumerate() {
+        let output = &input_tx.output[vouts[index]];
+        let address = Address::from_script(&output.script_pubkey, Network::Bitcoin)
+            .map_err(BitcoinTxError::Address)?;
+        addresses.push(address.to_string());
     }
 
-    async fn http_get_tx(
-        &self,
-        txid: Txid,
-        max_response_bytes: u32,
-    ) -> Result<Transaction, HttpGetTxError> {
-        // TODO(XC-159): Support multiple providers
-        let host = "btcscan.org";
-        let url = format!("https://{}/api/tx/{}/raw", host, txid);
-        let request_headers = vec![
-            HttpHeader {
-                name: "Host".to_string(),
-                value: format!("{host}:443"),
-            },
-            HttpHeader {
-                name: "User-Agent".to_string(),
-                value: "bitcoin_inputs_collector".to_string(),
-            },
-        ];
-        let request = CanisterHttpRequestArgument {
-            url: url.to_string(),
-            method: HttpMethod::GET,
-            body: None,
-            max_response_bytes: Some(max_response_bytes as u64),
-            transform: Some(TransformContext {
-                function: TransformFunc(candid::Func {
-                    principal: ic_cdk::api::id(),
-                    method: "transform".to_string(),
-                }),
-                context: vec![],
+    Ok(addresses)
+}
+
+async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
+    // TODO(XC-159): Support multiple providers
+    let host = "btcscan.org";
+    let url = format!("https://{}/api/tx/{}/raw", host, tx_id);
+    let request_headers = vec![
+        HttpHeader {
+            name: "Host".to_string(),
+            value: format!("{host}:443"),
+        },
+        HttpHeader {
+            name: "User-Agent".to_string(),
+            value: "bitcoin_inputs_collector".to_string(),
+        },
+    ];
+    // The max_response_bytes is set to 400KiB because:
+    // - The maximum size of a standard non-taproot transaction is 400k vBytes.
+    // - Taproot transactions could be as big as full block size (4MiB).
+    // - Currently a subnet's maximum response size is only 2MiB.
+    // - Transactions bigger than 2MiB are very rare.
+    //
+    // TODO(XC-171): Transactions between 400k and 2MiB are uncommon but may need to be handled.
+    let request = CanisterHttpRequestArgument {
+        url: url.to_string(),
+        method: HttpMethod::GET,
+        body: None,
+        max_response_bytes: Some(400 * 1024), // 400 KiB
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: ic_cdk::api::id(),
+                method: "transform".to_string(),
             }),
-            headers: request_headers,
-        };
-        let cycles = get_tx_cycle_cost(max_response_bytes);
-        match http_request(request, cycles).await {
-            Ok((response,)) => {
-                // Ensure response is 200 before decoding
-                if response.status != 200u32 {
-                    let code = if response.status == 429u32 {
-                        RejectionCode::SysTransient
-                    } else {
-                        RejectionCode::SysFatal
-                    };
-                    return Err(HttpGetTxError::Rejected {
-                        code,
-                        message: format!("HTTP GET {} received code {}", url, response.status),
-                    });
-                }
-                let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                    .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?;
-                // Verify the correctness of the transaction by recomputing the transaction ID.
-                let decoded_txid = tx.compute_txid();
-                if decoded_txid.as_ref() as &[u8; 32] != txid.as_ref() {
-                    return Err(HttpGetTxError::TxidMismatch {
-                        expected: txid,
-                        decoded: Txid::from(*(decoded_txid.as_ref() as &[u8; 32])),
-                    });
-                }
-                Ok(tx)
+            context: vec![],
+        }),
+        headers: request_headers,
+    };
+    let cycles = 49_140_000 + 1024 * 5_200 + 10_400 * 400 * 1024; // 1 KiB request, 400 KiB response
+    match http_request(request, cycles).await {
+        Ok((response,)) => {
+            // TODO(XC-158): ensure response is 200 before decoding
+            let tx = Transaction::consensus_decode(&mut response.body.as_slice())
+                .map_err(BitcoinTxError::Encoding)?;
+            // Verify the correctness of the transaction by recomputing the transaction ID.
+            let decoded_tx_id = tx.compute_txid().to_string();
+            if decoded_tx_id != tx_id {
+                return Err(BitcoinTxError::TxIdMismatch {
+                    expected: tx_id,
+                    decoded: decoded_tx_id,
+                });
             }
-            Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
-            Err((r, m)) => {
-                // TODO(XC-158): maybe try other providers and also log the error.
-                println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
-                Err(HttpGetTxError::Rejected {
-                    code: r,
-                    message: m,
-                })
-            }
+            Ok(tx)
         }
-    }
-
-    fn cycles_accept(&self, cycles: u128) -> u128 {
-        ic_cdk::api::call::msg_cycles_accept128(cycles)
-    }
-    fn cycles_available(&self) -> u128 {
-        ic_cdk::api::call::msg_cycles_available128()
-    }
-}
-
-/// Check the input addresses of a transaction given its txid.
-/// It consists of the following steps:
-///
-/// 1. Call `try_fetch_tx` to find if the transaction has already
-///    been fetched, or if another fetch is already pending, or
-///    if we are experiencing high load, or we need to retry the
-///    fetch (when the previous max_response_bytes setting wasn't
-///    enough).
-///
-/// 2. If we need to fetch this tranction, call the function `do_fetch`.
-///
-/// 3. For fetched transaction, call `check_fetched`, which further
-///    checks if the input addresses of this transaction are available.
-///    If not, we need to additionally fetch those input transactions
-///    in order to compute their corresponding addresses.
-pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
-    let env = &KytCanisterEnv;
-    match env.try_fetch_tx(txid) {
-        TryFetchResult::Pending => CheckTransactionPending::Pending.into(),
-        TryFetchResult::HighLoad => CheckTransactionPending::HighLoad.into(),
-        TryFetchResult::Error(err) => (txid, err).into(),
-        TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
-        TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
-        TryFetchResult::ToFetch(do_fetch) => {
-            match do_fetch.await {
-                Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
-                Ok(FetchResult::Error(err)) => (txid, err).into(),
-                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionPending::Pending.into(),
-                Err(_) => unreachable!(), // should never happen
-            }
+        Err((r, m)) => {
+            // TODO(XC-158): maybe try other providers and also log the error.
+            println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
+            Err(BitcoinTxError::Rejected {
+                code: r,
+                message: m,
+            })
         }
     }
 }

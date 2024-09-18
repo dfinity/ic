@@ -39,7 +39,8 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{
@@ -47,7 +48,7 @@ use ic_nns_governance::{
         test_data::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        Environment, Governance, HeapGrowthPotential,
+        validate_proposal_title, Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
@@ -61,7 +62,6 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
-        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -79,8 +79,8 @@ use ic_nns_governance::{
         settle_neurons_fund_participation_request, swap_background_information,
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
-        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, KnownNeuron,
+        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
         Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
         NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
@@ -94,10 +94,6 @@ use ic_nns_governance::{
     },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
-};
-use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    proposal_validation::validate_proposal_title,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -8160,7 +8156,7 @@ fn test_filter_proposals_excluding_topics() {
                 proposer: Some(NeuronId { id: 1 }),
                 proposal: Some(Proposal {
                     action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                        nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
+                        nns_function: NnsFunction::NnsCanisterUpgrade as i32,
                         payload: Vec::new(),
                     })),
                     ..new_motion_proposal()
@@ -8194,7 +8190,7 @@ fn test_filter_proposals_excluding_topics() {
             &ListProposalInfo {
                 exclude_topic: vec![
                     Topic::NetworkEconomics as i32,
-                    Topic::ProtocolCanisterManagement as i32
+                    Topic::NetworkCanisterManagement as i32
                 ],
                 ..Default::default()
             },
@@ -8564,7 +8560,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
-    // Let's try an Installcode for Governance itself. This proposal type is whitelisted, so it can
+    // Let's try a NnsCanisterUpgrade. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
         gov.make_proposal(
@@ -8573,14 +8569,10 @@ async fn test_max_number_of_proposals_with_ballots() {
             &principal(1),
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
-                summary: "InstallCode for Governance should go through despite the limit"
-                    .to_string(),
-                action: Some(proposal::Action::InstallCode(InstallCode {
-                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
-                    wasm_module: Some(vec![1, 2, 3]),
-                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
-                    arg: Some(vec![4, 5, 6]),
-                    skip_stopping_before_installing: None,
+                summary: "NnsCanisterUpgrade should go through despite the limit".to_string(),
+                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                    payload: Vec::new(),
                 })),
                 ..Default::default()
             },
@@ -11774,7 +11766,7 @@ lazy_static! {
                     Some(517576), // memory_allocation
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
-                    (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
+                    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, // wasm_memory_limit
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -11885,7 +11877,7 @@ lazy_static! {
             )
         };
 
-        let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(create_service_nervous_system))
+        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)
             .expect(
                 "Cannot build SNS_INIT_PAYLOAD from \
                 CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING."

@@ -21,7 +21,6 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:slog",
-    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
 ]

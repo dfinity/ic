@@ -14,15 +14,10 @@ path = "src/main.rs"
 bitcoin = { version = "0.32.2", default-features = false }
 candid = { workspace = true }
 futures = { workspace = true }
-ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
 pocket-ic = { path = "../../../packages/pocket-ic" } 
-tokio = { workspace = true }

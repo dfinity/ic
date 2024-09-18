@@ -180,17 +180,20 @@ pub(crate) async fn download_ingress<P: Peers>(
 
 #[cfg(test)]
 mod tests {
-    use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_summary_block_proposal,
-    };
-
     use super::*;
 
     use http_body_util::Full;
     use ic_logger::no_op_logger;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContentSigner},
+        make_genesis,
+    };
     use ic_test_utilities_types::messages::SignedIngressBuilder;
-    use ic_types_test_utils::ids::NODE_1;
+    use ic_types::batch::{BatchPayload, IngressPayload};
+    use ic_types::consensus::{dkg::Dealings, Block, BlockProposal, DataPayload, Payload, Rank};
+    use ic_types::Height;
+    use ic_types_test_utils::ids::{node_test_id, NODE_1};
     use tower::ServiceExt;
 
     fn mock_pools(
@@ -361,9 +364,40 @@ mod tests {
     // Utility functions below
 
     fn fake_block_proposal(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
-        let block_proposal = fake_block_proposal_with_ingresses(ingress_messages);
+        let parent = make_genesis(ic_types::consensus::dkg::Summary::fake())
+            .content
+            .block
+            .into_inner();
 
-        ConsensusMessage::BlockProposal(block_proposal)
+        let batch = BatchPayload {
+            ingress: IngressPayload::from(ingress_messages),
+            ..Default::default()
+        };
+
+        let block = Block::new(
+            ic_types::crypto::crypto_hash(&parent),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch,
+                    dealings: Dealings::new_empty(Height::from(0)),
+                    idkg: None,
+                }),
+            ),
+            parent.height.increment(),
+            Rank(0),
+            parent.context.clone(),
+        );
+        ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
+    }
+
+    fn fake_summary_block_proposal() -> ConsensusMessage {
+        let block = make_genesis(ic_types::consensus::dkg::Summary::fake())
+            .content
+            .block
+            .into_inner();
+
+        ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
     }
 
     fn request(

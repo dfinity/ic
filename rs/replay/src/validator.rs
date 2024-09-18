@@ -328,7 +328,7 @@ impl ReplayValidator {
             if changes.is_empty() {
                 break;
             } else {
-                pool.apply(changes);
+                pool.apply_changes(changes);
             }
         }
 

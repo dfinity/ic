@@ -1673,7 +1673,7 @@ impl StateManagerImpl {
             .zip(snapshots.iter().skip(1))
             .all(|(s0, s1)| s0.height < s1.height));
 
-        let last_snapshot_height = snapshots.back().map_or(0, |s| s.height.get() as i64);
+        let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
 
         metrics.resident_state_count.set(snapshots.len() as i64);
 
@@ -2238,7 +2238,8 @@ impl StateManagerImpl {
         let latest_height = states
             .snapshots
             .back()
-            .map_or(Self::INITIAL_STATE_HEIGHT, |s| s.height);
+            .map(|s| s.height)
+            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
 
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);

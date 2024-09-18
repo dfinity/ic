@@ -12,4 +12,3 @@ canister-test = { path = "../../../rust_canisters/canister_test" }
 criterion = { workspace = true }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
 ic-types = { path = "../../../types/types" }
-ic-wasm-transform = { path = "../../../wasm_transform" }

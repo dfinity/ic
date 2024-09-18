@@ -7,7 +7,7 @@ nano
 # packages requested by networking
 tcpdump
 iperf
-netcat-openbsd
+netcat
 curl
 iputils-ping
 
@@ -22,12 +22,10 @@ strace
 setools
 
 # flamegraphs (scalability suite)
-linux-tools-virtual-hwe-24.04
+linux-tools-virtual-hwe-20.04
 
 # performance testing additions
 fio
-stress-ng
-sysbench
 bpftrace
 linux-tools-common
 linux-tools-generic

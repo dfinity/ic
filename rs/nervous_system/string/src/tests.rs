@@ -25,5 +25,5 @@ fn test_clamp_debug_len() {
         i: i32,
     }
 
-    assert_eq!(&clamp_debug_len(&S { i: 42 }, 100), "S {\n    i: 42,\n}");
+    assert_eq!(&clamp_debug_len(S { i: 42 }, 100), "S {\n    i: 42,\n}");
 }

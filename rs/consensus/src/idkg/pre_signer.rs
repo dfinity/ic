@@ -1456,7 +1456,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_2)),
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
                 ];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Set up the transcript creation request
                 // The block requests transcripts 1, 4, 5
@@ -1498,7 +1498,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing1)),
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing2)),
                 ];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Finalized height doesn't increase, so dealing1 shouldn't be purged
                 let change_set = pre_signer.on_state_change(&idkg_pool, &transcript_loader);
@@ -1512,7 +1512,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
 
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Finalized height increases above dealing2, so it is purged
                 let new_height = consensus_pool.advance_round_normal_operation();
@@ -1855,7 +1855,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: {transcript 2, dealer = NODE_2, height = 100}
                 let dealing = create_dealing(id_2, NODE_2);
@@ -2003,7 +2003,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -2015,7 +2015,7 @@ mod tests {
                     &id,
                     &NODE_2,
                 ));
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Since we already issued support for the dealing, it should not produce any
                 // more support.
@@ -2050,7 +2050,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 // create a transcript with unknown future registry version
                 let rv = RegistryVersion::from(1);
                 let t = create_transcript_param_with_registry_version(
@@ -2098,7 +2098,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_1]);
 
                 let block_reader =
@@ -2135,7 +2135,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 let t = create_transcript_param(&key_id, id, &[NODE_2], &[NODE_3]);
 
                 let block_reader =
@@ -2159,7 +2159,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let block_reader =
                     TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![]);
@@ -2290,7 +2290,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
@@ -2318,7 +2318,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
@@ -2341,7 +2341,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing.clone(),
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let block_reader = block_reader
@@ -2374,12 +2374,12 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let change_set = vec![IDkgChangeAction::AddToValidated(
                     IDkgMessage::DealingSupport(support.clone()),
                 )];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 // Unvalidated pool has: duplicate of the same support share
                 let msg_id = support.message_id();
@@ -2449,7 +2449,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 support.dealer_id = NODE_3;
                 let msg_id = support.message_id();
@@ -2488,7 +2488,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 let msg_id = support.message_id();
@@ -2527,7 +2527,7 @@ mod tests {
                 let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     dealing,
                 ))];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 support.dealing_hash = CryptoHashOf::new(CryptoHash(vec![]));
                 support.dealer_id = NODE_4;
@@ -2633,7 +2633,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_3)),
                     IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing_4)),
                 ];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let t4 = create_transcript_param(&key_id, id_4, &[NODE_2], &[NODE_4]);
@@ -2725,7 +2725,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_2)),
                     IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_3)),
                 ];
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
                 let block_reader =
@@ -2792,7 +2792,7 @@ mod tests {
                     .values()
                     .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
                     .collect();
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 {
                     let b = IDkgTranscriptBuilderImpl::new(
@@ -2819,7 +2819,7 @@ mod tests {
                         IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
                     })
                     .collect();
-                idkg_pool.apply(change_set);
+                idkg_pool.apply_changes(change_set);
 
                 let b = IDkgTranscriptBuilderImpl::new(
                     &block_reader,

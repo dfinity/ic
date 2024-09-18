@@ -95,7 +95,6 @@ fn ic_admin_template() -> IcAdminTemplate {
             .parse()
             .unwrap(),
         arg: "arg".to_string(),
-        arg_sha256: "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
         summary_file: "summary.md".to_string(),
     }
 }

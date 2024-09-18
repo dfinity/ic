@@ -3,9 +3,9 @@ use crate::{
     pool_common::{HasLabel, PoolSection},
 };
 use ic_interfaces::{
-    dkg::{ChangeAction, DkgPool, Mutations},
+    dkg::{ChangeAction, ChangeSet, DkgPool},
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
@@ -79,7 +79,7 @@ impl DkgPoolImpl {
 }
 
 impl MutablePool<dkg::Message> for DkgPoolImpl {
-    type Mutations = Mutations;
+    type ChangeSet = ChangeSet;
 
     /// Inserts an unvalidated artifact into the unvalidated section.
     fn insert(&mut self, artifact: UnvalidatedArtifact<consensus::dkg::Message>) {
@@ -99,9 +99,9 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<dkg::Message> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<dkg::Message> {
         let changed = !change_set.is_empty();
-        let mut transmits = vec![];
+        let mut mutations = vec![];
         for action in change_set {
             match action {
                 ChangeAction::HandleInvalid(id, reason) => {
@@ -110,14 +110,14 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                     self.unvalidated.remove(&id);
                 }
                 ChangeAction::AddToValidated(message) => {
-                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
                     }));
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
-                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: message.clone(),
                         // relayed
                         is_latency_sensitive: false,
@@ -135,12 +135,12 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                         .expect("Unvalidated artifact was not found.");
                 }
                 ChangeAction::Purge(height) => {
-                    transmits.extend(self.purge(height).drain(..).map(ArtifactTransmit::Abort))
+                    mutations.extend(self.purge(height).drain(..).map(ArtifactMutation::Remove))
                 }
             }
         }
-        ArtifactTransmits {
-            transmits,
+        ChangeResult {
+            mutations,
             poll_immediately: changed,
         }
     }
@@ -243,7 +243,7 @@ mod test {
         let last_dkg_id_start_height = Height::from(10);
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
-        let result = pool.apply(
+        let result = pool.apply_changes(
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -265,36 +265,36 @@ mod test {
             timestamp: UNIX_EPOCH,
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
-        assert_eq!(result.transmits.len(), 2);
+        assert_eq!(result.mutations.len(), 2);
         assert!(!result
-            .transmits
+            .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        let result = pool.apply(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
-        assert_eq!(result.transmits.len(), 1);
+        let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
+        assert_eq!(result.mutations.len(), 1);
         assert!(!result
-            .transmits
+            .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        let result = pool.apply(vec![ChangeAction::Purge(
+        let result = pool.apply_changes(vec![ChangeAction::Purge(
             current_dkg_id_start_height.increment(),
         )]);
-        assert_eq!(result.transmits.len(), 1);
+        assert_eq!(result.mutations.len(), 1);
         assert!(!result
-            .transmits
+            .mutations
             .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

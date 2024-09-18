@@ -342,7 +342,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<DfnRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
     ));
 }
@@ -385,7 +385,7 @@ fn canister_post_upgrade() {
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::<DfnRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
     ));
 

@@ -40,7 +40,6 @@ REPO_COMPONENTS = glob(
 
 # files used for testing and development that aren't "used" by any ic-os variant
 ignored_repo_components = [
-    "hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh",
     "networking/dev-certs/canister_http_test_ca.key",
     "networking/dev-certs/root_cert_gen.sh",
 ]

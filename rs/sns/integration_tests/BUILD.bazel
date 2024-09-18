@@ -85,7 +85,7 @@ BASE_DEV_DEPENDENCIES = [
 # dependencies (`DEV_DEPENDENCIES`), or `TEST_DEV_DEPENDENCIES` feature previews.
 # (Currently not used)
 # DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-#     "//rs/nns/governance/api",
+#     "//rs/nns/governance",
 #     "//rs/nns/sns-wasm",
 #     "//rs/nns/test_utils",
 #     "//rs/sns/governance",

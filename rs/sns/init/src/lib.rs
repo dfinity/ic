@@ -44,7 +44,6 @@ use std::{
     string::ToString,
 };
 
-mod create_service_nervous_system;
 pub mod distributions;
 pub mod pb;
 
@@ -666,6 +665,7 @@ impl SnsInitPayload {
             swap_canister_id: Some(sns_canister_ids.swap),
             dapp_canister_ids,
             archive_canister_ids: vec![],
+            latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
         }

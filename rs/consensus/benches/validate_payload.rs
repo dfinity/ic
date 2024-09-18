@@ -21,7 +21,7 @@ use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
@@ -263,7 +263,7 @@ fn add_past_blocks(
         .next()
         .unwrap();
     let mut parent = cup.content.block.into_inner();
-    let mut changeset = Mutations::new();
+    let mut changeset = ChangeSet::new();
     let to_add = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 1;
     for i in 1..=to_add {
         let mut block = Block::from_parent(&parent);
@@ -290,7 +290,7 @@ fn add_past_blocks(
             timestamp: UNIX_EPOCH,
         }));
     }
-    consensus_pool.apply(changeset);
+    consensus_pool.apply_changes(changeset);
     parent
 }
 

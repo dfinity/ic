@@ -544,7 +544,7 @@ impl Payload {
 
     /// Returns the number of messages in this payload.
     pub fn len(&self) -> usize {
-        self.messages.as_ref().map_or(0, |msgs| msgs.len())
+        self.messages.as_ref().map(|msgs| msgs.len()).unwrap_or(0)
     }
 
     /// Takes the prefix of `messages` up to the given index. Returns a

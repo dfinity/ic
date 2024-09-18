@@ -1,6 +1,6 @@
 #!/bin/sh
 
-docker load -i /config/jaeger.tar
+docker load -i /config/image.tar
 docker run -d --name jaeger \
     -e COLLECTOR_OTLP_ENABLED=true \
     -e SPAN_STORAGE_TYPE=badger \

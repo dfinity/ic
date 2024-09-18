@@ -281,7 +281,8 @@ impl StateReader for FakeStateManager {
             .read()
             .unwrap()
             .last()
-            .map_or_else(initial_state, |snap| snap.make_labeled_state())
+            .map(|snap| snap.make_labeled_state())
+            .unwrap_or_else(initial_state)
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

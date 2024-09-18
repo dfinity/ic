@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
@@ -54,7 +54,7 @@ impl ConsensusManagerBuilder {
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
+        outbound_artifacts_rx: Receiver<ArtifactMutation<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
     ) {
@@ -114,7 +114,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
+    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,

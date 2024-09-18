@@ -13,7 +13,6 @@ pub trait CanisterApi {
         target_subnet: SubnetId,
         controller_id: PrincipalId,
         cycles: Cycles,
-        wasm_memory_limit: u64,
     ) -> Result<CanisterId, String>;
 
     /// Delete a canister that has been created

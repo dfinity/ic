@@ -1849,7 +1849,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter",
+ "wasmprinter 0.212.0",
  "wat",
 ]
 
@@ -1949,7 +1949,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "clap 4.5.17",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
+ "cloudflare",
  "flate2",
  "futures",
  "http 1.1.0",
@@ -2272,24 +2272,6 @@ dependencies = [
 [[package]]
 name = "cloudflare"
 version = "0.12.0"
-source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
-dependencies = [
- "chrono",
- "http 0.2.12",
- "percent-encoding",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "thiserror",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "cloudflare"
-version = "0.12.0"
 source = "git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae#f14720e42184ee176a97676e85ef2d2d85bc3aae"
 dependencies = [
  "chrono",
@@ -2406,9 +2388,12 @@ dependencies = [
  "anyhow",
  "canister-test",
  "canister_http",
+ "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-canister-client",
  "ic-interfaces-registry",
+ "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -2420,6 +2405,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_system_test_upgrade_common",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
@@ -2490,29 +2476,6 @@ dependencies = [
  "slog",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "consensus-upgrade-system-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "futures",
- "ic-agent",
- "ic-canister-client",
- "ic-management-canister-types",
- "ic-nervous-system-common-test-keys",
- "ic-nns-common",
- "ic-registry-nns-data-provider",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
- "slog",
- "tokio",
 ]
 
 [[package]]
@@ -3753,7 +3716,6 @@ dependencies = [
  "criterion",
  "ic-test-utilities-execution-environment",
  "ic-types",
- "ic-wasm-transform",
 ]
 
 [[package]]
@@ -4579,6 +4541,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hardware_wallet_tests"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ic-canister-client-sender",
+ "ic-crypto-ed25519",
+ "ic-ledger-core",
+ "ic-nns-constants",
+ "ic-rosetta-api",
+ "ic-rosetta-test-utils",
+ "ic-types",
+ "icp-ledger",
+ "nix 0.24.3",
+ "rand 0.8.5",
+ "rand_distr",
+ "reqwest 0.12.7",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5292,6 +5279,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-handler-root",
  "ic-nns-init",
@@ -5413,7 +5401,6 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "slog",
- "thiserror",
  "tokio",
  "tower 0.4.13",
  "tracing",
@@ -5626,7 +5613,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chacha20poly1305",
- "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
+ "cloudflare",
  "derive-new",
  "fqdn",
  "futures",
@@ -5880,15 +5867,10 @@ dependencies = [
  "candid",
  "candid_parser",
  "futures",
- "ic-base-types",
- "ic-btc-interface",
  "ic-cdk 0.13.5",
  "ic-test-utilities-load-wasm",
- "ic-types",
- "ic-universal-canister",
  "pocket-ic",
  "serde",
- "tokio",
 ]
 
 [[package]]
@@ -8030,7 +8012,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "tower 0.4.13",
- "wasmparser 0.215.0",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -8084,9 +8066,9 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
- "wasm-encoder 0.215.0",
- "wasmparser 0.215.0",
- "wasmprinter",
+ "wasm-encoder 0.212.0",
+ "wasmparser 0.212.0",
+ "wasmprinter 0.212.0",
  "wasmtime",
  "wasmtime-environ",
  "wast",
@@ -8195,7 +8177,7 @@ dependencies = [
  "tokio",
  "tower 0.4.13",
  "tracing",
- "wasmparser 0.215.0",
+ "wasmparser 0.212.0",
  "wat",
 ]
 
@@ -9374,7 +9356,6 @@ dependencies = [
  "reqwest 0.12.7",
  "serde",
  "serde_json",
- "sha2 0.10.8",
  "strum",
  "strum_macros",
  "tempfile",
@@ -9528,7 +9509,6 @@ dependencies = [
  "ic-sns-wasm",
  "serde",
  "tempfile",
- "thiserror",
  "tokio",
 ]
 
@@ -9537,8 +9517,8 @@ name = "ic-nervous-system-canisters"
 version = "0.9.0"
 dependencies = [
  "async-trait",
- "candid",
  "dfn_core",
+ "dfn_protobuf",
  "ic-base-types",
  "ic-ledger-core",
  "ic-nervous-system-common",
@@ -9592,6 +9572,7 @@ dependencies = [
  "by_address",
  "bytes",
  "dfn_core",
+ "dfn_protobuf",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
@@ -9667,10 +9648,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-nervous-system-common-validation"
-version = "0.9.0"
-
-[[package]]
 name = "ic-nervous-system-governance"
 version = "0.0.1"
 dependencies = [
@@ -9701,6 +9678,7 @@ dependencies = [
  "candid",
  "canister-test",
  "cycles-minting-canister",
+ "dfn_protobuf",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types",
@@ -10004,7 +9982,6 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
- "ic-nervous-system-common-validation",
  "ic-nervous-system-proto",
  "ic-nns-common",
  "ic-protobuf",
@@ -10971,6 +10948,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
@@ -11462,7 +11440,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance-api",
+ "ic-nns-governance",
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
@@ -11513,7 +11491,6 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
- "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
  "ic-nervous-system-lock",
  "ic-nervous-system-proto",
@@ -11622,7 +11599,6 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-proto",
  "ic-nns-constants",
- "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-init-protobuf-generator",
  "ic-sns-root",
@@ -11725,7 +11701,6 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
- "ic-cdk-timers",
  "ic-management-canister-types",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
@@ -12517,7 +12492,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower 0.4.13",
- "wasmprinter",
+ "wasmprinter 0.212.0",
  "wat",
 ]
 
@@ -13080,9 +13055,9 @@ dependencies = [
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
- "wasm-encoder 0.215.0",
- "wasmparser 0.215.0",
- "wasmprinter",
+ "wasm-encoder 0.212.0",
+ "wasmparser 0.212.0",
+ "wasmprinter 0.212.0",
  "wat",
 ]
 
@@ -13317,6 +13292,21 @@ dependencies = [
  "rand_chacha 0.3.1",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_consensus_system_test_upgrade_common"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "ic-management-canister-types",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "slog",
 ]
 
 [[package]]
@@ -14684,7 +14674,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter",
+ "wasmprinter 0.212.0",
 ]
 
 [[package]]
@@ -17601,7 +17591,6 @@ version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
- "async-compression",
  "base64 0.21.7",
  "bytes",
  "encoding_rs",
@@ -17628,7 +17617,6 @@ dependencies = [
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
- "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -21163,6 +21151,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501940df4418b8929eb6d52f1aade1fdd15a5b86c92453cb696e3c906bd3fc33"
 dependencies = [
  "leb128",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21172,7 +21161,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb56df3e06b8e6b77e37d2969a50ba51281029a9aeb3855e76b7f49b6418847"
 dependencies = [
  "leb128",
- "wasmparser 0.215.0",
 ]
 
 [[package]]
@@ -21214,6 +21202,17 @@ dependencies = [
  "indexmap 2.5.0",
  "semver",
  "serde",
+]
+
+[[package]]
+name = "wasmprinter"
+version = "0.212.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
+dependencies = [
+ "anyhow",
+ "termcolor",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -21341,7 +21340,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.215.0",
  "wasmparser 0.215.0",
- "wasmprinter",
+ "wasmprinter 0.215.0",
  "wasmtime-types",
 ]
 

@@ -21,7 +21,7 @@ use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
+    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactMutation,
     p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
@@ -445,7 +445,7 @@ pub fn start_test_processor(
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    mpsc::Receiver<ArtifactTransmit<U64Artifact>>,
+    mpsc::Receiver<ArtifactMutation<U64Artifact>>,
     mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);

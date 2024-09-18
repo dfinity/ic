@@ -27,10 +27,6 @@ use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nns_constants::{
-    DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::{
     client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
@@ -1175,68 +1171,61 @@ where
         initial_cycles_per_canister: u64,
     ) -> Result<SnsCanisterIds, (String, Option<SnsCanisterIds>)> {
         let this_canister_id = canister_api.local_canister_id().get();
-        let new_canister = |canister_type: SnsCanisterType| {
+        let new_canister = || {
             canister_api.create_canister(
                 subnet_id,
                 this_canister_id,
                 Cycles::new(initial_cycles_per_canister.into()),
-                if canister_type == SnsCanisterType::Governance {
-                    DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
-                } else {
-                    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT
-                },
             )
         };
 
         // Create these in order instead of join_all to get deterministic ordering for tests
-        let root = new_canister(SnsCanisterType::Root).await;
-        let governance = new_canister(SnsCanisterType::Governance).await;
-        let ledger = new_canister(SnsCanisterType::Ledger).await;
-        let swap = new_canister(SnsCanisterType::Swap).await;
-        let index = new_canister(SnsCanisterType::Index).await;
+        let canisters_attempted = vec![
+            new_canister().await,
+            new_canister().await,
+            new_canister().await,
+            new_canister().await,
+            new_canister().await,
+        ];
+        let canisters_attempted_count = canisters_attempted.len();
 
-        let (root, governance, ledger, swap, index) = match (root, governance, ledger, swap, index)
-        {
-            (Ok(root), Ok(governance), Ok(ledger), Ok(swap), Ok(index)) => {
-                (root, governance, ledger, swap, index)
-            }
-            (root, governance, ledger, swap, index) => {
-                let canisters_to_delete = SnsCanisterIds {
-                    root: root.ok().map(|canister_id| canister_id.get()),
-                    governance: governance.ok().map(|canister_id| canister_id.get()),
-                    ledger: ledger.ok().map(|canister_id| canister_id.get()),
-                    swap: swap.ok().map(|canister_id| canister_id.get()),
-                    index: index.ok().map(|canister_id| canister_id.get()),
-                };
-                let problem_canisters = vec![
-                    canisters_to_delete.root.is_none().then_some("Root"),
-                    canisters_to_delete
-                        .governance
-                        .is_none()
-                        .then_some("Governance"),
-                    canisters_to_delete.ledger.is_none().then_some("Ledger"),
-                    canisters_to_delete.swap.is_none().then_some("Swap"),
-                    canisters_to_delete.index.is_none().then_some("Index"),
-                ]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>();
-                return Err((
-                    format!(
-                        "Could not create some canisters: {}",
-                        problem_canisters.join(", ")
-                    ),
-                    Some(canisters_to_delete),
-                ));
-            }
-        };
+        let mut canisters_created = canisters_attempted
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        let canisters_created_count = canisters_created.len();
+
+        if canisters_created_count < canisters_attempted_count {
+            let next = |c: &mut Vec<CanisterId>| {
+                if !c.is_empty() {
+                    Some(c.remove(0).get())
+                } else {
+                    None
+                }
+            };
+            let canisters_to_delete = SnsCanisterIds {
+                root: next(&mut canisters_created),
+                governance: next(&mut canisters_created),
+                ledger: next(&mut canisters_created),
+                swap: next(&mut canisters_created),
+                index: next(&mut canisters_created),
+            };
+            return Err((
+                format!(
+                    "Could not create needed canisters. Only created {} but 5 needed.",
+                    canisters_created_count
+                ),
+                Some(canisters_to_delete),
+            ));
+        }
 
         Ok(SnsCanisterIds {
-            root: Some(root.get()),
-            governance: Some(governance.get()),
-            ledger: Some(ledger.get()),
-            swap: Some(swap.get()),
-            index: Some(index.get()),
+            root: Some(canisters_created.remove(0).get()),
+            governance: Some(canisters_created.remove(0).get()),
+            ledger: Some(canisters_created.remove(0).get()),
+            swap: Some(canisters_created.remove(0).get()),
+            index: Some(canisters_created.remove(0).get()),
         })
     }
 
@@ -2042,7 +2031,6 @@ mod test {
             _target_subnet: SubnetId,
             _controller_id: PrincipalId,
             _cycles: Cycles,
-            _wasm_memory_limit: u64,
         ) -> Result<CanisterId, String> {
             let mut errors = self.errors_on_create_canister.lock().unwrap();
             if errors.len() > 0 {
@@ -3278,10 +3266,10 @@ mod test {
 
         let subnet_id = subnet_test_id(1);
 
-        let governance_id = canister_test_id(1);
-        let ledger_id = canister_test_id(2);
-        let swap_id = canister_test_id(3);
-        let index_id = canister_test_id(4);
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
 
         let sns_init_payload = SnsInitPayload {
             dapp_canisters: None,
@@ -3296,21 +3284,22 @@ mod test {
             true,
             vec![],
             vec![],
-            vec![governance_id, ledger_id, swap_id, index_id],
+            vec![root_id, governance_id, ledger_id, swap_id],
             vec![],
             vec![],
             vec![],
             DeployNewSnsResponse {
                 canisters: Some(SnsCanisterIds {
-                    root: None,
+                    root: Some(root_id.get()),
                     ledger: Some(ledger_id.get()),
                     governance: Some(governance_id.get()),
                     swap: Some(swap_id.get()),
-                    index: Some(index_id.get()),
+                    index: None,
                 }),
                 subnet_id: Some(subnet_id.get()),
                 error: Some(SnsWasmError {
-                    message: "Could not create some canisters: Root".to_string(),
+                    message: "Could not create needed canisters. Only created 4 but 5 needed."
+                        .to_string(),
                 }),
                 dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
                     restored_dapp_canisters: vec![],

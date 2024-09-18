@@ -32,8 +32,8 @@ env:
     ${{ github.event_name == 'schedule' && '7' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
-  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
+  CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
   CI_JOB_ID: ${{ github.job }}
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

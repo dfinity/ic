@@ -233,7 +233,7 @@ mod tests {
 
             // After adding our random tape share for height 2, we should not create
             // any more shares
-            pool.apply(add_all_to_validated(
+            pool.apply_changes(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));
@@ -257,7 +257,7 @@ mod tests {
             // when we advance the pool by three heights again (advancing the finalized
             // height to 7), but we add a full random tape for height 7, we should
             // only construct a share for heights 6 and 8.
-            pool.apply(add_all_to_validated(
+            pool.apply_changes(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));
@@ -282,7 +282,7 @@ mod tests {
             // 8 already was delivered so there is no need to construct random tape 8
             // anymore. We therefore expect the random tape maker to only add a
             // share for height 10.
-            pool.apply(add_all_to_validated(
+            pool.apply_changes(add_all_to_validated(
                 time_source.get_relative_time(),
                 shares,
             ));

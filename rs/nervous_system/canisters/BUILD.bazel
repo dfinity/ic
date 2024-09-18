@@ -11,8 +11,8 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_protobuf",
     "//rs/types/base_types",
-    "@crate_index//:candid",
 ]
 
 MACRO_DEPENDENCIES = [

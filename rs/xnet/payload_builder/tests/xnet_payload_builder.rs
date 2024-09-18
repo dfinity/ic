@@ -380,7 +380,7 @@ proptest! {
             // And exactly one message should be missing.
             let msg_count: usize = payload
                 .values()
-                .map(|slice| slice.messages().map_or(0, |m| m.len()))
+                .map(|slice| slice.messages().map(|m| m.len()).unwrap_or(0))
                 .sum();
             assert_eq!(msg_count1 + msg_count2 - 1, msg_count);
 

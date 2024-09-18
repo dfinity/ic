@@ -18,7 +18,7 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:24.04 as download
+FROM ubuntu:20.04 as download
 
 USER root:root
 
@@ -48,7 +48,7 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:24.04
+FROM ubuntu:20.04
 
 USER root:root
 

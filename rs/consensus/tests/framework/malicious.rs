@@ -5,9 +5,9 @@ use ic_consensus::consensus::ConsensusImpl;
 use ic_consensus::idkg::{malicious_pre_signer, IDkgImpl};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction::*, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::PoolMutationsProducer,
+    p2p::consensus::ChangeSetProducer,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::{ConsensusMessageHashable, NotarizationShare};
@@ -21,9 +21,9 @@ pub struct InvalidNotaryShareSignature {
     consensus: ConsensusImpl,
 }
 
-impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature {
-    type Mutations = Mutations;
-    fn on_state_change(&self, pool: &T) -> Mutations {
+impl<T: ConsensusPool> ChangeSetProducer<T> for InvalidNotaryShareSignature {
+    type ChangeSet = ChangeSet;
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         let mut change_set = self.consensus.on_state_change(pool);
         for action in change_set.iter_mut() {
             if let AddToValidated(msg) = action {
@@ -65,9 +65,9 @@ pub struct AbsentNotaryShare {
     consensus: ConsensusImpl,
 }
 
-impl<T: ConsensusPool> PoolMutationsProducer<T> for AbsentNotaryShare {
-    type Mutations = Mutations;
-    fn on_state_change(&self, pool: &T) -> Mutations {
+impl<T: ConsensusPool> ChangeSetProducer<T> for AbsentNotaryShare {
+    type ChangeSet = ChangeSet;
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         self.consensus
             .on_state_change(pool)
             .into_iter()
@@ -95,9 +95,9 @@ pub struct ConsensusWithMaliciousFlags {
     malicious_flags: MaliciousFlags,
 }
 
-impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusWithMaliciousFlags {
-    type Mutations = Mutations;
-    fn on_state_change(&self, pool: &T) -> Mutations {
+impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusWithMaliciousFlags {
+    type ChangeSet = ChangeSet;
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         let changeset = self.consensus.on_state_change(pool);
         let pool_reader = PoolReader::new(pool);
         if self.malicious_flags.is_consensus_malicious() {
@@ -123,8 +123,8 @@ pub struct IDkgWithMaliciousFlags {
     malicious_flags: MaliciousFlags,
 }
 
-impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgWithMaliciousFlags {
-    type Mutations = IDkgChangeSet;
+impl<T: IDkgPool> ChangeSetProducer<T> for IDkgWithMaliciousFlags {
+    type ChangeSet = IDkgChangeSet;
     fn on_state_change(&self, pool: &T) -> IDkgChangeSet {
         let changeset = IDkgImpl::on_state_change(&self.idkg.borrow(), pool);
         if self.malicious_flags.is_idkg_malicious() {

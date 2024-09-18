@@ -872,8 +872,12 @@ impl PageMap {
     /// ```
     pub fn num_host_pages(&self) -> usize {
         let pages_in_checkpoint = self.storage.num_logical_pages();
-        pages_in_checkpoint
-            .max(self.page_delta.max_page_index().map_or(0, |i| i.get() + 1) as usize)
+        pages_in_checkpoint.max(
+            self.page_delta
+                .max_page_index()
+                .map(|i| i.get() + 1)
+                .unwrap_or(0) as usize,
+        )
     }
 
     /// Switches the checkpoint file of the current page map to the one provided
