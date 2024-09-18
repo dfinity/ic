@@ -397,14 +397,20 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::ReviseElectedGuestosVersions | NnsFunction::DeployGuestosToAllSubnetNodes
+            NnsFunction::NnsRootUpgrade
+                | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
+                | NnsFunction::ReviseElectedGuestosVersions
+                | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterInstall
+            NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsCanisterInstall
+                | NnsFunction::NnsRootUpgrade
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
@@ -420,8 +426,6 @@ impl NnsFunction {
                 | NnsFunction::UpdateNodesHostosVersion
                 | NnsFunction::BlessReplicaVersion
                 | NnsFunction::RetireReplicaVersion
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsRootUpgrade
         )
     }
 }
