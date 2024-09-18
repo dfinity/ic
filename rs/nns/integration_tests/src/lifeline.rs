@@ -9,13 +9,15 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
-    install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
-    manage_neuron_response::Command as CommandResponse, InstallCodeRequest, MakeProposalRequest,
-    ProposalActionRequest, ProposalStatus, Vote,
+use ic_nns_governance_api::{
+    pb::v1::{
+        manage_neuron_response::Command as CommandResponse, NnsFunction, ProposalStatus, Vote,
+    },
+    proposal_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
+    governance::UpgradeRootProposal,
     state_test_helpers::{
         get_pending_proposals, get_root_canister_status, nns_cast_vote,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
@@ -69,18 +71,17 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     let funny: u32 = 422557101; // just a funny number I came up with
     let magic = funny.to_le_bytes();
 
-    let proposal = MakeProposalRequest {
-        title: Some("Proposal to upgrade the root canister".to_string()),
-        summary: "".to_string(),
-        url: "".to_string(),
-        action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-            canister_id: Some(ROOT_CANISTER_ID.get()),
-            wasm_module: Some(wasm_module.clone()),
-            install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
-            arg: Some(magic.to_vec()),
-            skip_stopping_before_installing: None,
-        })),
-    };
+    let proposal = create_external_update_proposal_candid(
+        "Proposal to upgrade the root canister",
+        "",
+        "",
+        NnsFunction::NnsRootUpgrade,
+        UpgradeRootProposal {
+            wasm_module: wasm_module.clone(),
+            module_arg: magic.to_vec(),
+            stop_upgrade_start: true,
+        },
+    );
 
     let neuron_id = NeuronId {
         id: TEST_NEURON_2_ID,
@@ -170,18 +171,17 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
 
     let init_arg: &[u8] = &[];
 
-    let proposal = MakeProposalRequest {
-        title: Some("Proposal to upgrade the root canister".to_string()),
-        summary: "".to_string(),
-        url: "".to_string(),
-        action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-            canister_id: Some(ROOT_CANISTER_ID.get()),
-            wasm_module: Some(empty_wasm.to_vec()),
-            install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
-            arg: Some(init_arg.to_vec()),
-            skip_stopping_before_installing: Some(true),
-        })),
-    };
+    let proposal = create_external_update_proposal_candid(
+        "Proposal to upgrade the root canister",
+        "",
+        "",
+        NnsFunction::NnsRootUpgrade,
+        UpgradeRootProposal {
+            wasm_module: empty_wasm.to_vec(),
+            module_arg: init_arg.to_vec(),
+            stop_upgrade_start: false,
+        },
+    );
 
     let neuron_id = NeuronId {
         id: TEST_NEURON_2_ID,
@@ -272,18 +272,17 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
     state_machine.tick();
 
     let root_wasm = Project::cargo_bin_maybe_from_env("root-canister", &[]).bytes();
-    let proposal = MakeProposalRequest {
-        title: Some("Tea. Earl Grey. Hot.".to_string()),
-        summary: "Make It So".to_string(),
-        url: "".to_string(),
-        action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-            canister_id: Some(ROOT_CANISTER_ID.get()),
-            wasm_module: Some(root_wasm),
-            install_mode: Some(GovernanceCanisterInstallMode::Upgrade as i32),
-            arg: Some(vec![]),
-            skip_stopping_before_installing: None,
-        })),
-    };
+    let proposal = create_external_update_proposal_candid(
+        "Tea. Earl Grey. Hot.",
+        "Make It So",
+        "",
+        NnsFunction::NnsRootUpgrade,
+        UpgradeRootProposal {
+            stop_upgrade_start: true,
+            wasm_module: root_wasm,
+            module_arg: vec![],
+        },
+    );
     let neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,
     };
