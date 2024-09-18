@@ -2387,6 +2387,16 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.5.17",
+ "ic-types",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_with 1.14.0",
+ "tempfile",
+ "url",
+ "utils",
 ]
 
 [[package]]
@@ -18785,6 +18795,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.17",
+ "config",
  "partition_tools",
  "serde",
  "serde_json",
@@ -18792,7 +18803,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
- "utils",
 ]
 
 [[package]]
@@ -20902,11 +20912,6 @@ name = "utils"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "once_cell",
- "serde",
- "serde_json",
- "serde_with 1.14.0",
- "url",
 ]
 
 [[package]]
