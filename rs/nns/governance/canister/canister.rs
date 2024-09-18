@@ -430,7 +430,9 @@ fn set_time_warp(new_time_warp: TimeWarp) {
 /// DEPRECATED: Use manage_neuron directly instead.
 #[update(hidden = true)]
 async fn forward_vote(
-    (neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote),
+    neuron_id: NeuronId,
+    proposal_id: ProposalId,
+    vote: Vote,
 ) -> ManageNeuronResponse {
     debug_log("forward_vote");
     manage_neuron(ManageNeuronRequest {
@@ -673,9 +675,7 @@ fn list_known_neurons() -> ListKnownNeuronsResponse {
 /// DEPRECATED: Always panics. Use manage_neuron instead.
 /// TODO(NNS1-413): Remove this once we are sure that there are no callers.
 #[update(hidden = true)]
-fn submit_proposal(
-    (_proposer, _proposal, _caller): (NeuronId, Proposal, PrincipalId),
-) -> ProposalId {
+fn submit_proposal(_proposer: NeuronId, _proposal: Proposal, _caller: PrincipalId) -> ProposalId {
     panic!(
         "{}submit_proposal is deprecated, and now always panics. \
                Use `manage_neuron` instead to submit a proposal.",
