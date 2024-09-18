@@ -11196,7 +11196,7 @@ impl Environment for MockEnvironment<'_> {
         panic!("Unexpected call to Environment::random_byte_array");
     }
 
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,

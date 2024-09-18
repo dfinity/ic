@@ -498,7 +498,7 @@ impl Environment for NNSFixture {
             .random_byte_array()
     }
 
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         proposal_id: u64,
         update: &ExecuteNnsFunction,
@@ -508,7 +508,6 @@ impl Environment for NNSFixture {
             .unwrap()
             .environment
             .execute_nns_function(proposal_id, update)
-            .await
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
@@ -952,12 +951,12 @@ impl Environment for NNS {
         self.fixture.random_byte_array()
     }
 
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         proposal_id: u64,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        self.fixture.execute_nns_function(proposal_id, update).await
+        self.fixture.execute_nns_function(proposal_id, update)
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

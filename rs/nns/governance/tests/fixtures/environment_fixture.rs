@@ -157,7 +157,7 @@ impl Environment for EnvironmentFixture {
         unimplemented!()
     }
 
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         _proposal_id: u64,
         _update: &ExecuteNnsFunction,

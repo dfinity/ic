@@ -216,7 +216,7 @@ impl Environment for CanisterEnv {
         bytes
     }
 
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         proposal_id: u64,
         update: &gov_pb::ExecuteNnsFunction,

@@ -1477,7 +1477,7 @@ pub trait Environment: Send + Sync {
     /// result back
     ///
     /// See also call_candid_method.
-    async fn execute_nns_function(
+    fn execute_nns_function(
         &self,
         proposal_id: u64,
         update: &ExecuteNnsFunction,
@@ -4421,7 +4421,7 @@ impl Governance {
             Action::ExecuteNnsFunction(m) => {
                 // This will eventually set the proposal execution
                 // status.
-                match self.env.execute_nns_function(pid, &m).await {
+                match self.env.execute_nns_function(pid, &m) {
                     Ok(()) => {
                         // The status will be set as a result of this
                         // call. We don't set it now.
