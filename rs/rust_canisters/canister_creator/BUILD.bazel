@@ -33,7 +33,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "canister_creator",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["src/**"]),
     crate_name = "canister_creator",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
