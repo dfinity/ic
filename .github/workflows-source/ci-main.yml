@@ -95,9 +95,8 @@ anchors:
       if-no-files-found: ignore
       compression-level: 9
       path: |
-        bazel-bep.pb
+        bazel-bep.json
         profile.json
-        trace.json
 
 jobs:
   bazel-test-all:
@@ -197,17 +196,7 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-      - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
