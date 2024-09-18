@@ -830,11 +830,7 @@ impl Player {
                 .last()
                 .expect("There should be at least one state hash to certify");
             self.state_manager
-                .deliver_state_certification(Self::certify_hash(
-                    self.subnet_id,
-                    height,
-                    hash,
-                ));
+                .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
         }
     }
 
@@ -843,8 +839,7 @@ impl Player {
         height: &Height,
         hash: &CryptoHashOfPartialState,
     ) -> Certification {
-        let combined_sig =
-            CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
+        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
             signed: Signed {
