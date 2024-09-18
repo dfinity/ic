@@ -1446,8 +1446,6 @@ message Governance {
   }
 
   MaturityModulation maturity_modulation = 26;
-
-  optional bool migrated_root_wasm_memory_limit = 27;
 }
 
 // Request message for 'get_metadata'.

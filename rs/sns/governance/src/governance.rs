@@ -6,7 +6,7 @@ use crate::pb::v1::{
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        update_root_canister_settings, upgrade_canister_directly,
+        upgrade_canister_directly,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -84,7 +84,6 @@ use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -97,10 +96,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{
-    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
-};
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -4588,32 +4584,6 @@ impl Governance {
         true
     }
 
-    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
-        if self
-            .proto
-            .migrated_root_wasm_memory_limit
-            .unwrap_or_default()
-        {
-            return;
-        }
-
-        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
-        self.proto.migrated_root_wasm_memory_limit = Some(true);
-
-        let settings = CanisterSettings {
-            wasm_memory_limit: Some(candid::Nat::from(
-                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-            )),
-            ..Default::default()
-        };
-
-        // Set root settings
-        match update_root_canister_settings(self, settings).await {
-            Ok(_) => (),
-            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
-        }
-    }
-
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         self.process_proposals();
@@ -4651,8 +4621,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        self.maybe_migrate_root_wasm_memory_limit().await;
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
