@@ -78,7 +78,7 @@ def _build_container_base_image_impl(ctx):
         runfiles = ctx.runfiles(outputs),
     )]
 
-build_container_base_image = _icos_build_rule(
+_build_container_base_image_rule = _icos_build_rule(
     implementation = _build_container_base_image_impl,
     attrs = {
         "context_files": attr.label_list(
@@ -96,6 +96,9 @@ build_container_base_image = _icos_build_rule(
         ),
     },
 )
+
+def build_container_base_image(**kwargs):
+    _build_container_base_image_rule(kwargs)
 
 def _build_container_filesystem_impl(ctx):
     args = []

@@ -949,3 +949,28 @@ http_file(
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")
 
 kubeconfig()
+
+# IC-OS deps
+http_file(
+    name = "ubuntu-base-20.04.1-base-amd64.tar.gz",
+    sha256 = "97f6cbcf41f39272c84e32b6f926ed5d6906c6e463a557025181f4aa191ad667",
+    url = "https://cdimage.ubuntu.com/ubuntu-base/releases/focal/release/ubuntu-base-20.04.1-base-amd64.tar.gz",
+)
+
+http_file(
+    name = "qemu-6.2.0.tar.xz",
+    sha256 = "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45",
+    url = "https://download.qemu.org/qemu-6.2.0.tar.xz",
+)
+
+http_file(
+    name = "filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+    sha256 = "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7",
+    url = "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+)
+
+http_file(
+    name = "node_exporter-1.8.1.linux-amd64.tar.gz",
+    sha256 = "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011",
+    url = "https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz",
+)

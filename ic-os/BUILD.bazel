@@ -2,3 +2,91 @@ exports_files([
     "vuln-scan/vuln-scan.sh",
     "vuln-scan/vuln-scan.html",
 ])
+
+# TODO: install these packages for qemu to be able to run:
+##    ninja-build
+##    libglib2.0-dev
+##    libpixman-1-dev
+genrule(
+    name = "build_qemu",
+    srcs = ["@qemu-6.2.0.tar.xz//file"],
+    outs = [
+        "qemu",
+        "qemu-system-x86_64",
+    ],
+    cmd = """
+        set -euo pipefail
+
+        tar -xJf $(location @qemu-6.2.0.tar.xz//file)
+        mkdir out
+
+        cd "qemu-6.2.0"
+        ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb
+        make -j 2 >/dev/null 2>&1
+        DESTDIR=$$(realpath ../out) ninja -C build install
+        cd -
+
+        mv "out/usr/local/bin/qemu-system-x86_64" "$(location qemu-system-x86_64)"
+        mv "out/usr/local/share/qemu" "$(location qemu)"
+    """,
+)
+
+genrule(
+    name = "test",
+    srcs = ["test.sh"],
+    outs = ["x.tmp"],
+    cmd = "/bin/bash $(location test.sh)",
+)
+
+#        # Install QEMU
+#        cp $(location qemu-system-x86_64) $$containerdir/usr/local/bin/qemu-system-x86_64
+#        cp -Lr $(location qemu) $$containerdir/usr/local/share/qemu
+
+genrule(
+    name = "hostos_base",
+    srcs = [
+        "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
+        "@ubuntu-base-20.04.1-base-amd64.tar.gz//file",
+        "//ic-os/hostos/context:packages.common",  # TODO: also handle dev packages
+        # "qemu",
+        # "qemu-system-x86_64",
+    ],
+    outs = ["hostos_base.tar"],
+    cmd = """
+        set -euo pipefail
+
+        # Create container directory and untar the Ubuntu base image
+        containerdir=$$(mktemp -d --tmpdir "icosbuildXXXX")
+        trap 'rm -rf $$containerdir' INT TERM EXIT
+        tar -xzf $(location @ubuntu-base-20.04.1-base-amd64.tar.gz//file) -C "$$containerdir"
+
+        # Install node_exporter
+        mkdir -p $$containerdir/etc/node_exporter
+        tar --strip-components=1 -C $$containerdir/usr/local/bin/ \
+            -zvxf $(location @node_exporter-1.8.1.linux-amd64.tar.gz//file) \
+            node_exporter-1.8.1.linux-amd64/node_exporter
+
+        # Copy list of packages
+        cp $(location //ic-os/hostos/context:packages.common) $$containerdir/tmp
+
+        # TODO: figure out network
+        cp /etc/resolv.conf $$containerdir/etc/resolv.conf
+
+        # Install packages under chroot
+        fakechroot fakeroot chroot $$containerdir /bin/bash -x <<EOF
+          PACKAGES=(/tmp/packages.common)
+          apt-get -y update && \
+          apt-get -y upgrade && \
+          apt-get -y --no-install-recommends install $$(for P in $$PACKAGES; do cat $$P | sed -e "s/#.*//" ; done)
+EOF
+
+        # Clean up
+        rm -rf $$containerdir/tmp/*
+        rm -rf $$containerdir/var/cache/*
+        rm -rf $$containerdir/var/log/*
+
+        destination_tar_path=$$(realpath $(location hostos_base.tar))
+        cd $$containerdir
+        tar --mtime='UTC 1970-01-01' -cf $$destination_tar_path *
+    """,
+)

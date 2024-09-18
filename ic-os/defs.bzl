@@ -3,6 +3,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
@@ -174,22 +175,23 @@ def icos_build(
     # Defer injection to this point to allow caching most of the built images
     # -------------------- Inject extra files --------------------
 
-    native.alias(
-        name = "partition-root-unsigned.img",
-        actual = "static-partition-root-unsigned.img",
-        tags = ["manual"],
-    )
-    #    inject_files(
+    #    native.alias(
     #        name = "partition-root-unsigned.img",
-    #        testonly = malicious,
-    #        base = "static-partition-root-unsigned.img",
-    #        file_contexts = ":file_contexts",
-    #        extra_files = {
-    #            k: v
-    #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-    #        },
-    #        tags = ["manual", "no-cache"],
+    #        actual = "static-partition-root-unsigned.img",
+    #        tags = ["manual"],
     #    )
+
+    inject_files(
+        name = "partition-root-unsigned.img",
+        testonly = malicious,
+        base = "static-partition-root-unsigned.img",
+        file_contexts = ":file_contexts",
+        extra_files = {
+            k: v
+            for k, v in ([(":version.txt", "/opt/ic/share/version.txt:0644")] + image_deps["rootfs"].items())
+        },
+        tags = ["manual", "no-cache"],
+    )
 
     #    component_file_references_test(
     #        name = name + "_component_file_references_test",
