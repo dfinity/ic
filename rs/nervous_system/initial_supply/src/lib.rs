@@ -119,7 +119,12 @@ pub struct InitialSupplyOptions {
     /// Give up if more than this many transactions need to be scanned to come up with a result.
     pub max_transactions: u64,
 
-    /// How many transactions to fetch at a time.
+    /// How many transactions to fetch at a time. Currently, this needs to be <=
+    /// the cap on transactions / response from ledger & archive. The standard
+    /// cap is 2_000; whereas, the default batch_size is 250 (see the new
+    /// method). Therefore, there is no need to worry about this in the context
+    /// of SNS, ICP, and ck*. Otherwise, more care needs to be taken when
+    /// setting this.
     pub batch_size: u64,
 }
 
