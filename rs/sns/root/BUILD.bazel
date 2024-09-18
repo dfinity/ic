@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nns/constants",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]

@@ -138,6 +138,16 @@ fn canister_post_upgrade() {
     );
     canister_init(state);
 
+    // Kick off migration one minute after upgrade
+    let duration = Duration::from_secs(60);
+    ic_cdk_timers::set_timer(duration, || {
+        ic_cdk::spawn(async {
+            let management_canister_client =
+                ManagementCanisterClientImpl::<CanisterRuntime>::new(None);
+            SnsRootCanister::migrate_canister_settings(&STATE, &management_canister_client).await;
+        })
+    });
+
     log!(INFO, "canister_post_upgrade: Done!");
 }
 
