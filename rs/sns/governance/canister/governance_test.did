@@ -292,6 +292,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  migrated_root_wasm_memory_limit : opt bool;
 };
 
 type GovernanceCachedMetrics = record {

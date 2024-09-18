@@ -15,9 +15,6 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
-use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
-};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -60,7 +57,7 @@ use ic_types::{
     },
     crypto::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        CombinedThresholdSig, CombinedThresholdSigOf, Signable, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, Signed,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
@@ -70,7 +67,6 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
-use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
@@ -828,37 +824,22 @@ impl Player {
     }
 
     fn certify_state_with_dummy_certification(&self) {
-        let (_ni_dkg_transcript, secret_key) =
-            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(42));
         if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
             let state_hashes = self.state_manager.list_state_hashes_to_certify();
             let (height, hash) = state_hashes
                 .last()
                 .expect("There should be at least one state hash to certify");
             self.state_manager
-                .deliver_state_certification(Self::certify_hash(
-                    &secret_key,
-                    self.subnet_id,
-                    height,
-                    hash,
-                ));
+                .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
         }
     }
 
     fn certify_hash(
-        secret_key: &SecretKeyBytes,
         subnet_id: SubnetId,
         height: &Height,
         hash: &CryptoHashOfPartialState,
     ) -> Certification {
-        let signature = sign_message(
-            CertificationContent::new(hash.clone())
-                .as_signed_bytes()
-                .as_slice(),
-            secret_key,
-        );
-        let combined_sig =
-            CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
+        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
             signed: Signed {

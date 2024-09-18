@@ -7,7 +7,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use url::Url;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct DeploymentJson {
+pub struct DeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
@@ -42,7 +42,7 @@ pub struct Resources {
     pub cpu: Option<String>,
 }
 
-pub fn read_deployment_file(deployment_json: &Path) -> Result<DeploymentJson> {
+pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
     let file = File::open(deployment_json).context("failed to open deployment config file")?;
     serde_json::from_reader(&file).context("Invalid json content")
 }
@@ -119,7 +119,7 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
         let hosts = [
             "elasticsearch-node-0.mercury.dfinity.systems:443",
             "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -127,7 +127,7 @@ mod test {
             "elasticsearch-node-3.mercury.dfinity.systems:443",
         ]
         .join(" ");
-        DeploymentJson {
+        DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
@@ -159,7 +159,7 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT_NO_MGMT_MAC: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT_NO_MGMT_MAC: Lazy<DeploymentSettings> = Lazy::new(|| {
         let hosts = [
             "elasticsearch-node-0.mercury.dfinity.systems:443",
             "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -167,7 +167,7 @@ mod test {
             "elasticsearch-node-3.mercury.dfinity.systems:443",
         ]
         .join(" ");
-        DeploymentJson {
+        DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
@@ -198,7 +198,7 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC: Lazy<DeploymentSettings> = Lazy::new(|| {
         let hosts = [
             "elasticsearch-node-0.mercury.dfinity.systems:443",
             "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -206,7 +206,7 @@ mod test {
             "elasticsearch-node-3.mercury.dfinity.systems:443",
         ]
         .join(" ");
-        DeploymentJson {
+        DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
@@ -238,7 +238,7 @@ mod test {
   }
 }"#;
 
-    static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
         let hosts = [
             "elasticsearch-node-0.mercury.dfinity.systems:443",
             "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -246,7 +246,7 @@ mod test {
             "elasticsearch-node-3.mercury.dfinity.systems:443",
         ]
         .join(" ");
-        DeploymentJson {
+        DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
@@ -292,7 +292,7 @@ mod test {
   }
 }"#;
 
-    static MULTI_URL_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static MULTI_URL_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
         let hosts = [
             "elasticsearch-node-0.mercury.dfinity.systems:443",
             "elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -300,7 +300,7 @@ mod test {
             "elasticsearch-node-3.mercury.dfinity.systems:443",
         ]
         .join(" ");
-        DeploymentJson {
+        DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
@@ -322,27 +322,24 @@ mod test {
 
     #[test]
     fn deserialize_deployment() {
-        let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
+        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
 
-        let parsed_deployment: DeploymentJson =
-            { serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap() };
+        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_NO_MGMT_MAC).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT_NO_MGMT_MAC, parsed_deployment);
 
-        let parsed_deployment: DeploymentJson =
+        let parsed_deployment =
             { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC, parsed_deployment);
 
-        let parsed_cpu_deployment: DeploymentJson =
-            { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
+        let parsed_cpu_deployment = { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
 
         assert_eq!(*QEMU_CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
 
-        let parsed_multi_url_deployment: DeploymentJson =
-            { serde_json::from_str(MULTI_URL_STR).unwrap() };
+        let parsed_multi_url_deployment = { serde_json::from_str(MULTI_URL_STR).unwrap() };
 
         assert_eq!(*MULTI_URL_STRUCT, parsed_multi_url_deployment);
 
@@ -350,7 +347,7 @@ mod test {
         // slash, so the above case parses with a slash for the sake of the
         // writeback test below. In practice, we have used addresses without
         // this slash, so here we verify that this parses to the same value.
-        let parsed_multi_url_sans_slash_deployment: DeploymentJson =
+        let parsed_multi_url_sans_slash_deployment =
             { serde_json::from_str(MULTI_URL_SANS_SLASH_STR).unwrap() };
 
         assert_eq!(*MULTI_URL_STRUCT, parsed_multi_url_sans_slash_deployment);
@@ -358,44 +355,39 @@ mod test {
         // Exercise DeserializeOwned using serde_json::from_value.
         // DeserializeOwned is used by serde_json::from_reader, which is the
         // main entrypoint of this code, in practice.
-        let parsed_deployment: DeploymentJson =
-            { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
+        let parsed_deployment = { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
     }
 
     #[test]
     fn serialize_deployment() {
-        let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT).unwrap();
+        let serialized_deployment = serde_json::to_string_pretty(&*DEPLOYMENT_STRUCT).unwrap();
 
         // DEPLOYMENT_STRUCT serializes to DEPLOYMENT_STR_NO_MGMT_MAC because mgmt_mac field is skipped in serialization
         assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
 
         let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
-                .unwrap();
+            serde_json::to_string_pretty(&*DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC).unwrap();
 
         assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
 
         let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_MGMT_MAC).unwrap();
+            serde_json::to_string_pretty(&*DEPLOYMENT_STRUCT_NO_MGMT_MAC).unwrap();
 
         assert_eq!(DEPLOYMENT_STR_NO_MGMT_MAC, serialized_deployment);
 
         let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC)
-                .unwrap();
+            serde_json::to_string_pretty(&*DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC).unwrap();
 
         assert_eq!(DEPLOYMENT_STR_NO_CPU_NO_MGMT_MAC, serialized_deployment);
 
         let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
+            serde_json::to_string_pretty(&*QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
 
         assert_eq!(QEMU_CPU_DEPLOYMENT_STR, serialized_deployment);
 
-        let serialized_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&MULTI_URL_STRUCT).unwrap();
+        let serialized_deployment = serde_json::to_string_pretty(&*MULTI_URL_STRUCT).unwrap();
 
         assert_eq!(MULTI_URL_STR, serialized_deployment);
     }
