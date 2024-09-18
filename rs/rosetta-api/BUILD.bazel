@@ -1,7 +1,7 @@
 load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_load")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
@@ -303,4 +303,10 @@ oci_push(
     remote_tags = ":stamped",
     repository = "docker.io/dfinity/rosetta-api",
     tags = ["manual"],
+)
+
+oci_load(
+    name = "load_rosetta_image",
+    image = ":rosetta_image",
+    repo_tags = ["bazel/rs/rosetta-api:rosetta_image"],
 )
