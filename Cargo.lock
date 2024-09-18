@@ -13158,14 +13158,14 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 1.4.1",
- "hyper-rustls 0.27.3",
- "hyper-util",
+ "hyper 0.14.30",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-tls",
+ "ic-interfaces-registry",
  "ic-xnet-uri",
+ "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower 0.4.13",
 ]
 
 [[package]]
@@ -13175,9 +13175,8 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "http-body-util",
- "hyper 1.4.1",
- "hyper-util",
+ "hyper 0.14.30",
+ "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -13221,7 +13220,6 @@ dependencies = [
  "reqwest 0.12.7",
  "slog",
  "tempfile",
- "thiserror",
  "tokio",
  "url",
 ]
@@ -13230,7 +13228,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 1.1.0",
+ "http 0.2.12",
  "ic-types",
 ]
 
