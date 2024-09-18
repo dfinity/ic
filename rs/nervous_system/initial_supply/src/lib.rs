@@ -237,6 +237,15 @@ impl ThickLedgerClient {
             )
         })?;
 
+        if response.transactions.len() != length {
+            // This could occur if batch_size is too large.
+            return Err(format!(
+                "{} did not return all the requested transactions: \
+                 requested = {} vs. actual = {}",
+                length, response.transactions.len(),
+            ));
+        }
+
         Ok(response.transactions)
     }
 }
