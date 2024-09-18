@@ -493,7 +493,7 @@ async fn claim_or_refresh_neuron_from_account(
     }
 }
 
-ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 #[update]
 fn claim_gtc_neurons(

@@ -4887,13 +4887,6 @@ impl Governance {
             ));
         }
 
-        let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Failed to validate ManageNeuron {}", e),
-            )
-        })?;
-
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
             .ok_or_else(|| {
