@@ -158,6 +158,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
+fn test_few_small_messages(env: TestEnv) {
+    test(env, 1, 1.0)
+}
+
 fn test_small_messages(env: TestEnv) {
     test(env, 4_000, 500.0)
 }
@@ -172,6 +176,7 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
+        .add_test(systest!(test_few_small_messages))
         .add_test(systest!(test_small_messages))
         .add_test(systest!(test_large_messages))
         .execute_from_args()?;

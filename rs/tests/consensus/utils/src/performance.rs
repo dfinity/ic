@@ -23,7 +23,7 @@ const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TEST_DURATION: Duration = Duration::from_secs(60);
+const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 
 const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
 const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
@@ -306,10 +306,10 @@ impl HistogramMetrics {
             vec![metrics_sum.clone(), metrics_count.clone()],
         );
 
-        let metrics = dbg!(fetcher
+        let metrics = fetcher
             .fetch::<f64>()
             .await
-            .expect("Should be able to fetch the metrics"));
+            .expect("Should be able to fetch the metrics");
 
         Self {
             sum: average_f64(&metrics[&metrics_sum]),
