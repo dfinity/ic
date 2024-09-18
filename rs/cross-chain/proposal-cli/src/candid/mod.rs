@@ -26,6 +26,10 @@ impl UpgradeArgs {
         hex::encode(&self.encoded_upgrade_args)
     }
 
+    pub fn args_sha256_hex(&self) -> String {
+        self.args_sha256.to_string()
+    }
+
     pub fn didc_encode_cmd(&self) -> String {
         if self.upgrade_args != EMPTY_UPGRADE_ARGS {
             format!(

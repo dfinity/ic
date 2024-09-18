@@ -29,4 +29,5 @@ ic-admin \
     --wasm-module-path "{{wasm_module_path}}" \
     --wasm-module-sha256 {{wasm_module_sha256}} \
     --arg "{{arg}}" \
+    --arg-sha256 "{{arg_sha256}}" \
     --summary-file "{{summary_file}}"
