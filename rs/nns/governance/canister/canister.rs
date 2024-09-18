@@ -57,7 +57,6 @@ use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
-    borrow::Cow,
     boxed::Box,
     str::FromStr,
     time::{Duration, SystemTime},
