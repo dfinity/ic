@@ -7,7 +7,8 @@ use ic_state_machine_tests::{
 use ic_types::NumInstructions;
 
 use ic_config::flag_status::FlagStatus;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use std::ops::RangeInclusive;
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -16,12 +17,15 @@ use std::{
 use tempfile::TempDir;
 // TODO: Add support for PocketIc.
 
+const NNS_CANISTER_ID_RANGE: RangeInclusive<u64> = 0..=(CANISTER_IDS_PER_SUBNET - 1);
+
 pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine {
     let fiduciary_subnet_id = SubnetId::new(
         PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
             .unwrap(),
     );
-    let routing_table = create_routing_table(0x2300000, 0x23FFFFE, fiduciary_subnet_id);
+    let canister_id_ranges = vec![NNS_CANISTER_ID_RANGE, 0x2300000..=0x23FFFFE];
+    let routing_table = create_routing_table(canister_id_ranges, fiduciary_subnet_id);
     let setup_config = SetupConfig {
         archive_state_dir_name: "fiduciary_state",
         routing_table,
@@ -45,7 +49,10 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
     // last canister ID in the canister range of the II subnet is omitted so
     // that the canister range of the II subnet is not used for automatic
     // generation of new canister IDs.
-    let routing_table = create_routing_table(0x2100000, 0x21FFFFE, nns_subnet_id);
+    let routing_table = create_routing_table(
+        vec![NNS_CANISTER_ID_RANGE, 0x2100000..=0x21FFFFE],
+        nns_subnet_id,
+    );
     let setup_config = SetupConfig {
         archive_state_dir_name: "nns_state",
         routing_table,
@@ -62,7 +69,10 @@ pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae")
             .unwrap(),
     );
-    let routing_table = create_routing_table(0x2000000, 0x20FFFFE, sns_subnet_id);
+    let routing_table = create_routing_table(
+        vec![NNS_CANISTER_ID_RANGE, 0x2000000..=0x20FFFFE],
+        sns_subnet_id,
+    );
     let setup_config = SetupConfig {
         archive_state_dir_name: "sns_state",
         routing_table,
@@ -226,52 +236,46 @@ struct SetupConfig {
 }
 
 /// Create a routing table for the `StateMachine`, with the provided canister IDs being routed to
-/// the local subnet, and all other canister IDs being routed to non-existent subnets. Any leftover
+/// the local subnet, and all other canister IDs being routed a non-existent subnet. Any leftover
 /// responses destined for other subnets will be routed to a stream and will stay there. In
-/// particular, they will not cause a panic, causing the test to fail.
+/// particular, they will not cause a panic, causing the test to fail. The provided
+/// `canister_ranges` shall be sorted and non-overlapping.
 fn create_routing_table(
-    canister_range_start: u64,
-    canister_range_end: u64,
+    canister_ranges: Vec<RangeInclusive<u64>>,
     subnet_id: SubnetId,
 ) -> RoutingTable {
     let mut routing_table = RoutingTable::new();
-    let (first_subnet_id, second_subnet_id) = compute_unique_subnet_ids(subnet_id);
-    if canister_range_start > 0 {
-        add_canister_range_to_routing_table(
-            &mut routing_table,
-            first_subnet_id,
-            0,
-            canister_range_start - 1,
-        );
+    let mut non_existent_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
+    if non_existent_subnet_id == subnet_id {
+        non_existent_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
     }
-    add_canister_range_to_routing_table(
-        &mut routing_table,
-        subnet_id,
-        canister_range_start,
-        canister_range_end,
-    );
-    if canister_range_end < u64::MAX {
+    let mut next_free_canister_id = 0;
+    for canister_range in canister_ranges {
+        if canister_range.start() > &next_free_canister_id {
+            add_canister_range_to_routing_table(
+                &mut routing_table,
+                non_existent_subnet_id,
+                next_free_canister_id,
+                canister_range.start().saturating_sub(1),
+            );
+        }
         add_canister_range_to_routing_table(
             &mut routing_table,
-            second_subnet_id,
-            canister_range_end + 1,
+            subnet_id,
+            *canister_range.start(),
+            *canister_range.end(),
+        );
+        next_free_canister_id = canister_range.end().saturating_add(1);
+    }
+    if next_free_canister_id < u64::MAX {
+        add_canister_range_to_routing_table(
+            &mut routing_table,
+            non_existent_subnet_id,
+            next_free_canister_id,
             u64::MAX,
         );
     }
     routing_table
-}
-
-fn compute_unique_subnet_ids(subnet_id: SubnetId) -> (SubnetId, SubnetId) {
-    let mut candidates = vec![];
-    let mut subnet_id_counter = 0u64;
-    while candidates.len() < 2 {
-        let candidate = SubnetId::from(PrincipalId::new_subnet_test_id(subnet_id_counter));
-        if candidate != subnet_id {
-            candidates.push(candidate);
-        }
-        subnet_id_counter += 1;
-    }
-    (candidates[0], candidates[1])
 }
 
 fn add_canister_range_to_routing_table(
@@ -375,8 +379,7 @@ mod tests {
     #[test]
     fn should_create_valid_routing_table_with_canister_ids_neither_0_nor_u64_max() {
         let routing_table = create_routing_table(
-            0x1000000,
-            0x1FFFFFE,
+            vec![0x1000000..=0x1FFFFFE],
             SubnetId::new(
                 PrincipalId::from_str(
                     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae",
@@ -388,10 +391,23 @@ mod tests {
     }
 
     #[test]
+    fn should_create_valid_routing_table_with_disjoint_canister_id_ranges() {
+        let routing_table = create_routing_table(
+            vec![NNS_CANISTER_ID_RANGE, 0x2000000..=0x2FFFFFE],
+            SubnetId::new(
+                PrincipalId::from_str(
+                    "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae",
+                )
+                .unwrap(),
+            ),
+        );
+        assert_routing_table_size(routing_table, 4);
+    }
+
+    #[test]
     fn should_create_valid_routing_table_with_canister_ids_starting_at_0() {
         let routing_table = create_routing_table(
-            0x0,
-            0x1FFFFFE,
+            vec![0..=0x1FFFFFE],
             SubnetId::new(
                 PrincipalId::from_str(
                     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae",
@@ -405,8 +421,7 @@ mod tests {
     #[test]
     fn should_create_valid_routing_table_with_canister_ids_ending_at_u64_max() {
         let routing_table = create_routing_table(
-            0x1000000,
-            u64::MAX,
+            vec![0x1000000..=u64::MAX],
             SubnetId::new(
                 PrincipalId::from_str(
                     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae",
@@ -420,8 +435,7 @@ mod tests {
     #[test]
     fn should_create_valid_routing_table_with_canister_ids_starting_at_0_and_ending_at_u64_max() {
         let routing_table = create_routing_table(
-            0x0,
-            u64::MAX,
+            vec![0..=u64::MAX],
             SubnetId::new(
                 PrincipalId::from_str(
                     "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae",
@@ -435,8 +449,7 @@ mod tests {
     #[test]
     fn should_create_routing_table_with_distinct_subnets_with_conflicting_subnet_id() {
         let routing_table = create_routing_table(
-            0x1000000,
-            0x1FFFFFE,
+            vec![0x1000000..=0x1FFFFFE],
             SubnetId::from(PrincipalId::new_subnet_test_id(0)),
         );
         assert_routing_table_size(routing_table, 3);
@@ -444,7 +457,8 @@ mod tests {
 
     fn assert_routing_table_size(routing_table: RoutingTable, expected_size: usize) {
         let mut num_subnets = 0;
-        for _ in routing_table.iter() {
+        for entry in routing_table.iter() {
+            println!("routing table entry: {:?}", entry);
             num_subnets += 1;
         }
         assert_eq!(num_subnets, expected_size);
