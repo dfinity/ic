@@ -1252,9 +1252,10 @@ pub(crate) fn syscalls<
                     },
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(format!(
-                            "Exceeded the limit for the number of modified pages \
-                            in the stable memory in a single execution: limit {} KB for \
-                            regular messages, {} KB for upgrade messages and {} KB for queries.",
+                            "Exceeded the limit for the number of \
+                            modified pages in the stable memory in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
                             stable_memory_dirty_page_limit.message.get()
                                 * (PAGE_SIZE as u64 / 1024),
                             stable_memory_dirty_page_limit.upgrade.get()
@@ -1264,18 +1265,19 @@ pub(crate) fn syscalls<
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(format!(
-                            "Exceeded the limit for the number of accessed pages in \
-                            the stable memory in a single message execution: limit {} KB for \
-                            regular messages and {} KB for queries.",
+                            "Exceeded the limit for the number of \
+                            accessed pages in the stable memory in a single \
+                            message execution: limit {} KB for regular messages \
+                            and {} KB for queries.",
                             stable_memory_access_page_limit.message.get()
                                 * (PAGE_SIZE as u64 / 1024),
                             stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
                         ))
                     }
                     InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
-                        message: "Internal error: `memory.grow` instruction \
-                        failed to grow stable memory"
-                            .to_string(),
+                        message:
+                            "Internal error: `memory.grow` instruction failed to grow stable memory"
+                                .to_string(),
                         backtrace: None,
                     },
                     InternalErrorCode::Unknown => HypervisorError::CalledTrap {

@@ -42,16 +42,16 @@ fn cannot_execute_wasm_without_memory() {
         )
         .build();
 
-    let result = instance.run(ic_types::methods::FuncRef::Method(
-        ic_types::methods::WasmMethod::Update("should_fail_with_contract_violation".to_string()),
-    ));
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(
+        "should_fail_with_contract_violation".to_string(),
+    )));
 
     match result {
         Ok(_) => panic!("Expected a HypervisorError::ContractViolation"),
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ToolchainContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: "WebAssembly module must define memory".to_string(),
                 }
             );
@@ -88,9 +88,9 @@ fn correctly_count_instructions() {
         .build();
 
     instance
-        .run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
-        ))
+        .run(FuncRef::Method(WasmMethod::Update(
+            "test_msg_arg_data_copy".to_string(),
+        )))
         .unwrap();
 
     let instruction_counter = instance.instruction_counter();
@@ -144,9 +144,9 @@ fn instruction_limit_traps() {
         .with_num_instructions(instruction_limit)
         .build();
 
-    let result = instance.run(ic_types::methods::FuncRef::Method(
-        ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
-    ));
+    let result = instance.run(FuncRef::Method(WasmMethod::Update(
+        "test_msg_arg_data_copy".to_string(),
+    )));
 
     assert_eq!(
         result.err(),
@@ -255,9 +255,9 @@ fn correctly_report_performance_counter() {
         .build();
 
     let res = instance
-        .run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("test_performance_counter".to_string()),
-        ))
+        .run(FuncRef::Method(WasmMethod::Update(
+            "test_performance_counter".to_string(),
+        )))
         .unwrap();
     let Global::I64(performance_counter1) = res.exported_globals[0] else {
         panic!("Error getting performance_counter1");
@@ -301,18 +301,14 @@ fn stack_overflow_traps() {
                 )
                 .build();
 
-            let result = instance.run(ic_types::methods::FuncRef::Method(
-                ic_types::methods::WasmMethod::Update("f".to_string()),
-            ));
+            let result = instance.run(FuncRef::Method(WasmMethod::Update("f".to_string())));
 
             assert_eq!(
                 result.err(),
-                Some(
-                    ic_interfaces::execution_environment::HypervisorError::Trapped {
-                        trap_code: ic_interfaces::execution_environment::TrapCode::StackOverflow,
-                        backtrace: None
-                    }
-                )
+                Some(HypervisorError::Trapped {
+                    trap_code: TrapCode::StackOverflow,
+                    backtrace: None
+                })
             );
         })
         .unwrap();

@@ -9,15 +9,13 @@ use ic_types::{CanisterId, Cycles};
 
 const B: u128 = 1_000 * 1_000 * 1_000;
 
-fn env_with_backtrace_canister(feature_enabled: bool) -> (StateMachine, CanisterId) {
+fn env_with_backtrace_canister(feature_enabled: FlagStatus) -> (StateMachine, CanisterId) {
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("backtrace_canister", &[]);
     let mut hypervisor_config = HypervisorConfig::default();
-    if feature_enabled {
-        hypervisor_config
-            .embedders_config
-            .feature_flags
-            .canister_backtrace = FlagStatus::Enabled;
-    }
+    hypervisor_config
+        .embedders_config
+        .feature_flags
+        .canister_backtrace = feature_enabled;
     let subnet_type = SubnetType::Application;
 
     let env = StateMachineBuilder::new()
@@ -38,7 +36,7 @@ fn env_with_backtrace_canister(feature_enabled: bool) -> (StateMachine, Canister
 
 #[test]
 fn unreachable_instr_backtrace() {
-    let (env, canister_id) = env_with_backtrace_canister(true);
+    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
     let result = env
         .execute_ingress(canister_id, "unreachable", Encode!(&()).unwrap())
         .unwrap_err();
@@ -58,7 +56,7 @@ canister_update unreachable
 
 #[test]
 fn no_backtrace_without_feature() {
-    let (env, canister_id) = env_with_backtrace_canister(false);
+    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Disabled);
     let result = env
         .execute_ingress(canister_id, "unreachable", Encode!(&()).unwrap())
         .unwrap_err();
@@ -74,7 +72,7 @@ fn no_backtrace_without_feature() {
 
 #[test]
 fn oob_backtrace() {
-    let (env, canister_id) = env_with_backtrace_canister(true);
+    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
     let result = env
         .execute_ingress(canister_id, "oob", Encode!(&()).unwrap())
         .unwrap_err();
@@ -92,7 +90,7 @@ canister_update oob
 
 #[test]
 fn backtrace_test_ic0_trap() {
-    let (env, canister_id) = env_with_backtrace_canister(true);
+    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
     let result = env
         .execute_ingress(canister_id, "ic0_trap", Encode!(&()).unwrap())
         .unwrap_err();

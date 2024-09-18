@@ -193,7 +193,7 @@ go_deps.bzl               @dfinity/idx
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/nns-team
-/rs/rust_canisters/backtrace-canister                   @dfinity/execution
+/rs/rust_canisters/backtrace_canister                   @dfinity/execution
 /rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
 /rs/rust_canisters/proxy_canister/                      @dfinity/networking

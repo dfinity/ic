@@ -249,6 +249,7 @@ impl std::fmt::Display for HypervisorError {
                 backtrace,
             } => {
                 write!(f, "Canister trapped: {}", trap_code)?;
+                // TODO(EXC-1727):
                 // When the wasm_backtrace feature is enabled, we can provide a
                 // more helpful message on how to get backtraces. E.g.:
                 // "Canister backtrace omitted here, but may be included in
