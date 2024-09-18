@@ -3524,18 +3524,6 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .insert(height, certification_metadata);
 
-            if let Some((state_metadata, compute_manifest_request)) =
-                state_metadata_and_compute_manifest_request
-            {
-                states.states_metadata.insert(height, state_metadata);
-                debug_assert!(self.tip_channel.len() <= 1);
-                self.tip_channel
-                    .send(compute_manifest_request)
-                    .expect("failed to send ComputeManifestRequest message");
-            } else {
-                debug_assert!(scope != CertificationScope::Full);
-            }
-
             let latest_height = update_latest_height(&self.latest_state_height, height);
             self.metrics.max_resident_height.set(latest_height as i64);
             {
@@ -3549,6 +3537,23 @@ impl StateManager for StateManagerImpl {
                     .observe((now - *last_height_update_time).as_secs_f64());
                 *last_height_update_time = now;
             }
+        }
+
+        if let Some((state_metadata, compute_manifest_request)) =
+            state_metadata_and_compute_manifest_request
+        {
+            let metadata = states
+                .states_metadata
+                .entry(height)
+                .or_insert(state_metadata);
+            debug_assert!(self.tip_channel.len() <= 1);
+            if metadata.bundled_manifest.is_none() {
+                self.tip_channel
+                    .send(compute_manifest_request)
+                    .expect("failed to send ComputeManifestRequest message");
+            }
+        } else {
+            debug_assert!(scope != CertificationScope::Full);
         }
 
         self.metrics
