@@ -29,7 +29,7 @@ RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login
 # but this is per system (so backups are not persisted across upgrades)
 # and thus not very useful, and /etc is read-only.
 # So simply suppress generating backups.
-RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
+RUN sed -e 's/\(# \)\?\(backup *= *\)[01]/\20/' -e 's/\(# \)\?\(archive *= *\)[01]/\20/' -i /etc/lvm/lvm.conf
 
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf

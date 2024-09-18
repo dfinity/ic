@@ -37,6 +37,7 @@ component_files = {
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/hosts"): "/etc/hosts",
+    Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
 
     # upgrade
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
