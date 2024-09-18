@@ -4,7 +4,7 @@ use hyper::Uri;
 use hyper_rustls::MaybeHttpsStream;
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioIo};
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_xnet_uri::XNetAuthority;
+use ic_xnet_uri_new::XNetAuthority;
 use std::{
     convert::TryFrom,
     future::Future,
