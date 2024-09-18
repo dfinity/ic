@@ -168,6 +168,7 @@ members = [
     "rs/nervous_system/common/test_canister",
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
+    "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",

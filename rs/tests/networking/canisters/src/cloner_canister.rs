@@ -26,10 +26,6 @@ thread_local! {
     static CANISTER_IDS: RefCell<BTreeSet<CanisterId>> = const { RefCell::new(BTreeSet::new()) };
 }
 
-fn store_canister_id(canister_id: CanisterId) {
-    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
-}
-
 async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     // Create canister.
     let canister_id = create_canister(
@@ -49,7 +45,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     .canister_id;
 
     // Store canister id.
-    store_canister_id(canister_id);
+    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
 
     // Install code if provided.
     let is_wasm_module_empty = wasm_module.is_empty();
