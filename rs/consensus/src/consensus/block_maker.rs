@@ -1045,7 +1045,7 @@ mod tests {
 
     #[rstest]
     #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
-    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(1 * (7 + 10)))]
+    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 10))]
     #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * (3 + 10)))]
     fn get_block_maker_delay_many_non_rank_0_blocks(
         #[case] rank: Rank,
@@ -1067,7 +1067,7 @@ mod tests {
 
     #[rstest]
     #[case(Rank(0), Duration::from_secs(2), Duration::from_secs(0))]
-    #[case(Rank(1), Duration::from_secs(4), Duration::from_secs(1 * 4))]
+    #[case(Rank(1), Duration::from_secs(4), Duration::from_secs(4))]
     #[case(Rank(2), Duration::from_secs(6), Duration::from_secs(2 * 6))]
     fn get_block_maker_delay_few_non_rank_0_blocks(
         #[case] rank: Rank,
