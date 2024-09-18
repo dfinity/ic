@@ -1214,34 +1214,46 @@ pub(crate) fn syscalls<
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
-                    InternalErrorCode::HeapOutOfBounds => {
-                        HypervisorError::Trapped {trap_code:TrapCode::HeapOutOfBounds, backtrace:None}
-                    }
-                    InternalErrorCode::StableMemoryOutOfBounds => {
-                        HypervisorError::Trapped {trap_code:TrapCode::StableMemoryOutOfBounds, backtrace:None}
-                    }
-                    InternalErrorCode::StableMemoryTooBigFor32Bit => {
-                        HypervisorError::Trapped {trap_code:TrapCode::StableMemoryTooBigFor32Bit, backtrace:None}
-                    }
+                    InternalErrorCode::HeapOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::HeapOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryTooBigFor32Bit => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                        backtrace: None,
+                    },
                     InternalErrorCode::MemoryWriteLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and {} KB for queries.",
-                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024),
-                            stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            modified pages in the stable memory in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
+                            stable_memory_dirty_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.upgrade.get()
+                                * (PAGE_SIZE as u64 / 1024),
                             stable_memory_dirty_page_limit.query.get() * (PAGE_SIZE as u64 / 1024)
-                            )
-                        )
+                        ))
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit {} KB for regular messages and {} KB for queries.",
-                                    stable_memory_access_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
-                            )
-                        )
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            accessed pages in the stable memory in a single \
+                            message execution: limit {} KB for regular messages \
+                            and {} KB for queries.",
+                            stable_memory_access_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
+                        ))
                     }
-                    InternalErrorCode::StableGrowFailed => {
-                        HypervisorError::CalledTrap("Internal error: `memory.grow` instruction failed to grow stable memory".to_string())
-                    }
+                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap(
+                        "Internal error: `memory.grow` instruction failed to grow stable memory"
+                            .to_string(),
+                    ),
                     InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
                         "Trapped with internal error code: {}",
                         err_code
