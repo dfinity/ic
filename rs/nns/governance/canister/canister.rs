@@ -53,7 +53,7 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
+use std::{boxed::Box, str::FromStr, time::SystemTime};
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -251,8 +251,12 @@ impl Environment for CanisterEnv {
             .get_proposal_data(ProposalId(proposal_id))
             .map(|data| data.proposal_timestamp_seconds)
             .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
-        let effective_payload =
-            get_effective_payload(mt, &update.payload, proposal_id, proposal_timestamp_seconds)?;
+        let effective_payload = get_effective_payload(
+            mt,
+            update.payload.clone(),
+            proposal_id,
+            proposal_timestamp_seconds,
+        )?;
         let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
         if err != 0 {
             Err(GovernanceError::new(ErrorType::PreconditionFailed))
@@ -1033,10 +1037,10 @@ fn http_request() {
 // `_proposal_timestamp_seconds` will be used in the future by subnet rental NNS proposals.
 fn get_effective_payload(
     mt: gov_pb::NnsFunction,
-    payload: &[u8],
+    payload: Vec<u8>,
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
-) -> Result<Cow<[u8]>, gov_pb::GovernanceError> {
+) -> Result<Vec<u8>, gov_pb::GovernanceError> {
     use gov_pb::{governance_error::ErrorType, GovernanceError, NnsFunction};
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
@@ -1046,7 +1050,7 @@ fn get_effective_payload(
     match mt {
         NnsFunction::BitcoinSetConfig => {
             // Decode the payload to get the network.
-            let payload = match Decode!([decoder_config()]; payload, BitcoinSetConfigProposal) {
+            let payload = match Decode!([decoder_config()]; &payload, BitcoinSetConfigProposal) {
               Ok(payload) => payload,
               Err(_) => {
                 return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid BitcoinSetConfigProposal."));
@@ -1066,11 +1070,11 @@ fn get_effective_payload(
             })
             .unwrap();
 
-            Ok(Cow::Owned(encoded_payload))
+            Ok(encoded_payload)
         }
         NnsFunction::SubnetRentalRequest => {
             // Decode the payload to `SubnetRentalRequest`.
-            let payload = match Decode!([decoder_config()]; payload, SubnetRentalRequest) {
+            let payload = match Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
               Ok(payload) => payload,
               Err(_) => {
                 return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid SubnetRentalRequest."));
@@ -1090,13 +1094,13 @@ fn get_effective_payload(
                 proposal_creation_time_seconds,
             }).unwrap();
 
-            Ok(Cow::Owned(encoded_payload))
+            Ok(encoded_payload)
         }
 
         | NnsFunction::AddSnsWasm => {
-            let payload = add_proposal_id_to_add_wasm_request(payload, proposal_id)?;
+            let payload = add_proposal_id_to_add_wasm_request(&payload, proposal_id)?;
 
-            Ok(Cow::Owned(payload))
+            Ok(payload)
         }
 
         // NOTE: Methods are listed explicitly as opposed to using the `_` wildcard so
@@ -1150,7 +1154,7 @@ fn get_effective_payload(
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(Cow::Borrowed(payload)),
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(payload),
     }
 }
 
