@@ -3,6 +3,8 @@ Rules for system-tests.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
@@ -206,8 +208,8 @@ def system_test(
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
@@ -374,4 +376,53 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+    )
+
+def oci_tar(name, image, repo_tags = []):
+    """Create a tarball from an OCI image. The target is marked as 'manual'.
+
+    Args:
+      name: This name will be used for the tarball (must end with '.tar').
+      repo_tags: OCI tags for oci_load.
+      image: The OCI image to bundle.
+    """
+
+    if not name.endswith(".tar"):
+        fail("Expected tarname to end with '.tar': " + name)
+
+    basename = name.removesuffix(".tar")
+
+    name_image = basename + "_image"
+
+    # First load the image
+    oci_load(
+        name = name_image,
+        image = image,
+        repo_tags = repo_tags,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    # create the tarball
+    name_tarballdir = basename + "_tarballdir"
+    native.filegroup(
+        name = name_tarballdir,
+        srcs = [":" + name_image],
+        output_group = "tarball",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
+    )
+
+    # Copy the tarball out so we can reference the file by 'name'
+    copy_file(
+        name = basename + "_tar",
+        src = ":" + name_tarballdir,
+        out = name,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
     )

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
+use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
     pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
     types::{Environment, HeapGrowthPotential},
@@ -15,6 +16,7 @@ type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 pub enum CanisterCallRequest {
     RegisterDappCanisters(RegisterDappCanistersRequest),
     SetDappControllers(SetDappControllersRequest),
+    UpdateSettings(CanisterSettings),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -69,6 +71,9 @@ impl EnvironmentFixture {
             )?),
             "set_dapp_controllers" => {
                 CanisterCallRequest::SetDappControllers(Decode!(&args, SetDappControllersRequest)?)
+            }
+            "update_settings" => {
+                CanisterCallRequest::UpdateSettings(Decode!(&args, CanisterSettings)?)
             }
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };
@@ -173,7 +178,7 @@ impl Environment for EnvironmentFixture {
                 .unwrap()
                 .mocked_canister_replies
                 .pop()
-                .expect("Expected there to be a mocked canister reply on the stack"),
+                .unwrap_or_else(|| panic!("Expected there to be a mocked canister reply on the stack for method `{method_name}`")),
         );
 
         match encode_result {

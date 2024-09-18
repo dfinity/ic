@@ -615,8 +615,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -633,8 +632,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;
@@ -1107,7 +1105,8 @@ impl SystemState {
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///  * `NonMatchingResponse` if no response is expected, the callback is not
-    ///    found or the respondent does not match.
+    ///    found, the respondent does not match or this is a duplicate guaranteed
+    ///    response.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,

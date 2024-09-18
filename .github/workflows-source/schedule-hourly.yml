@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
-  CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   CI_JOB_NAME: ${{ github.job }}
   CI_JOB_ID: ${{ github.job }} # github does not expose this variable https://github.com/orgs/community/discussions/8945
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -126,6 +126,7 @@ jobs:
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--combined_report=lcov"
+          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
       # TODO: publish coverage to github pages
       - name: Upload Test Coverage Report
         uses: actions/upload-artifact@v4
