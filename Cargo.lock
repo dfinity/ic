@@ -18814,6 +18814,7 @@ dependencies = [
  "clap 4.5.17",
  "config",
  "network",
+ "utils",
 ]
 
 [[package]]

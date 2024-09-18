@@ -84,6 +84,9 @@ function get_network_settings() {
     ipv6_address_system=$(eval_command_with_retries \
         "echo ${ipv6_address_system_full} | awk -F '/' '{ print \$1 }'" \
         "Failed to get system's IPv6 address.")
+
+    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
+    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)
 }
 
 function print_network_settings() {
@@ -106,6 +109,8 @@ function print_network_settings() {
 
     echo "* Printing IPv6 addresses..."
     echo "  SetupOS: ${ipv6_address_system_full}"
+    echo "  HostOS : ${HOSTOS_IPV6_ADDRESS}"
+    echo "  GuestOS: ${GUESTOS_IPV6_ADDRESS}"
     echo " "
 }
 
