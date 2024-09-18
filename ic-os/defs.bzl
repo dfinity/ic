@@ -80,7 +80,11 @@ def icos_build(
 
     # -------------------- Build grub partition --------------------
 
-    build_grub_partition("partition-grub.tzst", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
+    build_grub_partition(
+        "partition-grub.img",
+        grub_config = image_deps.get("grub_config", default = None),
+        tags = ["manual"],
+    )
 
     # -------------------- Build the container image --------------------
 
@@ -138,7 +142,7 @@ def icos_build(
     # -------------------- Extract root partition --------------------
 
     ext4_image(
-        name = "static-partition-root-unsigned.tzst",
+        name = "static-partition-root-unsigned.img",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
@@ -160,7 +164,7 @@ def icos_build(
     # -------------------- Extract boot partition --------------------
 
     ext4_image(
-        name = "static-partition-boot.tzst",
+        name = "static-partition-boot.img",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
@@ -174,16 +178,20 @@ def icos_build(
     # Defer injection to this point to allow caching most of the built images
     # -------------------- Inject extra files --------------------
 
-    inject_files(
-        name = "partition-root-unsigned.tzst",
-        testonly = malicious,
-        base = "static-partition-root-unsigned.tzst",
-        file_contexts = ":file_contexts",
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-        },
-        tags = ["manual"],
+    #    inject_files(
+    #        name = "partition-root-unsigned.img",
+    #        testonly = malicious,
+    #        base = "static-partition-root-unsigned.img",
+    #        file_contexts = ":file_contexts",
+    #        extra_files = {
+    #            k: v
+    #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+    #        },
+    #        tags = ["manual"],
+    #    )
+    native.alias(
+        name = "partition-root-unsigned.img",
+        actual = "static-partition-root-unsigned.img",
     )
 
     # Inherit tags for this test, to avoid triggering builds for local base images
@@ -196,9 +204,9 @@ def icos_build(
 
     if upgrades:
         inject_files(
-            name = "partition-root-test-unsigned.tzst",
+            name = "partition-root-test-unsigned.img",
             testonly = malicious,
-            base = "static-partition-root-unsigned.tzst",
+            base = "static-partition-root-unsigned.img",
             file_contexts = ":file_contexts",
             extra_files = {
                 k: v
@@ -209,11 +217,11 @@ def icos_build(
 
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual"])
+        native.alias(name = "partition-root.img", actual = ":partition-root-unsigned.img", tags = ["manual"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual"])
+            native.alias(name = "partition-root-test.img", actual = ":partition-root-test-unsigned.img", tags = ["manual"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
         native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
@@ -221,9 +229,9 @@ def icos_build(
         native.genrule(
             name = "partition-root-sign",
             testonly = malicious,
-            srcs = ["partition-root-unsigned.tzst"],
-            outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+            srcs = ["partition-root-unsigned.img"],
+            outs = ["partition-root.img", "partition-root-hash"],
+            cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.img) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
             executable = False,
             tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
             tags = ["manual"],
@@ -244,9 +252,9 @@ def icos_build(
             native.genrule(
                 name = "partition-root-test-sign",
                 testonly = malicious,
-                srcs = ["partition-root-test-unsigned.tzst"],
-                outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+                srcs = ["partition-root-test-unsigned.img"],
+                outs = ["partition-root-test.img", "partition-root-test-hash"],
+                cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.img) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
                 tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
                 tags = ["manual"],
             )
@@ -263,8 +271,8 @@ def icos_build(
             )
 
     inject_files(
-        name = "partition-boot.tzst",
-        base = "static-partition-boot.tzst",
+        name = "partition-boot.img",
+        base = "static-partition-boot.img",
         file_contexts = ":file_contexts",
         prefix = "/boot",
         extra_files = {
@@ -281,8 +289,8 @@ def icos_build(
 
     if upgrades:
         inject_files(
-            name = "partition-boot-test.tzst",
-            base = "static-partition-boot.tzst",
+            name = "partition-boot-test.img",
+            base = "static-partition-boot.img",
             file_contexts = ":file_contexts",
             prefix = "/boot",
             extra_files = {
@@ -311,10 +319,10 @@ def icos_build(
         name = "disk-img.tar",
         layout = image_deps["partition_table"],
         partitions = [
-            "//ic-os/bootloader:partition-esp.tzst",
-            ":partition-grub.tzst",
-            ":partition-boot.tzst",
-            ":partition-root.tzst",
+            "//ic-os/bootloader:partition-esp.img",
+            ":partition-grub.img",
+            ":partition-boot.img",
+            ":partition-root.img",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual"],
@@ -349,9 +357,8 @@ def icos_build(
     if upgrades:
         upgrade_image(
             name = "update-img.tar",
-            boot_partition = ":partition-boot.tzst",
-            root_partition = ":partition-root.tzst",
-            tags = ["manual"],
+            boot_partition = ":partition-boot.img",
+            root_partition = ":partition-root.img",
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
@@ -381,8 +388,8 @@ def icos_build(
 
         upgrade_image(
             name = "update-img-test.tar",
-            boot_partition = ":partition-boot-test.tzst",
-            root_partition = ":partition-root-test.tzst",
+            boot_partition = ":partition-boot-test.img",
+            root_partition = ":partition-root-test.img",
             tags = ["manual"],
             target_compatible_with = [
                 "@platforms//os:linux",
@@ -646,7 +653,7 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
-    build_grub_partition("partition-grub.tzst", tags = ["manual"])
+    build_grub_partition("partition-grub.img", tags = ["manual"])
 
     build_container_filesystem(
         name = "rootfs-tree.tar",
@@ -685,7 +692,7 @@ EOF
     )
 
     ext4_image(
-        name = "partition-config.tzst",
+        name = "partition-config.img",
         partition_size = "100M",
         target_compatible_with = [
             "@platforms//os:linux",
@@ -702,7 +709,7 @@ EOF
     )
 
     ext4_image(
-        name = "static-partition-boot.tzst",
+        name = "static-partition-boot.img",
         src = ":rootfs-tree.tar",
         partition_size = "1G",
         subdir = "boot/",
@@ -713,8 +720,8 @@ EOF
     )
 
     inject_files(
-        name = "partition-boot.tzst",
-        base = "static-partition-boot.tzst",
+        name = "partition-boot.img",
+        base = "static-partition-boot.img",
         prefix = "/boot",
         extra_files = {
             k: v
@@ -729,7 +736,7 @@ EOF
     )
 
     ext4_image(
-        name = "static-partition-root-unsigned.tzst",
+        name = "static-partition-root-unsigned.img",
         src = ":rootfs-tree.tar",
         partition_size = "3G",
         strip_paths = [
@@ -742,21 +749,25 @@ EOF
         ],
     )
 
-    inject_files(
-        name = "partition-root-unsigned.tzst",
-        base = "static-partition-root-unsigned.tzst",
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-        },
-        tags = ["manual"],
+    native.alias(
+        name = "partition-root-unsigned.img",
+        actual = "static-partition-root-unsigned.img",
     )
+    #    inject_files(
+    #        name = "partition-root-unsigned.img",
+    #        base = "static-partition-root-unsigned.img",
+    #        extra_files = {
+    #            k: v
+    #            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+    #        },
+    #        tags = ["manual"],
+    #    )
 
     native.genrule(
         name = "partition-root-sign",
-        srcs = ["partition-root-unsigned.tzst"],
-        outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
+        srcs = ["partition-root-unsigned.img"],
+        outs = ["partition-root.img", "partition-root-hash"],
+        cmd = "$(location //toolchains/sysimage:proc_wrapper) $(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.img) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/build_tools/dflate)",
         executable = False,
         tools = ["//toolchains/sysimage:proc_wrapper", "//toolchains/sysimage:verity_sign.py", "//rs/ic_os/build_tools/dflate"],
         tags = ["manual"],
@@ -777,11 +788,11 @@ EOF
         name = "disk-img.tar",
         layout = "//ic-os/boundary-guestos:partitions.csv",
         partitions = [
-            "//ic-os/bootloader:partition-esp.tzst",
-            ":partition-grub.tzst",
-            ":partition-config.tzst",
-            ":partition-boot.tzst",
-            ":partition-root.tzst",
+            "//ic-os/bootloader:partition-esp.img",
+            ":partition-grub.img",
+            ":partition-config.img",
+            ":partition-boot.img",
+            ":partition-root.img",
         ],
         expanded_size = "50G",
         tags = ["manual"],

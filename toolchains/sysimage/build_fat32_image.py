@@ -125,7 +125,7 @@ def main():
 
     def path_transform(path, limit_prefix=limit_prefix):
         if path.startswith(limit_prefix):
-            return path[len(limit_prefix) :]
+            return path[len(limit_prefix):]
         else:
             return None
 

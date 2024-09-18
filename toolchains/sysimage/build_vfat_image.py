@@ -119,50 +119,20 @@ def main():
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
 
-    image_file = os.path.join(tmpdir, "partition.img")
-
     def path_transform(path, limit_prefix=limit_prefix):
         if path.startswith(limit_prefix):
-            return path[len(limit_prefix) :]
+            return path[len(limit_prefix):]
         else:
             return None
 
-    os.close(os.open(image_file, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_EXCL, 0o600))
-    os.truncate(image_file, image_size)
-    subprocess.run(["/usr/sbin/mkfs.vfat", "-i", "0", image_file], check=True)
-
+    os.close(os.open(out_file, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_EXCL, 0o600))
+    os.truncate(out_file, image_size)
+    subprocess.run(["/usr/sbin/mkfs.vfat", "-i", "0", out_file], check=True)
     if in_file:
         with tarfile.open(in_file, mode="r|*") as tf:
-            untar_to_vfat(tf, fs_basedir, image_file, path_transform)
+            untar_to_vfat(tf, fs_basedir, out_file, path_transform)
 
-    install_extra_files(image_file, extra_files, path_transform)
-
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    temp_tar = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            image_file,
-            "--output",
-            temp_tar,
-        ],
-        check=True,
-    )
-
-    subprocess.run(
-        [
-            "zstd",
-            "-q",
-            "--threads=0",
-            temp_tar,
-            "-o",
-            out_file,
-        ],
-        check=True,
-    )
+    install_extra_files(out_file, extra_files, path_transform)
 
 
 if __name__ == "__main__":

@@ -41,8 +41,6 @@ def main():
     tmpdir = os.getenv("ICOS_TMPDIR")
     if not tmpdir:
         raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
-    partition = os.path.join(tmpdir, "partition.img")
-
     subprocess.run(
         [
             "tar",
@@ -57,8 +55,8 @@ def main():
     verity_cmdline = [
         "/usr/sbin/veritysetup",
         "format",
-        partition,
-        partition,
+        args.output,
+        args.output,
         "--hash-offset",
         str(args.hash_offset),
         "--uuid",
@@ -86,33 +84,6 @@ def main():
 
     with open(args.root_hash, "w") as f:
         f.write(root_hash + "\n")
-
-    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
-    # If dflate is ever misbehaving, it can be replaced with:
-    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    temp_tar = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            partition,
-            "--output",
-            temp_tar,
-        ],
-        check=True,
-    )
-
-    subprocess.run(
-        [
-            "zstd",
-            "-q",
-            "--threads=0",
-            temp_tar,
-            "-o",
-            args.output,
-        ],
-        check=True,
-    )
 
 
 if __name__ == "__main__":
