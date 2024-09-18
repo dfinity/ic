@@ -33,7 +33,6 @@ bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

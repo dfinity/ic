@@ -36,7 +36,6 @@ BASE_DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/root",

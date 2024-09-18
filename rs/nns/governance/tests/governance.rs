@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
-use dfn_protobuf::ToProto;
 use fixtures::{
     account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
@@ -111,7 +110,7 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
     ListDeployedSnsesResponse, SnsWasmError,
 };
-use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
@@ -9193,13 +9192,18 @@ fn test_update_node_provider() {
 
     let np = NodeProvider {
         id: Some(controller),
-        reward_account: Some(account.into_proto()),
+        reward_account: Some(protobuf::AccountIdentifier {
+            hash: account.to_vec(),
+        }),
     };
 
     gov.heap_data.node_providers.push(np);
 
     let hex = "b6a3539e69c6b75fe3c87b1ff82b1fc7f189a6113b77ba653b2e5eed67c95632";
-    let new_reward_account = AccountIdentifier::from_hex(hex).unwrap().into_proto();
+    let new_reward_account = AccountIdentifier::from_hex(hex).unwrap();
+    let new_reward_account = protobuf::AccountIdentifier {
+        hash: new_reward_account.to_vec(),
+    };
     let update_np = UpdateNodeProvider {
         reward_account: Some(new_reward_account.clone()),
     };
