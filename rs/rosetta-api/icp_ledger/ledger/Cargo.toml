@@ -41,6 +41,7 @@ serde_cbor = { workspace = true }
 candid_parser = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
+ic-error-types = { path = "../../../types/error_types" }
 ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }

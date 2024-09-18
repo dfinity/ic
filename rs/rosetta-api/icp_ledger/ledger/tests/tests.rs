@@ -212,7 +212,7 @@ fn test_anonymous_transfers() {
     // Transfer to the account of the anonymous principal succeeds
     transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed");
 
-    // Transfer from the account of the anonymous principal fails
+    // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
     let transfer_arg = TransferArg {
         from_subaccount: None,
         to: Account::from(p1.0),
@@ -235,6 +235,27 @@ fn test_anonymous_transfers() {
         string_from_bytes_result,
         Ok("Anonymous principal cannot hold tokens on the ledger.".to_string())
     );
+
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    let transfer_args = icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo(0u64),
+        amount: Tokens::from_e8s(TRANSFER_AMOUNT),
+        fee: Tokens::from_e8s(FEE),
+        from_subaccount: None,
+        to: AccountIdentifier::new(p1, None).to_address(),
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        anon,
+        canister_id,
+        "transfer",
+        Encode!(&transfer_args).unwrap(),
+    );
+    assert!(response.is_err());
+    if let Err(err) = response {
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(err.description().contains("Canister called `ic0.trap` with message: Panicked at 'Sending from 2vxsx-fae is not allowed'"));
+    }
 
     assert_eq!(INITIAL_BALANCE - FEE, total_supply(&env, canister_id));
     assert_eq!(

@@ -152,6 +152,7 @@ rust_ic_test(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/error_types",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-agent",

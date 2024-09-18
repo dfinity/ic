@@ -14420,6 +14420,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-log 0.2.0",
+ "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
  "ic-icrc1-test-utils",
