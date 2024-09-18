@@ -338,7 +338,7 @@ impl PocketIc {
                 socks_proxy: None,
                 ipv6_only: false,
                 logger: logger_config,
-                incoming_source: IncomingSource::Path(bitcoin_adapter_uds_path.to_path_buf()),
+                incoming_source: IncomingSource::Path(bitcoin_adapter_uds_path.clone()),
                 ..Default::default()
             };
             let bitcoin_adapter_config_json =
