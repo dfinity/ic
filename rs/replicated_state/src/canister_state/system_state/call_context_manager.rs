@@ -781,9 +781,8 @@ impl CallContextManager {
 
         self.stats.on_register_callback(&callback);
         if callback.deadline != NO_DEADLINE {
-            assert!(self
-                .unexpired_callbacks
-                .insert((callback.deadline, callback_id)));
+            self.unexpired_callbacks
+                .insert((callback.deadline, callback_id));
         }
 
         self.callbacks.insert(callback_id, Arc::new(callback));
@@ -816,9 +815,9 @@ impl CallContextManager {
         &mut self,
         now: CoarseTime,
     ) -> impl Iterator<Item = CallbackId> {
-        let mut expired_callbacks = self
-            .unexpired_callbacks
-            .split_off(&(now, CallbackId::from(0)));
+        const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
+
+        let mut expired_callbacks = self.unexpired_callbacks.split_off(&(now, MIN_CALLBACK_ID));
         std::mem::swap(&mut self.unexpired_callbacks, &mut expired_callbacks);
         expired_callbacks
             .into_iter()
