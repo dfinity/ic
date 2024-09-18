@@ -1494,7 +1494,20 @@ pub struct GetIngressMessageInBlockResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedBlockProposal {}
+pub struct StrippedBlockProposal {
+    #[prost(message, optional, tag = "1")]
+    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    #[prost(message, repeated, tag = "2")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    #[prost(message, optional, tag = "3")]
+    pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedIngressMessage {
+    #[prost(message, optional, tag = "1")]
+    pub stripped: ::core::option::Option<IngressMessageId>,
+}
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

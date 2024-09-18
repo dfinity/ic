@@ -1,6 +1,6 @@
 # ICP ledger upgrade history
 
-The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ICP ledger index (`qhbym-qaaaa-aaaaa-aaafq-cai`), and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`, `qsgjb-riaaa-aaaaa-aaaga-cai`).
+The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ICP ledger index (`qhbym-qaaaa-aaaaa-aaafq-cai`), and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`, `qsgjb-riaaa-aaaaa-aaaga-cai`, `q4eej-kyaaa-aaaaa-aaaha-cai`).
 
 | Proposal | Date | Git commit | Wasm |
 |---------:|:----:|:----------:|------|
