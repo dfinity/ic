@@ -1,10 +1,11 @@
 name: Release Testing
 on:
-  push:
-    branches:
-      - "hotfix-*"
-      - "rc--*"
-  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - "hotfix-*"
+  #     - "rc--*"
+  # workflow_dispatch:
+  pull_request:
 # new commits interrupt any running workflow on the same branch
 concurrency:
   group: ${{ github.ref }}
