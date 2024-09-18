@@ -22,7 +22,7 @@ use ic_state_machine_tests::StateMachine;
 
 const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
 const INVALID_TOPIC: i32 = 69420;
-const PROTOCOAL_CANISTER_MANAGEMENT_TOPIC: i32 = Topic::ProtocolCanisterManagement as i32;
+const NETWORK_CANISTER_MANAGEMENT_TOPIC: i32 = Topic::NetworkCanisterManagement as i32;
 const NEURON_MANAGEMENT_TOPIC: i32 = Topic::NeuronManagement as i32;
 const VOTING_POWER_NEURON_1: u64 = 1_404_004_106;
 const VOTING_POWER_NEURON_2: u64 = 140_400_410;
@@ -210,7 +210,7 @@ fn vote_propagation_with_following() {
         &state_machine,
         &n1,
         &[n2.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // voting doesn't get propagated by mutating the following graph
@@ -250,7 +250,7 @@ fn vote_propagation_with_following() {
         &state_machine,
         &n3,
         &[n2.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // make n2 follow n1
@@ -258,7 +258,7 @@ fn vote_propagation_with_following() {
         &state_machine,
         &n2,
         &[n1.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // now n1 and n2 follow each other (circle), and n3 follows n2
@@ -291,7 +291,7 @@ fn vote_propagation_with_following() {
         &state_machine,
         &n2,
         &[n1a.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // at this point n2 is not influential
@@ -349,14 +349,14 @@ fn vote_propagation_with_following() {
         &state_machine,
         &n1a,
         &[n3.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     set_followees_on_topic(
         &state_machine,
         &n3,
         &[n1.neuron_id],
-        PROTOCOAL_CANISTER_MANAGEMENT_TOPIC,
+        NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // fire off a new proposal by n1, and see all neurons voting
