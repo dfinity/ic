@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -131,7 +133,17 @@ pub fn generate_mac_address(
         );
         Ok(mgmt_mac)
     } else {
-        let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
+        // A bug in our version of ipmitool causes it to exit with an error
+        // status, but we have enough output to work with anyway.
+        // https://github.com/ipmitool/ipmitool/issues/388
+
+        // let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
+        let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+        if !output.status.success() {
+            warn!("Error running ipmitool: {}", str::from_utf8(output.stderr));
+        }
+        let ipmitool_output = String::from_utf8(output.stdout)?;
+
         get_mac_address_from_ipmitool_output(&ipmitool_output)
     }?;
     generate_mac_address_internal(&mgmt_mac, deployment_name, node_type, '6')
