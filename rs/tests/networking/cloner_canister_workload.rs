@@ -43,8 +43,8 @@ const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
-const SUBNET_SIZE: usize = 13;
-const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
+const SUBNET_SIZE: usize = 42;
+const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(300);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
@@ -85,7 +85,7 @@ pub fn setup(env: TestEnv) {
         .with_default_vm_resources(vm_resources)
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
-            Subnet::new(SubnetType::Application)
+            Subnet::new(SubnetType::System)
                 .add_nodes(SUBNET_SIZE)
                 .with_initial_notary_delay(INITIAL_NOTARY_DELAY),
         )
