@@ -6,7 +6,8 @@ use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_ledger_sm_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    get_allowance, send_approval, send_transfer_from, supported_standards, transfer, MINTER,
+    get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
+    transfer, FEE, MINTER,
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::{block::BlockType, Tokens};
@@ -29,6 +30,7 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
+use std::string::FromUtf8Error;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -188,6 +190,59 @@ fn test_total_supply() {
 #[test]
 fn test_minting_account() {
     ic_icrc1_ledger_sm_tests::test_minting_account(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_anonymous_transfers() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const TRANSFER_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    println!("p1: {:?}", p1);
+    let anon = PrincipalId::new_anonymous();
+    println!("anon: {:?}", anon);
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+    );
+
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
+
+    // Transfer to the account of the anonymous principal succeeds
+    transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed");
+
+    // Transfer from the account of the anonymous principal fails
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: Account::from(p1.0),
+        fee: None,
+        created_at_time: None,
+        amount: Nat::from(TRANSFER_AMOUNT),
+        memo: None,
+    };
+    let encoded_transfer_result = env
+        .execute_ingress_as(
+            anon,
+            canister_id,
+            "icrc1_transfer",
+            Encode!(&transfer_arg).unwrap(),
+        )
+        .expect("failed to transfer funds")
+        .bytes();
+    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
+    assert_eq!(
+        string_from_bytes_result,
+        Ok("Anonymous principal cannot hold tokens on the ledger.".to_string())
+    );
+
+    assert_eq!(INITIAL_BALANCE - FEE, total_supply(&env, canister_id));
+    assert_eq!(
+        INITIAL_BALANCE - TRANSFER_AMOUNT - FEE,
+        balance_of(&env, canister_id, p1.0)
+    );
+    assert_eq!(TRANSFER_AMOUNT, balance_of(&env, canister_id, anon.0));
 }
 
 #[test]
