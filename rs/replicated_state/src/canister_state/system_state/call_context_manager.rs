@@ -605,13 +605,21 @@ impl CallContextManager {
         self.callbacks.get(&callback_id).map(AsRef::as_ref)
     }
 
-    /// Validates the given response before inducting it into the queue.
+    /// Tests whether the given response should be inducted or silently dropped.
     /// Verifies that the stored respondent and originator associated with the
     /// `callback_id`, as well as its deadline match those of the response.
     ///
-    /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
-    /// or if the response is not valid.
-    pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
+    /// Returns:
+    ///
+    ///  * `Ok(true)` if the response can be safely inducted.
+    ///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
+    ///    for a best-effort response (because the callback might have expired and
+    ///    been closed).
+    ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
+    ///    not found for a guaranteed response.
+    ///  * `Err(StateError::NonMatchingResponse)` if the response details do not
+    ///    match those of the callback.
+    pub(crate) fn should_enqueue(&self, response: &Response) -> Result<bool, StateError> {
         match self.callback(response.originator_reply_callback) {
             Some(callback) if response.respondent != callback.respondent
                     || response.originator != callback.originator
@@ -621,10 +629,17 @@ impl CallContextManager {
                         callback.originator, callback.respondent, Time::from(callback.deadline)
                     ), response))
             }
-            Some(_) => Ok(()),
+            Some(_) => Ok(true),
             None => {
                 // Received an unknown callback ID.
-                Err(StateError::non_matching_response("unknown callback ID", response))
+                if response.deadline == NO_DEADLINE {
+                    // This is an error for a guaranteed response.
+                    Err(StateError::non_matching_response("unknown callback ID", response))
+                } else {
+                    // But should be ignored in the case of a best-effort response (as the callback
+                    // may have expired and been dropped in the meantime).
+                    Ok(false)
+                }
             }
         }
     }

@@ -20,6 +20,7 @@ use ic_config::{
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -121,10 +122,18 @@ lazy_static! {
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
-    static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
-        + instruction_to_cost(&wasmparser::Operator::MemoryGrow { mem: 0 })
-        + instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
-    static ref UNREACHABLE_COST: u64 = instruction_to_cost(&wasmparser::Operator::Unreachable);
+    static ref DROP_MEMORY_GROW_CONST_COST: u64 =
+        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+            + instruction_to_cost(
+                &wasmparser::Operator::MemoryGrow { mem: 0 },
+                WasmMemoryType::Wasm32
+            )
+            + instruction_to_cost(
+                &wasmparser::Operator::I32Const { value: 0 },
+                WasmMemoryType::Wasm32
+            );
+    static ref UNREACHABLE_COST: u64 =
+        instruction_to_cost(&wasmparser::Operator::Unreachable, WasmMemoryType::Wasm32);
 }
 
 fn canister_change_origin_from_canister(sender: &CanisterId) -> CanisterChangeOrigin {

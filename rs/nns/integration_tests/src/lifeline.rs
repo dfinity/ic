@@ -13,7 +13,7 @@ use ic_nns_governance_api::{
     pb::v1::{
         manage_neuron_response::Command as CommandResponse, NnsFunction, ProposalStatus, Vote,
     },
-    proposal_helpers::create_external_update_proposal_candid,
+    proposal_submission_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

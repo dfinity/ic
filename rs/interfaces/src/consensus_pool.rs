@@ -37,7 +37,7 @@ impl<T> AsRef<T> for ValidatedArtifact<T> {
     }
 }
 
-pub type ChangeSet = Vec<ChangeAction>;
+pub type Mutations = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
@@ -73,7 +73,7 @@ pub enum PurgeableArtifactType {
     EquivocationProof,
 }
 
-impl From<ChangeAction> for ChangeSet {
+impl From<ChangeAction> for Mutations {
     fn from(action: ChangeAction) -> Self {
         vec![action]
     }
@@ -84,13 +84,13 @@ pub trait ChangeSetOperation: Sized {
     /// Conditional composition when self is empty. Similar to Option::or_else.
     fn or_else<F: FnOnce() -> Self>(self, f: F) -> Self;
     /// Append a change action only when it is not a duplicate of what already
-    /// exists in the ChangeSet. Return the rejected action as error when it
+    /// exists in the Mutations. Return the rejected action as error when it
     /// is considered as duplicate.
     fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction>;
 }
 
-impl ChangeSetOperation for ChangeSet {
-    fn or_else<F: FnOnce() -> ChangeSet>(self, f: F) -> ChangeSet {
+impl ChangeSetOperation for Mutations {
+    fn or_else<F: FnOnce() -> Mutations>(self, f: F) -> Mutations {
         if self.is_empty() {
             f()
         } else {

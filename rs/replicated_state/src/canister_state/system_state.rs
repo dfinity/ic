@@ -628,8 +628,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -646,8 +645,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;
@@ -1229,9 +1227,13 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    call_context_manager
-                        .validate_response(response)
-                        .map_err(|err| (err, msg.clone()))?;
+                    if !call_context_manager
+                        .should_enqueue(response)
+                        .map_err(|err| (err, msg.clone()))?
+                    {
+                        // Best effort response whose callback is gone. Silently drop it.
+                        return Ok(());
+                    }
                 }
                 push_input(
                     &mut self.queues,
