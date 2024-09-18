@@ -1,5 +1,5 @@
 {
-  "checksum": "339b81ae381c208e11c61ce38eeb4b3f305e2cbf83acd1e738d42318b671348b",
+  "checksum": "fd9eb489c0f6ca72fa72926e5dae2912f046890fdf3dbe3468c8ee3cf268861f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12576,9 +12576,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/cloudflare/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "f14720e42184ee176a97676e85ef2d2d85bc3aae"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -18971,7 +18971,7 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.212.0",
+              "id": "wasm-encoder 0.215.0",
               "target": "wasm_encoder"
             },
             {
@@ -18979,11 +18979,11 @@
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.215.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.212.0",
+              "id": "wasmprinter 0.215.0",
               "target": "wasmprinter"
             },
             {
@@ -52843,7 +52843,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "rustls",
@@ -52851,6 +52855,7 @@
             "rustls-tls-webpki-roots",
             "serde_json",
             "tokio-rustls",
+            "tokio-util",
             "webpki-roots"
           ],
           "selects": {}
@@ -52904,6 +52909,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.4",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.33",
                 "target": "encoding_rs"
@@ -52963,6 +52972,10 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-util 0.7.12",
+                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -71541,11 +71554,21 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "wasmparser"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
               "id": "leb128 0.2.5",
               "target": "leb128"
+            },
+            {
+              "id": "wasmparser 0.215.0",
+              "target": "wasmparser"
             }
           ],
           "selects": {}
@@ -71863,6 +71886,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "serde",
             "std",
             "validate"
@@ -71907,61 +71931,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "wasmprinter 0.212.0": {
-      "name": "wasmprinter",
-      "version": "0.212.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmprinter/0.212.0/download",
-          "sha256": "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmprinter",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmprinter",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.72",
-              "target": "anyhow"
-            },
-            {
-              "id": "termcolor 1.4.1",
-              "target": "termcolor"
-            },
-            {
-              "id": "wasmparser 0.212.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.212.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "wasmprinter 0.215.0": {
       "name": "wasmprinter",
@@ -79176,10 +79145,10 @@
     "walkdir 2.3.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.87",
-    "wasm-encoder 0.212.0",
+    "wasm-encoder 0.215.0",
     "wasm-smith 0.212.0",
-    "wasmparser 0.212.0",
-    "wasmprinter 0.212.0",
+    "wasmparser 0.215.0",
+    "wasmprinter 0.215.0",
     "wasmtime 24.0.0",
     "wasmtime-environ 24.0.0",
     "wast 212.0.0",

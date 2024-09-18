@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/lock",
     "//rs/nervous_system/proto",

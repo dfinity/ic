@@ -62,6 +62,7 @@ impl IcAdminArgs {
             wasm_module_path: generated_files.wasm.to_string_lossy().to_string(),
             wasm_module_sha256: proposal.compressed_wasm_hash().clone(),
             arg: generated_files.arg.to_string_lossy().to_string(),
+            arg_sha256: proposal.args_sha256_hex(),
             summary_file: generated_files.summary.to_string_lossy().to_string(),
         }
         .render()
@@ -110,6 +111,9 @@ pub struct IcAdminTemplate {
     /// The path to a binary file containing the initialization or upgrade args of the
     /// canister.
     pub arg: String,
+
+    /// The sha256 of the arg binary file.
+    pub arg_sha256: String,
 
     /// A file containing a human-readable summary of the proposal content.
     pub summary_file: String,

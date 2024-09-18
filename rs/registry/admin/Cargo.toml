@@ -34,7 +34,6 @@ ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-init = { path = "../../nns/init" }
