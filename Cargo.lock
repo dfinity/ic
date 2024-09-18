@@ -9364,6 +9364,7 @@ dependencies = [
  "reqwest 0.12.7",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
  "strum",
  "strum_macros",
  "tempfile",
