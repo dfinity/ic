@@ -106,7 +106,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     // Convert to return type.
     let result = u64::try_from(result.0).map_err(|err| {
         format!(
-            "Failed to convert initial supply in e8s does to u64. Reason: {:?}",
+            "Failed to convert initial supply in e8s to u64. Reason: {:?}",
             err,
         )
     })?;
