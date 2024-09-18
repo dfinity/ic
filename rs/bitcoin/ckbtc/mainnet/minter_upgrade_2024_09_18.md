@@ -1,12 +1,12 @@
-# Proposal to upgrade the ckETH minter canister
+# Proposal to upgrade the ckBTC minter canister
 
 Git hash: `511ad1cf505003e33baf0ce0eefa0168aad91bf1`
 
-New compressed Wasm hash: `b09dafaaa92efa5fffa831104fc39ecc759fb6954cfa8615dc00b77700d37a68`
+New compressed Wasm hash: `638d972cf20cfd725fadb7e49957eceadb0bee85bbc711f96d5d5be541e8e091`
 
-Target canister: `sv3dd-oaaaa-aaaar-qacoa-cai`
+Target canister: `mqygn-kiaaa-aaaar-qaadq-cai`
 
-Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/132474
+Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/132134
 
 ---
 
@@ -18,15 +18,18 @@ Since the size of the fiduciary subnet (`pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h
 ```
 git fetch
 git checkout 511ad1cf505003e33baf0ce0eefa0168aad91bf1
-cd rs/ethereum/cketh/minter
+cd rs/bitcoin/ckbtc/minter
 didc encode '()'
 ```
 
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' 603473e2a9d4f5a0259bc4ea6aee4ba438186fba..511ad1cf505003e33baf0ce0eefa0168aad91bf1 -- rs/ethereum/cketh/minter
+git log --format='%C(auto) %h %s' 667a6bd3bc08c58535b8b63bfebc01dba89c0704..511ad1cf505003e33baf0ce0eefa0168aad91bf1 -- rs/bitcoin/ckbtc/minter
 511ad1cf5 fix(cketh/ckbtc): Update fee for tECDSA signatures (#1545)
+4d09678d2 chore: sort rust derive traits (#1241)
+d4c3bb26c chore: upgrade crates and use workspace version (#1207)
+3fc6c3fda chore: Remove use of extended_bip32 crate from ckbtc minter (#976)
  ```
 
 ## Wasm Verification
@@ -37,5 +40,5 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 git fetch
 git checkout 511ad1cf505003e33baf0ce0eefa0168aad91bf1
 ./ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/ic-cketh-minter.wasm.gz
+sha256sum ./artifacts/canisters/ic-ckbtc-minter.wasm.gz
 ```
