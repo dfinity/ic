@@ -21,7 +21,7 @@
 use crate::consensus::metrics::PurgerMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ChangeSet, HeightRange, PurgeableArtifactType},
+    consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
     messaging::MessageRouting,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -82,11 +82,11 @@ impl Purger {
     /// Purge unvalidated and validated pools, and replicated states according
     /// to the purging rules.
     ///
-    /// Pool purging is conveyed through the returned [ChangeSet] which has to
+    /// Pool purging is conveyed through the returned [Mutations] which has to
     /// be applied by the caller, but state purging is directly communicated to
     /// the state manager.
-    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> ChangeSet {
-        let mut changeset = ChangeSet::new();
+    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> Mutations {
+        let mut changeset = Mutations::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
         let previous_finalized_height = *self.prev_finalized_height.borrow();
 
@@ -186,7 +186,7 @@ impl Purger {
     fn purge_unvalidated_pool_by_expected_batch_height(
         &self,
         pool_reader: &PoolReader<'_>,
-        changeset: &mut ChangeSet,
+        changeset: &mut Mutations,
     ) {
         let finalized_height = pool_reader.get_finalized_height();
         let expected_batch_height = self.message_routing.expected_batch_height();
@@ -243,7 +243,7 @@ impl Purger {
     fn purge_validated_pool_by_catch_up_package(
         &self,
         pool_reader: &PoolReader<'_>,
-        changeset: &mut ChangeSet,
+        changeset: &mut Mutations,
     ) -> bool {
         if let Some(purge_height) = get_purge_height(pool_reader) {
             changeset.push(ChangeAction::PurgeValidatedBelow(purge_height));
@@ -274,7 +274,7 @@ impl Purger {
     fn purge_validated_shares_by_finalized_height(
         &self,
         finalized_height: Height,
-        changeset: &mut ChangeSet,
+        changeset: &mut Mutations,
     ) {
         changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
             PurgeableArtifactType::NotarizationShare,
@@ -296,7 +296,7 @@ impl Purger {
         &self,
         pool: &PoolReader,
         finalized_height: Height,
-        changeset: &mut ChangeSet,
+        changeset: &mut Mutations,
     ) {
         if pool
             .pool()
@@ -366,7 +366,7 @@ impl Purger {
         pool: &PoolReader,
         previous_finalized_height: Height,
         new_finalized_height: Height,
-        changeset: &mut ChangeSet,
+        changeset: &mut Mutations,
     ) {
         // TODO: Consider changing the signature of [`PoolReader::get_finalized_block`] to also
         // return the hash of the block.
@@ -589,7 +589,7 @@ mod tests {
             );
 
             // No more purge action when called again
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);

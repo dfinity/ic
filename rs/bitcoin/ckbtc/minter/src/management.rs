@@ -13,7 +13,6 @@ use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
-    SignWithECDSAArgs, SignWithECDSAReply,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -275,22 +274,27 @@ pub async fn sign_with_ecdsa(
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<Vec<u8>, CallError> {
-    const CYCLES_PER_SIGNATURE: u64 = 25_000_000_000;
+    use ic_cdk::api::management_canister::ecdsa::{
+        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+    };
 
-    let reply: SignWithECDSAReply = call(
-        "sign_with_ecdsa",
-        CYCLES_PER_SIGNATURE,
-        &SignWithECDSAArgs {
-            message_hash,
-            derivation_path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name.clone(),
-            },
+    let result = sign_with_ecdsa(SignWithEcdsaArgument {
+        message_hash: message_hash.to_vec(),
+        derivation_path: derivation_path.into_inner(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name.clone(),
         },
-    )
-    .await?;
-    Ok(reply.signature)
+    })
+    .await;
+
+    match result {
+        Ok((reply,)) => Ok(reply.signature),
+        Err((code, msg)) => Err(CallError {
+            method: "sign_with_ecdsa".to_string(),
+            reason: Reason::from_reject(code, msg),
+        }),
+    }
 }
 
 /// Requests alerts for the given UTXO.

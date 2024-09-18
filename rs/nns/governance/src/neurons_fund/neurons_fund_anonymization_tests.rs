@@ -47,6 +47,7 @@ fn test_neurons_fund_participation_anonymization() {
                         one_third_participation_milestone_icp: dec!(100_000.0),
                         full_participation_milestone_icp: dec!(167_000.0),
                     },
+                    cfg!(not(test)),
                 )
                 .unwrap()
                 .serialize(),

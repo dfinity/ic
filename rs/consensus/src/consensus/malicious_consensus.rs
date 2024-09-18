@@ -6,7 +6,7 @@ use crate::consensus::{
     notary::Notary,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
+use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::{
     consensus::{
@@ -18,9 +18,9 @@ use ic_types::{
 };
 use std::time::Duration;
 
-/// Return a `ChangeSet` that moves all block proposals in the range to the
+/// Return a `Mutations` that moves all block proposals in the range to the
 /// validated pool.
-fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLogger) -> ChangeSet {
+fn maliciously_validate_all_blocks(pool_reader: &PoolReader, logger: &ReplicaLogger) -> Mutations {
     trace!(logger, "maliciously_validate_all_blocks");
     let mut change_set = Vec::new();
 
@@ -309,14 +309,14 @@ fn maliciously_finalize_block(
 #[allow(unused, clippy::too_many_arguments)]
 pub fn maliciously_alter_changeset(
     pool: &PoolReader,
-    honest_changeset: ChangeSet,
+    honest_changeset: Mutations,
     malicious_flags: &MaliciousFlags,
     block_maker: &BlockMaker,
     finalizer: &Finalizer,
     notary: &Notary,
     logger: &ReplicaLogger,
     timestamp: Time,
-) -> ChangeSet {
+) -> Mutations {
     let mut changeset = honest_changeset;
 
     if malicious_flags.maliciously_propose_equivocating_blocks

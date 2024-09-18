@@ -1,6 +1,5 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    enable_new_canister_management_topics,
     pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
     proposals::call_canister::CallCanister,
 };
@@ -23,12 +22,6 @@ struct UpgradeRootProposalPayload {
 
 impl InstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !enable_new_canister_management_topics() {
-            return Err(invalid_proposal_error(
-                "InstallCode proposal is not yet supported",
-            ));
-        }
-
         let _ = self.valid_canister_id()?;
         let _ = self.valid_install_mode()?;
         let _ = self.valid_wasm_module()?;
@@ -120,6 +113,13 @@ impl InstallCode {
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
     }
+
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        let Ok(canister_id) = self.valid_canister_id() else {
+            return false;
+        };
+        topic_to_manage_canister(&canister_id) == Topic::ProtocolCanisterManagement
+    }
 }
 
 impl CallCanister for InstallCode {
@@ -171,7 +171,8 @@ mod tests {
     use crate::pb::v1::governance_error::ErrorType;
 
     use candid::Decode;
-    use ic_nns_constants::REGISTRY_CANISTER_ID;
+    use ic_base_types::CanisterId;
+    use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
     #[test]
     fn test_invalid_install_code_proposal() {
@@ -293,6 +294,7 @@ mod tests {
             install_code.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "change_nns_canister"))
         );
+        assert!(install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
         assert_eq!(
@@ -328,6 +330,7 @@ mod tests {
             install_code.canister_and_function(),
             Ok((LIFELINE_CANISTER_ID, "upgrade_root"))
         );
+        assert!(install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), UpgradeRootProposalPayload).unwrap();
         assert_eq!(
@@ -341,9 +344,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reinstall_code_non_root_protocol_canister() {
+    fn test_reinstall_code_non_protocol_canister() {
         let install_code = InstallCode {
-            canister_id: Some(LIFELINE_CANISTER_ID.get()),
+            canister_id: Some(SNS_WASM_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
             arg: Some(vec![]),
@@ -353,12 +356,13 @@ mod tests {
         assert_eq!(install_code.validate(), Ok(()));
         assert_eq!(
             install_code.valid_topic(),
-            Ok(Topic::ProtocolCanisterManagement)
+            Ok(Topic::ServiceNervousSystemManagement)
         );
         assert_eq!(
             install_code.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "change_nns_canister"))
         );
+        assert!(!install_code.allowed_when_resources_are_low());
         let decoded_payload =
             Decode!(&install_code.payload().unwrap(), ChangeCanisterRequest).unwrap();
         assert_eq!(
@@ -366,7 +370,7 @@ mod tests {
             ChangeCanisterRequest {
                 stop_before_installing: false,
                 mode: RootCanisterInstallMode::Reinstall,
-                canister_id: LIFELINE_CANISTER_ID,
+                canister_id: SNS_WASM_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![],
                 compute_allocation: None,
@@ -377,9 +381,6 @@ mod tests {
 
     #[test]
     fn test_upgrade_canisters_topic_mapping() {
-        use ic_base_types::CanisterId;
-        use ic_nns_constants::SNS_WASM_CANISTER_ID;
-
         let test_cases = vec![
             (REGISTRY_CANISTER_ID, Topic::ProtocolCanisterManagement),
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),

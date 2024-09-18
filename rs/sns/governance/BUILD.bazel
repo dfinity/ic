@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/lock",
     "//rs/nervous_system/proto",
@@ -146,6 +147,7 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -157,7 +159,11 @@ rust_canister(
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
-    deps = DEPENDENCIES + [":governance--test_feature"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance--test_feature",
+        "//rs/nervous_system/canisters",
+    ],
 )
 
 rust_test(
@@ -177,6 +183,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -190,6 +197,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
