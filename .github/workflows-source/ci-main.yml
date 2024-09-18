@@ -95,7 +95,7 @@ anchors:
       if-no-files-found: ignore
       compression-level: 9
       path: |
-        bazel-bep.json
+        bazel-bep.pb
         profile.json
 
 jobs:
