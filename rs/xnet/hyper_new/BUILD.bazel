@@ -3,19 +3,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "hyper",
+    name = "hyper_new",
     srcs = glob(["src/**"]),
-    crate_name = "ic_xnet_hyper",
+    crate_name = "ic_xnet_hyper_new",
     version = "0.9.0",
     deps = [
         # Keep sorted.
         "//rs/crypto/tls_interfaces",
-        "//rs/crypto/utils/tls",
-        "//rs/interfaces/registry",
-        "//rs/xnet/uri",
-        "@crate_index//:hyper_0_14_27",
-        "@crate_index//:socket2",
+        "//rs/xnet/uri_new",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-rustls",
+        "@crate_index//:hyper-util",
         "@crate_index//:tokio",
         "@crate_index//:tokio-rustls",
+        "@crate_index//:tower",
     ],
 )

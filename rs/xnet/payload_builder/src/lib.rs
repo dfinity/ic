@@ -45,7 +45,7 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
-use ic_xnet_hyper::TlsConnector;
+use ic_xnet_hyper_new::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};

@@ -28,7 +28,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
-ic-xnet-hyper = { path = "../hyper" }
+ic-xnet-hyper-new = { path = "../hyper_new" }
 ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
 rand = { workspace = true }

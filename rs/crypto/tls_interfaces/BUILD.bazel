@@ -10,6 +10,7 @@ package(default_visibility = [
     "//rs/test_utilities:__subpackages__",
     "//rs/xnet/endpoint:__subpackages__",
     "//rs/xnet/hyper:__subpackages__",
+    "//rs/xnet/hyper_new:__subpackages__",
     "//rs/xnet/payload_builder:__subpackages__",
 ])
 

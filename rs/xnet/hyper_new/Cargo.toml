@@ -1,5 +1,5 @@
 [package]
-name = "ic-xnet-hyper"
+name = "ic-xnet-hyper-new"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hyper = { version = "0.14.18" , features = ["full", "tcp"] }
+hyper = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-xnet-uri = { path = "../uri" }
-socket2 = { workspace = true }
+ic-xnet-uri-new = { path = "../uri_new" }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
+tower = { workspace = true }

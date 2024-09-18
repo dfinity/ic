@@ -22,7 +22,7 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/xnet/hyper",
+    "//rs/xnet/hyper_new",
     "//rs/xnet/uri",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",

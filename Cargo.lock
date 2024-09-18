@@ -13118,12 +13118,8 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
- "axum 0.7.5",
  "bytes",
- "crossbeam-channel",
- "hyper 1.4.1",
- "hyper-util",
- "ic-async-utils",
+ "hyper 0.14.30",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -13141,6 +13137,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -13149,8 +13146,6 @@ dependencies = [
  "serde_json",
  "slog",
  "tokio",
- "tokio-rustls 0.26.0",
- "tower 0.4.13",
  "url",
 ]
 
@@ -13158,11 +13153,25 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
+ "hyper 0.14.30",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-tls",
+ "ic-interfaces-registry",
+ "ic-xnet-uri",
+ "socket2 0.5.7",
+ "tokio",
+ "tokio-rustls 0.26.0",
+]
+
+[[package]]
+name = "ic-xnet-hyper-new"
+version = "0.9.0"
+dependencies = [
  "hyper 1.4.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-crypto-tls-interfaces",
- "ic-xnet-uri",
+ "ic-xnet-uri-new",
  "tokio",
  "tokio-rustls 0.26.0",
  "tower 0.4.13",
@@ -13210,7 +13219,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
+ "ic-xnet-hyper-new",
  "ic-xnet-uri",
  "maplit",
  "mockall 0.13.0",
@@ -13228,6 +13237,14 @@ dependencies = [
 
 [[package]]
 name = "ic-xnet-uri"
+version = "0.9.0"
+dependencies = [
+ "http 0.2.12",
+ "ic-types",
+]
+
+[[package]]
+name = "ic-xnet-uri-new"
 version = "0.9.0"
 dependencies = [
  "http 1.1.0",

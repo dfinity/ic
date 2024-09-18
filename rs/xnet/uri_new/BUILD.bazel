@@ -5,13 +5,13 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/types",
-    "@crate_index//:http_0_2_12",
+    "@crate_index//:http",
 ]
 
 rust_library(
-    name = "uri",
+    name = "uri_new",
     srcs = glob(["src/**"]),
-    crate_name = "ic_xnet_uri",
+    crate_name = "ic_xnet_uri_new",
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
