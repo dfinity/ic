@@ -2494,6 +2494,7 @@ pub fn test_upgrade_serialization(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
+    downgrade_to_mainnet_possible: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2573,8 +2574,10 @@ pub fn test_upgrade_serialization(
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
-                // Test downgrade to mainnet wasm
-                test_upgrade(ledger_wasm_mainnet.clone());
+                if downgrade_to_mainnet_possible {
+                    // Test downgrade to mainnet wasm
+                    test_upgrade(ledger_wasm_mainnet.clone());
+                }
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
@@ -2621,11 +2624,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 
     // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(
-        ledger_wasm_mainnet.clone(),
-        encode_init_args,
-        initial_balances,
-    );
+    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
 
     const APPROVE_AMOUNT: u64 = 150_000;
     let expiration =
@@ -2682,8 +2681,6 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
     for a1 in &accounts {
@@ -2701,8 +2698,8 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
         }
     }
 
-    // Test downgrade to mainnet wasm
-    test_upgrade(ledger_wasm_mainnet, balances);
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current, balances);
 
     // See if the additional approvals are there
     for a1 in &accounts {

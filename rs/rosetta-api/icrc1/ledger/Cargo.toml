@@ -22,6 +22,7 @@ ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-icrc1 = { path = ".." }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }

@@ -3,10 +3,11 @@ mod benches;
 
 use candid::candid_method;
 use candid::types::number::Nat;
-use ic_canister_log::{declare_log_buffer, export};
+use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
 
+use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
 use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
@@ -15,12 +16,13 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::UPGRADES_MEMORY;
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_core::approvals::AllowancesData;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
@@ -59,8 +61,11 @@ use icrc_ledger_types::{
 };
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
-use std::cell::RefCell;
-use std::io::{Read, Write};
+use std::{
+    cell::RefCell,
+    io::{Read, Write},
+    time::Duration,
+};
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
@@ -213,9 +218,80 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    Access::with_ledger_mut(|ledger| {
+        ledger.state = LedgerState::Migrating(LedgerField::Allowances);
+        ledger.approvals.allowances_data.clear_arrivals();
+    });
+    const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 20_000_000_000;
+    migrate_next_part(MAX_INSTRUCTIONS_PER_UPGRADE);
+
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
+}
+
+fn migrate_next_part(instruction_limit: u64) {
+    let mut migrated_allowances = 0;
+    let mut migrated_expirations = 0;
+
+    ic_cdk::println!("Migration started.");
+    log!(&LOG, "Migration started.");
+
+    Access::with_ledger_mut(|ledger| {
+        while instruction_counter() < instruction_limit {
+            let field = match ledger.state.clone() {
+                LedgerState::Migrating(ledger_field) => ledger_field,
+                LedgerState::Ready => break,
+            };
+            match field {
+                LedgerField::Allowances => {
+                    match ledger.approvals.allowances_data.pop_first_allowance() {
+                        Some((account_spender, allowance)) => {
+                            ledger
+                                .approvals_mut()
+                                .allowances_data
+                                .set_allowance(account_spender, allowance);
+                            migrated_allowances += 1;
+                        }
+                        None => {
+                            ledger.state =
+                                LedgerState::Migrating(LedgerField::AllowancesExpirations);
+                        }
+                    };
+                }
+                LedgerField::AllowancesExpirations => {
+                    match ledger.approvals.allowances_data.pop_first_expiry() {
+                        Some((timestamp, account_spender)) => {
+                            ledger
+                                .approvals_mut()
+                                .allowances_data
+                                .insert_expiry(timestamp, account_spender);
+                            migrated_expirations += 1;
+                        }
+                        None => {
+                            ledger.state = LedgerState::Ready;
+                        }
+                    };
+                }
+            }
+        }
+        let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
+            instruction_counter());
+        if ledger.is_migrating() {
+            ic_cdk::println!("Migration partially done. Scheduling the next part. {msg}");
+            log!(
+                &LOG,
+                "Migration partially done. Scheduling the next part. {msg}"
+            );
+            const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 2_000_000_000;
+            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+            });
+        } else {
+            ic_cdk::println!("Migration completed! {msg}");
+            log!(&LOG, "Migration completed! {msg}");
+        }
+    });
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

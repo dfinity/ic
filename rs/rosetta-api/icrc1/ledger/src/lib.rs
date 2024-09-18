@@ -356,12 +356,30 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerField {
+    Allowances,
+    AllowancesExpirations,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerState {
+    Migrating(LedgerField),
+    Ready,
+}
+
+impl Default for LedgerState {
+    fn default() -> Self {
+        Self::Ready
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Ledger {
     balances: LedgerBalances<Tokens>,
     #[serde(default)]
-    approvals: LedgerAllowances<Tokens>,
+    pub approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
@@ -389,6 +407,9 @@ pub struct Ledger {
     maximum_number_of_accounts: usize,
     #[serde(default = "default_accounts_overflow_trim_quantity")]
     accounts_overflow_trim_quantity: usize,
+
+    #[serde(default)]
+    pub state: LedgerState,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -482,6 +503,7 @@ impl Ledger {
                 .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
                 .try_into()
                 .unwrap(),
+            state: LedgerState::Ready,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -501,6 +523,20 @@ impl Ledger {
         }
 
         ledger
+    }
+
+    pub fn is_migrating(&self) -> bool {
+        match self.state {
+            LedgerState::Ready => false,
+            _ => true,
+        }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        match self.state {
+            LedgerState::Ready => true,
+            _ => false,
+        }
     }
 }
 
@@ -959,6 +995,12 @@ impl AllowancesData for StableAllowancesData {
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
     }
 
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        todo!()
+    }
+
     fn len_allowances(&self) -> usize {
         ALLOWANCES_MEMORY
             .with_borrow(|allowances| allowances.len())
@@ -975,5 +1017,9 @@ impl AllowancesData for StableAllowancesData {
 
     fn len_arrivals(&self) -> usize {
         0
+    }
+
+    fn clear_arrivals(&mut self) {
+        todo!()
     }
 }

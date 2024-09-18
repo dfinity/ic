@@ -74,6 +74,10 @@ pub trait AllowancesData {
     #[allow(clippy::type_complexity)]
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
+
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
@@ -81,6 +85,8 @@ pub trait AllowancesData {
     fn len_expirations(&self) -> usize;
 
     fn len_arrivals(&self) -> usize;
+
+    fn clear_arrivals(&mut self);
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -173,6 +179,12 @@ where
         self.expiration_queue.pop_first()
     }
 
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        self.allowances.pop_first()
+    }
+
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
         let mut result = vec![];
         for (_t, key) in &self.arrival_queue {
@@ -194,6 +206,10 @@ where
 
     fn len_arrivals(&self) -> usize {
         self.arrival_queue.len()
+    }
+
+    fn clear_arrivals(&mut self) {
+        self.arrival_queue.clear();
     }
 }
 
@@ -217,7 +233,7 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct AllowanceTable<AD: AllowancesData> {
-    allowances_data: AD,
+    pub allowances_data: AD,
 }
 
 impl<AD> Default for AllowanceTable<AD>
