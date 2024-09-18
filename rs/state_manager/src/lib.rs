@@ -2104,11 +2104,15 @@ impl StateManagerImpl {
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
         states.disable_state_fetch_below(height);
 
-        if states
+        let is_snapshot_present = states
             .snapshots
             .iter()
-            .any(|snapshot| snapshot.height == height)
-        {
+            .any(|snapshot| snapshot.height == height);
+
+        let is_state_metadata_present = states.states_metadata.contains_key(&height);
+
+        // If both the snapshot and the state metadata are present, we can safely skip it.
+        if is_snapshot_present && is_state_metadata_present {
             info!(
                 self.log,
                 "Completed StateSync for state {} that we already have locally", height
@@ -2116,22 +2120,24 @@ impl StateManagerImpl {
             return;
         }
 
-        states.snapshots.push_back(Snapshot {
-            height,
-            state: Arc::new(state),
-        });
-        states
-            .snapshots
-            .make_contiguous()
-            .sort_by_key(|snapshot| snapshot.height);
+        if !is_snapshot_present {
+            states.snapshots.push_back(Snapshot {
+                height,
+                state: Arc::new(state),
+            });
+            states
+                .snapshots
+                .make_contiguous()
+                .sort_by_key(|snapshot| snapshot.height);
 
-        self.metrics
-            .resident_state_count
-            .set(states.snapshots.len() as i64);
+            self.metrics
+                .resident_state_count
+                .set(states.snapshots.len() as i64);
 
-        states
-            .certifications_metadata
-            .insert(height, certification_metadata);
+            states
+                .certifications_metadata
+                .insert(height, certification_metadata);
+        }
 
         let state_size_bytes: i64 = manifest
             .file_table
@@ -2139,18 +2145,20 @@ impl StateManagerImpl {
             .map(|f| f.size_bytes as i64)
             .sum();
 
-        states.states_metadata.insert(
-            height,
-            StateMetadata {
-                checkpoint_layout: Some(cp_layout),
-                bundled_manifest: Some(BundledManifest {
-                    root_hash,
-                    manifest,
-                    meta_manifest,
-                }),
-                state_sync_file_group: None,
-            },
-        );
+        if !is_state_metadata_present {
+            states.states_metadata.insert(
+                height,
+                StateMetadata {
+                    checkpoint_layout: Some(cp_layout),
+                    bundled_manifest: Some(BundledManifest {
+                        root_hash,
+                        manifest,
+                        meta_manifest,
+                    }),
+                    state_sync_file_group: None,
+                },
+            );
+        }
 
         let latest_height = update_latest_height(&self.latest_state_height, height);
         if latest_height == height.get() {
