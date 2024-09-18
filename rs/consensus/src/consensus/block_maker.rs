@@ -135,6 +135,7 @@ impl BlockMaker {
                         height,
                         rank,
                         self.time_source.as_ref(),
+                        Some(&self.metrics),
                     )
                 {
                     self.propose_block(pool, rank, parent).map(|proposal| {
@@ -542,6 +543,7 @@ pub(super) fn get_block_maker_delay(
     parent: Block,
     registry_version: RegistryVersion,
     rank: Rank,
+    metrics: Option<&BlockMakerMetrics>,
 ) -> Option<Duration> {
     let settings =
         get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
@@ -549,6 +551,9 @@ pub(super) fn get_block_maker_delay(
 
     let dynamic_delay =
         if count_non_rank_0_blocks(pool, parent) > DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS {
+            if let Some(metrics) = metrics {
+                metrics.dynamic_delay_triggered.inc();
+            }
             unit_delay + DYNAMIC_DELAY_EXTRA_DURATION
         } else {
             unit_delay
@@ -568,6 +573,7 @@ pub(super) fn is_time_to_make_block(
     height: Height,
     rank: Rank,
     time_source: &dyn TimeSource,
+    metrics: Option<&BlockMakerMetrics>,
 ) -> bool {
     let Some(registry_version) = pool.registry_version(height) else {
         return false;
@@ -580,6 +586,7 @@ pub(super) fn is_time_to_make_block(
         parent,
         registry_version,
         rank,
+        metrics,
     ) else {
         return false;
     };
@@ -703,6 +710,7 @@ mod tests {
                     start.as_ref().clone(),
                     RegistryVersion::from(10),
                     Rank(4),
+                    /*metrics=*/ None,
                 )
                 .unwrap();
             let expected_context = ValidationContext {
@@ -1088,7 +1096,7 @@ mod tests {
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain() {
+    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
         assert_eq!(
             block_maker_delay_test_case(
                 &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
@@ -1100,7 +1108,7 @@ mod tests {
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_2() {
+    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
         assert_eq!(
             block_maker_delay_test_case(
                 &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
@@ -1150,6 +1158,7 @@ mod tests {
                 parent,
                 RegistryVersion::from(registry_version),
                 block_maker_rank,
+                /*metrics=*/ None,
             )
             .expect("Should successfully compute the block maker delay with valid inputs")
         })

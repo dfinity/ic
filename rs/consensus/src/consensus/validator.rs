@@ -1077,6 +1077,7 @@ impl Validator {
                 proposal.height(),
                 proposal.rank(),
                 self.time_source.as_ref(),
+                /*metrics=*/ None,
             ) {
                 continue;
             }
@@ -2584,6 +2585,7 @@ pub mod test {
                     parent.clone(),
                     pool_reader.registry_version(test_block.height()).unwrap(),
                     rank,
+                    /*metrics=*/ None,
                 )
                 .unwrap();
 
@@ -3286,6 +3288,7 @@ pub mod test {
                 parent.clone(),
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
+                /*metrics=*/ None,
             )
             .unwrap();
             test_block.content.as_mut().rank = rank;
@@ -3338,6 +3341,7 @@ pub mod test {
                 parent.clone(),
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
+                /*metrics=*/ None,
             )
             .unwrap();
             test_block.content.as_mut().rank = rank;
