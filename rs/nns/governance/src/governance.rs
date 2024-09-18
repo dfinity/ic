@@ -72,7 +72,6 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use dfn_core::api::spawn;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use dfn_protobuf::ToProto;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -4882,13 +4881,6 @@ impl Governance {
                     .to_string(),
             ));
         }
-
-        let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Failed to validate ManageNeuron {}", e),
-            )
-        })?;
 
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
