@@ -1509,3 +1509,45 @@ fn cmc_notify_top_up_not_rate_limited_by_invalid_top_up() {
     .unwrap();
     assert_eq!(cycles, Cycles::new(400_000_000_000_000u128));
 }
+
+#[test]
+fn cmc_get_default_subnets() {
+    let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
+    let icpts = Tokens::new(100, 0).unwrap();
+    let neuron = get_neuron_1();
+
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(account, icpts)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let default_subnets = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_default_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
+    assert!(decoded.is_empty());
+
+    let subnet_id = state_machine.get_subnet_id();
+    cmc_set_default_authorized_subnetworks(
+        &state_machine,
+        vec![subnet_id],
+        neuron.principal_id,
+        neuron.neuron_id,
+    );
+
+    let default_subnets = state_machine
+        .execute_ingress(
+            CYCLES_MINTING_CANISTER_ID,
+            "get_default_subnets",
+            candid::encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let decoded = Decode!(default_subnets.bytes().as_slice(), Vec<PrincipalId>).unwrap();
+    assert!(decoded.len() == 1);
+}
