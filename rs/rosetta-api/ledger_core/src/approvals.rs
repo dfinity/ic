@@ -481,8 +481,6 @@ fn remote_future() -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(u64::MAX)
 }
 
-// We do not serialize and deserialize the arrived_at value as it is not used anymore
-// after the migration to stable structures.
 impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allowance<Tokens> {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buffer = vec![];
@@ -493,6 +491,7 @@ impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allo
         if let Some(expires_at) = self.expires_at {
             buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
         }
+        // We don't seriazlize arrived_at - it is not used after stable structures migration.
         Cow::Owned(buffer)
     }
 
@@ -500,6 +499,7 @@ impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allo
         let mut cursor = Cursor::new(bytes.into_owned());
         let amount = Nat::decode(&mut cursor).expect("Unable to deserialize amount");
         let amount = Tokens::try_from(amount).expect("Unable to convert Nat to Tokens");
+        // arrived_at was not serialized, use a default value.
         let arrived_at = TimeStamp::from_nanos_since_unix_epoch(0);
         let mut expires_at_bytes = [0u8; 8];
         let expires_at = match cursor.read_exact(&mut expires_at_bytes) {
