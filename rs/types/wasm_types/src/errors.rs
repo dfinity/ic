@@ -99,6 +99,11 @@ pub enum WasmValidationError {
     CodeSectionTooLarge { size: u32, allowed: u32 },
     /// The total module size is too large.
     ModuleTooLarge { size: u64, allowed: u64 },
+    // The initial Wasm64 heap memory is too large.
+    InitialWasm64MemoryTooLarge {
+        declared_size: u64,
+        allowed_size: u64,
+    },
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -204,6 +209,14 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module size of {size} exceeds the maximum \
                     allowed size of {allowed}.",
             ),
+            Self::InitialWasm64MemoryTooLarge {
+                declared_size,
+                allowed_size,
+            } => write!(
+                f,
+                "Wasm module declares an initial Wasm64 heap memory size of {declared_size} pages \
+                    which exceeds the maximum allowed size of {allowed_size} pages.",
+            ),
         }
     }
 }
@@ -269,6 +282,10 @@ impl AsErrorHelp for WasmValidationError {
                 `ic-wasm` or splitting the logic across multiple canisters."
                     .to_string(),
                 doc_link: doc_ref("wasm-module-too-large"),
+            },
+            WasmValidationError::InitialWasm64MemoryTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the initial Wasm64 heap memory size.".to_string(),
+                doc_link: doc_ref("wasm-module-initial-wasm64-memory-too-large"),
             },
         }
     }

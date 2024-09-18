@@ -21,6 +21,8 @@ use ic_types::{
     Cycles, NumBytes, NumInstructions,
 };
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 #[cfg(target_os = "linux")]
 use ic_types::PrincipalId;
 
@@ -2790,24 +2792,31 @@ fn wasm64_cycles_burn128() {
 
 #[test]
 fn large_wasm64_memory_allocation_test() {
-    // This test checks if initial memory size and maximum memory size
-    // are capped to the maximum allowed memory size in 64 bit mode.
-    let wat = r#"
+    // This test checks if maximum memory size
+    // is capped to the maximum allowed memory size in 64 bit mode.
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let max_heap_size_in_pages = config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let wat = format!(
+        r#"
     (module
         (import "ic0" "msg_reply" (func $msg_reply))
         (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
         (func $test (export "canister_update test")
-            ;; store the result of memory.size at heap address 10
-            (i64.store (i64.const 0) (memory.size))
-            ;; return the result of memory.size
-            (call $msg_reply_data_append (i64.const 0) (i64.const 4))
+            ;; store the result of memory.grow at heap address 0
+            (i64.store (i64.const 0) (memory.grow (i64.const 1)))
+            ;; return the result of memory.grow
+            (call $msg_reply_data_append (i64.const 0) (i64.const 1))
             (call $msg_reply)
         )
-        (memory i64 16777216 200000000)
-    )"#;
+        ;; declare a memory with initial size max_heap and another max large value
+        (memory i64 {} {})
+    )"#,
+        max_heap_size_in_pages,
+        max_heap_size_in_pages * 100
+    );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_api_type(ic_system_api::ApiType::update(
@@ -2817,7 +2826,7 @@ fn large_wasm64_memory_allocation_test() {
             user_test_id(24).get(),
             call_context_test_id(13),
         ))
-        .with_wat(wat)
+        .with_wat(&wat)
         .build();
 
     let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
@@ -2827,8 +2836,8 @@ fn large_wasm64_memory_allocation_test() {
         .unwrap()
         .take_execution_result(result.as_ref().err());
 
-    // The reply is actually the encoding of 65_536 (the max size of memory).
-    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![0, 0, 1, 0]))));
+    // The reply is actually the encoding of -1 (the memory grow failed).
+    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![255]))));
 }
 
 #[test]
