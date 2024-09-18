@@ -96,7 +96,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.json
+            bazel-bep.pb
             profile.json
   bazel-build-all-config-check:
     runs-on:
@@ -139,7 +139,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.json
+            bazel-bep.pb
             profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -183,7 +183,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.json
+            bazel-bep.pb
             profile.json
       - name: Purge Bazel Output
         if: always()
@@ -225,7 +225,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.json
+            bazel-bep.pb
             profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -262,7 +262,7 @@ jobs:
           if-no-files-found: ignore
           compression-level: 9
           path: |
-            bazel-bep.json
+            bazel-bep.pb
             profile.json
   python-ci-tests:
     name: Python CI Tests
