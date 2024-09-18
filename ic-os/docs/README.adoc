@@ -7,4 +7,3 @@ Refer to detailed documentation on:
 * link:Components{outfilesuffix}[Components]
 * link:SELinux{outfilesuffix}[SELinux security policy]
 * link:Configuration{outfilesuffix}[Configuration]
-* link:ConfigStore-SetupOSHostOS{outfilesuffix}[SetupOS and HostOS config store]
