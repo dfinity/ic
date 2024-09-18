@@ -69,12 +69,21 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
                 ));
             }
 
+            if transaction.kind != "mint" {
+                // This is pretty weird, but not impossible that a non-mint with
+                // the same block timestamp as the first transaction, but if
+                // this does happen, then, we define the all the mint
+                // transactions prior to this transaction to be the "initial
+                // supply".
+                break 'outer;
+            }
+
             // Unpack transaction; it should be a mint.
             let mint = match transaction.mint {
                 Some(ok) => ok,
                 None => {
                     return Err(format!(
-                        "Transaction {} was not a mint, even though it was among the initial transactions: {:#?}",
+                        "Transaction {} was not a mint, even though its kind is \"mint\": {:#?}",
                         transaction_count, transaction,
                     ));
                 }
