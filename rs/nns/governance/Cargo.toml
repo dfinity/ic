@@ -32,7 +32,6 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }

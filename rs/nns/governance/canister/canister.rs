@@ -1,7 +1,5 @@
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
-use dfn_core::{over, over_async};
-use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
@@ -742,7 +740,20 @@ fn manage_neuron_pb() {
         0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
-    over_async(protobuf, manage_neuron)
+
+    let input = arg_data_raw();
+
+    ic_cdk::spawn(async move {
+        ic_cdk::setup();
+        let request =
+            ManageNeuronRequest::decode(&input[..]).expect("Could not decode ManageNeuronRequest");
+        let res: ManageNeuronResponse = manage_neuron(request).await;
+        let mut buf = Vec::with_capacity(res.encoded_len());
+        res.encode(&mut buf)
+            .map_err(|e| e.to_string())
+            .expect("Could not encode response");
+        ic_cdk::api::call::reply_raw(&buf)
+    })
 }
 
 #[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
@@ -764,7 +775,15 @@ fn list_neurons_pb() {
         0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
-    over(protobuf, list_neurons)
+
+    ic_cdk::setup();
+    let request = ListNeurons::decode(&arg_data_raw()[..]).expect("Could not decode ListNeurons");
+    let res: ListNeuronsResponse = list_neurons(request);
+    let mut buf = Vec::with_capacity(res.encoded_len());
+    res.encode(&mut buf)
+        .map_err(|e| e.to_string())
+        .expect("Could not encode response");
+    ic_cdk::api::call::reply_raw(&buf);
 }
 
 #[update]
