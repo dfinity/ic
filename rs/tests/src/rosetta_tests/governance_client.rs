@@ -8,7 +8,7 @@ use ic_nns_governance_api::{
         manage_neuron_response, manage_neuron_response::MakeProposalResponse, MakeProposalRequest,
         ManageNeuronResponse, ProposalInfo,
     },
-    proposal_helpers::create_make_proposal_payload,
+    proposal_submission_helpers::create_make_proposal_payload,
 };
 use ic_system_test_driver::{
     driver::{

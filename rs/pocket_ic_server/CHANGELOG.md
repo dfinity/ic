@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
+
+
+
+## 6.0.0 - 2024-09-12
+
 ### Added
 - New CLI option `--ip_addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
 - New argument `ip_addr` of the endpoint `/http_gateway` to specify the IP address at which the HTTP gateway should listen (defaults to `127.0.0.1`).

@@ -17,6 +17,7 @@ rust_library(
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:futures",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],
@@ -29,6 +30,8 @@ rust_test(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:tokio",
     ],
 )
 
@@ -42,6 +45,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-btc-interface",
     ],
 )
 
@@ -59,6 +63,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
     ],
 )
@@ -78,6 +83,11 @@ test_using_pocket_ic_server(
         ":btc_kyt_lib",
         "//packages/pocket-ic",
         "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-cdk",
     ],
 )

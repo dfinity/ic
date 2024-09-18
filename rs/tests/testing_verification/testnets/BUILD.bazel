@@ -60,8 +60,9 @@ system_test_nns(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test_nns(
+system_test(
     name = "from_config",
+    env = NNS_CANISTER_ENV,
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -69,7 +70,7 @@ system_test_nns(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [
         "//rs/tests",
         "//rs/tests/dre/utils:os_qualification_utils",

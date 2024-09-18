@@ -538,6 +538,26 @@ fn push_input_queues_respects_local_remote_subnet() {
 }
 
 #[test]
+fn subnet_queue_push_input_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    let response = response_to(SUBNET_ID.into());
+    assert_eq!(
+        state.push_input(
+            response.clone().into(),
+            &mut SUBNET_AVAILABLE_MEMORY.clone()
+        ),
+        Err((
+            StateError::non_matching_response(
+                "Management canister does not accept canister responses",
+                &response
+            ),
+            response.into()
+        ))
+    );
+}
+
+#[test]
 fn insert_bitcoin_response_non_matching() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
