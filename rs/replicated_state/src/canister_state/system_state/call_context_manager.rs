@@ -941,9 +941,6 @@ impl CallContextManager {
         let mut reject_responses = Vec::new();
 
         for call_context in self.call_contexts.values_mut() {
-            // Mark the call context as deleted.
-            call_context.mark_deleted();
-
             if !call_context.has_responded() {
                 // Generate a reject response.
                 if let Some(response) = reject(call_context) {
@@ -954,6 +951,9 @@ impl CallContextManager {
                 self.stats
                     .on_call_context_response(&call_context.call_origin);
             }
+
+            // Mark the call context as deleted.
+            call_context.mark_deleted();
         }
         debug_assert!(self.stats_ok());
 
