@@ -1018,7 +1018,7 @@ impl SystemState {
         metadata: RequestMetadata,
     ) -> Result<CallContextId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
-            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
             .new_call_context(call_origin, cycles, time, metadata))
     }
 
@@ -1046,7 +1046,7 @@ impl SystemState {
         instructions_used: NumInstructions,
     ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
         Ok(call_context_manager_mut(&mut self.status)
-            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
             .on_canister_result(call_context_id, result, instructions_used))
     }
 
@@ -1070,7 +1070,7 @@ impl SystemState {
     // request.
     pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
-            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
             .register_callback(callback))
     }
 
@@ -1081,7 +1081,7 @@ impl SystemState {
         callback_id: CallbackId,
     ) -> Result<Option<Arc<Callback>>, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
-            .ok_or_else(|| StateError::CanisterStopped(self.canister_id))?
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
             .unregister_callback(callback_id))
     }
 
