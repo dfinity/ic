@@ -223,7 +223,10 @@ impl ThickLedgerClient {
             _marker: _,
         } = callback;
 
-        let request = Request { start, length };
+        let request = Request {
+            start,
+            length: length.clone(),
+        };
         let (response,): (Response,) = MyRuntime::call_with_cleanup(
             CanisterId::unchecked_from_principal(PrincipalId::from(canister_id)),
             &method,
@@ -242,7 +245,9 @@ impl ThickLedgerClient {
             return Err(format!(
                 "{} did not return all the requested transactions: \
                  requested = {} vs. actual = {}",
-                length, response.transactions.len(),
+                canister_id,
+                length,
+                response.transactions.len(),
             ));
         }
 
