@@ -30,7 +30,6 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
-use std::string::FromUtf8Error;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
