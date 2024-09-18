@@ -1,15 +1,12 @@
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
-use dfn_core::{
-    api::{call_with_callbacks, reject_message},
-    over, over_async,
-};
+use dfn_core::{over, over_async};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
     api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, update,
+    println, query, spawn, update,
 };
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_common::{
@@ -234,11 +231,11 @@ impl Environment for CanisterEnv {
         let reply = move || {
             governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
         };
-        let reject = move || {
+        let reject = move |(code, msg): (i32, String)| {
+            let mut msg = msg;
             // There's no guarantee that the reject response is a string of character, and
             // it can also be potential large. Propagating error information
             // here is on a best-effort basis.
-            let mut msg = reject_message();
             const MAX_REJECT_MSG_SIZE: usize = 10000;
             if msg.len() > MAX_REJECT_MSG_SIZE {
                 msg = "(truncated error message) "
@@ -257,25 +254,36 @@ impl Environment for CanisterEnv {
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error executing ExecuteNnsFunction proposal. Rejection message: {}",
+                        "Error executing ExecuteNnsFunction proposal. Error Code: {}. Rejection message: {}",
+                        code,
                         msg
                     ),
                 )),
             );
         };
         let (canister_id, method) = mt.canister_and_function()?;
+        let method = method.to_owned();
         let proposal_timestamp_seconds = governance()
             .get_proposal_data(ProposalId(proposal_id))
             .map(|data| data.proposal_timestamp_seconds)
             .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
-        let effective_payload =
-            get_effective_payload(mt, &update.payload, proposal_id, proposal_timestamp_seconds)?;
-        let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
-        if err != 0 {
-            Err(GovernanceError::new(ErrorType::PreconditionFailed))
-        } else {
-            Ok(())
-        }
+        let effective_payload = get_effective_payload(
+            mt,
+            update.payload.clone(),
+            proposal_id,
+            proposal_timestamp_seconds,
+        )?;
+
+        spawn(async move {
+            match CdkRuntime::call_bytes_with_cleanup(canister_id, &method, &effective_payload)
+                .await
+            {
+                Ok(_) => reply(),
+                Err(e) => reject(e),
+            }
+        });
+
+        Ok(())
     }
 
     async fn call_canister_method(
@@ -856,10 +864,10 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 // `_proposal_timestamp_seconds` will be used in the future by subnet rental NNS proposals.
 fn get_effective_payload(
     mt: gov_pb::NnsFunction,
-    payload: &[u8],
+    payload: Vec<u8>,
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
-) -> Result<Cow<[u8]>, gov_pb::GovernanceError> {
+) -> Result<Vec<u8>, gov_pb::GovernanceError> {
     use gov_pb::{governance_error::ErrorType, GovernanceError, NnsFunction};
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
@@ -869,7 +877,7 @@ fn get_effective_payload(
     match mt {
         NnsFunction::BitcoinSetConfig => {
             // Decode the payload to get the network.
-            let payload = match Decode!([decoder_config()]; payload, BitcoinSetConfigProposal) {
+            let payload = match Decode!([decoder_config()]; &payload, BitcoinSetConfigProposal) {
               Ok(payload) => payload,
               Err(_) => {
                 return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid BitcoinSetConfigProposal."));
@@ -889,11 +897,11 @@ fn get_effective_payload(
             })
             .unwrap();
 
-            Ok(Cow::Owned(encoded_payload))
+            Ok(encoded_payload)
         }
         NnsFunction::SubnetRentalRequest => {
             // Decode the payload to `SubnetRentalRequest`.
-            let payload = match Decode!([decoder_config()]; payload, SubnetRentalRequest) {
+            let payload = match Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
               Ok(payload) => payload,
               Err(_) => {
                 return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid SubnetRentalRequest."));
@@ -913,13 +921,13 @@ fn get_effective_payload(
                 proposal_creation_time_seconds,
             }).unwrap();
 
-            Ok(Cow::Owned(encoded_payload))
+            Ok(encoded_payload)
         }
 
         | NnsFunction::AddSnsWasm => {
-            let payload = add_proposal_id_to_add_wasm_request(payload, proposal_id)?;
+            let payload = add_proposal_id_to_add_wasm_request(&payload, proposal_id)?;
 
-            Ok(Cow::Owned(payload))
+            Ok(payload)
         }
 
         // NOTE: Methods are listed explicitly as opposed to using the `_` wildcard so
@@ -973,7 +981,7 @@ fn get_effective_payload(
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(Cow::Borrowed(payload)),
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(payload),
     }
 }
 
