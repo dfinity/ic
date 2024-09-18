@@ -222,7 +222,7 @@ async fn install_nns_controlled_canister<'a>(
         governance_canister,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsCanisterUpgrade,
+        NnsFunction::NnsCanisterInstall,
         proposal_payload,
         "Install Canister".to_string(),
         "<proposal created by install_nns_controlled_canister>".to_string(),
