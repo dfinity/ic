@@ -23,7 +23,7 @@ const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
+const TEST_DURATION: Duration = Duration::from_secs(60);
 
 const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
 const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
@@ -32,6 +32,11 @@ const INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS: &str =
     "replica_http_ingress_watcher_wait_for_certification_duration_seconds_sum";
 const INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS: &str =
     "replica_http_ingress_watcher_wait_for_certification_duration_seconds_count";
+const TIME_TO_NOTARIZE_SUM_METRICS: &str = "consensus_time_to_notary_sign_sum{{rank=\"0\"}}";
+const TIME_TO_NOTARIZE_COUNT_METRICS: &str = "consensus_time_to_notary_count_sum{{rank=\"0\"}}";
+const TIME_TO_RECEIVE_BLOCK_SUM_METRICS: &str = "consensus_time_to_receive_block_sum{{rank=\"0\"}}";
+const TIME_TO_RECEIVE_BLOCK_COUNT_METRICS: &str =
+    "consensus_time_to_receive_block_count_sum{{rank=\"0\"}}";
 
 pub fn test_with_rt_handle(
     env: TestEnv,
@@ -170,6 +175,8 @@ pub struct TestMetrics {
     throughput_bytes_per_second: f64,
     throughput_messages_per_second: f64,
     average_e2e_latency: f64,
+    average_time_to_notarize: f64,
+    average_time_to_receive_block: f64,
 }
 
 impl TestMetrics {
@@ -186,6 +193,10 @@ impl TestMetrics {
         let throughput_messages_per_second =
             metrics_difference.delivered_ingress_messages as f64 / duration.as_secs_f64();
         let e2e_latency = metrics_difference.latency_sum / metrics_difference.latency_count;
+        let time_to_notarize =
+            metrics_difference.time_to_notarize_sum / metrics_difference.time_to_notarize_count;
+        let time_to_receive_block = metrics_difference.time_to_receive_block_sum
+            / metrics_difference.time_to_receive_block_count;
 
         Self {
             blocks_per_second,
@@ -194,6 +205,8 @@ impl TestMetrics {
             throughput_bytes_per_second,
             throughput_messages_per_second,
             average_e2e_latency: e2e_latency,
+            average_time_to_notarize: time_to_notarize,
+            average_time_to_receive_block: time_to_receive_block,
         }
     }
 }
@@ -207,6 +220,16 @@ impl std::fmt::Display for TestMetrics {
             "Throughput: {:.1} MiB/s, {:.1} messages/s",
             self.throughput_bytes_per_second / (1024. * 1024.),
             self.throughput_messages_per_second
+        )?;
+        writeln!(
+            f,
+            "Average time to notarize a rank 0 block: {:.1}s",
+            self.average_time_to_notarize
+        )?;
+        writeln!(
+            f,
+            "Average time to receive a rank 0 block: {:.1}s",
+            self.average_time_to_receive_block
         )?;
         write!(
             f,
@@ -223,6 +246,10 @@ struct ConsensusMetrics {
     delivered_ingress_messages_bytes: u64,
     latency_sum: f64,
     latency_count: f64,
+    time_to_notarize_sum: f64,
+    time_to_notarize_count: f64,
+    time_to_receive_block_sum: f64,
+    time_to_receive_block_count: f64,
 }
 
 impl std::ops::Sub for ConsensusMetrics {
@@ -237,6 +264,12 @@ impl std::ops::Sub for ConsensusMetrics {
                 - other.delivered_ingress_messages_bytes,
             latency_sum: self.latency_sum - other.latency_sum,
             latency_count: self.latency_count - other.latency_count,
+            time_to_notarize_sum: self.time_to_notarize_sum - other.time_to_notarize_sum,
+            time_to_notarize_count: self.time_to_notarize_count - other.time_to_notarize_count,
+            time_to_receive_block_sum: self.time_to_receive_block_sum
+                - other.time_to_receive_block_sum,
+            time_to_receive_block_count: self.time_to_receive_block_count
+                - other.time_to_receive_block_count,
         }
     }
 }
@@ -256,6 +289,10 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
         vec![
             INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS.to_string(),
             INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS.to_string(),
+            TIME_TO_NOTARIZE_SUM_METRICS.to_string(),
+            TIME_TO_NOTARIZE_COUNT_METRICS.to_string(),
+            TIME_TO_RECEIVE_BLOCK_SUM_METRICS.to_string(),
+            TIME_TO_RECEIVE_BLOCK_COUNT_METRICS.to_string(),
         ],
     );
 
@@ -275,6 +312,12 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     let avg_latency_sum = average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS]);
     let avg_latency_count =
         average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS]);
+    let avg_time_to_notarize_sum = average_f64(&latency_metrics[TIME_TO_NOTARIZE_SUM_METRICS]);
+    let avg_time_to_notarize_count = average_f64(&latency_metrics[TIME_TO_NOTARIZE_COUNT_METRICS]);
+    let avg_time_to_receive_block_sum =
+        average_f64(&latency_metrics[TIME_TO_RECEIVE_BLOCK_SUM_METRICS]);
+    let avg_time_to_receive_block_count =
+        average_f64(&latency_metrics[TIME_TO_RECEIVE_BLOCK_COUNT_METRICS]);
 
     ConsensusMetrics {
         delivered_blocks: avg_blocks,
@@ -282,6 +325,10 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
         delivered_ingress_messages_bytes: avg_ingress_bytes,
         latency_sum: avg_latency_sum,
         latency_count: avg_latency_count,
+        time_to_notarize_sum: avg_time_to_notarize_sum,
+        time_to_notarize_count: avg_time_to_notarize_count,
+        time_to_receive_block_sum: avg_time_to_receive_block_sum,
+        time_to_receive_block_count: avg_time_to_receive_block_count,
     }
 }
 
