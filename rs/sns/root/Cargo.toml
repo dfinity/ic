@@ -31,6 +31,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 prost = { workspace = true }
