@@ -8,7 +8,7 @@ use icrc_ledger_types::icrc3::{
     },
 };
 use num_bigint::BigUint;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, SubAssign};
 
 pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     ledger_canister_id: CanisterId,
@@ -172,12 +172,15 @@ impl ThickLedgerClient {
             length: length.clone(),
         };
 
-        let (mut response,): (GetTransactionsResponse,) =
-            MyRuntime::call_with_cleanup(self.ledger_canister_id, "get_transactions", (request,))
-                .await
-                .map_err(|err| format!("Failed to call ledger: {:?}", err))?;
+        let (mut response,): (GetTransactionsResponse,) = MyRuntime::call_with_cleanup(
+            self.ledger_canister_id,
+            "get_transactions",
+            (request.clone(),),
+        )
+        .await
+        .map_err(|err| format!("Failed to call ledger: {:?}", err))?;
 
-        normalize_get_transactions_response(start, &mut response)?;
+        normalize_get_transactions_response(&request, &mut response)?;
 
         let mut result = vec![];
         // Fetch transactions from archive.
@@ -242,12 +245,18 @@ impl ThickLedgerClient {
 ///
 /// Here, normalizing just means that response.archived_transactions is sorted.
 fn normalize_get_transactions_response(
-    mut start: Nat,
+    request: &GetTransactionsRequest,
     response: &mut GetTransactionsResponse,
 ) -> Result<(), String> {
+    let GetTransactionsRequest {
+        mut start,
+        mut length,
+    } = request.clone();
+
     if start >= response.log_length {
-        // These should already be empty, but since we are normalizing right
-        // now, let's clear just to be super sure.
+        // We went past the end of the log. In that case, these fields should
+        // already be empty, but since we are normalizing right now, let's clear
+        // just to be super sure. Alternatively, we could return Err.
         response.transactions.clear();
         response.archived_transactions.clear();
 
@@ -263,6 +272,10 @@ fn normalize_get_transactions_response(
         .archived_transactions
         .sort_by_key(|archived_range| archived_range.start.clone());
 
+    // Scan archived_ranges to make sure they are not missing any transactions
+    // that we asked for. In other words, that they are "complete". (This check
+    // requires that archived_transactions be sorted, which is ensured by the
+    // previous statement.)
     for archived_range in &response.archived_transactions {
         if archived_range.start != start {
             return Err(format!(
@@ -273,8 +286,18 @@ fn normalize_get_transactions_response(
         }
 
         start.add_assign(archived_range.length.clone());
+
+        // Decrement length by the same amount.
+        if length < archived_range.length {
+            return Err(format!(
+                "An excess of transactions was returned in archived_range: {:?} vs. {:?}",
+                request, archived_range,
+            ));
+        }
+        length.sub_assign(archived_range.length.clone());
     }
 
+    // Make sure there is no gap between response.archived_ranges vs. response.transactions.
     if response.first_index != start {
         return Err(format!(
             "GetTransactionsResponse seems to be missing requested transactions \
@@ -283,7 +306,55 @@ fn normalize_get_transactions_response(
         ));
     }
 
+    // Make sure that the response is not missing transactions at the end of our
+    // requested range. More concretely, the length of response.transactions
+    // must be maximal: either we got the amount we aked for (i.e. length), or
+    // we got all the transactions that exist (at the end of the log). We can
+    // remove this if ThickLedgerClient.get_transactions knew how to handle
+    // incomplete transactions, which is only a problem with batch_size is too
+    // big.
+    let available_transactions_count = checked_sub(&response.log_length, &response.first_index)
+        .map_err(|_err| {
+            format!(
+                "Received a GetTransactionsResponse from ledger that is inconsistent: \
+         first_index = {}, log_length = {}",
+                response.first_index, response.log_length,
+            )
+        })?;
+    let is_last_complete = response.transactions.len() == length.min(available_transactions_count);
+    if !is_last_complete {
+        return Err(format!(
+            "GetTransactionsResponse seems to be missing some requested \
+             transactions at the end of our requested range. This might \
+             be because batch-size is too large (specifically, greater \
+             than the transactions / response cap from ledger): {:?} vs. \
+             response.first_index = {}, response.log_length = {}, \
+             response.transactions.len() = {}",
+            request,
+            response.first_index,
+            response.log_length,
+            response.transactions.len(),
+        ));
+    }
+
     Ok(())
+}
+
+/// Returns Err when change > base.
+///
+/// Otherwise, returns Ok(base - change).
+///
+/// AFAICT, if you try to do 7 - 99 (or similar) with Nats, you will get a
+/// panic. This returns Err instead.
+///
+/// Since Nat does not implement Copy, this takes references to avoid taking the
+/// caller's data.
+fn checked_sub(base: &Nat, change: &Nat) -> Result<Nat, ()> {
+    if change > base {
+        return Err(());
+    }
+
+    Ok(base.clone() - change.clone())
 }
 
 #[cfg(test)]
