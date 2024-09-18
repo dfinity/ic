@@ -1,6 +1,7 @@
+load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
-load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
+load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
@@ -190,42 +191,32 @@ write_file(
 )
 
 ## Create a layer with a rosetta user
-passwd_entry(
-    name = "root_user",
-    uid = 0,
-    username = "root",
-)
-
-passwd_entry(
-    name = "ic_icrc_rosetta_user",
-    home = "/home/ic_icrc_rosetta",
-    info = "icrc rosetta node user",
-    uid = 1002,
-    username = "ic_icrc_rosetta",
-)
-
-passwd_file(
+passwd(
     name = "passwd",
     entries = [
-        ":ic_icrc_rosetta_user",
-        ":root_user",
+        dict(
+            gecos = ["root"],
+            gid = 0,
+            home = "/root",
+            shell = "/usr/bin/bash",
+            uid = 0,
+            username = "root",
+        ),
+        dict(
+            gecos = ["icrc rosetta node user"],
+            gid = 1002,
+            home = "/home/ic_icrc_rosetta",
+            shell = "/usr/bin/bash",
+            uid = 1002,
+            username = "ic_icrc_rosetta",
+        ),
     ],
-)
-
-pkg_tar(
-    name = "passwd_tar",
-    srcs = [":passwd"],
-    mode = "0644",
-    package_dir = "etc",
 )
 
 pkg_mkdirs(
     name = "data_dir",
-    # Unfortunately, rules_docker does not preserve the file ownership:
-    # https://github.com/bazelbuild/rules_docker/issues/1928
-    #
     # We make the /data directory rwx for everyone so that "rosetta"
-    # user could write to that directory.
+    # user can write to that directory.
     attributes = pkg_attributes(
         mode = "0777",
         user = "ic_icrc_rosetta",
@@ -242,37 +233,35 @@ pkg_tar(
 )
 
 ## An intermediate image with the passwd file and empty directories.
-
-container_image(
+oci_image(
     name = "ic_icrc_rosetta_image_base",
-    base = "@rust_base//image",
+    base = "@rust_base",
     tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     tars = [
-        ":passwd_tar",
+        ":passwd",
         ":data_tar",
     ],
 )
 
 ## The final image we can publish.
+pkg_tar(
+    name = "ic_icrc_rosetta_image_homedir",
+    srcs = [":ic-icrc-rosetta-bin"],
+    package_dir = "/home/ic_icrc_rosetta",
+)
 
-container_image(
+oci_image(
     name = "ic_icrc_rosetta_image",
     base = ":ic_icrc_rosetta_image_base",
-    directory = "/home/ic_icrc_rosetta",
-    entrypoint = [
-        "/home/ic_icrc_rosetta/ic-icrc-rosetta-bin",
-    ],
-    files = [
-        ":ic-icrc-rosetta-bin",
-    ],
-    ports = ["8080"],
+    entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
     tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    tars = [":ic_icrc_rosetta_image_homedir"],
     user = "ic_icrc_rosetta",
     workdir = "/home/ic_icrc_rosetta",
 )
@@ -280,12 +269,26 @@ container_image(
 ## Run this target with --embed_label flag[1] to specify the image tag.
 ## [1]: https://bazel.build/reference/command-line-reference#flag--embed_label
 
-container_push(
+# Use the value of --embed_label under --stamp, otherwise use a deterministic constant
+# value to ensure cache hits for actions that depend on this.
+expand_template(
+    name = "stamped",
+    out = "_stamped.tags.txt",
+    stamp_substitutions = {"0.0.0": "{{BUILD_EMBED_LABEL}}"},
+    template = [
+        "0.0.0",
+    ],
+)
+
+# Push image with:
+#  $ bazel run //<path>:push_ic_icrc_rosetta_image
+#
+# Usage:
+#   https://github.com/bazel-contrib/rules_oci/blob/main/docs/push.md#usage
+oci_push(
     name = "push_ic_icrc_rosetta_image",
-    format = "Docker",
     image = ":ic_icrc_rosetta_image",
-    registry = "index.docker.io",
-    repository = "dfinity/ic-icrc-rosetta-api",
-    tag = "{BUILD_EMBED_LABEL}",
+    remote_tags = ":stamped",
+    repository = "docker.io/dfinity/ic-icrc-rosetta-api",
     tags = ["manual"],
 )

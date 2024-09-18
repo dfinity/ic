@@ -3,6 +3,8 @@ use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
 use criterion::{Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
+use ic_types::NumBytes;
+use ic_wasm_transform::Module;
 use std::{
     cell::RefCell,
     time::{Duration, Instant},
@@ -22,6 +24,15 @@ fn initialize_execution_test(
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
 
+    // Get the memory type of the wasm module using ic_wasm_transform.
+    let module = Module::parse(wasm, true).unwrap();
+    let mut is_wasm64 = false;
+    if let Some(mem) = module.memories.first() {
+        if mem.memory64 {
+            is_wasm64 = true
+        }
+    }
+
     let mut current = cell.borrow_mut();
     if current.is_some() {
         return;
@@ -30,8 +41,15 @@ fn initialize_execution_test(
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
-        .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .build();
+        .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT);
+
+    if is_wasm64 {
+        test = test.with_wasm64();
+        // Set memory size to 8 GiB for Wasm64.
+        test = test.with_max_wasm_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
+    }
+    let mut test = test.build();
+
     let canister_id = test.create_canister(Cycles::from(1_u128 << 64));
     let args = InstallCodeArgs::new(
         CanisterInstallMode::Install,

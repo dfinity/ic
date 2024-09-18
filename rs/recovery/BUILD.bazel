@@ -58,7 +58,6 @@ ALIASES = {}
 
 rust_library(
     name = "recovery",
-    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_recovery",
@@ -74,7 +73,6 @@ rust_library(
 
 rust_binary(
     name = "ic-recovery",
-    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
