@@ -3,6 +3,8 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/functions.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
@@ -60,7 +62,6 @@ function setup_storage() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     purge_partitions
     setup_storage

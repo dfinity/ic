@@ -5,7 +5,7 @@ Enumerate every component file dependency for SetupOS
 component_files = {
     # setupos-scripts
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
-    Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",
+    Label("setupos-scripts/check-config.sh"): "/opt/ic/bin/check-config.sh",
     Label("setupos-scripts/setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",
     Label("setupos-scripts/setup-disk.sh"): "/opt/ic/bin/setup-disk.sh",
     Label("setupos-scripts/functions.sh"): "/opt/ic/bin/functions.sh",
@@ -26,9 +26,9 @@ component_files = {
 
     # misc
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
+    Label("misc/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
-    Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 

@@ -3,25 +3,19 @@
 set -o nounset
 set -o pipefail
 
+source /opt/ic/bin/config.sh
+source /opt/ic/bin/functions.sh
+
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
-DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv4_address") ipv4_address="${value}" ;;
-            "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
-            "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "domain") domain="${value}" ;;
-        esac
-    done <"${CONFIG}"
+function read_config_variables() {
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_prefix')
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_gateway')
+    domain=$(get_config_value '.network_settings.domain')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -168,45 +162,36 @@ function ping_ipv6_gateway() {
     echo " "
 }
 
-function assemble_nns_nodes_list() {
-    NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    NNS_URL_LIST=$(echo $NNS_URL_STRING | sed 's@,@ @g')
-}
-
 function query_nns_nodes() {
     echo "* Querying NNS nodes..."
 
-    i=0
-    success=0
-    nodes=$(echo ${NNS_URL_LIST} | wc -w)
-    # At least one of the provided URLs needs to work.
-    verify=1
-    for url in $(echo $NNS_URL_LIST); do
+    local nns_urls=($(get_config_value '.icos_settings.nns_urls' | jq -r '.[]'))
+    local success=false
+
+    for url in "${nns_urls[@]}"; do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
-        curl --insecure --head --connect-timeout 3 --silent ${url} >/dev/null 2>&1
-        if [ "${?}" -ne 0 ]; then
-            echo "  fail: ${url}"
-        else
+        if curl --insecure --head --connect-timeout 3 --silent "${url}" >/dev/null 2>&1; then
             echo "  okay: ${url}"
-            success=$((${success} + 1))
-        fi
-        i=$((${i} + 1))
-        if [ ${success} -ge ${verify} ]; then
-            echo "  success"
+            success=true
             break
-        elif [ ${i} -eq ${nodes} ]; then
-            log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
+        else
+            echo "  fail: ${url}"
         fi
     done
+
+    if $success; then
+        echo "  success"
+    else
+        log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
+    fi
 }
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    read_variables
+    read_config_variables
     get_network_settings
     print_network_settings
 
@@ -217,7 +202,6 @@ main() {
     fi
 
     ping_ipv6_gateway
-    assemble_nns_nodes_list
     query_nns_nodes
     log_end "$(basename $0)"
 }
