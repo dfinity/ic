@@ -117,7 +117,7 @@ canister_update ic0_trap
 
 #[test]
 fn backtrace_test_stable_oob() {
-    let (env, canister_id) = env_with_backtrace_canister(true);
+    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
     let result = env
         .execute_ingress(canister_id, "stable_oob", Encode!(&()).unwrap())
         .unwrap_err();
