@@ -8,11 +8,8 @@ use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
 use network::info::NetworkInfo;
-use network::ipv6::generate_ipv6_address;
-use network::mac_address::generate_mac_address;
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
-use utils::to_cidr;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -21,10 +18,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
         /// systemd-networkd output directory
         output_directory: String,
-    },
-    GenerateIpv6Address {
-        #[arg(short, long, default_value = "SetupOS")]
-        node_type: String,
     },
 }
 
@@ -79,32 +72,6 @@ pub fn main() -> Result<()> {
                 NodeType::SetupOS,
                 Path::new(&output_directory),
             )
-        }
-        Some(Commands::GenerateIpv6Address { node_type }) => {
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
-
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
-
-            let node_type = node_type.parse::<NodeType>()?;
-
-            let mac = generate_mac_address(
-                &deployment_settings.deployment.name,
-                &node_type,
-                deployment_settings.deployment.mgmt_mac.as_deref(),
-            )?;
-            let ipv6_prefix = network_info
-                .ipv6_prefix
-                .context("ipv6_prefix required in config to generate ipv6 address")?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
-            println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
-            Ok(())
         }
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
