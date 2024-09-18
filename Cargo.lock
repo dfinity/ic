@@ -8822,6 +8822,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-crypto-tree-hash",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
