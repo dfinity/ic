@@ -2722,6 +2722,14 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeToLatestRequest {}
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeToLatestResponse {}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(

@@ -2137,3 +2137,11 @@ message Account {
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
 }
+
+message UpgradeToLatestRequest {
+
+}
+
+message UpgradeToLatestResponse {
+
+}

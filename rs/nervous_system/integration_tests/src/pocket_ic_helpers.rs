@@ -197,10 +197,10 @@ pub fn propose_to_set_network_economics_and_wait(
 
 pub fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
-    with_mainnet_ledger_wasms: bool,
+    with_mainnet_sns_canister_wasms: bool,
 ) -> Result<BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>, String> {
     let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
-        if with_mainnet_ledger_wasms {
+        if with_mainnet_sns_canister_wasms {
             (
                 ensure_sns_wasm_gzipped(build_mainnet_root_sns_wasm()),
                 ensure_sns_wasm_gzipped(build_mainnet_governance_sns_wasm()),

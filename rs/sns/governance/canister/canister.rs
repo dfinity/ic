@@ -30,10 +30,9 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-#[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, GovernanceError, MintTokensRequest,
-    MintTokensResponse, Neuron,
+    MintTokensResponse, Neuron, UpgradeToLatestRequest, UpgradeToLatestResponse,
 };
 use ic_sns_governance::{
     governance::{
@@ -731,6 +730,14 @@ fn add_maturity() {
 #[candid_method(update, rename = "add_maturity")]
 fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
     governance_mut().add_maturity(request)
+}
+
+#[export_name = "canister_update upgrade_to_latest"]
+fn upgrade_to_latest(request: UpgradeToLatestRequest) {
+    //panic!("???");
+    over(candid_one, |request: UpgradeToLatestRequest| {
+        UpgradeToLatestResponse {}
+    })
 }
 
 /// Mints tokens for testing

@@ -1,10 +1,13 @@
+use std::time::Duration;
+
+use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
+        self, add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_nns_canisters, nns, sns,
+        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
@@ -13,8 +16,11 @@ use ic_nns_test_utils::sns_wasm::{
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
     ensure_sns_wasm_gzipped,
 };
+use ic_sns_governance::pb::v1::UpgradeToLatestRequest;
+use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
+use pocket_ic::PocketIcBuilder;
 
 /// In order to ensure that creating an SNS still works, we need to test the following:
 /// We test new SNS canisters with mainnet NNS canisters
@@ -167,7 +173,22 @@ pub fn test_sns_deployment(
 }
 
 fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions();
+    let pocket_ic = {
+        let pocket_ic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_sns_subnet()
+            .build();
+
+        // Install the (mainnet) NNS canisters.
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]);
+
+        // Publish (mainnet) SNS Wasms to SNS-W.
+        let with_mainnet_sns_wasms = false;
+        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
+
+        pocket_ic
+    };
 
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
@@ -194,6 +215,7 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         governance_canister_id: Some(sns_governance_canister_id),
         ledger_canister_id: Some(sns_ledger_canister_id),
         swap_canister_id: Some(swap_canister_id),
+        root_canister_id: Some(sns_root_canister_id),
         ..
     } = deployed_sns
     else {
@@ -256,15 +278,48 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
     sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
     sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
 
+    let mut canister_states = vec![{
+        let summary = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+        (
+            summary.governance.unwrap().status.unwrap().module_hash,
+            summary.root.unwrap().status.unwrap().module_hash,
+            summary.swap.unwrap().status.unwrap().module_hash,
+        )
+    }];
+
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
-    for _ in sns_canisters_to_upgrade {
-        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
-            &pocket_ic,
-            sns_governance_canister_id,
+    //pocket_ic
+    let _ = pocket_ic
+        .update_call(
+            sns_governance_canister_id.into(),
+            GOVERNANCE_CANISTER_ID.get().0,
+            "upgrade_to_latest",
+            Encode!(&UpgradeToLatestRequest {}).unwrap(),
+        )
+        .unwrap();
+
+    for _attempt_count in 1..=50 {
+        pocket_ic.tick();
+        pocket_ic.advance_time(Duration::from_secs(1));
+        let summary = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+        let summary = (
+            summary.governance.unwrap().status.unwrap().module_hash,
+            summary.root.unwrap().status.unwrap().module_hash,
+            summary.swap.unwrap().status.unwrap().module_hash,
         );
-        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
-            &pocket_ic,
-            sns_governance_canister_id,
-        );
+        if canister_states.last().unwrap() != &summary {
+            canister_states.push(summary);
+        }
     }
+    panic!("Canister states: {:#?}", canister_states.len());
+    /*for _ in sns_canisters_to_upgrade {
+        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
+            &pocket_ic,
+            sns_governance_canister_id,
+        );
+        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
+            &pocket_ic,
+            sns_governance_canister_id,
+        );
+    }*/
 }
