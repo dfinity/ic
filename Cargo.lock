@@ -9841,7 +9841,7 @@ name = "ic-nervous-system-string"
 version = "0.0.1"
 
 [[package]]
-name = "ic-nervous-system-stub-cycles-minting-canister"
+name = "ic-nervous-system-stub-cycles-minting"
 version = "0.0.1"
 dependencies = [
  "candid",
