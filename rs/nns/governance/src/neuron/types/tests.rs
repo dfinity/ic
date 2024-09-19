@@ -317,7 +317,7 @@ fn increase_dissolve_delay_sets_age_correctly_for_dissolved_neurons() {
     ];
 
     for dissolve_state_and_age in cases {
-        println!("Testing case {:?}", dissolve_state_and_age);
+        ic_cdk::println!("Testing case {:?}", dissolve_state_and_age);
         test_increase_dissolve_delay_by_1_on_dissolved_neuron(dissolve_state_and_age);
     }
 }
