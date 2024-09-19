@@ -14,6 +14,7 @@ BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
+    "//rs/nns/constants",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
@@ -34,14 +35,12 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/governance/api",
-    "//rs/nns/constants",
     "//rs/sns/governance",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/constants:constants--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ]

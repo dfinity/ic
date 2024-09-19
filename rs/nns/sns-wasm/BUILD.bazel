@@ -19,6 +19,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
+    "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
@@ -46,13 +47,11 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/governance",
     "//rs/sns/init",
-    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
