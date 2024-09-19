@@ -23,7 +23,7 @@ DEV_DEPENDENCIES = [
 ]
 
 LIB_SRCS = glob(
-    ["src/**"],
+    ["src/**/*.rs"],
     exclude = ["src/**/*tests.rs"],
 )
 
@@ -38,7 +38,7 @@ rust_library(
 
 rust_test(
     name = "initial_supply_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = PROC_MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
