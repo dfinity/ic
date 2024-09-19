@@ -11,13 +11,7 @@ cleanup() {
   sudo rm -rf "$tmpdir"
 }
 
-tmpdir=$(sudo mktemp -d "/tmp/tmpfs/icosbuildXXXX")
-lower="$tmpdir/overlayfslower"
-upper="$tmpdir/overlayfsupper"
-workdir="$tmpdir/overlayfsworkdir"
-upper=$(sudo mktemp -d "/mnt/icosbuildtmpXXXX/overlayfsupper")
-workdir=$(sudo mktemp -d "/mnt/icosbuildtmpXXXX/overlayfsworkdir")
-mountpoint=$(sudo mktemp -d "/mnt/icosbuildtmpXXXX/mount")
-sudo mount -t overlay overlay -o lowerdir="$lower",upperdir="$upper",workdir="$workdir" "$tmpdir"
+tmpdir=$(sudo mktemp -d "/mnt/icosbuildtmpXXXX")
+sudo mount -o size=8G -t tmpfs none "$tmpdir"
 trap cleanup INT TERM EXIT
 ICOS_TMPDIR="$tmpdir" "$@"
