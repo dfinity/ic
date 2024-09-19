@@ -1,20 +1,13 @@
 use crate::test_utils::TestLedger;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
-use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::CheckedAdd;
-use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::CallRequest;
 use ic_rosetta_api::models::QueryBlockRangeRequest;
 use ic_rosetta_api::models::QueryBlockRangeResponse;
-use ic_rosetta_api::models::{SearchTransactionsRequest, SearchTransactionsResponse};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
-use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::objects::ObjectMap;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 mod test_utils;
