@@ -27,7 +27,7 @@ where
         .collect()
 }
 
-/// parallel_map(...) if thread_pool is Some(); map if None.
+/// `parallel_map(_)` if thread_pool is `Some`; `map(_)` if `None`.
 pub fn maybe_parallel_map<S, T, I, F>(
     thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     items: I,
