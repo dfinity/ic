@@ -97,6 +97,4 @@ fn test_inflation_relaxes_treasury_proposal_limits() {
 
     // Without taking inflation into account, this panics.
     result.unwrap();
-
-    panic!("\n\nHELLO INFLATION!\n\n");
 }
