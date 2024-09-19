@@ -3,7 +3,6 @@ use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
-    time_source::TimeSource,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -57,8 +56,8 @@ pub struct RoundRobin {
 
 impl RoundRobin {
     /// Call the next function in the given list of calls according to a round
-    /// robin schedule. Return as soon as a call returns a non-empty ChangeSet.
-    /// Otherwise try calling the next one, and return empty ChangeSet if all
+    /// robin schedule. Return as soon as a call returns a non-empty Mutations.
+    /// Otherwise try calling the next one, and return empty Mutations if all
     /// calls from the given list have been tried.
     pub fn call_next<T>(&self, calls: &[&dyn Fn() -> Vec<T>]) -> Vec<T> {
         let mut result;
@@ -84,51 +83,6 @@ pub fn crypto_hashable_to_seed<T: CryptoHashable>(hashable: &T) -> [u8; 32] {
     let n = hash_bytes.len().min(32);
     seed[0..n].copy_from_slice(&hash_bytes[0..n]);
     seed
-}
-
-/// Calculate the required delay for block making based on the block maker's
-/// rank.
-pub fn get_block_maker_delay(
-    log: &ReplicaLogger,
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    rank: Rank,
-) -> Option<Duration> {
-    get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)
-        .map(|settings| settings.unit_delay * rank.0 as u32)
-}
-
-/// Return true if the time since round start is greater than the required block
-/// maker delay for the given rank.
-pub fn is_time_to_make_block(
-    log: &ReplicaLogger,
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    pool: &PoolReader<'_>,
-    height: Height,
-    rank: Rank,
-    time_source: &dyn TimeSource,
-) -> bool {
-    let Some(registry_version) = pool.registry_version(height) else {
-        return false;
-    };
-    let Some(block_maker_delay) =
-        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
-    else {
-        return false;
-    };
-
-    // If the relative time indicates that not enough time has passed, we fall
-    // back to the the monotonic round start time. We do this to safeguard
-    // against a stalled relative clock.
-    pool.get_round_start_time(height)
-        .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
-        || pool
-            .get_round_start_instant(height, time_source.get_origin_instant())
-            .is_some_and(|start_instant| {
-                time_source.get_instant() >= start_instant + block_maker_delay
-            })
 }
 
 /// Calculate the required delay for notary based on the rank of block to notarize,

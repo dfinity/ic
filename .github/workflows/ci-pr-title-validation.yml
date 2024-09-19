@@ -24,9 +24,9 @@ jobs:
       - name: Check PR Title
         id: check-pr-title
         env:
-          CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+          CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if [[ $CI_MERGE_REQUEST_TITLE == *"[S3_UPLOAD]"* ]]; then
+          if [[ $CI_PULL_REQUEST_TITLE == *"[S3_UPLOAD]"* ]]; then
             echo "Error: The [S3_UPLOAD] flag has been deprecated. Please use [RUN_ALL_BAZEL_TARGETS] instead. It will automatically upload to S3."
             exit 1
           fi

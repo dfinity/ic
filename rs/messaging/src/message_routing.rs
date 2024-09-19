@@ -102,6 +102,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
+pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -313,6 +314,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches were not strictly
     /// monotonically increasing.
     critical_error_non_increasing_batch_time: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -407,6 +411,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_non_increasing_batch_time: metrics_registry
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
+            critical_error_induct_response_failed: metrics_registry
+                .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -550,6 +556,7 @@ impl BatchProcessorImpl {
             subnet_id,
             hypervisor_config.clone(),
             metrics_registry,
+            &metrics,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
         ));
@@ -570,6 +577,7 @@ impl BatchProcessorImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &metrics,
             time_in_stream_metrics,
             log.clone(),
         ));
@@ -1380,6 +1388,7 @@ impl MessageRoutingImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),

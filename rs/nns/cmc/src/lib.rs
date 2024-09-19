@@ -208,10 +208,6 @@ pub enum CreateCanisterError {
         refund_amount: u128,
         create_error: String,
     },
-    RefundFailed {
-        create_error: String,
-        refund_error: String,
-    },
 }
 
 /// Options to select subnets when creating a canister
@@ -239,6 +235,8 @@ pub enum NotifyErrorCode {
     BadSubnetSelection = 4,
     /// The caller is not allowed to perform the operation.
     Unauthorized = 5,
+    /// Deposit memo field is too long.
+    DepositMemoTooLong = 6,
 }
 
 impl NotifyError {

@@ -1,4 +1,5 @@
 use candid::{CandidType, Principal};
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
@@ -138,7 +139,7 @@ async fn sign_with_ecdsa(
 }
 
 #[update]
-async fn canister_http() -> HttpResponse {
+async fn canister_http() -> Result<HttpResponse, (RejectionCode, String)> {
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
         url: "https://example.com".to_string(),
         max_response_bytes: None,
@@ -148,7 +149,7 @@ async fn canister_http() -> HttpResponse {
         transform: None,
     };
     let cycles = 20_849_238_800; // magic number derived from the error message when setting this to zero
-    http_request(arg, cycles).await.unwrap().0
+    http_request(arg, cycles).await.map(|resp| resp.0)
 }
 
 #[query]

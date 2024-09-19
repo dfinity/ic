@@ -1,14 +1,11 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
-use crate::common::utils::get_custom_agent;
-use crate::common::utils::memo_bytebuf_to_u64;
+use crate::common::utils::assert_rosetta_blockchain_is_valid;
+use crate::common::utils::get_test_agent;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
-use ic_icrc1_tokens_u256::U256;
-use ic_nns_constants::LEDGER_CANISTER_ID;
-use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
@@ -63,85 +60,25 @@ fn test_icp_transfer() {
                         .build()
                         .await;
 
-                    for arg_with_caller in args_with_caller.into_iter() {
-                        let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
-                            .to_transaction(Account::from(MINTING_IDENTITY.sender().unwrap()));
+                    rosetta_testing_environment
+                        .generate_blocks(args_with_caller)
+                        .await;
 
-                        // Rosetta does not support mint and burn operations
-                        // To keep the balances in sync we need to call the ledger agent directly and then go to the next iteration of args with caller
-                        if matches!(
-                            icrc1_transaction.operation,
-                            ic_icrc1::Operation::Mint { .. }
-                        ) || matches!(
-                            icrc1_transaction.operation,
-                            ic_icrc1::Operation::Burn { .. }
-                        ) {
-                            let caller_agent = Icrc1Agent {
-                                agent: get_custom_agent(
-                                    arg_with_caller.caller.clone(),
-                                    rosetta_testing_environment
-                                        ._pocket_ic
-                                        .url()
-                                        .unwrap()
-                                        .port()
-                                        .unwrap(),
-                                )
-                                .await,
-                                ledger_canister_id: LEDGER_CANISTER_ID.into(),
-                            };
-                            match arg_with_caller.arg {
-                                LedgerEndpointArg::TransferArg(mut transfer_arg) => {
-                                    // ICP Rosetta cannot handle subaccounts, so we have to eliminate them
-                                    transfer_arg.from_subaccount = None;
-                                    transfer_arg.to.subaccount = None;
-                                    caller_agent
-                                        .transfer(transfer_arg.clone())
-                                        .await
-                                        .unwrap()
-                                        .unwrap()
-                                }
-                                _ => panic!("Expected TransferArg for Mint and Burns"),
-                            };
-                            continue;
-                        }
-
-                        let transfer_args = match arg_with_caller.arg {
-                            LedgerEndpointArg::TransferArg(mut transfer_args) => {
-                                transfer_args.from_subaccount = None;
-                                transfer_args.to.subaccount = None;
-                                transfer_args
-                            }
-                            _ => panic!("Expected TransferArg"),
-                        };
-
-                        let transfer_operations = rosetta_testing_environment
-                            .rosetta_client
-                            .build_transfer_operations(
-                                arg_with_caller.caller.sender().unwrap(),
-                                transfer_args.from_subaccount,
-                                transfer_args.to,
-                                transfer_args.amount,
-                                rosetta_testing_environment.network_identifier.clone(),
-                            )
-                            .await
-                            .unwrap();
-
-                        // This submit wrapper will also wait for the transaction to be finalized
-                        rosetta_testing_environment
-                            .rosetta_client
-                            .make_submit_and_wait_for_transaction(
-                                &arg_with_caller.caller,
-                                rosetta_testing_environment.network_identifier.clone(),
-                                transfer_operations,
-                                // We don't care about the specific memo, only that there exists a memo
-                                transfer_args.memo.map(|memo| {
-                                    memo_bytebuf_to_u64(memo.0.as_slice()).unwrap_or(0)
-                                }),
-                                transfer_args.created_at_time,
-                            )
-                            .await
-                            .unwrap();
-                    }
+                    // Let's check that rosetta has a valid blockchain when compared to the ledger
+                    assert_rosetta_blockchain_is_valid(
+                        &rosetta_testing_environment.rosetta_client,
+                        rosetta_testing_environment.network_identifier.clone(),
+                        &get_test_agent(
+                            rosetta_testing_environment
+                                .pocket_ic
+                                .url()
+                                .unwrap()
+                                .port()
+                                .unwrap(),
+                        )
+                        .await,
+                    )
+                    .await;
                 });
                 Ok(())
             },

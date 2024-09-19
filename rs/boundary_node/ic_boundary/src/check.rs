@@ -9,6 +9,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
+use ic_bn_lib::http::Client;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SumTreeSMA, SMA};
@@ -22,7 +23,6 @@ use url::Url;
 
 use crate::{
     core::Run,
-    http::HttpClient,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
@@ -575,12 +575,12 @@ pub trait Check: Send + Sync {
 }
 
 pub struct Checker {
-    http_client: Arc<dyn HttpClient>,
+    http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn HttpClient>, timeout: Duration) -> Self {
+    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
         Self {
             http_client,
             timeout,

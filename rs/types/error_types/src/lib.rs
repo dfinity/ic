@@ -27,6 +27,7 @@ pub enum RejectCode {
     DestinationInvalid = 3,
     CanisterReject = 4,
     CanisterError = 5,
+    SysUnknown = 6,
 }
 
 impl std::fmt::Display for RejectCode {
@@ -43,6 +44,7 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "DESTINATION_INVALID",
             RejectCode::CanisterReject => "CANISTER_REJECT",
             RejectCode::CanisterError => "CANISTER_ERROR",
+            RejectCode::SysUnknown => "SYS_UNKNOWN",
         }
     }
 }
@@ -55,6 +57,7 @@ impl From<RejectCode> for RejectCodeProto {
             RejectCode::DestinationInvalid => RejectCodeProto::DestinationInvalid,
             RejectCode::CanisterReject => RejectCodeProto::CanisterReject,
             RejectCode::CanisterError => RejectCodeProto::CanisterError,
+            RejectCode::SysUnknown => RejectCodeProto::SysUnknown,
         }
     }
 }
@@ -73,6 +76,7 @@ impl TryFrom<RejectCodeProto> for RejectCode {
             RejectCodeProto::DestinationInvalid => Ok(RejectCode::DestinationInvalid),
             RejectCodeProto::CanisterReject => Ok(RejectCode::CanisterReject),
             RejectCodeProto::CanisterError => Ok(RejectCode::CanisterError),
+            RejectCodeProto::SysUnknown => Ok(RejectCode::SysUnknown),
         }
     }
 }
@@ -86,6 +90,7 @@ impl TryFrom<u64> for RejectCode {
             3 => Ok(RejectCode::DestinationInvalid),
             4 => Ok(RejectCode::CanisterReject),
             5 => Ok(RejectCode::CanisterError),
+            6 => Ok(RejectCode::SysUnknown),
             _ => Err(TryFromError::ValueOutOfRange(code)),
         }
     }
@@ -156,6 +161,9 @@ impl From<ErrorCode> for RejectCode {
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
             CanisterWasmMemoryLimitExceeded => CanisterError,
+            // Response unknown (best-effort calls only).
+            DeadlineExpired => SysUnknown,
+            ResponseDropped => SysUnknown,
         }
     }
 }
@@ -231,6 +239,9 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    // 6xx -- `RejectCode::SysUnknown`
+    DeadlineExpired = 601,
+    ResponseDropped = 602,
 }
 
 impl TryFrom<ErrorCodeProto> for ErrorCode {
@@ -330,6 +341,8 @@ impl TryFrom<ErrorCodeProto> for ErrorCode {
             ErrorCodeProto::ReservedCyclesLimitIsTooLow => {
                 Ok(ErrorCode::ReservedCyclesLimitIsTooLow)
             }
+            ErrorCodeProto::DeadlineExpired => Ok(ErrorCode::DeadlineExpired),
+            ErrorCodeProto::ResponseDropped => Ok(ErrorCode::ResponseDropped),
         }
     }
 }
@@ -418,6 +431,8 @@ impl From<ErrorCode> for ErrorCodeProto {
                 ErrorCodeProto::CanisterWasmMemoryLimitExceeded
             }
             ErrorCode::ReservedCyclesLimitIsTooLow => ErrorCodeProto::ReservedCyclesLimitIsTooLow,
+            ErrorCode::DeadlineExpired => ErrorCodeProto::DeadlineExpired,
+            ErrorCode::ResponseDropped => ErrorCodeProto::ResponseDropped,
         }
     }
 }
@@ -538,7 +553,9 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterHeapDeltaRateLimited
-            | ErrorCode::CanisterWasmMemoryLimitExceeded => false,
+            | ErrorCode::CanisterWasmMemoryLimitExceeded
+            | ErrorCode::DeadlineExpired
+            | ErrorCode::ResponseDropped => false,
         }
     }
 
@@ -609,6 +626,7 @@ mod tests {
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
                 533, 534, 535, 536, 537, 538, 539, 540,
+                601, 602,
             ]
         );
     }
@@ -629,7 +647,7 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             RejectCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5]
+            [1, 2, 3, 4, 5, 6]
         );
     }
 }

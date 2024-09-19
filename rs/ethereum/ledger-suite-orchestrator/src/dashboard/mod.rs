@@ -6,7 +6,7 @@ use candid::Principal;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
     Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
-    WasmHash,
+    TokenId, WasmHash,
 };
 use ic_ledger_suite_orchestrator::storage::{StorableWasm, StoredWasm, WasmStore};
 use std::cmp::Reverse;
@@ -31,6 +31,7 @@ mod filters {
 #[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
     managed_canisters: BTreeMap<Erc20Token, CanistersDashboardData>,
+    other_canisters: BTreeMap<String, Vec<CanisterDashboardData>>,
     wasm_store: Vec<DashboardStoredWasm>,
 }
 
@@ -141,16 +142,32 @@ impl DashboardTemplate {
             Reverse((w.timestamp, w.git_commit.clone(), w.wasm_hash.clone()))
         });
 
+        let (erc20_canisters, other_canisters): (Vec<_>, Vec<_>) = state
+            .all_managed_canisters_iter()
+            .partition(|(token_id, _canisters)| match token_id {
+                TokenId::Erc20(_) => true,
+                TokenId::Other(_) => false,
+            });
+
         Self {
-            managed_canisters: state
-                .managed_canisters_iter()
-                .map(|(k, v)| {
+            managed_canisters: erc20_canisters
+                .into_iter()
+                .map(|(token_id, v)| {
                     (
-                        k.clone(),
+                        token_id.into_erc20_unchecked().clone(),
                         CanistersDashboardData {
-                            ckerc20_token_symbol: v.metadata.ckerc20_token_symbol.clone(),
+                            ckerc20_token_symbol: v.metadata.token_symbol.clone(),
                             canisters: CanisterDashboardData::from_canisters(v),
                         },
+                    )
+                })
+                .collect(),
+            other_canisters: other_canisters
+                .into_iter()
+                .map(|(token_id, canisters)| {
+                    (
+                        token_id.into_other_unchecked().to_string(),
+                        CanisterDashboardData::from_canisters(canisters),
                     )
                 })
                 .collect(),
