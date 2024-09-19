@@ -443,12 +443,11 @@ fn test_specified_id() {
 #[test]
 fn test_dashboard() {
     let (server_url, _) = start_server_helper(None, false, false);
-    let subnet_config_set = SubnetConfigSet {
-        nns: true,
-        application: 1,
-        ..Default::default()
-    };
-    let mut pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url.clone());
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_server_url(server_url.clone())
+        .build();
 
     // retrieve the NNS and application subnets
     let topology = pic.topology();

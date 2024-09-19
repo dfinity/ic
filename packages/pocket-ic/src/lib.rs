@@ -70,7 +70,7 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcBuilder {
-    config: ExtendedSubnetConfigSet,
+    config: Option<ExtendedSubnetConfigSet>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
@@ -82,7 +82,7 @@ pub struct PocketIcBuilder {
 impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
-            config: ExtendedSubnetConfigSet::default(),
+            config: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
@@ -94,7 +94,7 @@ impl PocketIcBuilder {
     pub fn build(self) -> PocketIc {
         let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
-            self.config,
+            self.config.unwrap_or_default(),
             server_url,
             self.max_request_time_ms,
             self.state_dir,
@@ -106,7 +106,7 @@ impl PocketIcBuilder {
     pub async fn build_async(self) -> PocketIcAsync {
         let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIcAsync::from_components(
-            self.config,
+            self.config.unwrap_or_default(),
             server_url,
             self.max_request_time_ms,
             self.state_dir,
@@ -116,50 +116,43 @@ impl PocketIcBuilder {
         .await
     }
 
-    pub fn with_server_url(self, server_url: Url) -> Self {
-        Self {
-            server_url: Some(server_url),
-            ..self
-        }
+    pub fn with_config(mut self, config: impl Into<ExtendedSubnetConfigSet>) -> Self {
+        assert!(self.config.is_none(), "`PocketIcBuilder::with_config` can only be used if no config was (partially) provided so far.");
+        self.config = Some(config.into());
+        self
     }
 
-    pub fn with_max_request_time_ms(self, max_request_time_ms: Option<u64>) -> Self {
-        Self {
-            max_request_time_ms,
-            ..self
-        }
+    pub fn with_server_url(mut self, server_url: Url) -> Self {
+        self.server_url = Some(server_url);
+        self
     }
 
-    pub fn with_state_dir(self, state_dir: PathBuf) -> Self {
-        Self {
-            state_dir: Some(state_dir),
-            ..self
-        }
+    pub fn with_max_request_time_ms(mut self, max_request_time_ms: Option<u64>) -> Self {
+        self.max_request_time_ms = max_request_time_ms;
+        self
     }
 
-    pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
-        Self {
-            nonmainnet_features,
-            ..self
-        }
+    pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(state_dir);
+        self
     }
 
-    pub fn with_log_level(self, log_level: Level) -> Self {
-        Self {
-            log_level: Some(log_level),
-            ..self
-        }
+    pub fn with_nonmainnet_features(mut self, nonmainnet_features: bool) -> Self {
+        self.nonmainnet_features = nonmainnet_features;
+        self
+    }
+
+    pub fn with_log_level(mut self, log_level: Level) -> Self {
+        self.log_level = Some(log_level);
+        self
     }
 
     /// Add an empty NNS subnet
-    pub fn with_nns_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_nns_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.nns = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
@@ -195,93 +188,90 @@ impl PocketIcBuilder {
     /// ```sh
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
-    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_nns_state(mut self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.nns = Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id));
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty sns subnet
-    pub fn with_sns_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                sns: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_sns_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.sns = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
+
     /// Add an empty internet identity subnet
-    pub fn with_ii_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                ii: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_ii_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.ii = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty fiduciary subnet
-    pub fn with_fiduciary_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                fiduciary: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_fiduciary_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.fiduciary = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty bitcoin subnet
-    pub fn with_bitcoin_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                bitcoin: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_bitcoin_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.bitcoin = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty generic system subnet
     pub fn with_system_subnet(mut self) -> Self {
-        self.config.system.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.system.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     /// Add an empty generic application subnet
     pub fn with_application_subnet(mut self) -> Self {
-        self.config.application.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.application.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     /// Add an empty verified application subnet
     pub fn with_verified_application_subnet(mut self) -> Self {
-        self.config.verified_application.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.verified_application.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
-        self.config
+        let mut config = self.config.unwrap_or_default();
+        config
             .application
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self.config = Some(config);
         self
     }
 
     pub fn with_benchmarking_system_subnet(mut self) -> Self {
-        self.config
+        let mut config = self.config.unwrap_or_default();
+        config
             .system
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self.config = Some(config);
         self
     }
 
     pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
-        self.config = self.config.with_dts_flag(dts_flag);
+        let config = self.config.unwrap_or_default().with_dts_flag(dts_flag);
+        self.config = Some(config);
         self
     }
 }
@@ -303,47 +293,6 @@ impl PocketIc {
     /// Returns the instance ID.
     pub fn instance_id(&self) -> InstanceId {
         self.pocket_ic.instance_id
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config.
-    /// The server is started if it's not already running.
-    pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
-    /// (`None` means that there is no timeout).
-    /// The server is started if it's not already running.
-    pub fn from_config_and_max_request_time(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        max_request_time_ms: Option<u64>,
-    ) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None)
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and server url.
-    /// This function is intended for advanced users who start the server manually.
-    pub fn from_config_and_server_url(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
-    ) -> Self {
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
     }
 
     pub(crate) fn from_components(

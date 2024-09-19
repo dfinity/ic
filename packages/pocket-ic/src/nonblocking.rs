@@ -7,7 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -75,49 +75,6 @@ impl PocketIc {
             .with_application_subnet()
             .build_async()
             .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config.
-    /// The server is started if it's not already running.
-    pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-        .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
-    /// (`None` means that there is no timeout).
-    /// The server is started if it's not already running.
-    pub async fn from_config_and_max_request_time(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        max_request_time_ms: Option<u64>,
-    ) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None).await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and server url.
-    /// This function is intended for advanced users who start the server manually.
-    pub async fn from_config_and_server_url(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
-    ) -> Self {
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-        .await
     }
 
     pub(crate) async fn from_components(

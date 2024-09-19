@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for verified application subnets: the library function `PocketIcBuilder::with_verified_application_subnet` adds a verified application subnet to the PocketIC instance;
   the library function `PocketIc::get_verified_app_subnets` lists all verified application subnets of the PocketIC instance.
 - The function `PocketIcBuilder::with_log_level` to specify the replica log level of the PocketIC instance.
+- The function `PocketIcBuilder::with_config` to specify a custom `ExtendedSubnetConfigSet`.
+  This function `PocketIcBuilder::with_config` can only be used if no config was (partially) provided so far.
+
+### Removed
+- Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
+  Use the `PocketIcBuilder` instead.
 
 
 
