@@ -39,7 +39,7 @@ MACRO_DEV_DEPENDENCIES = []
 rust_library(
     name = "init",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_init",
     proc_macro_deps = MACRO_DEPENDENCIES,

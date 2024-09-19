@@ -34,7 +34,7 @@ DEPENDENCIES = [
 rust_library(
     name = "golden_nns_state",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nns_test_utils_golden_nns_state",
     version = "0.0.1",
     deps = DEPENDENCIES,

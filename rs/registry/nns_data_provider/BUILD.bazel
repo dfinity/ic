@@ -27,7 +27,7 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "nns_data_provider",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_nns_data_provider",
     version = "0.9.0",
     deps = DEPENDENCIES,

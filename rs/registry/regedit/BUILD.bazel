@@ -39,7 +39,7 @@ ALIASES = {}
 
 rust_library(
     name = "regedit",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_regedit",
     proc_macro_deps = MACRO_DEPENDENCIES,

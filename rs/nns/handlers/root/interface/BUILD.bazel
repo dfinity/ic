@@ -26,7 +26,7 @@ ALIASES = {}
 
 rust_library(
     name = "interface",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_handler_root_interface",
     proc_macro_deps = MACRO_DEPENDENCIES,
