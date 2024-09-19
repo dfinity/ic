@@ -77,7 +77,7 @@ pub async fn assert_rosetta_blockchain_is_valid(
         .network_status(network_identifier.clone())
         .await
         .unwrap();
-    let ledger_tip = query_encoded_blocks(agent, None, 1).await.blocks[0].clone();
+    let ledger_tip = query_encoded_blocks(agent, u64::MAX, u64::MAX).await.blocks[0].clone();
     assert_eq!(
         to_hash(&network_status.current_block_identifier.hash).unwrap(),
         icp_ledger::Block::block_hash(&ledger_tip),
@@ -104,13 +104,13 @@ pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
     Some(value)
 }
 
-/// This function calls the `query_encoded_blocks` endpoint on the ledger canister.
-/// The user can specify the maximum block height and the number of blocks to query.
-/// If the maximum block height is not specified then the current chain tip index will be used.
+/// This function calls the 'query_encoded_blocks' endpoint on the ledger canister.
+/// The user can specify the minimum block height and the number of blocks to query.
+/// If the minimum block height is greater than the current chain tip index, the function will cap the start index to the current chain tip index.
+/// If the number of blocks to query is greater than the chain length, the function will cap the length to the chain length.
 pub async fn query_encoded_blocks(
     agent: &Agent,
-    // If this is left None then the whatever the currently highest block is will be used.
-    max_block_height: Option<u64>,
+    min_block_height: u64,
     num_blocks: u64,
 ) -> QueryEncodedBlocksResponse {
     let response = Decode!(
@@ -132,12 +132,7 @@ pub async fn query_encoded_blocks(
 
     let current_chain_tip_index = response.chain_length.saturating_sub(1);
     let block_request = GetBlocksArgs {
-        // If max_block_height is None then we will use the current chain tip index.
-        // Otherwise we will use the minimum of the max_block_height and the current chain tip index.
-        start: std::cmp::min(
-            max_block_height.unwrap_or(current_chain_tip_index),
-            current_chain_tip_index,
-        ),
+        start: std::cmp::min(min_block_height, current_chain_tip_index),
         length: std::cmp::min(num_blocks, response.chain_length) as usize,
     };
     Decode!(

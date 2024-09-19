@@ -2,7 +2,7 @@ use std::net::Ipv6Addr;
 
 use anyhow::{bail, Context, Result};
 
-use config::ConfigMap;
+use config::config_ini::ConfigMap;
 
 #[derive(Debug)]
 pub struct NetworkInfo {

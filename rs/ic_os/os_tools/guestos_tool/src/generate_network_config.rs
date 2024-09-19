@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 
-use config::config_map_from_path;
+use config::config_ini::config_map_from_path;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
