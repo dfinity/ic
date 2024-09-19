@@ -3,7 +3,7 @@ use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Cli
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{
     config::{Config, IncomingSource},
-    start_grpc_server_and_router, AdapterState,
+    start_grpc_server_and_router,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -86,13 +86,7 @@ fn make_send_tx_request(
     )
 }
 
-async fn start_adapter(
-    logger: ReplicaLogger,
-    metrics_registry: MetricsRegistry,
-    nodes: Vec<SocketAddr>,
-    uds_path: &Path,
-    network: bitcoin::Network,
-) {
+async fn start_adapter(nodes: Vec<SocketAddr>, uds_path: &Path, network: bitcoin::Network) {
     let config = Config {
         network,
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
@@ -102,12 +96,7 @@ async fn start_adapter(
         ..Default::default()
     };
 
-    let adapter_state = AdapterState::new(config.idle_seconds);
-
-    // make sure that the adapter is not idle
-    adapter_state.received_now();
-
-    start_grpc_server_and_router(&config, &metrics_registry, logger, adapter_state);
+    start_grpc_server_and_router(&config).await;
 }
 
 fn get_default_bitcoind() -> BitcoinD {
@@ -171,14 +160,7 @@ fn start_adapter_and_client(
             Ok(rt.block_on(async {
                 let metrics_registry = MetricsRegistry::new();
 
-                start_adapter(
-                    logger.clone(),
-                    metrics_registry.clone(),
-                    urls.clone(),
-                    uds_path,
-                    network,
-                )
-                .await;
+                start_adapter(urls.clone(), uds_path, network).await;
 
                 start_client(metrics_registry, logger.clone(), uds_path).await
             }))
@@ -504,8 +486,6 @@ fn test_receives_blocks() {
 /// Checks that the adapter can connect to multiple BitcoinD peers.
 #[test]
 fn test_connection_to_multiple_peers() {
-    let logger = no_op_logger();
-
     let bitcoind1 = get_default_bitcoind();
     let client1 = Client::new(
         bitcoind1.rpc_url().as_str(),
@@ -553,14 +533,7 @@ fn test_connection_to_multiple_peers() {
     let _temp = Builder::new()
         .make(|uds_path| {
             rt.block_on(async {
-                start_adapter(
-                    logger.clone(),
-                    MetricsRegistry::new(),
-                    vec![url1, url2, url3],
-                    uds_path,
-                    bitcoin::Network::Regtest,
-                )
-                .await;
+                start_adapter(vec![url1, url2, url3], uds_path, bitcoin::Network::Regtest).await;
             });
             Ok(())
         })
