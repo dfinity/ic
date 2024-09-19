@@ -23,10 +23,10 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
+use super::utils::{find_lowest_ranked_non_disqualified_proposals, get_adjusted_notary_delay};
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    find_lowest_ranked_non_disqualified_proposals, get_adjusted_notary_delay,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };

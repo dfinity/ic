@@ -13,7 +13,7 @@ use crate::{
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, is_time_to_make_block,
+    get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -52,6 +52,8 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+
+use super::utils::is_time_to_make_block;
 
 /// The number of seconds spent in unvalidated pool, after which we start
 /// logging why we cannot validate an artifact.
@@ -1888,6 +1890,7 @@ impl Validator {
 
 #[cfg(test)]
 pub mod test {
+    use super::super::utils::get_block_maker_delay;
     use super::*;
     use crate::idkg::test_utils::{
         add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
@@ -1900,7 +1903,6 @@ pub mod test {
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
     };
-    use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,

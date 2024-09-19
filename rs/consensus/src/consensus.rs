@@ -18,6 +18,7 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 mod status;
+mod utils;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
@@ -28,11 +29,11 @@ use crate::consensus::{
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
     notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+    share_aggregator::ShareAggregator, utils::get_notarization_delay_settings,
+    validator::Validator,
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -80,6 +81,24 @@ enum ConsensusSubcomponent {
     Aggregator,
     Purger,
 }
+
+/// The acceptable gap between the finalized height and the certified height. If
+/// the actual gap is greater than this, consensus starts slowing down the block
+/// rate.
+const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
+
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the notarization/certification gap.
+const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
+
+/// In order to have a bound on the advertised consensus pool, we place a limit on
+/// the gap between notarized height and the height of the next pending CUP.
+const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
+
+/// In order to have a bound on the validated consensus pool, we don't validate
+/// artifacts with a height greater than the given value above the next pending CUP.
+/// The only exception to this are CUPs, which have no upper bound on the height.
+const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
 
 /// When purging consensus or certification artifacts, we always keep a
 /// minimum chain length below the catch-up height.

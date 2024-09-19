@@ -6,11 +6,12 @@ use crate::{
     consensus::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
+        utils::get_block_hash_string,
     },
     idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
