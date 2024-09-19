@@ -67,28 +67,10 @@ function start_guestos() {
     fi
 }
 
-function enable_guestos() {
-    if [ "$(virsh list --autostart | grep 'guestos')" ]; then
-        write_log "GuestOS virtual machine is already enabled."
-        write_metric "hostos_guestos_service_enable" \
-            "0" \
-            "GuestOS virtual machine enable state" \
-            "gauge"
-    else
-        virsh autostart guestos
-        write_log "Enabling GuestOS virtual machine."
-        write_metric "hostos_guestos_service_enable" \
-            "1" \
-            "GuestOS virtual machine enable state" \
-            "gauge"
-    fi
-}
-
 function main() {
     # Establish run order
     define_guestos
     start_guestos
-    enable_guestos
 }
 
 main
