@@ -36,6 +36,10 @@ impl IngressPool for TestIngressPool {
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         self.pool.unvalidated()
     }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
+    }
 }
 
 impl IngressPoolThrottler for TestIngressPool {

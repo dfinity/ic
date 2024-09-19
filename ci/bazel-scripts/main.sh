@@ -24,6 +24,7 @@ done
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
+    RUN_ON_DIFF_ONLY="false"
 fi
 
 # check if the workflow was triggered by a pull request and if the job requested running only on diff

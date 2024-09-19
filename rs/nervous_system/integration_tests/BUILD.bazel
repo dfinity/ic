@@ -53,7 +53,6 @@ BASE_DEPENDENCIES = [
 # Currently unused.
 # DEPENDENCIES = BASE_DEPENDENCIES + [
 #     "//rs/sns/init",
-#     "//rs/nns/governance",
 #     "//rs/nns/sns-wasm",
 #     "//rs/nns/handlers/root/impl:root",
 #     "//rs/sns/swap",
