@@ -219,9 +219,15 @@ fn test_search_transactions_by_index() {
                         )
                         .await;
 
-                        assert_eq!(response.len(), args_with_caller.len());
+                        assert_eq!(
+                            response.len() as u64,
+                            maximum_number_returnable_transactions
+                        );
                         // Make sure all transactions are unique
-                        assert_eq!(response.len(), response.into_iter().collect::<HashSet<_>>().len());
+                        assert_eq!(
+                            response.len(),
+                            response.into_iter().collect::<HashSet<_>>().len()
+                        );
                     }
                 });
                 Ok(())
