@@ -17534,6 +17534,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-string",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",

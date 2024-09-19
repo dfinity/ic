@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/string",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
