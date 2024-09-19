@@ -2256,7 +2256,11 @@ fn route(
         EffectivePrincipal::CanisterId(canister_id) => match pic.try_route_canister(canister_id) {
             Some(subnet) => Ok(subnet),
             None => {
-                if is_provisional_create_canister {
+                // Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+                // are created on an arbitrary subnet.
+                if is_provisional_create_canister && canister_id == CanisterId::ic_00() {
+                    Ok(pic.random_subnet())
+                } else if is_provisional_create_canister {
                     // We retrieve the PocketIC instace time (consistent across all subnets) from one subnet.
                     let time = pic.subnets.read().unwrap().values().next().unwrap().time();
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.

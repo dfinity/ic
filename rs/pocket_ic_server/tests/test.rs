@@ -3,6 +3,8 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_cdk::api::management_canister::main::CanisterIdRecord;
+use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
@@ -16,7 +18,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet,
 };
-use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -1196,4 +1198,26 @@ fn registry_canister() {
         Encode!(&registry_init_payload).unwrap(),
         None,
     );
+}
+
+#[test]
+fn provisional_create_canister_with_cycles() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    let arg = ProvisionalCreateCanisterWithCyclesArgument::default();
+    let res: (CanisterIdRecord,) = update_candid(
+        &pic,
+        Principal::management_canister(),
+        "provisional_create_canister_with_cycles",
+        (arg,),
+    )
+    .unwrap();
+    let canister_id = res.0.canister_id;
+
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), app_subnet);
 }

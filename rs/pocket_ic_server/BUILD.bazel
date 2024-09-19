@@ -91,6 +91,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-utils",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
