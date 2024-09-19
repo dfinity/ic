@@ -342,7 +342,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
         })?;
         let initial_supply_e8s = initial_supply_e8s_result.map_err(|err| {
             ValuationError::new_external(format!(
-                "Unable to obtain SNS token price at the time of the SNS initialization swap: {:?}",
+                "Unable to determine the initial supply of SNS tokens: {:?}",
                 err,
             ))
         })?;
