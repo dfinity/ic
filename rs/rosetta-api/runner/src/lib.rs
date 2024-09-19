@@ -42,6 +42,8 @@ pub struct RosettaOptions {
     pub store_type: String,
 
     pub ic_url: String,
+
+    pub offline: bool
 }
 
 impl RosettaOptions {
@@ -63,6 +65,7 @@ impl RosettaOptionsBuilder {
             ledger_id: None,
             persistent_storage: false,
             ic_url,
+            offline:false
         }
     }
 
@@ -90,6 +93,7 @@ impl RosettaOptionsBuilder {
                 "sqlite-in-memory".to_string()
             },
             ic_url: self.ic_url,
+            offline: self.offline
         }
     }
 }

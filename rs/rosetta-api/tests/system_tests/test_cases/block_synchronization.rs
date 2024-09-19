@@ -240,12 +240,12 @@ fn test_load_from_storage() {
                 rt.block_on(async {
                     let mut env = RosettaTestingEnvironment::builder()
                         .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                        .wit
+                        .with_persistent_storage(true)
                         .build()
                         .await;
-
-                    env.restart_rosetta_node(
-                        RosettaOptions::builder(env.pocket_ic.url().unwrap().to_string())
+                    let replica_url = env.pocket_ic.url();
+                    env = env.restart_rosetta_node(
+                        RosettaOptions::builder(replica_url.clone().unwrap().to_string())
                             .with_persistent_storage()
                             .offline()
                             .build(),
@@ -255,7 +255,7 @@ fn test_load_from_storage() {
                     wait_for_rosetta_to_sync_up_to_block(
                         &env.rosetta_client,
                         env.network_identifier.clone(),
-                        args_with_caller.len(),
+                        args_with_caller.len() as u64,
                     )
                     .await
                     .unwrap();
@@ -263,8 +263,8 @@ fn test_load_from_storage() {
                     assert_rosetta_blockchain_is_valid(
                         &env.rosetta_client,
                         env.network_identifier.clone(),
-                        &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
-                    )
+                        &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
+                    ).await
                 });
 
                 Ok(())

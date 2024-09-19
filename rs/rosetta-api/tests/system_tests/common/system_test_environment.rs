@@ -195,8 +195,8 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
-    pub fn with_persistent_storage(mut self) -> Self {
-        self.persistent_storage = true;
+    pub fn with_persistent_storage(mut self, enable_persistent_storage:bool) -> Self {
+        self.persistent_storage = enable_persistent_storage;
         self
     }
 
@@ -285,8 +285,10 @@ impl RosettaTestingEnvironmentBuilder {
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
 
-        let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string())
-            .with_persistent_storage(self.persistent_storage);
+    
+
+        let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string());
+        
         if self.persistent_storage {
             rosetta_options_builder = rosetta_options_builder.with_persistent_storage();
         }
