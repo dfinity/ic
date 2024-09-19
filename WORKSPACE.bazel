@@ -409,7 +409,7 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
-# shfmt binary for fast shell linting
+# shfmt binary for fast shell formatting
 load("//bazel:shfmt.bzl", "shfmt")
 
 shfmt(name = "shfmt")
