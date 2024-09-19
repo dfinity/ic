@@ -320,64 +320,51 @@ fn normalize_get_transactions_response(
         length.sub_assign(archived_range.length.clone());
     }
 
-    // Make sure there is no gap between response.archived_ranges vs. response.transactions.
-    if response.first_index != start {
-        return Err(format!(
-            "GetTransactionsResponse seems to be missing requested transactions \
-             from {} to ({} - 1). (This is probably not retry-able failure.)",
-            start, response.first_index,
-        ));
-    }
+    let directly_available_requested_range_len = {
+        // Intersection.
+        let begin = start.clone().max(response.first_index.clone());
+        let end = (start.clone() + length).min(response.log_length.clone());
 
-    // Make sure that the response is not missing transactions at the end of our
-    // requested range. More concretely, the length of response.transactions
-    // must be maximal: either we got the amount we aked for (i.e. length), or
-    // we got all the transactions that exist (at the end of the log). We can
-    // remove this if ThickLedgerClient.get_transactions knew how to handle
-    // incomplete transactions, which is only a problem with batch_size is too
-    // big.
-    let available_transactions_count = checked_sub(&response.log_length, &response.first_index)
-        .map_err(|_err| {
-            format!(
-                "Received a GetTransactionsResponse from ledger that is inconsistent: \
-         first_index = {}, log_length = {}",
-                response.first_index, response.log_length,
-            )
-        })?;
-    let is_last_complete = response.transactions.len() == length.min(available_transactions_count);
-    if !is_last_complete {
-        return Err(format!(
-            "GetTransactionsResponse seems to be missing some requested \
-             transactions at the end of our requested range. This might \
-             be because batch-size is too large (specifically, greater \
-             than the transactions / response cap from ledger): {:?} vs. \
-             response.first_index = {}, response.log_length = {}, \
-             response.transactions.len() = {}",
-            request,
-            response.first_index,
-            response.log_length,
-            response.transactions.len(),
-        ));
+        // Because Nat does not have saturating_sub.
+        if begin < end {
+            end - begin
+        } else {
+            Nat::from(0_u64)
+        }
+    };
+
+    // Skip checks that are moot when requested transactions and directly
+    // available transactions are disjoint.
+    if directly_available_requested_range_len > Nat::from(0_u64) {
+
+        // Make sure there is no gap between response.archived_ranges vs. response.transactions.
+        if response.first_index != start {
+            return Err(format!(
+                "GetTransactionsResponse seems to be missing requested transactions \
+                 from {} to ({} - 1). (This is probably not retry-able failure.)",
+                start, response.first_index,
+            ));
+        }
+
+        // Make sure that the response has all the transactions that we
+        // requested and are locally available.
+        if Nat::from(response.transactions.len()) != directly_available_requested_range_len {
+            return Err(format!(
+                "GetTransactionsResponse seems to be missing some requested \
+                 transactions at the end of our requested range. This might \
+                 be because batch-size is too large (specifically, greater \
+                 than the transactions / response cap from ledger): {:?} vs. \
+                 response.first_index = {}, response.log_length = {}, \
+                 response.transactions.len() = {}",
+                request,
+                response.first_index,
+                response.log_length,
+                response.transactions.len(),
+            ));
+        }
     }
 
     Ok(())
-}
-
-/// Returns Err when change > base.
-///
-/// Otherwise, returns Ok(base - change).
-///
-/// AFAICT, if you try to do 7 - 99 (or similar) with Nats, you will get a
-/// panic. This returns Err instead.
-///
-/// Since Nat does not implement Copy, this takes references to avoid taking the
-/// caller's data.
-fn checked_sub(base: &Nat, change: &Nat) -> Result<Nat, ()> {
-    if change > base {
-        return Err(());
-    }
-
-    Ok(base.clone() - change.clone())
 }
 
 #[cfg(test)]
