@@ -9841,6 +9841,15 @@ name = "ic-nervous-system-string"
 version = "0.0.1"
 
 [[package]]
+name = "ic-nervous-system-stub-cycles-minting-canister"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "cycles-minting-canister",
+ "ic-cdk 0.13.5",
+]
+
+[[package]]
 name = "ic-nervous-system-temporary"
 version = "0.0.1"
 dependencies = [

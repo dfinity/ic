@@ -1,0 +1,19 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "//rs/nns/cmc",
+]
+
+rust_canister(
+    name = "stub_cycles_minting",
+    srcs = [
+        "src/main.rs",
+    ],
+    service_file = "stub_cycles_minting.did",
+    deps = DEPENDENCIES,
+)
