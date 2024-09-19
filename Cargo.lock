@@ -9525,6 +9525,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-sns-governance",
  "ic-sns-wasm",
+ "pocket-ic",
  "serde",
  "tempfile",
  "thiserror",
