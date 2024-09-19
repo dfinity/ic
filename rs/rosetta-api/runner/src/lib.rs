@@ -2,7 +2,6 @@ pub mod constants;
 use crate::constants::{NUM_TRIES, WAIT_BETWEEN_ATTEMPTS};
 use candid::Principal;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tempfile::TempDir;
@@ -12,8 +11,7 @@ struct KillOnDrop(Child);
 
 pub struct RosettaContext {
     _proc: KillOnDrop,
-    _tempdir: Option<TempDir>,
-    pub state_directory: PathBuf,
+    pub state_directory: TempDir,
     pub port: u16,
 }
 
@@ -22,8 +20,17 @@ impl RosettaContext {
         self.port
     }
 
-    pub fn kill(self) {
+    /// Kills the rosetta process and deletes the state directory.
+    /// All traces of the rosetta process will be removed.
+    pub fn kill_rosetta_context(self) {
         drop(self._proc);
+    }
+
+    /// Kills the process in which the rosetta server and blocks synchronizer are running.
+    /// Leaves the state directory untouched.
+    /// This is useful when you want to restart the rosetta server with the same state directory. (Load existing blocks from storage)
+    pub fn kill_rosetta_process(&mut self) {
+        self._proc.0.kill().expect("Failed to kill rosetta process");
     }
 }
 
@@ -43,7 +50,7 @@ pub struct RosettaOptions {
 
     pub ic_url: String,
 
-    pub offline: bool
+    pub offline: bool,
 }
 
 impl RosettaOptions {
@@ -65,7 +72,7 @@ impl RosettaOptionsBuilder {
             ledger_id: None,
             persistent_storage: false,
             ic_url,
-            offline:false
+            offline: false,
         }
     }
 
@@ -93,14 +100,14 @@ impl RosettaOptionsBuilder {
                 "sqlite-in-memory".to_string()
             },
             ic_url: self.ic_url,
-            offline: self.offline
+            offline: self.offline,
         }
     }
 }
 
 pub async fn start_rosetta(
     rosetta_bin: &Path,
-    state_directory: Option<PathBuf>,
+    state_directory: TempDir,
     arguments: RosettaOptions,
 ) -> RosettaContext {
     assert!(
@@ -109,15 +116,7 @@ pub async fn start_rosetta(
         rosetta_bin.display()
     );
 
-    let (state_directory, _tempdir) = state_directory.map_or_else(
-        || {
-            let tempdir = tempfile::TempDir::new().expect("failed to create a temporary directory");
-            let state_directory = tempdir.path().to_owned();
-            (state_directory, Some(tempdir))
-        },
-        |state_dir| (state_dir, None),
-    );
-    let port_file = state_directory.join("port");
+    let port_file = state_directory.path().join("port");
     if port_file.exists() {
         if let Err(e) = std::fs::remove_file(port_file.clone()) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -132,7 +131,12 @@ pub async fn start_rosetta(
         .arg("--port-file")
         .arg(port_file.clone())
         .arg("--store-type")
-        .arg(arguments.store_type);
+        .arg(arguments.store_type.clone());
+
+    if arguments.store_type == "sqlite" {
+        cmd.arg("--store-location")
+            .arg(std::fs::canonicalize(&state_directory).unwrap());
+    }
 
     if arguments.ledger_id.is_some() {
         cmd.arg("--canister-id")
@@ -181,7 +185,6 @@ pub async fn start_rosetta(
 
     RosettaContext {
         _proc,
-        _tempdir,
         state_directory,
         port,
     }

@@ -131,17 +131,11 @@ impl RosettaTestingEnvironment {
             .current_block_identifier
             .index;
 
-        self.rosetta_context.kill();
+        self.rosetta_context.kill_rosetta_process();
 
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-        let rosetta_state_directory =
-            TempDir::new().expect("failed to create a temporary directory");
-        self.rosetta_context = start_rosetta(
-            &rosetta_bin,
-            Some(rosetta_state_directory.path().to_owned()),
-            options,
-        )
-        .await;
+        self.rosetta_context =
+            start_rosetta(&rosetta_bin, self.rosetta_context.state_directory, options).await;
 
         self.rosetta_client =
             RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
@@ -195,7 +189,7 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
-    pub fn with_persistent_storage(mut self, enable_persistent_storage:bool) -> Self {
+    pub fn with_persistent_storage(mut self, enable_persistent_storage: bool) -> Self {
         self.persistent_storage = enable_persistent_storage;
         self
     }
@@ -285,16 +279,14 @@ impl RosettaTestingEnvironmentBuilder {
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
 
-    
-
         let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string());
-        
+
         if self.persistent_storage {
             rosetta_options_builder = rosetta_options_builder.with_persistent_storage();
         }
         let rosetta_context = start_rosetta(
             &rosetta_bin,
-            Some(rosetta_state_directory.path().to_owned()),
+            rosetta_state_directory,
             rosetta_options_builder.build(),
         )
         .await;
