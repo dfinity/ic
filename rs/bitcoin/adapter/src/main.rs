@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_async_utils::abort_on_panic;
-use ic_btc_adapter::{cli::Cli, start_grpc_server_and_router};
+use ic_btc_adapter::{cli::Cli, run_server};
 
 #[tokio::main]
 pub async fn main() {
@@ -17,5 +17,5 @@ pub async fn main() {
         }
     };
 
-    start_grpc_server_and_router(&config).await;
+    run_server(&config).await;
 }

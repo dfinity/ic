@@ -197,7 +197,7 @@ impl AdapterState {
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.
-pub async fn start_grpc_server_and_router(config: &config::Config) {
+pub async fn run_server(config: &config::Config) {
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     info!(

@@ -3,7 +3,7 @@ use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Cli
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{
     config::{Config, IncomingSource},
-    start_grpc_server_and_router,
+    run_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -96,7 +96,7 @@ async fn start_adapter(nodes: Vec<SocketAddr>, uds_path: &Path, network: bitcoin
         ..Default::default()
     };
 
-    start_grpc_server_and_router(&config).await;
+    run_server(&config).await;
 }
 
 fn get_default_bitcoind() -> BitcoinD {
