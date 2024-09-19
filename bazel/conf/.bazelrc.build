@@ -132,6 +132,6 @@ common --noincompatible_enable_cc_toolchain_resolution
 # on this (not yet clear why)
 common --remote_download_all
 
-# This option (in conjonction with remote cache issues) create build failures
+# This option (in conjunction with remote cache issues) creates build failures
 #   https://github.com/bazelbuild/bazel/issues/22387
 common --noexperimental_inmemory_dotd_files
