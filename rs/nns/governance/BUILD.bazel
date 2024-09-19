@@ -48,6 +48,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
@@ -71,7 +72,6 @@ BASE_DEPENDENCIES = [
         # Keep sorted.
         "//rs/nervous_system/common/test_keys",
         "@crate_index//:csv",
-        "@crate_index//:futures",
     ],
 })
 
