@@ -24,7 +24,7 @@ DEV_DEPENDENCIES = [
 
 LIB_SRCS = glob(
     ["src/**/*.rs"],
-    exclude = ["src/**/*tests.rs"],
+    exclude = ["src/**/*tests*"],
 )
 
 rust_library(
