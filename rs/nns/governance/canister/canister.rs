@@ -342,7 +342,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(IcpLedgerCanister::<DfnRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
     ));
 }
@@ -385,7 +385,7 @@ fn canister_post_upgrade() {
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
-        Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
+        Box::new(IcpLedgerCanister::<DfnRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<DfnRuntime>::new()),
     ));
 
@@ -860,7 +860,7 @@ fn canister_heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.3,
+        0.7,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
     over_async(protobuf, manage_neuron_)
@@ -882,7 +882,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.3,
+        0.7,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
     over(protobuf, list_neurons_)

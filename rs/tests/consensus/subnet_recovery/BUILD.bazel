@@ -13,7 +13,7 @@ ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = [":orchestrator_universal_vm_activation.s
 
 STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/tests:static-file-server_image",
+    "//rs/tests:static-file-server.tar",
 ]
 
 rust_library(

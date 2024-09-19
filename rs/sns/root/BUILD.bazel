@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nns/constants",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
@@ -27,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:comparable",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:prost",
     "@crate_index//:serde",
