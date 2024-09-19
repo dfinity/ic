@@ -76,7 +76,7 @@ stderr_awk_program='
     { stream_info_line = $0; \
       match(stream_info_line, /https:\/\/[a-zA-Z0-9\/-.]*/); \
       stream_url = substr(stream_info_line, RSTART, RLENGTH) } \
-  # In general, forward everyline to the output
+  # In general, forward every line to the output
   // { print } \
   # Every N lines, repeat the stream info line
   // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line }
