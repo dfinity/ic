@@ -5,15 +5,16 @@ use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use ic_nervous_system_common_test_utils::SpyLedger;
 use ic_sns_governance::pb::v1::{
     manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
-    ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
+    SetModeResponse,
 };
 use ic_sns_swap::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterClients,
     pb::v1::{
-        set_dapp_controllers_request::CanisterIds, CanisterCallError, ClaimSwapNeuronsRequest,
-        SetDappControllersRequest, SetDappControllersResponse,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        set_dapp_controllers_request::CanisterIds, CanisterCallError, SetDappControllersRequest,
+        SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};

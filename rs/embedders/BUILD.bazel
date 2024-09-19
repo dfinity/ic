@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
+    "@crate_index//:num-traits",
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
     "@crate_index//:serde",

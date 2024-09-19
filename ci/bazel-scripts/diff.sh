@@ -13,8 +13,8 @@ set -euo pipefail
 set -x
 cd "$(git rev-parse --show-toplevel)"
 
-git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --quiet
-MERGE_BASE="$(git merge-base HEAD origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME)"
+git fetch origin "$CI_PULL_REQUEST_TARGET_BRANCH_NAME" --quiet
+MERGE_BASE="$(git merge-base HEAD origin/$CI_PULL_REQUEST_TARGET_BRANCH_NAME)"
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 

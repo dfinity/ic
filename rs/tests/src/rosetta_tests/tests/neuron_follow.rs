@@ -27,7 +27,7 @@ use std::{
 };
 
 const PORT: u32 = 8108;
-const VM_NAME: &str = "rosetta-neuron-follow";
+const VM_NAME: &str = "neuron-follow";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

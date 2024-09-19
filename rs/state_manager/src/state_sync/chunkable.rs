@@ -131,8 +131,7 @@ impl Drop for IncompleteState {
                         } else {
                             state_sync_file_group
                                 .get(&(*ix as u32))
-                                .map(|vec| vec.len())
-                                .unwrap_or(0)
+                                .map_or(0, |vec| vec.len())
                         }
                     })
                     .sum();

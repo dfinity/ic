@@ -12,9 +12,7 @@ canister-test = { path = "../../../rust_canisters/canister_test" }
 canister_http = { path = "../../networking/canister_http" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canister-client = { path = "../../../canister_client" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
-ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
@@ -34,10 +32,6 @@ ssh2 = "0.9.4"
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-
-[[bin]]
-name = "ic-systest-sr-nns-failover-nodes-test"
-path = "sr_nns_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-cup-compatibility"
@@ -66,7 +60,3 @@ path = "unstuck_subnet_test.rs"
 [[bin]]
 name = "ic-systest-node-assign-test"
 path = "node_assign_test.rs"
-
-[[bin]]
-name = "ic-systest-unassigned-node-upgrade"
-path = "unassigned_node_upgrade_test.rs"

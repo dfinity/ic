@@ -11,7 +11,7 @@ use icp_ledger::{AccountIdentifier, Subaccount};
 use slog::{info, Logger};
 
 const PORT: u32 = 8101;
-const VM_NAME: &str = "rosetta-test-derive";
+const VM_NAME: &str = "test-derive";
 
 pub fn test(env: TestEnv) {
     let client = setup(&env, PORT, VM_NAME, None, None);

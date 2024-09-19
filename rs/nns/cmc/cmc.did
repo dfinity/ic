@@ -86,13 +86,6 @@ type CreateCanisterError = variant {
     // The reason why creating a canister failed.
     create_error : text;
   };
-  RefundFailed : record {
-    // The reason why creating a canister failed.
-    create_error : text;
-
-    // The reason why refunding cycles failed.
-    refund_error : text;
-  };
 };
 
 type NotifyError = variant {

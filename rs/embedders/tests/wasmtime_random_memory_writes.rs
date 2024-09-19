@@ -481,7 +481,7 @@ mod tests {
 
     use ic_embedders::{
         wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasmtime_embedder::CanisterMemoryType,
+        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
@@ -729,9 +729,9 @@ mod tests {
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
             let expected_instructions = 1 // Function is 1 instruction.
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
-                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
@@ -789,17 +789,18 @@ mod tests {
         };
         use ic_config::subnet_config::SchedulerConfig;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+        use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
         fn setup_instruction_overhead() -> u64 {
-            instruction_to_cost(&wasmparser::Operator::Drop)
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+            instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
-                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
-                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
+                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
                 + 1 // Function is 1 instruction.
         }
 

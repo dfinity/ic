@@ -1066,174 +1066,160 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                match self.config.ic00_compute_initial_i_dkg_dealings {
-                    FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                    FlagStatus::Enabled => {
-                        let cycles = msg.take_cycles();
-                        match &msg {
-                            CanisterCall::Request(request) => {
-                                match ComputeInitialIDkgDealingsArgs::decode(
-                                    request.method_payload(),
-                                ) {
-                                    Ok(args) => match get_master_public_key(
-                                        idkg_subnet_public_keys,
-                                        self.own_subnet_id,
-                                        &args.key_id,
-                                    ) {
-                                        Ok(_) => self
-                                            .compute_initial_idkg_dealings(
-                                                &mut state, args, request,
-                                            )
-                                            .map_or_else(
-                                                |err| ExecuteSubnetMessageResult::Finished {
-                                                    response: Err(err),
-                                                    refund: cycles,
-                                                },
-                                                |()| ExecuteSubnetMessageResult::Processing,
-                                            ),
-                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        match ComputeInitialIDkgDealingsArgs::decode(request.method_payload()) {
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Ok(_) => self
+                                    .compute_initial_idkg_dealings(&mut state, args, request)
+                                    .map_or_else(
+                                        |err| ExecuteSubnetMessageResult::Finished {
                                             response: Err(err),
                                             refund: cycles,
                                         },
-                                    },
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err),
-                                        refund: cycles,
-                                    },
-                                }
-                            }
-                            CanisterCall::Ingress(_) => self
-                                .reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings),
+                                        |()| ExecuteSubnetMessageResult::Processing,
+                                    ),
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: cycles,
+                                },
+                            },
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: cycles,
+                            },
                         }
+                    }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
                     }
                 }
             }
 
-            Ok(Ic00Method::SchnorrPublicKey) => match self.config.ic00_schnorr_public_key {
-                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                FlagStatus::Enabled => {
-                    let cycles = msg.take_cycles();
-                    match &msg {
-                        CanisterCall::Request(request) => {
-                            let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
+            Ok(Ic00Method::SchnorrPublicKey) => {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
+                            Err(err) => Err(err),
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &MasterPublicKeyId::Schnorr(args.key_id.clone()),
+                            ) {
                                 Err(err) => Err(err),
-                                Ok(args) => match get_master_public_key(
-                                    idkg_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &MasterPublicKeyId::Schnorr(args.key_id.clone()),
-                                ) {
-                                    Err(err) => Err(err),
-                                    Ok(pubkey) => {
-                                        let canister_id = match args.canister_id {
-                                            Some(id) => id.into(),
-                                            None => *msg.sender(),
-                                        };
-                                        self.get_threshold_public_key(
-                                            pubkey,
-                                            canister_id,
-                                            args.derivation_path.into_inner(),
-                                        )
-                                        .map(|res| {
-                                            SchnorrPublicKeyResponse {
-                                                public_key: res.public_key,
-                                                chain_code: res.chain_key,
-                                            }
-                                            .encode()
-                                        })
-                                    }
-                                },
-                            };
-                            ExecuteSubnetMessageResult::Finished {
-                                response: res,
-                                refund: cycles,
-                            }
-                        }
-                        CanisterCall::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::SchnorrPublicKey)
+                                Ok(pubkey) => {
+                                    let canister_id = match args.canister_id {
+                                        Some(id) => id.into(),
+                                        None => *msg.sender(),
+                                    };
+                                    self.get_threshold_public_key(
+                                        pubkey,
+                                        canister_id,
+                                        args.derivation_path.into_inner(),
+                                    )
+                                    .map(|res| {
+                                        SchnorrPublicKeyResponse {
+                                            public_key: res.public_key,
+                                            chain_code: res.chain_key,
+                                        }
+                                        .encode()
+                                    })
+                                }
+                            },
+                        };
+                        ExecuteSubnetMessageResult::Finished {
+                            response: res,
+                            refund: cycles,
                         }
                     }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::SchnorrPublicKey)
+                    }
                 }
-            },
+            }
 
-            Ok(Ic00Method::SignWithSchnorr) => match self.config.ic00_sign_with_schnorr {
-                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                FlagStatus::Enabled => match &msg {
-                    CanisterCall::Request(request) => {
-                        if payload.is_empty() {
-                            use ic_types::messages;
-                            state.push_subnet_output_response(
-                                Response {
-                                    originator: request.sender,
-                                    respondent: CanisterId::from(self.own_subnet_id),
-                                    originator_reply_callback: request.sender_reply_callback,
-                                    refund: request.payment,
-                                    response_payload: messages::Payload::Reject(
-                                        messages::RejectContext::new(
-                                            ic_error_types::RejectCode::CanisterReject,
-                                            "An empty message cannot be signed",
-                                        ),
+            Ok(Ic00Method::SignWithSchnorr) => match &msg {
+                CanisterCall::Request(request) => {
+                    if payload.is_empty() {
+                        use ic_types::messages;
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund: request.payment,
+                                response_payload: messages::Payload::Reject(
+                                    messages::RejectContext::new(
+                                        ic_error_types::RejectCode::CanisterReject,
+                                        "An empty message cannot be signed",
                                     ),
-                                    deadline: request.deadline,
-                                }
-                                .into(),
-                            );
-                            return (state, Some(NumInstructions::from(0)));
-                        }
+                                ),
+                                deadline: request.deadline,
+                            }
+                            .into(),
+                        );
+                        return (state, Some(NumInstructions::from(0)));
+                    }
 
-                        match SignWithSchnorrArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
-                                match get_master_public_key(
-                                    idkg_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &key_id,
+                    match SignWithSchnorrArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                        },
+                        Ok(args) => {
+                            let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
+                            match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &key_id,
+                            ) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(_) => match self.sign_with_threshold(
+                                    (**request).clone(),
+                                    ThresholdArguments::Schnorr(SchnorrArguments {
+                                        key_id: args.key_id,
+                                        message: Arc::new(args.message),
+                                    }),
+                                    args.derivation_path.into_inner(),
+                                    registry_settings
+                                        .chain_key_settings
+                                        .get(&key_id)
+                                        .map(|setting| setting.max_queue_size)
+                                        .unwrap_or_default(),
+                                    &mut state,
+                                    rng,
+                                    registry_settings.subnet_size,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
                                     },
-                                    Ok(_) => match self.sign_with_threshold(
-                                        (**request).clone(),
-                                        ThresholdArguments::Schnorr(SchnorrArguments {
-                                            key_id: args.key_id,
-                                            message: Arc::new(args.message),
-                                        }),
-                                        args.derivation_path.into_inner(),
-                                        registry_settings
-                                            .chain_key_settings
-                                            .get(&key_id)
-                                            .map(|setting| setting.max_queue_size)
-                                            .unwrap_or_default(),
-                                        &mut state,
-                                        rng,
-                                        registry_settings.subnet_size,
-                                    ) {
-                                        Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: msg.take_cycles(),
-                                        },
-                                        Ok(()) => {
-                                            self.metrics.observe_message_with_label(
-                                                &request.method_name,
-                                                since.elapsed().as_secs_f64(),
-                                                SUBMITTED_OUTCOME_LABEL.into(),
-                                                SUCCESS_STATUS_LABEL.into(),
-                                            );
-                                            ExecuteSubnetMessageResult::Processing
-                                        }
-                                    },
-                                }
+                                    Ok(()) => {
+                                        self.metrics.observe_message_with_label(
+                                            &request.method_name,
+                                            since.elapsed().as_secs_f64(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
+                                        );
+                                        ExecuteSubnetMessageResult::Processing
+                                    }
+                                },
                             }
                         }
                     }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
-                    }
-                },
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
+                }
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
@@ -1541,17 +1527,6 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
-    }
-
-    // Rejects message because API is not implemented.
-    fn reject_due_to_api_not_implemented(msg: &mut CanisterCall) -> ExecuteSubnetMessageResult {
-        ExecuteSubnetMessageResult::Finished {
-            response: Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!("{} API is not yet implemented.", msg.method_name()),
-            )),
-            refund: msg.take_cycles(),
-        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.

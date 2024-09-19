@@ -3,6 +3,7 @@ use crate::fixtures::{
     GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
 };
 use assert_matches::assert_matches;
+use fixtures::environment_fixture::CanisterCallReply;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -3016,4 +3017,45 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         proposal_data.minimum_yes_proportion_of_total.unwrap(),
         Percentage::from_basis_points(2000)
     );
+}
+
+#[test]
+fn test_updates_root_settings() {
+    let mut gov = {
+        // Set up the test environment migrated_root_wasm_memory_limit set to Some(false);
+        let gov_fixture_builder =
+            GovernanceCanisterFixtureBuilder::new().set_migrated_root_wasm_memory_limit(false);
+        let gov = gov_fixture_builder.create();
+        // The heartbeat will call the management canister to update the settings,
+        // so we need to mock the reply
+        gov.environment_fixture
+            .environment_fixture_state
+            .lock()
+            .unwrap()
+            .mocked_canister_replies
+            .push(CanisterCallReply::Response(Vec::new()));
+        gov
+    };
+
+    gov.heartbeat();
+    assert!(gov
+        .governance
+        .proto
+        .migrated_root_wasm_memory_limit
+        .unwrap());
+}
+
+#[test]
+#[should_panic(
+    expected = "Expected there to be a mocked canister reply on the stack for method `update_settings`"
+)]
+fn test_updates_root_settings_calls_management_canister() {
+    let mut gov = {
+        // Set up the test environment migrated_root_wasm_memory_limit set to Some(false);
+        let gov_fixture_builder =
+            GovernanceCanisterFixtureBuilder::new().set_migrated_root_wasm_memory_limit(false);
+        gov_fixture_builder.create()
+    };
+
+    gov.heartbeat(); // should panic
 }
